@@ -351,40 +351,36 @@ struct BufferTextWindowBodyRenderState<'emit> {
 }
 
 struct BufferTextWindowBodyPassState<'emit> {
-    pub(crate) output: BufferTextWindowBodyOutputState<'emit>,
+    pub(crate) output: BufferTextWindowBodyOutputRenderState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-struct BufferTextWindowOutputSurface<'emit> {
+struct BufferTextWindowOutputState<'emit> {
     output_builder: &'emit mut DisplayOutputBuilder,
     evaluator: &'emit mut Context,
 }
 
-struct BufferTextWindowBodyOutputState<'emit> {
-    output: BufferTextWindowOutputSurface<'emit>,
+struct BufferTextWindowBodyOutputRenderState<'emit> {
+    output: BufferTextWindowOutputState<'emit>,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
 }
 
 struct BufferTextWindowOutputSession<'emit> {
-    output: BufferTextWindowOutputSurface<'emit>,
+    output: BufferTextWindowOutputState<'emit>,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
     face_ids: FrameFaceIdAllocator,
     retry_checkpoint: TextWindowOutputRetryCheckpoint,
 }
 
-struct BufferTextWindowRenderAttemptState<'a, 'face> {
-    output: BufferTextWindowOutputSurface<'a>,
+pub(crate) struct BufferTextWindowRenderAttemptContext<'a, 'face> {
+    output: BufferTextWindowOutputState<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
     frame_face_id_counter: &'a mut u32,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-}
-
-pub(crate) struct BufferTextWindowRenderAttemptSurface<'a, 'face> {
-    state: BufferTextWindowRenderAttemptState<'a, 'face>,
 }
 
 pub(crate) struct BufferTextWindowRenderRequest<'a, B>
@@ -447,13 +443,13 @@ pub(crate) enum BufferTextWindowRenderAttemptOutcome {
 }
 
 struct BufferTextWindowRenderedBodyFinishState<'a> {
-    output: BufferTextWindowOutputSurface<'a>,
+    output: BufferTextWindowOutputState<'a>,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    output: BufferTextWindowOutputSurface<'emit>,
+    output: BufferTextWindowOutputState<'emit>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
     hit_data: &'emit mut Vec<WindowHitData>,
     display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
@@ -1197,7 +1193,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
     }
 }
 
-impl<'emit> BufferTextWindowOutputSurface<'emit> {
+impl<'emit> BufferTextWindowOutputState<'emit> {
     fn from_parts(
         output_builder: &'emit mut DisplayOutputBuilder,
         evaluator: &'emit mut Context,
@@ -1208,8 +1204,8 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         }
     }
 
-    fn reborrow(&mut self) -> BufferTextWindowOutputSurface<'_> {
-        BufferTextWindowOutputSurface {
+    fn reborrow(&mut self) -> BufferTextWindowOutputState<'_> {
+        BufferTextWindowOutputState {
             output_builder: self.output_builder,
             evaluator: self.evaluator,
         }
@@ -1270,7 +1266,7 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
     }
 }
 
-impl<'emit> BufferTextWindowBodyOutputState<'emit> {
+impl<'emit> BufferTextWindowBodyOutputRenderState<'emit> {
     pub(crate) fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
@@ -1287,28 +1283,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
     }
 }
 
-impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        output: BufferTextWindowOutputSurface<'a>,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'face FaceResolver,
-        frame_face_id_counter: &'a mut u32,
-        hit_data: &'a mut Vec<WindowHitData>,
-        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-    ) -> Self {
-        Self {
-            output,
-            font_metrics,
-            face_resolver,
-            frame_face_id_counter,
-            hit_data,
-            display_snapshots,
-        }
-    }
-}
-
-impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
+impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         output_builder: &'a mut DisplayOutputBuilder,
@@ -1320,19 +1295,13 @@ impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
-            state: BufferTextWindowRenderAttemptState::new(
-                BufferTextWindowOutputSurface::from_parts(output_builder, evaluator),
-                font_metrics,
-                face_resolver,
-                frame_face_id_counter,
-                hit_data,
-                display_snapshots,
-            ),
+            output: BufferTextWindowOutputState::from_parts(output_builder, evaluator),
+            font_metrics,
+            face_resolver,
+            frame_face_id_counter,
+            hit_data,
+            display_snapshots,
         }
-    }
-
-    fn into_state(self) -> BufferTextWindowRenderAttemptState<'a, 'face> {
-        self.state
     }
 }
 
@@ -1364,7 +1333,7 @@ where
 
     pub(crate) fn render_into(
         self,
-        surface: BufferTextWindowRenderAttemptSurface<'_, '_>,
+        context: BufferTextWindowRenderAttemptContext<'_, '_>,
         text_buf: &mut Vec<u8>,
         remaining_visibility_retries: usize,
     ) -> BufferTextWindowRenderAttemptOutcome {
@@ -1378,7 +1347,7 @@ where
             buffer_name,
             reserve_right_border_col,
         } = self;
-        let mut state = surface.into_state();
+        let mut state = context;
         let buf_access = RustBufferAccess::new(buffer);
         state.output.install_cursor_effects(params);
 
@@ -1526,8 +1495,8 @@ where
 }
 
 impl<'emit> BufferTextWindowOutputSession<'emit> {
-    fn from_output_surface(
-        mut output: BufferTextWindowOutputSurface<'emit>,
+    fn from_output_state(
+        mut output: BufferTextWindowOutputState<'emit>,
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'emit FaceResolver,
         frame_face_id_counter: u32,
@@ -1544,7 +1513,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
 
     pub(crate) fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
         BufferTextWindowBodyPassState {
-            output: BufferTextWindowBodyOutputState {
+            output: BufferTextWindowBodyOutputRenderState {
                 output: self.output.reborrow(),
                 font_metrics: self.font_metrics,
                 face_resolver: self.face_resolver,
@@ -1603,7 +1572,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
-        let BufferTextWindowOutputSurface {
+        let BufferTextWindowOutputState {
             output_builder,
             evaluator,
         } = &mut self.output;
@@ -1624,7 +1593,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        let BufferTextWindowOutputSurface {
+        let BufferTextWindowOutputState {
             output_builder,
             evaluator,
         } = &mut self.output;
@@ -2259,7 +2228,7 @@ where
     fn render_attempt<'buf>(
         self,
         walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderAttemptState<'_, '_>,
+        state: BufferTextWindowRenderAttemptContext<'_, '_>,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
         remaining_visibility_retries: usize,
         text: &'a [u8],
@@ -2267,7 +2236,7 @@ where
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowRenderAttemptOutcome {
-        let BufferTextWindowRenderAttemptState {
+        let BufferTextWindowRenderAttemptContext {
             output,
             font_metrics,
             face_resolver,
@@ -2275,7 +2244,7 @@ where
             hit_data,
             display_snapshots,
         } = state;
-        let mut output_session = BufferTextWindowOutputSession::from_output_surface(
+        let mut output_session = BufferTextWindowOutputSession::from_output_state(
             output,
             font_metrics,
             face_resolver,
