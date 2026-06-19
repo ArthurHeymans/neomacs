@@ -1678,10 +1678,16 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         buffer_slice_value_range(buffer, buffer.full_emacs_byte_range())
     };
+    let old_bytes: Vec<u8> = source_value
+        .as_lisp_string()
+        .map(|s| s.as_bytes().to_vec())
+        .unwrap_or_default();
+    let old_byte_len = old_bytes.len();
     let (converted_value, mode) = convert_buffer_string_for_multibyte(source_value, flag)?;
     let piece = buffer_insert_piece_from_string(converted_value, target_multibyte)?;
     let new_storage = piece.text;
     let new_total_bytes = new_storage.sbytes();
+    let conversion_byte_map = build_multibyte_conversion_byte_map(&old_bytes, mode);
 
     let new_props = {
         let buffer = eval
@@ -1697,9 +1703,12 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     let logical_byte = buffer
                         .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
                         .get();
-                    let boundary = lisp_string_advance_byte_to_boundary(
+                    let boundary = remap_old_byte_to_new_boundary(
+                        &conversion_byte_map,
+                        old_byte_len,
                         &new_storage,
-                        logical_byte.min(new_total_bytes),
+                        new_total_bytes,
+                        logical_byte,
                     );
                     lisp_string_byte_to_char(&new_storage, boundary)
                 })
@@ -1717,17 +1726,39 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         buffer.remap_text_marker_anchors(|old_position| {
             let old_byte = old_position.emacs_byte_pos().get();
-            let boundary =
-                lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
+            let boundary = remap_old_byte_to_new_boundary(
+                &conversion_byte_map,
+                old_byte_len,
+                &new_storage,
+                new_total_bytes,
+                old_byte,
+            );
             let new_char = lisp_string_byte_to_char(&new_storage, boundary);
             TextPositionAnchor::new(CharPos0::new(new_char), EmacsBytePos::new(boundary))
         });
         buffer.replace_lisp_string_with_text_props(&new_storage, new_props);
     }
 
+    // Set the multibyte flag BEFORE remapping positions. GNU does
+    // `bset_enable_multibyte_characters` first ("so that chars_in_text asks the
+    // right question"): the buffer's byte<->char conversion used by point /
+    // narrowing / marker remapping must see the new multibyteness, otherwise it
+    // counts every byte as a character.
+    for id in &shared_ids {
+        eval.buffers
+            .set_buffer_multibyte_flag(*id, target_multibyte)
+            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
+    }
+
     for snapshot in snapshots {
         let map_boundary = |logical_byte: usize| {
-            lisp_string_advance_byte_to_boundary(&new_storage, logical_byte.min(new_total_bytes))
+            remap_old_byte_to_new_boundary(
+                &conversion_byte_map,
+                old_byte_len,
+                &new_storage,
+                new_total_bytes,
+                logical_byte,
+            )
         };
 
         let pt_byte = map_boundary(snapshot.pt_old_emacs_byte.get());
@@ -3085,6 +3116,94 @@ fn convert_buffer_string_for_multibyte(
         remap_string_text_props_for_conversion(source, converted, mode);
     }
     Ok((converted, mode))
+}
+
+/// Map each OLD content byte offset (into the pre-conversion buffer storage) to
+/// the corresponding byte offset in the converted storage, by replaying the
+/// conversion's exact byte consumption. A unibyte byte and a multibyte byte are
+/// not the same position: converting unibyte `[0xFF 0xFE]` to multibyte yields 4
+/// bytes (two eight-bit chars), so old byte 2 maps to new byte 4 — without this,
+/// the old end position maps short and the buffer is wrongly narrowed. `map[k]`
+/// is the new offset of old byte `k`; `map[old_len]` is the total new length.
+fn build_multibyte_conversion_byte_map(
+    old_bytes: &[u8],
+    mode: BufferMultibyteConversionMode,
+) -> Vec<usize> {
+    use crate::emacs_core::emacs_char::{bytes_by_char_head, char_byte8_head_p, multibyte_length};
+    let mut map = Vec::with_capacity(old_bytes.len() + 1);
+    let mut new_pos = 0usize;
+    let mut p = 0usize;
+    match mode {
+        // string-as-multibyte: a valid multibyte sequence is kept as-is (N bytes
+        // -> N bytes); an invalid (eight-bit) byte becomes a 2-byte char.
+        BufferMultibyteConversionMode::AsMultibyte => {
+            while p < old_bytes.len() {
+                match multibyte_length(&old_bytes[p..], true) {
+                    Some(n) if n > 0 => {
+                        for i in 0..n {
+                            map.push(new_pos + i);
+                        }
+                        new_pos += n;
+                        p += n;
+                    }
+                    _ => {
+                        map.push(new_pos);
+                        new_pos += 2;
+                        p += 1;
+                    }
+                }
+            }
+        }
+        // string-to-multibyte: every byte becomes a character (1 byte ASCII, a
+        // 2-byte eight-bit char for a high byte).
+        BufferMultibyteConversionMode::ToMultibyte => {
+            for &b in old_bytes {
+                map.push(new_pos);
+                new_pos += if b < 0x80 { 1 } else { 2 };
+            }
+            p = old_bytes.len();
+        }
+        // string-as-unibyte: an eight-bit char collapses to its single raw byte;
+        // any other multibyte char keeps its bytes.
+        BufferMultibyteConversionMode::AsUnibyte => {
+            while p < old_bytes.len() {
+                let lead = old_bytes[p];
+                let len = bytes_by_char_head(lead).max(1).min(old_bytes.len() - p);
+                if char_byte8_head_p(lead) {
+                    for _ in 0..len {
+                        map.push(new_pos);
+                    }
+                    new_pos += 1;
+                } else {
+                    for i in 0..len {
+                        map.push(new_pos + i);
+                    }
+                    new_pos += len;
+                }
+                p += len;
+            }
+        }
+    }
+    map.push(new_pos);
+    map
+}
+
+/// Remap an old buffer byte offset to a character boundary in the converted
+/// storage, via the conversion byte map (then round to a char boundary for any
+/// position that fell inside a multibyte sequence).
+fn remap_old_byte_to_new_boundary(
+    byte_map: &[usize],
+    old_byte_len: usize,
+    new_storage: &crate::heap_types::LispString,
+    new_total_bytes: usize,
+    old_byte: usize,
+) -> usize {
+    let new_byte = byte_map
+        .get(old_byte.min(old_byte_len))
+        .copied()
+        .unwrap_or(new_total_bytes)
+        .min(new_total_bytes);
+    lisp_string_advance_byte_to_boundary(new_storage, new_byte)
 }
 
 fn collect_insert_pieces(args: &[Value], target_multibyte: bool) -> Result<Vec<InsertPiece>, Flow> {

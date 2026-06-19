@@ -13380,6 +13380,51 @@ fn buffer_string_returns_unibyte_storage_for_unibyte_buffer() {
 }
 
 #[test]
+fn set_buffer_multibyte_t_preserves_positions_for_consecutive_eight_bit() {
+    // Regression: converting consecutive raw high bytes to multibyte produces
+    // eight-bit characters (each 2 bytes, GNU `[0xC1 0xBF]` for byte 255).
+    // Point, point-max and markers must land on the right characters — earlier
+    // the byte->char position cache was poisoned by mid-character byte queries,
+    // collapsing the whole buffer to a unibyte (byte==char) mapping.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    builtin_set_buffer_multibyte(&mut eval, vec![Value::NIL]).unwrap();
+    for b in [255i64, 254, 255] {
+        builtin_insert_byte(&mut eval, vec![Value::fixnum(b), Value::fixnum(1)]).unwrap();
+    }
+    builtin_goto_char(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    builtin_set_buffer_multibyte(&mut eval, vec![Value::T]).unwrap();
+
+    // 3 eight-bit characters, point preserved at character 2.
+    assert_eq!(
+        builtin_point_max(&mut eval, vec![]).unwrap(),
+        Value::fixnum(4)
+    );
+    assert_eq!(builtin_point(&mut eval, vec![]).unwrap(), Value::fixnum(2));
+    assert_eq!(
+        builtin_char_after(&mut eval, vec![Value::fixnum(1)]).unwrap(),
+        Value::fixnum(0x3FFF00 + 255)
+    );
+    assert_eq!(
+        builtin_char_after(&mut eval, vec![Value::fixnum(2)]).unwrap(),
+        Value::fixnum(0x3FFF00 + 254)
+    );
+    assert_eq!(
+        builtin_char_after(&mut eval, vec![Value::fixnum(3)]).unwrap(),
+        Value::fixnum(0x3FFF00 + 255)
+    );
+    // position-bytes mirrors the eight-bit byte layout (char N -> byte 2N-1).
+    assert_eq!(
+        builtin_position_bytes(&mut eval, vec![Value::fixnum(2)]).unwrap(),
+        Value::fixnum(3)
+    );
+    assert_eq!(
+        builtin_position_bytes(&mut eval, vec![Value::fixnum(3)]).unwrap(),
+        Value::fixnum(5)
+    );
+}
+
+#[test]
 fn set_buffer_multibyte_reinterprets_bytes_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
