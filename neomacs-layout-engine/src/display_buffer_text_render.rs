@@ -5,9 +5,9 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
 pub(crate) use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyCheckpointRenderContext, BufferDisplayPropertyCheckpointRenderRequest,
-    BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextReplacementRenderOutcome,
-    BufferDisplayPropertyTextReplacementRenderRequest,
-    BufferDisplayPropertyTextReplacementRenderState, BufferDisplayPropertyTextWalkOutcome,
+    BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextReplacementRenderState,
+    BufferDisplayPropertyTextReplacementResolveOutcome,
+    BufferDisplayPropertyTextReplacementResolveRequest, BufferDisplayPropertyTextWalkOutcome,
 };
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
@@ -2993,7 +2993,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     where
         'surface: 'request,
     {
-        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
+        let request = BufferDisplayPropertyTextReplacementResolveRequest::new(
             replacement,
             self.loop_context.text_start_byte(),
             text,
@@ -3004,21 +3004,34 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             active_face_state,
             self.loop_context.point_charpos(),
         );
-        match request.render_and_apply(
-            buffer,
-            BufferDisplayPropertyTextReplacementRenderState {
-                source_render: self.source_render.reborrow(),
-                face_ids: self.face_ids,
-                append_surface: self.append_surface,
-                row_geometry: self.row_geometry,
-                cursor_info: self.cursor_info,
-                progress: self.progress.reborrow(),
-            },
-        ) {
-            BufferDisplayPropertyTextReplacementRenderOutcome::Continue => {
+        let resolve_outcome =
+            self.source_render
+                .with_font_metrics_and_display_host(|font_metrics, host| {
+                    request.resolve(
+                        font_metrics,
+                        host,
+                        *self.progress.row.x,
+                        self.progress.row_position(),
+                    )
+                });
+        match resolve_outcome {
+            BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
+                request.render_and_apply(
+                    buffer,
+                    BufferDisplayPropertyTextReplacementRenderState {
+                        text,
+                        source_render: self.source_render.reborrow(),
+                        face_ids: self.face_ids,
+                        append_surface: self.append_surface,
+                        row_geometry: self.row_geometry,
+                        cursor_info: self.cursor_info,
+                        active_face_state,
+                        progress: self.progress.reborrow(),
+                    },
+                );
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
-            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => self
+            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => self
                 .render_source_item_for_context(
                     BufferTextSourceItemRenderRequest {
                         layout_resolution_context,
@@ -3030,7 +3043,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     },
                     buffer,
                 ),
-            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
+            BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
                 BufferTextWindowLoopStepOutcome::StopBufferWalk
             }
         }

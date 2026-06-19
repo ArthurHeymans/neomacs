@@ -7,12 +7,16 @@ use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
-use crate::display_row_replacement::DisplayPropertyReplacementAppendOutcome;
+use crate::display_row_replacement::{
+    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
+};
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{TextPropertyScanCheckpoints, skip_text_to_charpos};
 use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
+use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::types::WindowParams;
+use neovm_core::emacs_core::eval::DisplayHost;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
@@ -44,13 +48,13 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) skip_to: i64,
 }
 
-pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
-    Continue,
+pub(crate) enum BufferDisplayPropertyTextReplacementResolveOutcome {
+    Resolved(BufferDisplayPropertyTextReplacementRenderRequest),
     Fallback(BufferTextSourceItem),
     Stop,
 }
 
-pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a> {
+pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a> {
     replacement: BufferTextReplacementItem,
     text_start_byte: usize,
     text: &'a [u8],
@@ -62,12 +66,21 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a> {
     point_charpos: i64,
 }
 
+pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest {
+    append_request: DisplayPropertyReplacementAppendRequest,
+    skip_to: i64,
+    start_charpos: i64,
+    point_charpos: i64,
+}
+
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
+    pub(crate) text: &'emit [u8],
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
     pub(crate) append_surface: &'emit DisplayRowAppendSurface,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) active_face_state: &'emit DisplayRowActiveFaceState,
     pub(crate) progress: BufferTextWindowProgressState<'emit>,
 }
 
@@ -97,7 +110,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
     }
 }
 
-impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
+impl<'a> BufferDisplayPropertyTextReplacementResolveRequest<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         replacement: BufferTextReplacementItem,
@@ -123,81 +136,113 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+    pub(crate) fn resolve(
         self,
-        buffer: &B,
-        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
-        let BufferDisplayPropertyTextReplacementRenderState {
-            mut source_render,
-            face_ids,
-            append_surface,
-            row_geometry,
-            cursor_info,
-            progress,
-        } = state;
+        font_metrics: &mut Option<FontMetricsService>,
+        display_host: Option<&dyn DisplayHost>,
+        current_x: f32,
+        start_position: DisplayRowPosition,
+    ) -> BufferDisplayPropertyTextReplacementResolveOutcome {
         let Some(source_text) = self
             .replacement
             .source_text(self.text_start_byte, self.text)
         else {
-            return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+            return BufferDisplayPropertyTextReplacementResolveOutcome::Stop;
         };
         let append_request =
-            source_render.with_font_metrics_and_display_host(|font_metrics, host| {
-                DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-                    self.replacement.classification(),
-                    self.replacement.replacement_source(),
-                    self.replacement.value(),
-                    self.replacement.start_charpos0(),
-                    source_text,
-                    self.active_face_state,
-                    *progress.row.x,
-                    self.content_x,
-                    self.params,
-                    self.glyph_y_offset,
-                    self.default_row_height,
-                    progress.row_position(),
-                )
-                .resolve(font_metrics, host)
-            });
+            DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
+                self.replacement.classification(),
+                self.replacement.replacement_source(),
+                self.replacement.value(),
+                self.replacement.start_charpos0(),
+                source_text,
+                self.active_face_state,
+                current_x,
+                self.content_x,
+                self.params,
+                self.glyph_y_offset,
+                self.default_row_height,
+                start_position,
+            )
+            .resolve(font_metrics, display_host);
         let Some(request) = append_request else {
             let Some(source_item) = self.replacement.fallback_source_item(
                 self.text_start_byte,
                 self.text,
                 RenderFaceRef::FaceId(self.active_face_state.face_id()),
             ) else {
-                return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+                return BufferDisplayPropertyTextReplacementResolveOutcome::Stop;
             };
-            return BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item);
+            return BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item);
         };
-        let outcome = request.append_to_text_row(
+        BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(
+            BufferDisplayPropertyTextReplacementRenderRequest::new(
+                request,
+                self.replacement.end_charpos(),
+                self.replacement.start_charpos(),
+                self.point_charpos,
+            ),
+        )
+    }
+}
+
+impl BufferDisplayPropertyTextReplacementRenderRequest {
+    pub(crate) fn new(
+        append_request: DisplayPropertyReplacementAppendRequest,
+        skip_to: i64,
+        start_charpos: i64,
+        point_charpos: i64,
+    ) -> Self {
+        Self {
+            append_request,
+            skip_to,
+            start_charpos,
+            point_charpos,
+        }
+    }
+
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+    ) {
+        let BufferDisplayPropertyTextReplacementRenderState {
+            text,
+            mut source_render,
+            face_ids,
+            append_surface,
+            row_geometry,
+            cursor_info,
+            active_face_state,
+            progress,
+        } = state;
+        let outcome = self.append_request.append_to_text_row(
             buffer,
             &mut source_render.reborrow(),
             face_ids,
             append_surface,
             row_geometry,
-            self.active_face_state,
+            active_face_state,
         );
         let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
-            skip_to: self.replacement.end_charpos(),
+            skip_to: self.skip_to,
         };
         replacement_outcome.capture_cursor_info_if_point(
             cursor_info,
-            self.active_face_state,
+            active_face_state,
             row_geometry,
             self.point_charpos,
-            self.replacement.start_charpos(),
+            self.start_charpos,
             *progress.byte_idx,
         );
         replacement_outcome.apply_to_walk_state(
-            self.text,
+            text,
             progress.byte_idx,
             progress.charpos,
             progress.row.x,
             progress.row.col,
         );
-        BufferDisplayPropertyTextReplacementRenderOutcome::Continue
     }
 }
 
