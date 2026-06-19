@@ -287,6 +287,13 @@ fn install_text_window_row_decoration(
     request.install(output_builder);
 }
 
+pub(crate) fn install_text_window_row_decoration_request(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowRowDecorationRequest,
+) {
+    install_text_window_row_decoration(output_builder, request);
+}
+
 fn begin_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     begin: DisplayTextRowBegin,
@@ -315,6 +322,133 @@ fn finish_display_text_row(
 
 fn finalize_display_text_row(output_builder: &mut DisplayOutputBuilder, display_row_index: usize) {
     output_builder.finalize_output_row_index(display_row_index);
+}
+
+pub(crate) fn begin_text_window_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    begin: DisplayTextRowBegin,
+) -> usize {
+    let display_row_index = begin_display_text_row(output_builder, begin);
+    output_emitter.begin_display_text_row(
+        evaluator,
+        begin.display_row_index,
+        begin.row,
+        begin.col,
+        begin.y,
+        begin.x,
+    );
+    display_row_index
+}
+
+pub(crate) fn finish_text_window_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    metrics: DisplayTextRowMetrics,
+) -> DisplayTextRowFinish {
+    let display_row_index = output_emitter.current_display_text_row_index();
+    let finish = finish_display_text_row(output_builder, display_row_index, metrics);
+    output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
+    finish
+}
+
+pub(crate) fn finish_and_end_text_window_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    metrics: DisplayTextRowMetrics,
+) -> DisplayTextRowFinish {
+    let display_row_index = output_emitter.current_display_text_row_index();
+    let finish = finish_text_window_row(output_builder, output_emitter, metrics);
+    finalize_display_text_row(output_builder, display_row_index);
+    finish
+}
+
+pub(crate) fn transition_text_window_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    transition: DisplayTextRowGeometryTransition,
+) -> DisplayTextRowTransition {
+    finish_and_end_text_window_row(output_builder, output_emitter, transition.finished_row);
+    begin_text_window_row(
+        output_builder,
+        output_emitter,
+        evaluator,
+        transition.begin_row,
+    );
+    DisplayTextRowTransition::BeganNextRow
+}
+
+pub(crate) fn transition_text_window_row_with_limit(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    transition: DisplayTextRowGeometryTransition,
+    max_rows: usize,
+) -> DisplayTextRowTransition {
+    if transition.begin_row.row >= max_rows {
+        finish_and_end_text_window_row(output_builder, output_emitter, transition.finished_row);
+        return DisplayTextRowTransition::ExhaustedRows;
+    }
+    transition_text_window_row(output_builder, output_emitter, evaluator, transition)
+}
+
+pub(crate) fn begin_text_window_output_and_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    request: TextWindowBegin,
+) {
+    let first_row = request.first_row;
+    begin_text_window_output(output_builder, request.into());
+    begin_text_window_row(output_builder, output_emitter, evaluator, first_row);
+}
+
+pub(crate) fn finish_pending_text_window_row(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    request: TextWindowPendingRowFinish<'_>,
+) -> bool {
+    let has_pending_row_output = output_emitter.current_row_has_output();
+    if !request.row_geometry.is_within_row_limit(request.row_limit)
+        || !request
+            .hit_row_range
+            .should_finish_current_row(request.charpos, has_pending_row_output)
+    {
+        return false;
+    }
+
+    let row_y_start = request.row_geometry.current_row_y(
+        request.row_y_positions,
+        request.text_y,
+        request.char_height,
+    );
+    let row_cursor = request.row_geometry.with_row_y(row_y_start).cursor();
+    request
+        .hit_rows
+        .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
+    finish_text_window_row(
+        output_builder,
+        output_emitter,
+        row_cursor.finish_current_row(),
+    );
+    true
+}
+
+pub(crate) fn render_window_chrome_rows(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    request: WindowChromeRowsRenderRequest<'_, '_>,
+    render_services: ChromeRowRenderServices<'_, '_>,
+) {
+    request.render(&mut WindowChromeRowsRenderState::new(
+        output_builder,
+        output_emitter,
+        evaluator,
+        render_services,
+    ));
 }
 
 pub(crate) fn close_text_window_output(output_builder: &mut DisplayOutputBuilder) {
@@ -688,207 +822,10 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-pub(crate) struct TextWindowRowOutputSurface<'output_builder, 'output> {
-    output_builder: &'output_builder mut DisplayOutputBuilder,
-    output_emitter: &'output mut WindowOutputEmitter,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowOutputRetryCheckpoint {
     pub(crate) transition_hints_len: usize,
     pub(crate) effect_hints_len: usize,
-}
-
-impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'output> {
-    pub(crate) fn from_parts(
-        output_builder: &'output_builder mut DisplayOutputBuilder,
-        output_emitter: &'output mut WindowOutputEmitter,
-    ) -> Self {
-        Self {
-            output_builder,
-            output_emitter,
-        }
-    }
-
-    fn output_emitter(&self) -> &WindowOutputEmitter {
-        self.output_emitter
-    }
-
-    fn output_emitter_mut(&mut self) -> &mut WindowOutputEmitter {
-        self.output_emitter
-    }
-
-    pub(crate) fn set_logical_cursor(&mut self, cursor: WindowCursorPos) {
-        self.output_emitter_mut().set_logical_cursor(cursor);
-    }
-
-    pub(crate) fn row_metrics(&self) -> &[RowMetricsSnapshot] {
-        self.output_emitter().row_metrics()
-    }
-
-    pub(crate) fn point_for_lisp_buffer_pos(
-        &self,
-        pos: LispCharPos1,
-    ) -> Option<&DisplayPointSnapshot> {
-        self.output_emitter().point_for_lisp_buffer_pos(pos)
-    }
-
-    pub(crate) fn begin_text_row(
-        &mut self,
-        evaluator: &mut Context,
-        begin: DisplayTextRowBegin,
-    ) -> usize {
-        let display_row_index = begin_display_text_row(self.output_builder, begin);
-        self.output_emitter.begin_display_text_row(
-            evaluator,
-            begin.display_row_index,
-            begin.row,
-            begin.col,
-            begin.y,
-            begin.x,
-        );
-        display_row_index
-    }
-
-    pub(crate) fn finish_text_row(
-        &mut self,
-        metrics: DisplayTextRowMetrics,
-    ) -> DisplayTextRowFinish {
-        let display_row_index = self.output_emitter.current_display_text_row_index();
-        let finish = finish_display_text_row(self.output_builder, display_row_index, metrics);
-        self.output_emitter
-            .push_text_row(metrics.y, metrics.height, metrics.ascent);
-        finish
-    }
-
-    pub(crate) fn finish_and_end_text_row(
-        &mut self,
-        metrics: DisplayTextRowMetrics,
-    ) -> DisplayTextRowFinish {
-        let display_row_index = self.output_emitter.current_display_text_row_index();
-        let finish = self.finish_text_row(metrics);
-        finalize_display_text_row(self.output_builder, display_row_index);
-        finish
-    }
-
-    pub(crate) fn transition_text_row(
-        &mut self,
-        evaluator: &mut Context,
-        transition: DisplayTextRowGeometryTransition,
-    ) -> DisplayTextRowTransition {
-        self.finish_and_end_text_row(transition.finished_row);
-        self.begin_text_row(evaluator, transition.begin_row);
-        DisplayTextRowTransition::BeganNextRow
-    }
-
-    pub(crate) fn transition_text_row_with_limit(
-        &mut self,
-        evaluator: &mut Context,
-        transition: DisplayTextRowGeometryTransition,
-        max_rows: usize,
-    ) -> DisplayTextRowTransition {
-        if transition.begin_row.row >= max_rows {
-            self.finish_and_end_text_row(transition.finished_row);
-            return DisplayTextRowTransition::ExhaustedRows;
-        }
-        self.transition_text_row(evaluator, transition)
-    }
-
-    pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        install_text_window_row_decoration(self.output_builder, request);
-    }
-
-    pub(crate) fn publish_cursor(
-        &mut self,
-        cursor: TextWindowCursor,
-    ) -> TextWindowCursorPublicationOutcome {
-        let publication = TextWindowCursorPublication::resolve(self.output_builder, cursor);
-        publication.publish(self)
-    }
-
-    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        publish_text_window_decorative_cursor(self.output_builder, cursor);
-    }
-
-    fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        install_text_window_cursor_artifact(self.output_builder, cursor);
-    }
-
-    fn set_display_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.output_builder.set_output_row_cursor(row, col, style);
-    }
-
-    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        store_text_window_phys_cursor(self.output_builder, cursor);
-    }
-
-    fn set_phys_cursor(&mut self, cursor: WindowCursorSnapshot) {
-        self.output_emitter_mut().set_phys_cursor(cursor);
-    }
-
-    pub(crate) fn install_body_output(
-        &mut self,
-        request: TextWindowBodyOutputInstall<'_>,
-        render_services: Option<ChromeRowRenderServices<'_, '_>>,
-    ) -> TextWindowRedisplayPositions {
-        install_text_window_body_output(
-            self.output_builder,
-            self.output_emitter,
-            request,
-            render_services,
-        )
-    }
-
-    pub(crate) fn render_chrome_rows(
-        &mut self,
-        evaluator: &mut Context,
-        request: WindowChromeRowsRenderRequest<'_, '_>,
-        render_services: ChromeRowRenderServices<'_, '_>,
-    ) {
-        request.render(&mut WindowChromeRowsRenderState::new(
-            self.output_builder,
-            self.output_emitter,
-            evaluator,
-            render_services,
-        ));
-    }
-
-    pub(crate) fn begin_text_window_output(
-        &mut self,
-        evaluator: &mut Context,
-        request: TextWindowBegin,
-    ) {
-        let first_row = request.first_row;
-        begin_text_window_output(self.output_builder, request.into());
-        self.begin_text_row(evaluator, first_row);
-    }
-
-    pub(crate) fn finish_pending_row(
-        &mut self,
-        _evaluator: &mut Context,
-        request: TextWindowPendingRowFinish<'_>,
-    ) -> bool {
-        let has_pending_row_output = self.output_emitter.current_row_has_output();
-        if !request.row_geometry.is_within_row_limit(request.row_limit)
-            || !request
-                .hit_row_range
-                .should_finish_current_row(request.charpos, has_pending_row_output)
-        {
-            return false;
-        }
-
-        let row_y_start = request.row_geometry.current_row_y(
-            request.row_y_positions,
-            request.text_y,
-            request.char_height,
-        );
-        let row_cursor = request.row_geometry.with_row_y(row_y_start).cursor();
-        request
-            .hit_rows
-            .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
-        self.finish_text_row(row_cursor.finish_current_row());
-        true
-    }
 }
 
 pub(crate) fn install_text_window_cursor_effects(
@@ -1041,16 +978,17 @@ impl TextWindowCursorPublication {
 
     fn publish(
         self,
-        output: &mut TextWindowRowOutputSurface<'_, '_>,
+        output_builder: &mut DisplayOutputBuilder,
+        output_emitter: &mut WindowOutputEmitter,
     ) -> TextWindowCursorPublicationOutcome {
         let installed_cursor_artifact = self.cursor_artifact.is_some();
         if let Some(cursor) = self.cursor_artifact {
-            output.install_cursor_artifact(cursor);
+            install_text_window_cursor_artifact(output_builder, cursor);
         }
-        output.set_display_row_cursor(self.row, self.row_col, self.style);
-        output.set_phys_cursor(self.live_cursor.clone());
+        output_builder.set_output_row_cursor(self.row, self.row_col, self.style);
+        output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
-            output.store_phys_cursor(cursor);
+            store_text_window_phys_cursor(output_builder, cursor);
         }
         TextWindowCursorPublicationOutcome {
             installed_cursor_artifact,
@@ -1062,7 +1000,16 @@ impl TextWindowCursorPublication {
     }
 }
 
-fn install_text_window_body_output(
+pub(crate) fn publish_text_window_cursor(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    cursor: TextWindowCursor,
+) -> TextWindowCursorPublicationOutcome {
+    let publication = TextWindowCursorPublication::resolve(output_builder, cursor);
+    publication.publish(output_builder, output_emitter)
+}
+
+pub(crate) fn install_text_window_body_output(
     output_builder: &mut DisplayOutputBuilder,
     output_emitter: &WindowOutputEmitter,
     request: TextWindowBodyOutputInstall<'_>,

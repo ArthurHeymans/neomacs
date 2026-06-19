@@ -1,11 +1,13 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowTextPosition;
 use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowRowOutputSurface,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, WindowOutputEmitter,
+    publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
@@ -762,14 +764,15 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         cursor: CapturedCursorInfo,
         row_metrics: &[RowMetricsSnapshot],
         fallback_row_metric: RowMetricsSnapshot,
-        output: &mut TextWindowRowOutputSurface<'_, '_>,
+        output_builder: &mut DisplayOutputBuilder,
+        output_emitter: &mut WindowOutputEmitter,
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
             row_metrics,
             self.display_text_row_base + cursor.display_row_offset,
             fallback_row_metric,
         );
-        output.set_logical_cursor(cursor.logical_cursor_position(
+        output_emitter.set_logical_cursor(cursor.logical_cursor_position(
             row_metric,
             self.display_text_row_base,
             self.text_area_left,
@@ -802,23 +805,27 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             return CapturedTextWindowCursorPublishOutcome::Clipped;
         }
 
-        output.publish_cursor(TextWindowCursor {
-            selected: self.params.selected,
-            window_id: resolved_cursor.window_id(),
-            charpos: self.point_charpos.max(0) as usize,
-            slot_id: resolved_cursor.slot_id,
-            x: resolved_cursor.x,
-            y: resolved_cursor.y,
-            width: resolved_cursor.width,
-            height: resolved_cursor.height,
-            ascent: resolved_cursor.ascent,
-            style: resolved_cursor.style,
-            color: resolved_cursor.color,
-            cursor_fg: resolved_cursor.cursor_fg,
-            text_area_left: self.text_area_left,
-            window_top: self.window_top,
-            glyph_row_resolved: cursor.glyph_row_resolved,
-        });
+        publish_text_window_cursor(
+            output_builder,
+            output_emitter,
+            TextWindowCursor {
+                selected: self.params.selected,
+                window_id: resolved_cursor.window_id(),
+                charpos: self.point_charpos.max(0) as usize,
+                slot_id: resolved_cursor.slot_id,
+                x: resolved_cursor.x,
+                y: resolved_cursor.y,
+                width: resolved_cursor.width,
+                height: resolved_cursor.height,
+                ascent: resolved_cursor.ascent,
+                style: resolved_cursor.style,
+                color: resolved_cursor.color,
+                cursor_fg: resolved_cursor.cursor_fg,
+                text_area_left: self.text_area_left,
+                window_top: self.window_top,
+                glyph_row_resolved: cursor.glyph_row_resolved,
+            },
+        );
 
         if self.ends_at_visible_eob {
             tracing::debug!(
@@ -874,7 +881,8 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
 
     pub(crate) fn publish_visual_cursors(
         self,
-        output: &mut TextWindowRowOutputSurface<'_, '_>,
+        output_builder: &mut DisplayOutputBuilder,
+        output_emitter: &WindowOutputEmitter,
     ) -> VisualTextWindowCursorPublishSummary {
         let mut summary = VisualTextWindowCursorPublishSummary::default();
 
@@ -884,7 +892,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 summary.no_cursor += 1;
                 continue;
             };
-            let Some(point) = output
+            let Some(point) = output_emitter
                 .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(spec.charpos))
             else {
                 summary.missing_point += 1;
@@ -909,17 +917,20 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 summary.clipped += 1;
                 continue;
             }
-            output.publish_decorative_cursor(TextWindowDecorativeCursor {
-                window_id: resolved_cursor.window_id(),
-                slot_id: resolved_cursor.slot_id,
-                x: resolved_cursor.x,
-                y: resolved_cursor.y,
-                width: resolved_cursor.width,
-                height: resolved_cursor.height,
-                style: resolved_cursor.style,
-                color: resolved_cursor.color,
-                effects: spec.effects.clone(),
-            });
+            publish_text_window_decorative_cursor(
+                output_builder,
+                TextWindowDecorativeCursor {
+                    window_id: resolved_cursor.window_id(),
+                    slot_id: resolved_cursor.slot_id,
+                    x: resolved_cursor.x,
+                    y: resolved_cursor.y,
+                    width: resolved_cursor.width,
+                    height: resolved_cursor.height,
+                    style: resolved_cursor.style,
+                    color: resolved_cursor.color,
+                    effects: spec.effects.clone(),
+                },
+            );
             summary.published += 1;
         }
 

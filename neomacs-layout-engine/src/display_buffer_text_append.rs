@@ -23,9 +23,9 @@ use crate::types::WindowParams;
 use crate::window_output::{
     DisplayTextRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
-    TextWindowRowOutputSurface, TextWindowTerminalRightBorder, WindowOutputEmitter,
-    close_text_window_output, install_text_window_cursor_effects,
-    install_text_window_terminal_right_border,
+    TextWindowTerminalRightBorder, WindowOutputEmitter, begin_text_window_output_and_row,
+    close_text_window_output, finish_pending_text_window_row, install_text_window_body_output,
+    install_text_window_cursor_effects, install_text_window_terminal_right_border,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -453,19 +453,20 @@ impl BufferTextWindowBeginRequest {
             self.window_top,
         );
         output_emitter.begin_update(evaluator);
-        TextWindowRowOutputSurface::from_parts(output_builder, &mut output_emitter)
-            .begin_text_window_output(
-                evaluator,
-                TextWindowBegin {
-                    window_id: self.output_window_id,
-                    rows: self.output_rows,
-                    cols: self.output_cols,
-                    bounds: self.bounds,
-                    text_bounds: self.text_bounds,
-                    selected: self.selected,
-                    first_row: self.first_row,
-                },
-            );
+        begin_text_window_output_and_row(
+            output_builder,
+            &mut output_emitter,
+            evaluator,
+            TextWindowBegin {
+                window_id: self.output_window_id,
+                rows: self.output_rows,
+                cols: self.output_cols,
+                bounds: self.bounds,
+                text_bounds: self.text_bounds,
+                selected: self.selected,
+                first_row: self.first_row,
+            },
+        );
         output_emitter
     }
 
@@ -506,11 +507,11 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
         };
 
         let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
-            output_render.with_text_window_output(|output, evaluator| {
+            output_render.with_output_parts(|output_builder, output_emitter, _evaluator| {
                 let mut cursor_publish_status = initial_cursor_publish_status;
                 if cursor_requested {
                     if let Some(cursor) = cursor_info.captured() {
-                        let cursor_row_metrics = output.row_metrics().to_vec();
+                        let cursor_row_metrics = output_emitter.row_metrics().to_vec();
                         cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
                             context.params,
                             context.text,
@@ -528,7 +529,8 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                             cursor,
                             &cursor_row_metrics,
                             row_geometry.row_metrics_snapshot(context.display_text_row_base),
-                            output,
+                            output_builder,
+                            output_emitter,
                         )
                         .into();
                     } else {
@@ -541,8 +543,10 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     }
                 }
 
-                let pending_row_finished =
-                    output.finish_pending_row(evaluator, TextWindowPendingRowFinish {
+                let pending_row_finished = finish_pending_text_window_row(
+                    output_builder,
+                    output_emitter,
+                    TextWindowPendingRowFinish {
                         row_geometry,
                         row_limit: context.row_limit,
                         row_y_positions,
@@ -551,7 +555,8 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                         charpos: context.charpos,
                         hit_row_range,
                         hit_rows,
-                    });
+                    },
+                );
 
                 let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
                     context.params,
@@ -561,7 +566,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     context.text_height,
                     context.char_w,
                 )
-                .publish_visual_cursors(output);
+                .publish_visual_cursors(output_builder, output_emitter);
                 (
                     cursor_publish_status,
                     pending_row_finished,
@@ -598,19 +603,18 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
             context.char_w,
         );
 
-        let redisplay_positions =
-            TextWindowRowOutputSurface::from_parts(state.output_builder, state.output_emitter)
-                .install_body_output(
-                    TextWindowBodyOutputInstall {
-                        window_id: context.window_id,
-                        window_start: context.window_start,
-                        text_start_byte: context.text_start_byte,
-                        byte_idx: context.byte_idx,
-                        right_edge_markers,
-                    },
-                    Some(state.render_services),
-                );
-        redisplay_positions
+        install_text_window_body_output(
+            state.output_builder,
+            state.output_emitter,
+            TextWindowBodyOutputInstall {
+                window_id: context.window_id,
+                window_start: context.window_start,
+                text_start_byte: context.text_start_byte,
+                byte_idx: context.byte_idx,
+                right_edge_markers,
+            },
+            Some(state.render_services),
+        )
     }
 }
 

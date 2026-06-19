@@ -95,7 +95,7 @@ use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
     DisplayTextRowTransition, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
-    TextWindowRowOutputSurface, WindowOutputEmitter, capture_text_window_retry_checkpoint,
+    WindowOutputEmitter, capture_text_window_retry_checkpoint, render_window_chrome_rows,
     restore_text_window_retry_checkpoint,
 };
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1628,7 +1628,9 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
             output_builder,
             evaluator,
         } = &mut self.output;
-        TextWindowRowOutputSurface::from_parts(output_builder, output_emitter).render_chrome_rows(
+        render_window_chrome_rows(
+            output_builder,
+            output_emitter,
             evaluator,
             request,
             self.render_services.reborrow(),

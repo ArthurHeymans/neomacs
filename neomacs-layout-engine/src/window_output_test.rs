@@ -14,14 +14,21 @@ use super::TextWindowDisplayRange;
 use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
 use super::TextWindowRowDecorationRequest;
-use super::TextWindowRowOutputSurface;
 use super::WindowOutputEmitter;
+use super::begin_text_window_row;
 use super::close_text_window_output;
+use super::finish_and_end_text_window_row;
+use super::finish_pending_text_window_row;
+use super::finish_text_window_row;
+use super::install_text_window_body_output;
 use super::install_text_window_cursor_effects;
 use super::install_text_window_finished_rows;
 use super::install_text_window_row_decoration;
+use super::publish_text_window_cursor;
 use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
+use super::transition_text_window_row;
+use super::transition_text_window_row_with_limit;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_builder::{
@@ -481,17 +488,18 @@ fn text_matrix_row_output_surface_begins_row() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    let outcome = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
-        .begin_text_row(
-            &mut eval,
-            DisplayTextRowBegin {
-                display_row_index: 0,
-                row: 0,
-                col: 0,
-                y: 0.0,
-                x: 0.0,
-            },
-        );
+    let outcome = begin_text_window_row(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        DisplayTextRowBegin {
+            display_row_index: 0,
+            row: 0,
+            col: 0,
+            y: 0.0,
+            x: 0.0,
+        },
+    );
 
     assert_eq!(outcome, 0);
 
@@ -537,8 +545,9 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    let mut output = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter);
-    output.begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -548,11 +557,15 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
             x: 0.0,
         },
     );
-    let outcome = output.finish_text_row(DisplayTextRowMetrics {
-        y: 20.0,
-        height: 16.0,
-        ascent: 11.0,
-    });
+    let outcome = finish_text_window_row(
+        &mut builder,
+        &mut emitter,
+        DisplayTextRowMetrics {
+            y: 20.0,
+            height: 16.0,
+            ascent: 11.0,
+        },
+    );
 
     assert_eq!(
         outcome.metrics,
@@ -625,7 +638,9 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
 
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -636,7 +651,9 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         },
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
+    finish_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -645,7 +662,9 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     );
     builder.end_row();
 
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 1,
@@ -655,7 +674,9 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             x: 0.0,
         },
     );
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
+    finish_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 16.0,
             height: 16.0,
@@ -715,8 +736,10 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     write_char_to_current_row(&mut builder, 'H', 3, 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
-    let outcome = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
-        .publish_cursor(TextWindowCursor {
+    let outcome = publish_text_window_cursor(
+        &mut builder,
+        &mut emitter,
+        TextWindowCursor {
             selected: true,
             window_id: window_id.0 as i64,
             charpos: 100,
@@ -736,7 +759,8 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             text_area_left: 16.0,
             window_top: 8.0,
             glyph_row_resolved: false,
-        });
+        },
+    );
 
     builder.end_row();
     builder.end_window();
@@ -833,7 +857,9 @@ fn text_matrix_row_commands_begin_and_finish_output() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -860,7 +886,9 @@ fn text_matrix_row_commands_begin_and_finish_output() {
         })
     );
 
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
+    finish_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -899,7 +927,9 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -910,7 +940,9 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
         },
     );
 
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_and_end_text_row(
+    finish_and_end_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -946,7 +978,9 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -962,20 +996,20 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
     let mut hit_rows = Vec::new();
 
-    let finished = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
-        .finish_pending_row(
-            &mut eval,
-            TextWindowPendingRowFinish {
-                row_geometry: &row_geometry,
-                row_limit: DisplayRowLimit { max_rows: 1 },
-                row_y_positions: &row_y_positions,
-                text_y: 4.0,
-                char_height: 18.0,
-                charpos: 5,
-                hit_row_range: &mut hit_row_range,
-                hit_rows: &mut hit_rows,
-            },
-        );
+    let finished = finish_pending_text_window_row(
+        &mut builder,
+        &mut emitter,
+        TextWindowPendingRowFinish {
+            row_geometry: &row_geometry,
+            row_limit: DisplayRowLimit { max_rows: 1 },
+            row_y_positions: &row_y_positions,
+            text_y: 4.0,
+            char_height: 18.0,
+            charpos: 5,
+            hit_row_range: &mut hit_row_range,
+            hit_rows: &mut hit_rows,
+        },
+    );
 
     assert!(finished);
     assert_eq!(hit_rows.len(), 1);
@@ -1011,7 +1045,9 @@ fn install_text_window_output_installs_row_metrics() {
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -1022,7 +1058,9 @@ fn install_text_window_output_installs_row_metrics() {
         },
     );
     write_char_to_current_row(&mut builder, 'x', 7, 0);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
+    finish_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -1063,7 +1101,9 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -1075,7 +1115,9 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row(&mut builder, 'x', 7, 0);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
+    finish_text_window_row(
+        &mut builder,
+        &mut emitter,
         DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -1083,17 +1125,18 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         },
     );
 
-    let positions = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
-        .install_body_output(
-            TextWindowBodyOutputInstall {
-                window_id: 41,
-                window_start: 3,
-                text_start_byte: 100,
-                byte_idx: 4,
-                right_edge_markers: None,
-            },
-            None,
-        );
+    let positions = install_text_window_body_output(
+        &mut builder,
+        &mut emitter,
+        TextWindowBodyOutputInstall {
+            window_id: 41,
+            window_start: 3,
+            text_start_byte: 100,
+            byte_idx: 4,
+            right_edge_markers: None,
+        },
+        None,
+    );
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
     assert_eq!(positions.window_end, LispCharPos1::new(8));
@@ -1152,7 +1195,9 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -1163,25 +1208,26 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         },
     );
 
-    let transition = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
-        .transition_text_row_with_limit(
-            &mut eval,
-            DisplayTextRowGeometryTransition {
-                finished_row: DisplayTextRowMetrics {
-                    y: 0.0,
-                    height: 16.0,
-                    ascent: 12.0,
-                },
-                begin_row: DisplayTextRowBegin {
-                    display_row_index: 1,
-                    row: 1,
-                    col: 0,
-                    y: 16.0,
-                    x: 0.0,
-                },
+    let transition = transition_text_window_row_with_limit(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
+                y: 0.0,
+                height: 16.0,
+                ascent: 12.0,
             },
-            1,
-        );
+            begin_row: DisplayTextRowBegin {
+                display_row_index: 1,
+                row: 1,
+                col: 0,
+                y: 16.0,
+                x: 0.0,
+            },
+        },
+        1,
+    );
 
     assert_eq!(transition, DisplayTextRowTransition::ExhaustedRows);
     assert_eq!(emitter.rows().len(), 1);
@@ -1213,7 +1259,9 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
+    begin_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
             display_row_index: 0,
@@ -1224,7 +1272,9 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
         },
     );
 
-    TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).transition_text_row(
+    transition_text_window_row(
+        &mut builder,
+        &mut emitter,
         &mut eval,
         DisplayTextRowGeometryTransition {
             finished_row: DisplayTextRowMetrics {

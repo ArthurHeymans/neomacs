@@ -32,7 +32,9 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextRowOutput, TextWindowRowDecorationRequest, TextWindowRowOutputSurface, WindowOutputEmitter,
+    TextRowOutput, TextWindowRowDecorationRequest, WindowOutputEmitter,
+    finish_and_end_text_window_row, install_text_window_row_decoration_request,
+    transition_text_window_row, transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::Context;
@@ -396,25 +398,24 @@ impl<'a> TextRowOutputRenderState<'a> {
         }
     }
 
-    pub(crate) fn with_text_window_output<R>(
+    pub(crate) fn with_output_parts<R>(
         self,
-        f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
+        f: impl FnOnce(&mut DisplayOutputBuilder, &mut WindowOutputEmitter, &mut Context) -> R,
     ) -> R {
-        let mut output =
-            TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter);
-        f(&mut output, self.evaluator)
+        f(self.output_builder, self.output_emitter, self.evaluator)
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        self.with_text_window_output(|output, _evaluator| {
-            output.finish_and_end_text_row(metrics);
-        });
+        finish_and_end_text_window_row(self.output_builder, self.output_emitter, metrics);
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        self.with_text_window_output(|output, evaluator| {
-            output.transition_text_row(evaluator, transition);
-        });
+        transition_text_window_row(
+            self.output_builder,
+            self.output_emitter,
+            self.evaluator,
+            transition,
+        );
     }
 
     pub(crate) fn transition_text_row_with_limit(
@@ -422,15 +423,17 @@ impl<'a> TextRowOutputRenderState<'a> {
         transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
     ) -> DisplayTextRowTransition {
-        self.with_text_window_output(|output, evaluator| {
-            output.transition_text_row_with_limit(evaluator, transition, max_rows)
-        })
+        transition_text_window_row_with_limit(
+            self.output_builder,
+            self.output_emitter,
+            self.evaluator,
+            transition,
+            max_rows,
+        )
     }
 
     pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        self.with_text_window_output(|output, _evaluator| {
-            output.install_row_decoration(request);
-        });
+        install_text_window_row_decoration_request(self.output_builder, request);
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
