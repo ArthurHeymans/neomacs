@@ -1,4 +1,7 @@
-use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_builder::{
+    DisplayOutputBuilder, OutputRetryCheckpointRestoreRequest,
+    OutputTextWindowDisplayRangeInstallRequest,
+};
 use crate::window_output::{
     TextWindowDisplayRange, TextWindowOutputBegin, TextWindowOutputRetryCheckpoint,
 };
@@ -32,19 +35,21 @@ impl<'output> WindowOutputInstallSurface<'output> {
     }
 
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        if let Some(info) = self.output_builder.window_infos_last_mut()
-            && info.window_id == range.window_id as i64
-        {
-            info.window_start = range.window_start.as_i64();
-            info.window_end = range.window_end.as_i64();
-        }
+        self.output_builder.install_window_metadata(
+            OutputTextWindowDisplayRangeInstallRequest::new(
+                range.window_id as i64,
+                range.window_start.as_i64(),
+                range.window_end.as_i64(),
+            ),
+        );
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
         self.output_builder
-            .truncate_transition_hints(checkpoint.transition_hints_len);
-        self.output_builder
-            .truncate_effect_hints(checkpoint.effect_hints_len);
+            .install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+                checkpoint.transition_hints_len,
+                checkpoint.effect_hints_len,
+            ));
     }
 }
 

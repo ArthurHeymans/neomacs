@@ -2,7 +2,8 @@ use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 use crate::display_output_artifact_install::OutputArtifactInstallSurface;
 use crate::display_output_builder::{
-    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRowDecorator,
+    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRowDecorationInstallRequest,
+    OutputRowDecorator,
 };
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
@@ -624,14 +625,20 @@ impl<'builder> DisplayRowDecorationInstaller<'builder> {
     where
         D: OutputRowDecorator,
     {
-        self.builder.decorate_current_window_row(row_idx, decorator);
+        self.builder
+            .install_row_decoration(OutputRowDecorationInstallRequest::current_window_row(
+                row_idx, decorator,
+            ));
     }
 
     fn decorate_last_window_rows<D>(&mut self, decorator: D)
     where
         D: OutputRowDecorator,
     {
-        self.builder.decorate_last_window_rows(decorator);
+        self.builder
+            .install_row_decoration(OutputRowDecorationInstallRequest::last_window_rows(
+                decorator,
+            ));
     }
 }
 

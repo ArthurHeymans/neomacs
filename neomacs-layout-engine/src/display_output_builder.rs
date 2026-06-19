@@ -273,6 +273,25 @@ enum OutputWindowLifecycleRequest {
     End,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OutputTextWindowDisplayRangeInstallRequest {
+    window_id: i64,
+    window_start: i64,
+    window_end: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OutputRetryCheckpointRestoreRequest {
+    transition_hints_len: usize,
+    effect_hints_len: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OutputWindowMetadataInstallRequest {
+    TextDisplayRange(OutputTextWindowDisplayRangeInstallRequest),
+    RestoreRetryCheckpoint(OutputRetryCheckpointRestoreRequest),
+}
+
 impl OutputWindowLifecycleRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
@@ -294,6 +313,58 @@ impl OutputWindowLifecycleRequest {
                         selected: builder.current_selected,
                     });
                 }
+            }
+        }
+    }
+}
+
+impl OutputTextWindowDisplayRangeInstallRequest {
+    pub(crate) fn new(window_id: i64, window_start: i64, window_end: i64) -> Self {
+        Self {
+            window_id,
+            window_start,
+            window_end,
+        }
+    }
+}
+
+impl OutputRetryCheckpointRestoreRequest {
+    pub(crate) fn new(transition_hints_len: usize, effect_hints_len: usize) -> Self {
+        Self {
+            transition_hints_len,
+            effect_hints_len,
+        }
+    }
+}
+
+impl From<OutputTextWindowDisplayRangeInstallRequest> for OutputWindowMetadataInstallRequest {
+    fn from(request: OutputTextWindowDisplayRangeInstallRequest) -> Self {
+        Self::TextDisplayRange(request)
+    }
+}
+
+impl From<OutputRetryCheckpointRestoreRequest> for OutputWindowMetadataInstallRequest {
+    fn from(request: OutputRetryCheckpointRestoreRequest) -> Self {
+        Self::RestoreRetryCheckpoint(request)
+    }
+}
+
+impl OutputWindowMetadataInstallRequest {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
+        match self {
+            Self::TextDisplayRange(range) => {
+                if let Some(info) = builder.window_infos.last_mut()
+                    && info.window_id == range.window_id
+                {
+                    info.window_start = range.window_start;
+                    info.window_end = range.window_end;
+                }
+            }
+            Self::RestoreRetryCheckpoint(checkpoint) => {
+                builder
+                    .transition_hints
+                    .truncate(checkpoint.transition_hints_len);
+                builder.effect_hints.truncate(checkpoint.effect_hints_len);
             }
         }
     }
@@ -355,6 +426,50 @@ impl OutputRowLifecycleRequest {
 
 pub(crate) trait OutputRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
+}
+
+pub(crate) enum OutputRowDecorationInstallRequest<D> {
+    CurrentWindowRow { row_idx: usize, decorator: D },
+    LastWindowRows { decorator: D },
+}
+
+impl<D> OutputRowDecorationInstallRequest<D>
+where
+    D: OutputRowDecorator,
+{
+    pub(crate) fn current_window_row(row_idx: usize, decorator: D) -> Self {
+        Self::CurrentWindowRow { row_idx, decorator }
+    }
+
+    pub(crate) fn last_window_rows(decorator: D) -> Self {
+        Self::LastWindowRows { decorator }
+    }
+
+    fn install(self, builder: &mut DisplayOutputBuilder) {
+        match self {
+            Self::CurrentWindowRow {
+                row_idx,
+                mut decorator,
+            } => {
+                let Some(matrix) = builder.current_matrix.as_mut() else {
+                    return;
+                };
+                let Some(row) = matrix.rows.get_mut(row_idx) else {
+                    return;
+                };
+                decorator.decorate_row(row, matrix.ncols);
+            }
+            Self::LastWindowRows { mut decorator } => {
+                let Some(entry) = builder.windows.last_mut() else {
+                    return;
+                };
+                let matrix_cols = entry.matrix.ncols;
+                for row in &mut entry.matrix.rows {
+                    decorator.decorate_row(row, matrix_cols);
+                }
+            }
+        }
+    }
 }
 
 pub(crate) struct DisplayOutputBuilder {
@@ -902,7 +1017,23 @@ impl DisplayOutputBuilder {
         request.install(self);
     }
 
+    pub(crate) fn install_window_metadata(
+        &mut self,
+        request: impl Into<OutputWindowMetadataInstallRequest>,
+    ) {
+        request.into().install(self);
+    }
+
     fn install_row_lifecycle(&mut self, request: OutputRowLifecycleRequest) {
+        request.install(self);
+    }
+
+    pub(crate) fn install_row_decoration<D>(
+        &mut self,
+        request: OutputRowDecorationInstallRequest<D>,
+    ) where
+        D: OutputRowDecorator,
+    {
         request.install(self);
     }
 
@@ -1140,24 +1271,12 @@ impl DisplayOutputBuilder {
         &self.window_infos
     }
 
-    pub(crate) fn window_infos_last_mut(&mut self) -> Option<&mut WindowInfo> {
-        self.window_infos.last_mut()
-    }
-
     pub(crate) fn transition_hints(&self) -> &[WindowTransitionHint] {
         &self.transition_hints
     }
 
     pub(crate) fn effect_hints(&self) -> &[WindowEffectHint] {
         &self.effect_hints
-    }
-
-    pub(crate) fn truncate_transition_hints(&mut self, len: usize) {
-        self.transition_hints.truncate(len);
-    }
-
-    pub(crate) fn truncate_effect_hints(&mut self, len: usize) {
-        self.effect_hints.truncate(len);
     }
 
     pub(crate) fn background_color(&self) -> &Color {
@@ -1175,32 +1294,6 @@ impl DisplayOutputBuilder {
 
     pub(crate) fn phys_cursor(&self) -> Option<&PhysCursor> {
         self.phys_cursor.as_ref()
-    }
-
-    pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, mut decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        let Some(matrix) = self.current_matrix.as_mut() else {
-            return;
-        };
-        let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return;
-        };
-        decorator.decorate_row(row, matrix.ncols);
-    }
-
-    pub(crate) fn decorate_last_window_rows<D>(&mut self, mut decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        let Some(entry) = self.windows.last_mut() else {
-            return;
-        };
-        let matrix_cols = entry.matrix.ncols;
-        for row in &mut entry.matrix.rows {
-            decorator.decorate_row(row, matrix_cols);
-        }
     }
 
     pub(crate) fn finish(
