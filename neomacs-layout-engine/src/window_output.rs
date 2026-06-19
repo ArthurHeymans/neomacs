@@ -23,7 +23,8 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface, DisplayRowInstallSurface,
+    DisplayRowArtifactInstallSurface, DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface,
+    DisplayRowInstallSurface, DisplayRowLifecycleSurface,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -271,7 +272,8 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
 
     #[cfg(test)]
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        request.install(self.builder);
+        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.builder);
+        request.install(&mut row_lifecycle);
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
@@ -329,10 +331,10 @@ pub(crate) enum TextWindowRowDecorationRequest {
 }
 
 impl TextWindowRowDecorationRequest {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, row_lifecycle: &mut DisplayRowLifecycleSurface<'_>) {
         match self {
             Self::MarkCurrentTruncatedLeft => {
-                builder.row_installer().mark_current_truncated_left();
+                row_lifecycle.mark_current_truncated_left();
             }
         }
     }
@@ -707,9 +709,11 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     fn begin(&mut self, begin: TextMatrixRowBegin) -> usize {
-        self.builder
-            .row_installer()
-            .begin(begin.matrix_row, GlyphRowRole::Text, false);
+        DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
+            begin.matrix_row,
+            GlyphRowRole::Text,
+            false,
+        );
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
             begin.matrix_row,
@@ -724,7 +728,7 @@ impl<'a> TextMatrixRowOutput<'a> {
     fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        self.builder.row_installer().set_metrics(
+        DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
             matrix_row,
             matrix_metrics.pixel_y,
             matrix_metrics.height_px,
@@ -741,7 +745,7 @@ impl<'a> TextMatrixRowOutput<'a> {
     fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_row = self.output_emitter.current_text_matrix_row();
         let finish = self.finish(metrics);
-        self.builder.row_installer().finalize(matrix_row);
+        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(matrix_row);
         finish
     }
 
@@ -832,7 +836,8 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     }
 
     fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        request.install(self.output.builder);
+        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.output.builder);
+        request.install(&mut row_lifecycle);
     }
 }
 
@@ -1058,7 +1063,7 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
                 effects,
             });
         }
-        self.builder.artifact_installer().add_cursor(
+        DisplayRowArtifactInstallSurface::from_builder(self.builder).add_cursor(
             cursor.window_id,
             cursor.slot_id,
             cursor.x,
@@ -1071,8 +1076,7 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
     }
 
     fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        self.builder
-            .artifact_installer()
+        DisplayRowArtifactInstallSurface::from_builder(self.builder)
             .set_cursor_effects(request.window_id, request.effects);
     }
 }
@@ -1262,7 +1266,7 @@ struct TextWindowMatrixCursor {
 
 impl TextWindowMatrixCursor {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        builder.artifact_installer().add_cursor(
+        DisplayRowArtifactInstallSurface::from_builder(builder).add_cursor(
             self.window_id,
             self.slot_id,
             self.x,
@@ -1327,12 +1331,14 @@ impl TextWindowCursorPublication {
         if let Some(cursor) = self.matrix_cursor {
             cursor.install(builder);
         }
-        builder
-            .row_installer()
-            .set_cursor(self.row, self.row_col, self.style);
+        DisplayRowLifecycleSurface::from_builder(builder).set_cursor(
+            self.row,
+            self.row_col,
+            self.style,
+        );
         output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
-            builder.artifact_installer().store_phys_cursor(cursor);
+            DisplayRowArtifactInstallSurface::from_builder(builder).store_phys_cursor(cursor);
         }
         TextWindowCursorPublicationOutcome {
             installed_matrix_cursor,
@@ -1350,7 +1356,7 @@ fn finish_text_window_output_rows(
 ) {
     let window_y = builder.current_window_pixel_bounds().y;
     for metric in output_emitter.row_metrics() {
-        builder.row_installer().set_metrics(
+        DisplayRowLifecycleSurface::from_builder(builder).set_metrics(
             metric.matrix_row,
             metric.pixel_y - window_y,
             metric.height,
@@ -1358,7 +1364,7 @@ fn finish_text_window_output_rows(
         );
     }
     if let Some(metric) = output_emitter.row_metrics().last() {
-        builder.row_installer().finalize(metric.matrix_row);
+        DisplayRowLifecycleSurface::from_builder(builder).finalize_row(metric.matrix_row);
     }
 }
 
