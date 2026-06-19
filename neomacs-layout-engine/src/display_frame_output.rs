@@ -105,22 +105,22 @@ impl FrameOutputOwner {
     }
 
     pub(crate) fn surface(&mut self) -> FrameOutputSurface<'_> {
-        FrameOutputSurface::from_builder(&mut self.builder)
+        FrameOutputSurface::from_output_builder(&mut self.builder)
     }
 
     pub(crate) fn text_window_surface(&mut self) -> FrameTextWindowOutputSurface<'_> {
-        FrameTextWindowOutputSurface::from_builder(&mut self.builder)
+        FrameTextWindowOutputSurface::from_output_builder(&mut self.builder)
     }
 
     pub(crate) fn chrome_surface(&mut self) -> FrameChromeOutputSurface<'_, '_> {
-        FrameChromeOutputSurface::from_builder(
+        FrameChromeOutputSurface::from_output_builder(
             &mut self.builder,
             &mut self.pending_frame_chrome_rows,
         )
     }
 
     pub(crate) fn view(&self) -> FrameOutputView<'_> {
-        FrameOutputView::from_builder(&self.builder)
+        FrameOutputView::from_output_builder(&self.builder)
     }
 
     pub(crate) fn reset(&mut self) {
@@ -137,7 +137,7 @@ impl FrameOutputOwner {
 }
 
 impl<'a> FrameOutputSurface<'a> {
-    pub(crate) fn from_builder(builder: &'a mut GlyphMatrixBuilder) -> Self {
+    pub(crate) fn from_output_builder(builder: &'a mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
@@ -186,7 +186,7 @@ impl<'a> FrameOutputSurface<'a> {
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
         request.install_and_apply(
-            &mut TextWindowArtifactOutputSurface::from_builder(self.builder),
+            &mut TextWindowArtifactOutputSurface::from_output_builder(self.builder),
             render_services,
         )
     }
@@ -249,7 +249,7 @@ impl<'a> FrameOutputSurface<'a> {
 }
 
 impl<'builder> FrameTextWindowOutputSurface<'builder> {
-    fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn from_output_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
@@ -260,23 +260,23 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
     }
 
     pub(crate) fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowOutputInstallSurface::from_builder(self.builder).capture_retry_checkpoint()
+        TextWindowOutputInstallSurface::from_output_builder(self.builder).capture_retry_checkpoint()
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        TextWindowOutputInstallSurface::from_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.builder)
             .restore_retry_checkpoint(checkpoint);
     }
 
     pub(crate) fn artifact_surface(&mut self) -> TextWindowArtifactOutputSurface<'_> {
-        TextWindowArtifactOutputSurface::from_builder(self.builder)
+        TextWindowArtifactOutputSurface::from_output_builder(self.builder)
     }
 
     pub(crate) fn begin_surface<'a>(
         &'a mut self,
         evaluator: &'a mut Context,
     ) -> TextWindowBeginOutputSurface<'a> {
-        TextWindowBeginOutputSurface::from_builder(self.builder, evaluator)
+        TextWindowBeginOutputSurface::from_output_builder(self.builder, evaluator)
     }
 
     pub(crate) fn live_surface<'a>(
@@ -284,7 +284,7 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> TextWindowLiveOutputSurface<'a> {
-        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, evaluator)
+        TextWindowLiveOutputSurface::from_output_builder(self.builder, output_emitter, evaluator)
     }
 
     pub(crate) fn finish_surface(
@@ -292,12 +292,12 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         output_emitter: WindowOutputEmitter,
         evaluator: &'builder mut Context,
     ) -> TextWindowFinishOutputSurface<'builder> {
-        TextWindowFinishOutputSurface::from_builder(self.builder, output_emitter, evaluator)
+        TextWindowFinishOutputSurface::from_output_builder(self.builder, output_emitter, evaluator)
     }
 }
 
 impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
-    pub(crate) fn from_builder(
+    pub(crate) fn from_output_builder(
         builder: &'builder mut GlyphMatrixBuilder,
         pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
     ) -> Self {
@@ -356,7 +356,7 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
 }
 
 impl<'builder> FrameOutputView<'builder> {
-    pub(crate) fn from_builder(builder: &'builder GlyphMatrixBuilder) -> Self {
+    pub(crate) fn from_output_builder(builder: &'builder GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 

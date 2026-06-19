@@ -103,7 +103,7 @@ fn text_row_output_render_state<'a>(
     output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
     evaluator: &'a mut Context,
 ) -> TextRowOutputRenderState<'a> {
-    TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_builder(
+    TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_output_builder(
         builder,
         output_emitter,
         evaluator,
@@ -6721,7 +6721,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
-    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
         .begin_text_row(crate::window_output::DisplayTextRowBegin {
             display_row_index: 0,
             row: 0,
@@ -6731,7 +6731,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         });
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
-    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
         .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -6759,7 +6759,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut TextWindowLiveOutputSurface::from_builder(
+            &mut TextWindowLiveOutputSurface::from_output_builder(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -6824,19 +6824,19 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(TextWindowBeginOutputSurface::from_builder(
+    .begin_and_apply(TextWindowBeginOutputSurface::from_output_builder(
         &mut builder,
         &mut eval,
     ));
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
-    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
         .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 9.0,
             height: 17.0,
             ascent: 12.0,
         });
-    crate::window_output::TextWindowOutputInstallSurface::from_builder(&mut builder)
+    crate::window_output::TextWindowOutputInstallSurface::from_output_builder(&mut builder)
         .close_text_window_output();
 
     let state = builder.finish(8, 4, 8.0, 16.0);
@@ -6858,7 +6858,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
     let effects = EffectsConfig::default();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
-        .install_and_apply(&mut TextWindowArtifactOutputSurface::from_builder(
+        .install_and_apply(&mut TextWindowArtifactOutputSurface::from_output_builder(
             &mut builder,
         ));
 
@@ -6872,7 +6872,7 @@ fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_builder(&mut builder),
+        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
     );
 
     assert!(!installed);
@@ -6896,7 +6896,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_builder(&mut builder),
+        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6941,7 +6941,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     let content_face_id = face_ids.allocate();
     let mut font_metrics = None;
     let border_face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_builder(&mut builder),
+        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6979,7 +6979,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_builder(&mut builder),
+        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -7042,7 +7042,7 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
     }];
 
     let finish_output =
-        TextWindowFinishOutputSurface::from_builder(&mut builder, output_emitter, &mut eval);
+        TextWindowFinishOutputSurface::from_output_builder(&mut builder, output_emitter, &mut eval);
     let finished =
         BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
             BufferTextWindowFinishState::from_output_surface(finish_output, hit_rows),

@@ -569,7 +569,7 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
         .artifact_installer()
         .add_window_info(window_info(41));
 
-    TextWindowOutputInstallSurface::from_builder(&mut builder).record_display_range(
+    TextWindowOutputInstallSurface::from_output_builder(&mut builder).record_display_range(
         TextWindowDisplayRange {
             window_id: 41,
             window_start: LispCharPos1::new(7),
@@ -581,7 +581,7 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
     assert_eq!(info.window_start, 7);
     assert_eq!(info.window_end, 19);
 
-    TextWindowOutputInstallSurface::from_builder(&mut builder).record_display_range(
+    TextWindowOutputInstallSurface::from_output_builder(&mut builder).record_display_range(
         TextWindowDisplayRange {
             window_id: 42,
             window_start: LispCharPos1::new(11),
@@ -678,7 +678,7 @@ fn close_text_window_output_closes_active_matrix_window() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
 
-    TextWindowOutputInstallSurface::from_builder(&mut builder).close_text_window_output();
+    TextWindowOutputInstallSurface::from_output_builder(&mut builder).close_text_window_output();
 
     assert_eq!(builder.windows().len(), 1);
     assert_eq!(builder.windows()[0].window_id, 9);
@@ -758,7 +758,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowArtifactOutputSurface::from_builder(&mut builder).publish_decorative_cursor(
+    TextWindowArtifactOutputSurface::from_output_builder(&mut builder).publish_decorative_cursor(
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
@@ -790,7 +790,7 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowArtifactOutputSurface::from_builder(&mut builder).install_cursor_effects(
+    TextWindowArtifactOutputSurface::from_output_builder(&mut builder).install_cursor_effects(
         TextWindowCursorEffects {
             window_id: 42,
             effects: effects.clone(),
@@ -1110,7 +1110,7 @@ fn mark_current_text_row_truncated_left_sets_current_row_flag() {
     builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
     builder.begin_row(1, GlyphRowRole::Text);
 
-    TextWindowOutputInstallSurface::from_builder(&mut builder)
+    TextWindowOutputInstallSurface::from_output_builder(&mut builder)
         .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
 
     builder.end_row();

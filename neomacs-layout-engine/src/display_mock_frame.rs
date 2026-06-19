@@ -312,7 +312,7 @@ pub(crate) fn layout_mock_frame_content(
 ) -> Vec<FrameDisplayState> {
     let mut builder = GlyphMatrixBuilder::new();
 
-    FrameOutputSurface::from_builder(&mut builder).set_frame_identity(FrameOutputIdentity {
+    FrameOutputSurface::from_output_builder(&mut builder).set_frame_identity(FrameOutputIdentity {
         frame_id: content.frame_id,
         parent_id: 0,
         parent_x: 0.0,
@@ -324,14 +324,14 @@ pub(crate) fn layout_mock_frame_content(
         background_alpha: 1.0,
         no_accept_focus: false,
     });
-    FrameOutputSurface::from_builder(&mut builder).set_background_color(content.background);
+    FrameOutputSurface::from_output_builder(&mut builder).set_background_color(content.background);
 
     for face in &content.faces {
         let mut face = face.clone();
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
         face.font_size = crate::fontconfig::points_to_pixels(face.font_size);
-        FrameOutputSurface::from_builder(&mut builder).install_face(&face);
+        FrameOutputSurface::from_output_builder(&mut builder).install_face(&face);
     }
 
     let default_face = content.faces.first();
@@ -379,7 +379,7 @@ pub(crate) fn layout_mock_frame_content(
     for window in &content.windows {
         let nrows = window.lines.len() + 1;
         let ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
-        TextWindowOutputInstallSurface::from_builder(&mut builder).begin_text_window_output(
+        TextWindowOutputInstallSurface::from_output_builder(&mut builder).begin_text_window_output(
             TextWindowOutputBegin {
                 window_id: window.window_id,
                 rows: nrows,
@@ -429,14 +429,15 @@ pub(crate) fn layout_mock_frame_content(
         );
         install_mock_display_row(&mut builder, mode_line_row, &row);
 
-        TextWindowOutputInstallSurface::from_builder(&mut builder).close_text_window_output();
+        TextWindowOutputInstallSurface::from_output_builder(&mut builder)
+            .close_text_window_output();
     }
 
     if let Some(ref mini) = content.minibuffer {
         let has_mode_line = !mini.mode_line.glyphs.is_empty();
         let nrows = mini.lines.len() + usize::from(has_mode_line);
         let ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
-        TextWindowOutputInstallSurface::from_builder(&mut builder).begin_text_window_output(
+        TextWindowOutputInstallSurface::from_output_builder(&mut builder).begin_text_window_output(
             TextWindowOutputBegin {
                 window_id: mini.window_id,
                 rows: nrows,
@@ -488,7 +489,8 @@ pub(crate) fn layout_mock_frame_content(
             install_mock_display_row(&mut builder, mode_line_row, &row);
         }
 
-        TextWindowOutputInstallSurface::from_builder(&mut builder).close_text_window_output();
+        TextWindowOutputInstallSurface::from_output_builder(&mut builder)
+            .close_text_window_output();
     }
 
     let main_state = builder.finish(
@@ -501,7 +503,7 @@ pub(crate) fn layout_mock_frame_content(
     let mut child_frames = Vec::new();
     for cf in &content.child_frames {
         let mut cb = GlyphMatrixBuilder::new();
-        FrameOutputSurface::from_builder(&mut cb).set_frame_identity(FrameOutputIdentity {
+        FrameOutputSurface::from_output_builder(&mut cb).set_frame_identity(FrameOutputIdentity {
             frame_id: cf.frame_id,
             parent_id: content.frame_id,
             parent_x: cf.parent_x,
@@ -513,14 +515,14 @@ pub(crate) fn layout_mock_frame_content(
             background_alpha: 1.0,
             no_accept_focus: false,
         });
-        FrameOutputSurface::from_builder(&mut cb)
+        FrameOutputSurface::from_output_builder(&mut cb)
             .set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
         for face in &content.faces {
-            FrameOutputSurface::from_builder(&mut cb).install_face(face);
+            FrameOutputSurface::from_output_builder(&mut cb).install_face(face);
         }
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
-        TextWindowOutputInstallSurface::from_builder(&mut cb).begin_text_window_output(
+        TextWindowOutputInstallSurface::from_output_builder(&mut cb).begin_text_window_output(
             TextWindowOutputBegin {
                 window_id: cf.window.window_id,
                 rows: nrows,
@@ -548,7 +550,7 @@ pub(crate) fn layout_mock_frame_content(
             );
             install_mock_display_row(&mut cb, ri, &row);
         }
-        TextWindowOutputInstallSurface::from_builder(&mut cb).close_text_window_output();
+        TextWindowOutputInstallSurface::from_output_builder(&mut cb).close_text_window_output();
         let cs = cb.finish(
             mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w),
             cf.window.lines.len().max(1),
