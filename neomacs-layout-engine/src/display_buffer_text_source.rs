@@ -753,7 +753,7 @@ impl BufferTextSourceItemStepper {
             Ok(step) => return Some(step),
             Err(item) => item,
         };
-        self.item_step_from_validated_item(item, position)
+        self.split_text_run_item(item, position)
     }
 
     fn validate_source_item(
@@ -803,75 +803,27 @@ impl BufferTextSourceItemStepper {
         ))
     }
 
-    fn item_step_from_validated_item(
+    fn split_text_run_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceItemStep> {
-        let item = item.into_item();
-        let start_byte_idx = match item.span.start {
-            DisplaySourcePosition::Buffer { byte_pos, .. } => {
-                byte_pos.get().checked_sub(self.text_start_byte)?
-            }
-            _ => return None,
-        };
         let DisplayItem {
             span,
             face,
             kind,
             layout,
-        } = item;
+        } = item.into_item();
         match kind {
             DisplayItemKind::TextRun(run) => {
                 self.pending_text_run =
                     PendingBufferTextRun::from_item(self.text_start_byte, span, face, layout, run);
                 self.next_pending_step(position)
             }
-            DisplayItemKind::RowBreak(row_break)
-                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
-            {
-                position.advance_byte_idx_to(start_byte_idx + 1);
-                Some(BufferTextSourceItemStep::new(
-                    BufferTextSourceStepChar::new('\n', start_byte_idx, position.charpos()),
-                    DisplayItem {
-                        span,
-                        face,
-                        kind: DisplayItemKind::RowBreak(row_break),
-                        layout,
-                    },
-                ))
-            }
-            DisplayItemKind::ControlChar { ch } => {
-                position.advance_byte_idx_to(start_byte_idx + ch.len_utf8());
-                let source_item = DisplayItem {
-                    span,
-                    face,
-                    kind: DisplayItemKind::ControlChar { ch },
-                    layout,
-                };
-                Some(BufferTextSourceItemStep::new(
-                    BufferTextSourceStepChar::new(ch, start_byte_idx, position.charpos()),
-                    source_item,
-                ))
-            }
-            DisplayItemKind::Glyphless(glyphless) => {
-                let ch = glyphless.ch;
-                position.advance_byte_idx_to(start_byte_idx + ch.len_utf8());
-                let source_item = DisplayItem {
-                    span,
-                    face,
-                    kind: DisplayItemKind::Glyphless(glyphless),
-                    layout,
-                };
-                Some(BufferTextSourceItemStep::new(
-                    BufferTextSourceStepChar::new(ch, start_byte_idx, position.charpos()),
-                    source_item,
-                ))
-            }
             _ => {
                 tracing::error!(
                     "BufferTextSourceItemStepper: typed cursor yielded a non-text item kind; \
-                     a display property escaped the render_next_step checkpoints"
+                     a direct item escaped source-item lowering"
                 );
                 None
             }
