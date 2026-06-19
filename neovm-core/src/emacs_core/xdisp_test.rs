@@ -2503,16 +2503,19 @@ fn test_lookup_image_map() {
 #[test]
 fn test_current_bidi_paragraph_direction() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_current_bidi_paragraph_direction(vec![]).unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = builtin_current_bidi_paragraph_direction(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::symbol("left-to-right"));
 
-    let result = builtin_current_bidi_paragraph_direction(vec![Value::make_buffer(
-        crate::buffer::BufferId(1),
-    )])
+    let result = builtin_current_bidi_paragraph_direction(
+        &mut eval,
+        vec![Value::make_buffer(crate::buffer::BufferId(1))],
+    )
     .unwrap();
     assert_eq!(result, Value::symbol("left-to-right"));
 
-    let err = builtin_current_bidi_paragraph_direction(vec![Value::symbol("buffer")]).unwrap_err();
+    let err = builtin_current_bidi_paragraph_direction(&mut eval, vec![Value::symbol("buffer")])
+        .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected wrong-type-argument, got {:?}", other),
