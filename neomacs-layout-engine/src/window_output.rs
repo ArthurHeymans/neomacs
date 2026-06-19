@@ -253,17 +253,19 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 
 pub(crate) struct TextWindowOutputInstall;
 
-pub(crate) struct TextWindowOutputInstallSurface<'builder> {
-    builder: &'builder mut GlyphMatrixBuilder,
+pub(crate) struct TextWindowOutputInstallSurface<'output_builder> {
+    output_builder: &'output_builder mut GlyphMatrixBuilder,
 }
 
-impl<'builder> TextWindowOutputInstallSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self { builder }
+impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
+    pub(crate) fn from_output_builder(
+        output_builder: &'output_builder mut GlyphMatrixBuilder,
+    ) -> Self {
+        Self { output_builder }
     }
 
     pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
-        self.builder.window_installer().begin(
+        self.output_builder.window_installer().begin(
             request.window_id,
             request.rows,
             request.cols,
@@ -274,7 +276,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
     }
 
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        if let Some(info) = self.builder.window_infos_last_mut()
+        if let Some(info) = self.output_builder.window_infos_last_mut()
             && info.window_id == range.window_id as i64
         {
             info.window_start = range.window_start.as_i64();
@@ -291,12 +293,12 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.builder);
+        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.output_builder);
         request.install(&mut row_lifecycle);
     }
 
     fn begin_display_text_row(&mut self, begin: DisplayTextRowBegin) -> usize {
-        DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
+        DisplayRowLifecycleSurface::from_builder(self.output_builder).begin_row(
             begin.display_row_index,
             GlyphRowRole::Text,
             false,
@@ -310,7 +312,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let matrix_metrics = self.display_text_row_metrics(metrics);
-        DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
+        DisplayRowLifecycleSurface::from_builder(self.output_builder).set_metrics(
             display_row_index,
             matrix_metrics.pixel_y,
             matrix_metrics.height_px,
@@ -323,24 +325,25 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
     }
 
     fn finalize_display_text_row(&mut self, display_row_index: usize) {
-        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(display_row_index);
+        DisplayRowLifecycleSurface::from_builder(self.output_builder)
+            .finalize_row(display_row_index);
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        self.builder.window_installer().end();
+        self.output_builder.window_installer().end();
     }
 
     pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
         TextWindowOutputRetryCheckpoint {
-            transition_hints_len: self.builder.transition_hints().len(),
-            effect_hints_len: self.builder.effect_hints().len(),
+            transition_hints_len: self.output_builder.transition_hints().len(),
+            effect_hints_len: self.output_builder.effect_hints().len(),
         }
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        self.builder
+        self.output_builder
             .truncate_transition_hints(checkpoint.transition_hints_len);
-        self.builder
+        self.output_builder
             .truncate_effect_hints(checkpoint.effect_hints_len);
     }
 
@@ -348,7 +351,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
         &self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowStoredMetrics {
-        let window_y = DisplayRowWindowContextSurface::from_builder(self.builder)
+        let window_y = DisplayRowWindowContextSurface::from_builder(self.output_builder)
             .current_window_pixel_bounds()
             .y;
         DisplayTextRowStoredMetrics {
@@ -359,11 +362,11 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
     }
 
     fn finish_output_rows(&mut self, output_emitter: &WindowOutputEmitter) {
-        let window_y = DisplayRowWindowContextSurface::from_builder(self.builder)
+        let window_y = DisplayRowWindowContextSurface::from_builder(self.output_builder)
             .current_window_pixel_bounds()
             .y;
         for metric in output_emitter.row_metrics() {
-            DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
+            DisplayRowLifecycleSurface::from_builder(self.output_builder).set_metrics(
                 metric.display_row_index,
                 metric.pixel_y - window_y,
                 metric.height,
@@ -371,7 +374,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
             );
         }
         if let Some(metric) = output_emitter.row_metrics().last() {
-            DisplayRowLifecycleSurface::from_builder(self.builder)
+            DisplayRowLifecycleSurface::from_builder(self.output_builder)
                 .finalize_row(metric.display_row_index);
         }
     }
@@ -382,7 +385,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
         request: TextWindowRightEdgeMarkers<'_>,
     ) {
         let base_face = render_services.face_resolver().default_face().clone();
-        let mut decorations = DisplayRowDecorationSurface::from_builder(self.builder);
+        let mut decorations = DisplayRowDecorationSurface::from_builder(self.output_builder);
         for decoration in text_window_right_edge_marker_decorations(&request) {
             decorations.decorate_current_window_row(
                 decoration.matrix_row,
@@ -403,7 +406,7 @@ impl<'builder> TextWindowOutputInstallSurface<'builder> {
         request: TextWindowRightBorder,
         base_face: &ResolvedFace,
     ) {
-        DisplayRowDecorationSurface::from_builder(self.builder).decorate_last_window_rows(
+        DisplayRowDecorationSurface::from_builder(self.output_builder).decorate_last_window_rows(
             RightBorderRowsDecorator::new(request, base_face, &mut render_services),
         );
     }
@@ -590,28 +593,31 @@ pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
 }
 
 pub(crate) struct TextWindowBeginOutputSurface<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut GlyphMatrixBuilder,
     evaluator: &'a mut Context,
 }
 
 pub(crate) struct TextWindowFinishOutputSurface<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut GlyphMatrixBuilder,
     output_emitter: WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
 pub(crate) struct TextWindowLiveOutputSurface<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
 impl<'a> TextWindowBeginOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut GlyphMatrixBuilder,
         evaluator: &'a mut Context,
     ) -> Self {
-        Self { builder, evaluator }
+        Self {
+            output_builder,
+            evaluator,
+        }
     }
 
     pub(crate) fn begin_update(&mut self, output_emitter: &mut WindowOutputEmitter) {
@@ -623,19 +629,19 @@ impl<'a> TextWindowBeginOutputSurface<'a> {
         output_emitter: &mut WindowOutputEmitter,
         begin: TextWindowBegin,
     ) {
-        TextWindowRowOutputSurface::from_parts(self.builder, output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, output_emitter)
             .begin_text_window_output(self.evaluator, begin);
     }
 }
 
 impl<'a> TextWindowFinishOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut GlyphMatrixBuilder,
         output_emitter: WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
         Self {
-            builder,
+            output_builder,
             output_emitter,
             evaluator,
         }
@@ -648,7 +654,7 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> WindowDisplaySnapshot {
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .close_text_window_output();
         self.output_emitter.finish_snapshot(
             self.evaluator,
@@ -662,12 +668,12 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
 
 impl<'a> TextWindowLiveOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut GlyphMatrixBuilder,
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
         Self {
-            builder,
+            output_builder,
             output_emitter,
             evaluator,
         }
@@ -675,7 +681,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
 
     pub(crate) fn reborrow(&mut self) -> TextWindowLiveOutputSurface<'_> {
         TextWindowLiveOutputSurface {
-            builder: self.builder,
+            output_builder: self.output_builder,
             output_emitter: self.output_emitter,
             evaluator: self.evaluator,
         }
@@ -685,29 +691,30 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         self,
         f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
     ) -> R {
-        let mut output = TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter);
+        let mut output =
+            TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter);
         f(&mut output, self.evaluator)
     }
 
     #[cfg(test)]
     pub(crate) fn begin_text_row(self, begin: DisplayTextRowBegin) -> usize {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .begin_text_row(self.evaluator, begin)
     }
 
     #[cfg(test)]
     pub(crate) fn finish_text_row(self, metrics: DisplayTextRowMetrics) {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .finish_text_row(metrics);
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .finish_and_end_text_row(metrics);
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .transition_text_row(self.evaluator, transition);
     }
 
@@ -716,12 +723,12 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
     ) -> DisplayTextRowTransition {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .transition_text_row_with_limit(self.evaluator, transition, max_rows)
     }
 
     pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .install_row_decoration(request);
     }
 
@@ -731,7 +738,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         face: &ResolvedFace,
         metrics: Option<crate::font_metrics::FontMetrics>,
     ) {
-        DisplayRowFaceInstallSurface::from_builder(self.builder)
+        DisplayRowFaceInstallSurface::from_builder(self.output_builder)
             .install_resolved_face(face_id, face, metrics);
     }
 
@@ -742,7 +749,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         faces: &[neomacs_display_protocol::face::Face],
         media: &[RenderedDisplayRowMedia],
     ) {
-        DisplayRowInstallSurface::from_builder(self.builder)
+        DisplayRowInstallSurface::from_builder(self.output_builder)
             .install_fragment_assets(role, matrix_row, faces, media);
     }
 
@@ -761,7 +768,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .install_body_output(request, render_services)
     }
 
@@ -770,7 +777,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         request: WindowChromeRowsRenderRequest<'_, '_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
             .render_chrome_rows(self.evaluator, request, render_services);
     }
 
@@ -778,14 +785,14 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         &mut self,
     ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
         TextWindowLiveCurrentRowEvaluatorState {
-            row_surface: DisplayRowCurrentRowSurface::from_builder(self.builder),
+            row_surface: DisplayRowCurrentRowSurface::from_builder(self.output_builder),
             evaluator: self.evaluator,
         }
     }
 
     pub(crate) fn current_row_host_state(&mut self) -> TextWindowLiveCurrentRowHostState<'_> {
         TextWindowLiveCurrentRowHostState {
-            row_surface: DisplayRowCurrentRowSurface::from_builder(self.builder),
+            row_surface: DisplayRowCurrentRowSurface::from_builder(self.output_builder),
             display_host: self.evaluator.display_host.as_deref(),
         }
     }
@@ -917,13 +924,13 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-pub(crate) struct TextWindowRowOutputSurface<'builder, 'output> {
-    builder: &'builder mut GlyphMatrixBuilder,
+pub(crate) struct TextWindowRowOutputSurface<'output_builder, 'output> {
+    output_builder: &'output_builder mut GlyphMatrixBuilder,
     output_emitter: &'output mut WindowOutputEmitter,
 }
 
-pub(crate) struct TextWindowArtifactOutputSurface<'builder> {
-    builder: &'builder mut GlyphMatrixBuilder,
+pub(crate) struct TextWindowArtifactOutputSurface<'output_builder> {
+    output_builder: &'output_builder mut GlyphMatrixBuilder,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -932,13 +939,13 @@ pub(crate) struct TextWindowOutputRetryCheckpoint {
     effect_hints_len: usize,
 }
 
-impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
+impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'output> {
     pub(crate) fn from_parts(
-        builder: &'builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut GlyphMatrixBuilder,
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> Self {
         Self {
-            builder,
+            output_builder,
             output_emitter,
         }
     }
@@ -971,8 +978,9 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         evaluator: &mut Context,
         begin: DisplayTextRowBegin,
     ) -> usize {
-        let display_row_index = TextWindowOutputInstallSurface::from_output_builder(self.builder)
-            .begin_display_text_row(begin);
+        let display_row_index =
+            TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
+                .begin_display_text_row(begin);
         self.output_emitter.begin_display_text_row(
             evaluator,
             begin.display_row_index,
@@ -989,7 +997,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
-        let finish = TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        let finish = TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .finish_display_text_row(display_row_index, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
@@ -1002,7 +1010,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
         let finish = self.finish_text_row(metrics);
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .finalize_display_text_row(display_row_index);
         finish
     }
@@ -1031,7 +1039,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .install_row_decoration(request);
     }
 
@@ -1039,27 +1047,27 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         &mut self,
         cursor: TextWindowCursor,
     ) -> TextWindowCursorPublicationOutcome {
-        let window_context = DisplayRowWindowContextSurface::from_builder(self.builder);
+        let window_context = DisplayRowWindowContextSurface::from_builder(self.output_builder);
         let publication = TextWindowCursorPublication::resolve(&window_context, cursor);
         publication.publish(self)
     }
 
     pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.builder)
+        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
             .publish_decorative_cursor(cursor);
     }
 
     fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.builder)
+        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
             .install_cursor_artifact(cursor);
     }
 
     fn set_display_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        DisplayRowLifecycleSurface::from_builder(self.builder).set_cursor(row, col, style);
+        DisplayRowLifecycleSurface::from_builder(self.output_builder).set_cursor(row, col, style);
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.builder)
+        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
             .store_phys_cursor(cursor);
     }
 
@@ -1072,7 +1080,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
-        TextWindowOutputInstaller::new(self.builder, self.output_emitter)
+        TextWindowOutputInstaller::new(self.output_builder, self.output_emitter)
             .install_body_output(request, render_services)
     }
 
@@ -1100,7 +1108,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     }
 
     pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstallSurface::from_builder(self.builder).install_measured(measured);
+        DisplayRowInstallSurface::from_builder(self.output_builder).install_measured(measured);
     }
 
     pub(crate) fn render_chrome_rows(
@@ -1122,7 +1130,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         request: TextWindowBegin,
     ) {
         let first_row = request.first_row;
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .begin_text_window_output(request.into());
         self.begin_text_row(evaluator, first_row);
     }
@@ -1155,13 +1163,15 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     }
 }
 
-impl<'builder> TextWindowArtifactOutputSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self { builder }
+impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
+    pub(crate) fn from_output_builder(
+        output_builder: &'output_builder mut GlyphMatrixBuilder,
+    ) -> Self {
+        Self { output_builder }
     }
 
     pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        DisplayRowArtifactInstallSurface::from_builder(self.builder)
+        DisplayRowArtifactInstallSurface::from_builder(self.output_builder)
             .set_cursor_effects(request.window_id, request.effects);
     }
 
@@ -1185,7 +1195,7 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
     }
 
     fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        DisplayRowArtifactInstallSurface::from_builder(self.builder).add_cursor(
+        DisplayRowArtifactInstallSurface::from_builder(self.output_builder).add_cursor(
             cursor.window_id,
             cursor.slot_id,
             cursor.x,
@@ -1198,7 +1208,8 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        DisplayRowArtifactInstallSurface::from_builder(self.builder).store_phys_cursor(cursor);
+        DisplayRowArtifactInstallSurface::from_builder(self.output_builder)
+            .store_phys_cursor(cursor);
     }
 
     pub(crate) fn install_terminal_right_border(
@@ -1215,12 +1226,12 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
         // `frame_face_id_counter` by the decoration render, engine.rs) rather than
         // a separate `FaceResolver` counter that could collide with it.
         let border_face_id = render_services.face_ids().allocate();
-        DisplayRowFaceInstallSurface::from_builder(self.builder).install_resolved_face(
+        DisplayRowFaceInstallSurface::from_builder(self.output_builder).install_resolved_face(
             border_face_id,
             &border_face,
             None,
         );
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
+        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .install_last_window_right_border(
                 render_services.reborrow(),
                 TextWindowRightBorder {
@@ -1325,18 +1336,18 @@ impl TextWindowCursorPublication {
     }
 }
 
-struct TextWindowOutputInstaller<'builder, 'output> {
-    output_install: TextWindowOutputInstallSurface<'builder>,
+struct TextWindowOutputInstaller<'output_builder, 'output> {
+    output_install: TextWindowOutputInstallSurface<'output_builder>,
     output_emitter: &'output WindowOutputEmitter,
 }
 
-impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
+impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'output> {
     fn new(
-        builder: &'builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut GlyphMatrixBuilder,
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
         Self {
-            output_install: TextWindowOutputInstallSurface::from_output_builder(builder),
+            output_install: TextWindowOutputInstallSurface::from_output_builder(output_builder),
             output_emitter,
         }
     }
