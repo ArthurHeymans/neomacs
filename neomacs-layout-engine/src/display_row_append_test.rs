@@ -1916,6 +1916,84 @@ fn buffer_text_source_item_stepper_can_return_full_text_run_item() {
 }
 
 #[test]
+fn buffer_text_source_item_can_build_direct_single_char_step() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        CharPos0::new(1),
+        RenderFaceRef::Inherit,
+    );
+    let mut source_context = DisplaySourceContext::empty();
+    let mut item_stepper = BufferTextSourceItemStepper::new(0);
+    let mut byte_idx = 0;
+    let typed_item = item_stepper
+        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .expect("typed source item");
+
+    let step = typed_item
+        .try_into_direct_item_step(&mut byte_idx, 0)
+        .expect("direct source step");
+
+    assert_eq!(byte_idx, 1);
+    assert_eq!(step.source_char().ch(), 'a');
+    let (_, source_item) = step.into_parts();
+    match &source_item.kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
+        other => panic!("expected single-char text run, got {other:?}"),
+    }
+}
+
+#[test]
+fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ab");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        CharPos0::new(2),
+        RenderFaceRef::Inherit,
+    );
+    let mut source_context = DisplaySourceContext::empty();
+    let mut item_stepper = BufferTextSourceItemStepper::new(0);
+    let mut byte_idx = 0;
+    let typed_item = item_stepper
+        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .expect("typed source item");
+
+    let typed_item = typed_item
+        .try_into_direct_item_step(&mut byte_idx, 0)
+        .expect_err("multi-char text runs are not direct single-char steps");
+
+    assert_eq!(byte_idx, 0);
+    match &typed_item.item().kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
+        other => panic!("expected full text run, got {other:?}"),
+    }
+}
+
+#[test]
 fn buffer_text_source_item_stepper_keeps_display_item_layout() {
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(

@@ -3022,6 +3022,26 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             };
         }
 
+        let source_item = match source_item.try_into_direct_item_step(self.byte_idx, *self.charpos)
+        {
+            Ok(source_step) => {
+                return self.render_source_item_step_for_context(
+                    BufferTextSourceItemStepRenderRequest {
+                        loop_context,
+                        layout_resolution_context,
+                        source_step,
+                        text,
+                        append_surface,
+                        overlay_context,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                );
+            }
+            Err(source_item) => source_item,
+        };
+
         let Some(source_step) =
             item_stepper.item_step_from_source_item(source_item, self.byte_idx, *self.charpos)
         else {
@@ -3093,8 +3113,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return Some(BufferTextConsumedSourceItem::PendingStep(step));
         }
         // One persistent typed source cursor feeds the row walk. Fetching the
-        // typed item is deliberately separate from legacy single-character
-        // lowering so the buffer source can be consumed as DisplayItems.
+        // typed item is deliberately separate from pending-run splitting so
+        // direct single-character items can stay typed through render.
         item_stepper
             .next_item_from_source(source_cursor, source_context, *self.byte_idx, *self.charpos)
             .map(BufferTextConsumedSourceItem::SourceItem)

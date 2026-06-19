@@ -321,6 +321,52 @@ impl BufferTextSourceItem {
         }
     }
 
+    fn direct_source_char(&self) -> Option<char> {
+        match &self.item.kind {
+            DisplayItemKind::TextRun(run) => {
+                let mut chars = run.text.chars();
+                let ch = chars.next()?;
+                chars.next().is_none().then_some(ch)
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                Some('\n')
+            }
+            DisplayItemKind::ControlChar { ch } => Some(*ch),
+            DisplayItemKind::Glyphless(glyphless) => Some(glyphless.ch),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn try_into_direct_item_step(
+        self,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Result<BufferTextSourceItemStep, Self> {
+        if self.start_byte_idx != *byte_idx || self.start_charpos != charpos {
+            tracing::error!(
+                "BufferTextSourceItem: validated source item at byte {} charpos {} \
+                 did not match buffer walk byte {} charpos {}",
+                self.start_byte_idx,
+                self.start_charpos,
+                *byte_idx,
+                charpos
+            );
+            return Err(self);
+        }
+        let Some(ch) = self.direct_source_char() else {
+            return Err(self);
+        };
+        let start_byte_idx = self.start_byte_idx;
+        let start_charpos = self.start_charpos;
+        *byte_idx = start_byte_idx.saturating_add(ch.len_utf8());
+        Ok(BufferTextSourceItemStep::new(
+            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
+            self.item,
+        ))
+    }
+
     pub(crate) fn start_byte_idx(&self) -> usize {
         self.start_byte_idx
     }
@@ -663,8 +709,9 @@ impl BufferTextSourceItemStepper {
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. The main buffer walk consumes this cursor through
-/// `BufferTextSourceItemStepper` while the remaining row lifecycle is migrated
-/// from character-at-a-time events to direct display items.
+/// direct single-item rendering when possible, and uses
+/// `BufferTextSourceItemStepper` only when a multi-character text run must be
+/// split across existing character-level walk actions.
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     buffer_id: BufferId,
     buffer: &'a B,
