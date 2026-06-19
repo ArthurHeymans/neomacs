@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_row_matrix_install::DisplayRowInstallSurface;
+use crate::display_row_matrix_install::{DisplayRowCurrentRowSurface, DisplayRowInstallSurface};
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
@@ -19,6 +19,20 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     resolver.default_face().clone()
+}
+
+fn text_row_source_measure_state<'a>(
+    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+) -> TextRowSourceMeasureState<'a> {
+    TextRowSourceMeasureState::from_current_row(
+        DisplayRowCurrentRowSurface::from_builder(builder),
+        evaluator,
+        font_metrics,
+        face_resolver,
+    )
 }
 
 fn display_row_request_from_base_face<'a>(
@@ -175,7 +189,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
     let mut font_metrics = None;
 
     assert_eq!(
-        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+        text_row_source_measure_state(&mut builder, &mut eval, &mut font_metrics, &resolver)
             .current_cluster_tail(),
         None
     );
@@ -186,7 +200,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+        text_row_source_measure_state(&mut builder, &mut eval, &mut font_metrics, &resolver)
             .current_cluster_tail(),
         Some(('\u{1F1EF}', true))
     );
@@ -197,7 +211,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+        text_row_source_measure_state(&mut builder, &mut eval, &mut font_metrics, &resolver)
             .current_cluster_tail(),
         Some(('\u{1F1F5}', false))
     );

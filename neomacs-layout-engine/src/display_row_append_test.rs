@@ -46,6 +46,7 @@ use crate::display_row_lisp_string::{
     LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
     append_lisp_string_to_text_row, apply_pending_display_source_faces, render_face_ref_id,
 };
+use crate::display_row_matrix_install::DisplayRowCurrentRowSurface;
 use crate::display_row_matrix_install::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
@@ -96,6 +97,46 @@ use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 use std::sync::{Arc, Mutex};
+
+fn text_row_output_render_state<'a>(
+    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
+    evaluator: &'a mut Context,
+) -> TextRowOutputRenderState<'a> {
+    TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_builder(
+        builder,
+        output_emitter,
+        evaluator,
+    ))
+}
+
+fn text_row_source_render_state<'a>(
+    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+) -> TextRowSourceRenderState<'a> {
+    TextRowSourceRenderState::from_output_render(
+        text_row_output_render_state(builder, output_emitter, evaluator),
+        font_metrics,
+        face_resolver,
+    )
+}
+
+fn text_row_source_measure_state<'a>(
+    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+) -> TextRowSourceMeasureState<'a> {
+    TextRowSourceMeasureState::from_current_row(
+        DisplayRowCurrentRowSurface::from_builder(builder),
+        evaluator,
+        font_metrics,
+        face_resolver,
+    )
+}
 
 fn write_char_to_current_row_with_width(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
@@ -252,7 +293,7 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     *face_scan.next_check_mut() = 99;
 
     {
-        let mut source_render = TextRowSourceRenderState::new(
+        let mut source_render = text_row_source_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
@@ -454,7 +495,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -533,7 +574,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 8.0, 6.0);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -595,7 +636,7 @@ fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
     .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -626,7 +667,7 @@ fn display_row_line_break_transition_request_records_hit_spacing_and_emits_next_
     .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -659,7 +700,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
     .emit_with_output(
         &mut line_ctx.geometry,
         &mut line_ctx.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut line_ctx.builder,
             &mut line_ctx.output_emitter,
             &mut line_ctx.eval,
@@ -701,7 +742,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
         &mut wrap_ctx.row_flags,
         wrap_ctx.row_limit,
         &mut wrap_ctx.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut wrap_ctx.builder,
             &mut wrap_ctx.output_emitter,
             &mut wrap_ctx.eval,
@@ -736,7 +777,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         &mut line_ctx.row_flags,
         row_limit,
         &mut line_ctx.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut line_ctx.builder,
             &mut line_ctx.output_emitter,
             &mut line_ctx.eval,
@@ -778,7 +819,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         &mut overflow_ctx.row_flags,
         row_limit,
         &mut overflow_ctx.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut overflow_ctx.builder,
             &mut overflow_ctx.output_emitter,
             &mut overflow_ctx.eval,
@@ -834,7 +875,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
         &mut ctx.row_flags,
         row_limit,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     )
     .emit_line_break_then_row_start(
         DisplayRowLineBreakTransitionPlan::hidden_line_break(),
@@ -895,7 +936,7 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
         &mut ctx.row_flags,
         row_limit,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     )
     .emit_overflow_then_row_start(
         transition,
@@ -1132,7 +1173,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         progress: BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
         hscroll_skip: &mut hscroll_skip,
         row_extend: &mut row_extend,
-        source_render: TextRowSourceRenderState::new(
+        source_render: text_row_source_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
@@ -1341,7 +1382,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     let mut x = 0.0;
     let mut col = 0;
     let mut render_state = BufferSyntheticTextRenderState::new(
-        TextRowSourceRenderState::new(
+        text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -1655,7 +1696,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
                 &mut x,
                 &mut col,
             ),
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -2602,7 +2643,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             trailing_whitespace: &mut trailing_whitespace,
             row_extend: &mut row_extend,
             box_face: &mut box_face,
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -2765,7 +2806,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
                 &mut x,
                 &mut col,
             ),
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -3193,7 +3234,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
                 &mut x,
                 &mut col,
             ),
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -3437,7 +3478,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
                 &mut x,
                 &mut col,
             ),
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -3540,7 +3581,7 @@ fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundar
         &mut ctx.row_flags,
         ctx.row_limit,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -3575,7 +3616,7 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
         &mut ctx.row_flags,
         ctx.row_limit,
         &mut ctx.hit_rows,
-        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
+        text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -3930,7 +3971,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &geometry,
         &mut append_state,
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -3977,7 +4018,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &geometry,
         &mut append_state,
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -4095,7 +4136,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
     let progress = append_context
         .append_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -4182,7 +4223,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
 
     let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
         .render_active_marker_to_text_row(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -4246,7 +4287,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
 
     let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
         .render_hscroll_truncation_marker_to_text_row(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -4335,7 +4376,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
         BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0)
             .render_requested_to_text_row_and_emit(
                 &mut prefix_request,
-                &mut TextRowSourceRenderState::new(
+                &mut text_row_source_render_state(
                     &mut builder,
                     &mut output_emitter,
                     &mut eval,
@@ -4412,7 +4453,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let mut col = 0;
 
     {
-        let mut source_render = TextRowSourceRenderState::new(
+        let mut source_render = text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -4489,7 +4530,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
     let progress = append_context
         .append_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -4549,7 +4590,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     {
-        let source_render = TextRowSourceRenderState::new(
+        let source_render = text_row_source_render_state(
             &mut ctx.builder,
             &mut ctx.output_emitter,
             &mut ctx.eval,
@@ -4603,7 +4644,7 @@ fn overlay_string_row_break_context_finishes_current_row() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     {
-        let source_render = TextRowSourceRenderState::new(
+        let source_render = text_row_source_render_state(
             &mut ctx.builder,
             &mut ctx.output_emitter,
             &mut ctx.eval,
@@ -4683,7 +4724,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         DisplayRowAppendKind::SourceText,
     );
 
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -4765,7 +4806,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         DisplayRowAppendKind::SourceText,
     );
 
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -5796,7 +5837,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let end = {
         let mut font_metrics = None;
-        let mut source_render = TextRowSourceRenderState::new(
+        let mut source_render = text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -5880,7 +5921,7 @@ fn lisp_string_append_context_appends_fragment_items() {
         Value::string("=>"),
     );
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
+        &mut text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -5961,7 +6002,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         .prepare_source_item_char_at(
             &geometry,
             &mut append_state,
-            &mut TextRowSourceMeasureState::new(
+            &mut text_row_source_measure_state(
                 &mut builder,
                 &mut eval,
                 &mut font_metrics,
@@ -6077,7 +6118,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         &geometry,
         ' ',
         &mut BufferTextSourceCharRenderState::new(
-            TextRowSourceRenderState::new(
+            text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -6237,7 +6278,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
                 &mut x,
                 &mut col,
             ),
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -6328,7 +6369,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
     let mut append_state = BufferTextRowAppendState::default();
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -6486,7 +6527,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     .render_and_apply(
         &snapshot,
         BufferEndOfBufferTailRenderState {
-            source_render: TextRowSourceRenderState::new(
+            source_render: text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
@@ -6578,7 +6619,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         &context.row_y_positions,
         &mut hit_row_range,
         &mut context.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
@@ -6642,7 +6683,7 @@ fn buffer_text_window_tail_finalize_reports_missing_cursor_capture() {
         &context.row_y_positions,
         &mut hit_row_range,
         &mut context.hit_rows,
-        TextRowOutputRenderState::new(
+        text_row_output_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
@@ -7191,7 +7232,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         .resolve_source_advance_request_to_text_row(
             &geometry,
             &mut append_state,
-            &mut TextRowSourceMeasureState::new(
+            &mut text_row_source_measure_state(
                 &mut builder,
                 &mut eval,
                 &mut font_metrics,
@@ -7221,7 +7262,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     let appended = append_context
         .append_source_text_request_to_text_row(
             &geometry,
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -7286,7 +7327,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -7359,7 +7400,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -7438,7 +7479,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         BufferTextSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
         .measure_source_request_width_to_text_row(
-            &mut TextRowSourceMeasureState::new(
+            &mut text_row_source_measure_state(
                 &mut builder,
                 &mut eval,
                 &mut font_metrics,
@@ -7452,7 +7493,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         .edit_current_row_for_test(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
     let fallback_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -7465,7 +7506,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
     let edge_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -7480,7 +7521,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 
     let progress = append_context
         .append_source_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -7820,7 +7861,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     .into_item();
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -7858,7 +7899,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         &params,
         &mut BufferTextSpecialSourceCharRenderState::new(
             &mut policy_face_ids,
-            TextRowSourceRenderState::new(
+            text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -7945,7 +7986,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
 
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -8022,7 +8063,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     .into_item();
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
-        &mut TextRowSourceMeasureState::new(
+        &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
             &mut font_metrics,
@@ -8052,7 +8093,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             &geometry,
             &params,
             &mut policy_face_ids,
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -8115,7 +8156,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let end = {
         let mut font_metrics = None;
-        let mut source_render = TextRowSourceRenderState::new(
+        let mut source_render = text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -8201,7 +8242,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
 
     let first = append_context
         .render_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -8222,7 +8263,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
 
     let second = append_context
         .render_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -8335,7 +8376,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     );
     let end = {
         let mut font_metrics = None;
-        let mut source_render = TextRowSourceRenderState::new(
+        let mut source_render = text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -8791,7 +8832,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         .selected_window;
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    let mut source_render = TextRowSourceRenderState::new(
+    let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -8940,7 +8981,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     .expect("display replacement append request");
     let outcome = request.append_to_text_row(
         &buffer,
-        &mut TextRowSourceRenderState::new(
+        &mut text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -9159,7 +9200,7 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
     );
 
     face_resolution_context.resolve_at_checkpoint_with_source_state(
-        &mut TextRowSourceRenderState::new(
+        &mut text_row_source_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
@@ -9599,7 +9640,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
     let end = request.render_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
+        &mut text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -9669,7 +9710,7 @@ fn display_replacement_append_context_uses_face_fallback() {
 
     let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -9756,7 +9797,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         .expect("stretch append request");
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -9843,7 +9884,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -9918,7 +9959,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
     let progress = append_context
         .append_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -10022,7 +10063,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -10156,7 +10197,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,
@@ -10293,7 +10334,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
+            &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
                 &mut eval,

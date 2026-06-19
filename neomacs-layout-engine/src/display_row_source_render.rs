@@ -26,8 +26,6 @@ use crate::display_source_resolver::{
     resolve_display_string_base_face,
 };
 use crate::font_metrics::FontMetricsService;
-#[cfg(test)]
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
@@ -378,19 +376,6 @@ impl<'a> TextRowOutputRenderState<'a> {
         Self { output }
     }
 
-    #[cfg(test)]
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self::from_live_output(TextWindowLiveOutputSurface::from_builder(
-            builder,
-            output_emitter,
-            evaluator,
-        ))
-    }
-
     pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
         TextRowOutputRenderState {
             output: self.output.reborrow(),
@@ -547,21 +532,6 @@ impl<'a> TextRowSourceRenderState<'a> {
             font_metrics,
             face_resolver,
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
-    ) -> Self {
-        Self::from_output_render(
-            TextRowOutputRenderState::new(builder, output_emitter, evaluator),
-            font_metrics,
-            face_resolver,
-        )
     }
 
     pub(crate) fn reborrow(&mut self) -> TextRowSourceRenderState<'_> {
@@ -811,14 +781,14 @@ pub(crate) struct TextRowSourceMeasureState<'a> {
 
 impl<'a> TextRowSourceMeasureState<'a> {
     #[cfg(test)]
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) fn from_current_row(
+        row_surface: DisplayRowCurrentRowSurface<'a>,
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'a FaceResolver,
     ) -> Self {
         Self {
-            row_surface: DisplayRowCurrentRowSurface::from_builder(builder),
+            row_surface,
             evaluator,
             font_metrics,
             face_resolver,
