@@ -21,11 +21,10 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowBorderInstaller,
-    TextWindowCursorEffects, TextWindowCursorInstaller, TextWindowOutputInstaller,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
-    TextWindowRowLifecycleInstaller, TextWindowTerminalRightBorder, WindowOutputEmitter,
-    close_text_window_output,
+    TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowOutputInstaller, TextWindowOutputRenderState, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
+    WindowOutputEmitter, close_text_window_output,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -119,16 +118,17 @@ impl BufferTextWindowCursorEffectsRequest {
         Self { window_id, effects }
     }
 
-    pub(crate) fn install_and_apply(self, builder: &mut GlyphMatrixBuilder) -> bool {
+    pub(crate) fn install_and_apply(
+        self,
+        output: &mut TextWindowOutputRenderState<'_, '_>,
+    ) -> bool {
         let Some(effects) = self.effects else {
             return false;
         };
-        TextWindowCursorInstaller::without_output(builder).install_cursor_effects(
-            TextWindowCursorEffects {
-                window_id: self.window_id,
-                effects,
-            },
-        );
+        output.install_cursor_effects(TextWindowCursorEffects {
+            window_id: self.window_id,
+            effects,
+        });
         true
     }
 }
@@ -150,10 +150,10 @@ impl BufferTextWindowTerminalRightBorderRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        builder: &mut GlyphMatrixBuilder,
+        output: &mut TextWindowOutputRenderState<'_, '_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        TextWindowBorderInstaller::new(builder).install_terminal_right_border(
+        output.install_terminal_right_border(
             TextWindowTerminalRightBorder {
                 ch: self.ch,
                 face_name: self.face_name,
@@ -443,16 +443,19 @@ impl BufferTextWindowBeginRequest {
             self.window_top,
         );
         output_emitter.begin_update(state.evaluator);
-        TextWindowRowLifecycleInstaller::new(state.builder, &mut output_emitter, state.evaluator)
-            .begin_text_window_output(TextWindowBegin {
-                window_id: self.matrix_window_id,
-                rows: self.matrix_rows,
-                cols: self.matrix_cols,
-                bounds: self.bounds,
-                text_bounds: self.text_bounds,
-                selected: self.selected,
-                first_row: self.first_row,
-            });
+        TextWindowOutputRenderState::new(state.builder, &mut output_emitter)
+            .begin_text_window_output(
+                state.evaluator,
+                TextWindowBegin {
+                    window_id: self.matrix_window_id,
+                    rows: self.matrix_rows,
+                    cols: self.matrix_cols,
+                    bounds: self.bounds,
+                    text_bounds: self.text_bounds,
+                    selected: self.selected,
+                    first_row: self.first_row,
+                },
+            );
         output_emitter
     }
 
@@ -494,10 +497,11 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
 
         let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
             output_render.apply(|builder, output_emitter, evaluator| {
+                let mut output = TextWindowOutputRenderState::new(builder, output_emitter);
                 let mut cursor_publish_status = initial_cursor_publish_status;
                 if cursor_requested {
                     if let Some(cursor) = cursor_info.captured() {
-                        let cursor_row_metrics = output_emitter.row_metrics().to_vec();
+                        let cursor_row_metrics = output.row_metrics().to_vec();
                         cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
                             context.params,
                             context.text,
@@ -515,8 +519,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                             cursor,
                             &cursor_row_metrics,
                             row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
-                            builder,
-                            output_emitter,
+                            &mut output,
                         )
                         .into();
                     } else {
@@ -530,17 +533,16 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                 }
 
                 let pending_row_finished =
-                    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-                        .finish_pending_row(TextWindowPendingRowFinish {
-                            row_geometry,
-                            row_limit: context.row_limit,
-                            row_y_positions,
-                            text_y: context.text_y,
-                            char_height: context.char_h,
-                            charpos: context.charpos,
-                            hit_row_range,
-                            hit_rows,
-                        });
+                    output.finish_pending_row(evaluator, TextWindowPendingRowFinish {
+                        row_geometry,
+                        row_limit: context.row_limit,
+                        row_y_positions,
+                        text_y: context.text_y,
+                        char_height: context.char_h,
+                        charpos: context.charpos,
+                        hit_row_range,
+                        hit_rows,
+                    });
 
                 let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
                     context.params,
@@ -550,7 +552,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     context.text_height,
                     context.char_w,
                 )
-                .publish_visual_cursors(builder, output_emitter);
+                .publish_visual_cursors(&mut output);
                 (
                     cursor_publish_status,
                     pending_row_finished,

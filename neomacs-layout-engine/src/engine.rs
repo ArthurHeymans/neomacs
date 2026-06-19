@@ -19,7 +19,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowMatrixBegin, begin_text_window_matrix, close_text_window_output,
+    TextWindowMatrixBegin, TextWindowOutputRenderState, begin_text_window_matrix,
+    close_text_window_output,
 };
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
@@ -933,7 +934,9 @@ impl LayoutEngine {
         let buffer_name = buffer.name().to_owned();
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut self.matrix_builder);
+            .install_and_apply(&mut TextWindowOutputRenderState::without_output(
+                &mut self.matrix_builder,
+            ));
 
         let char_w = params.char_width;
         let char_h = params.char_height;

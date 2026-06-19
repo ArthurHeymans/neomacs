@@ -944,6 +944,111 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
     }
 }
 
+pub(crate) struct TextWindowOutputRenderState<'builder, 'output> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    output_emitter: Option<&'output mut WindowOutputEmitter>,
+}
+
+impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
+    pub(crate) fn new(
+        builder: &'builder mut GlyphMatrixBuilder,
+        output_emitter: &'output mut WindowOutputEmitter,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter: Some(output_emitter),
+        }
+    }
+
+    pub(crate) fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            builder,
+            output_emitter: None,
+        }
+    }
+
+    fn output_emitter(&self) -> &WindowOutputEmitter {
+        self.output_emitter
+            .as_deref()
+            .expect("text-window output state requires an output emitter")
+    }
+
+    fn output_emitter_mut(&mut self) -> &mut WindowOutputEmitter {
+        self.output_emitter
+            .as_deref_mut()
+            .expect("text-window output state requires an output emitter")
+    }
+
+    pub(crate) fn set_logical_cursor(&mut self, cursor: WindowCursorPos) {
+        self.output_emitter_mut().set_logical_cursor(cursor);
+    }
+
+    pub(crate) fn row_metrics(&self) -> &[RowMetricsSnapshot] {
+        self.output_emitter().row_metrics()
+    }
+
+    pub(crate) fn point_for_lisp_buffer_pos(
+        &self,
+        pos: LispCharPos1,
+    ) -> Option<&DisplayPointSnapshot> {
+        self.output_emitter().point_for_lisp_buffer_pos(pos)
+    }
+
+    pub(crate) fn publish_cursor(
+        &mut self,
+        cursor: TextWindowCursor,
+    ) -> TextWindowCursorPublicationOutcome {
+        let output_emitter = self
+            .output_emitter
+            .as_deref_mut()
+            .expect("text-window cursor publication requires an output emitter");
+        TextWindowCursorInstaller::new(self.builder, output_emitter).publish_cursor(cursor)
+    }
+
+    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
+        TextWindowCursorInstaller::without_output(self.builder).publish_decorative_cursor(cursor);
+    }
+
+    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
+        TextWindowCursorInstaller::without_output(self.builder).install_cursor_effects(request);
+    }
+
+    pub(crate) fn install_terminal_right_border(
+        &mut self,
+        request: TextWindowTerminalRightBorder,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) -> u32 {
+        TextWindowBorderInstaller::new(self.builder)
+            .install_terminal_right_border(request, render_services)
+    }
+
+    pub(crate) fn begin_text_window_output(
+        &mut self,
+        evaluator: &mut Context,
+        request: TextWindowBegin,
+    ) {
+        let output_emitter = self
+            .output_emitter
+            .as_deref_mut()
+            .expect("text-window output state requires an output emitter");
+        TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
+            .begin_text_window_output(request);
+    }
+
+    pub(crate) fn finish_pending_row(
+        &mut self,
+        evaluator: &mut Context,
+        request: TextWindowPendingRowFinish<'_>,
+    ) -> bool {
+        let output_emitter = self
+            .output_emitter
+            .as_deref_mut()
+            .expect("text-window output state requires an output emitter");
+        TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
+            .finish_pending_row(request)
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn publish_text_window_cursor(
     builder: &mut GlyphMatrixBuilder,

@@ -29,7 +29,7 @@ use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::{VisualCursorSpec, WindowKind};
-use crate::window_output::WindowOutputEmitter;
+use crate::window_output::{TextWindowOutputRenderState, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
@@ -1176,6 +1176,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
     params.selected = true;
     params.cursor_color = 0x00ffffff;
 
+    let mut output = TextWindowOutputRenderState::new(&mut builder, &mut output_emitter);
     let outcome = CapturedTextWindowCursorPublishContext::new(
         &params, b"abc", 0, 10.0, 20.0, 20.0, 64.0, 8.0, 16.0, 4, false,
     )
@@ -1195,11 +1196,11 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
             height: 16.0,
             ascent: 12.0,
         },
-        &mut builder,
-        &mut output_emitter,
+        &mut output,
     );
 
     assert_eq!(outcome, CapturedTextWindowCursorPublishOutcome::Published);
+    drop(output);
     let phys = builder.phys_cursor().expect("selected phys cursor");
     assert_eq!(
         phys.slot_id,
@@ -1246,7 +1247,10 @@ fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_di
     let mut builder = GlyphMatrixBuilder::new();
 
     let summary = VisualTextWindowCursorPublishContext::new(&params, 10.0, 20.0, 20.0, 80.0, 8.0)
-        .publish_visual_cursors(&mut builder, &output_emitter);
+        .publish_visual_cursors(&mut TextWindowOutputRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+        ));
 
     assert_eq!(
         summary,

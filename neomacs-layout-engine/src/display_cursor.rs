@@ -2,12 +2,10 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowTextPosition;
 use crate::display_source::DisplayPropertyReplacementCursorPolicy;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowCursorInstaller, TextWindowDecorativeCursor,
-    WindowOutputEmitter,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowOutputRenderState,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
@@ -764,15 +762,14 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         cursor: CapturedCursorInfo,
         row_metrics: &[RowMetricsSnapshot],
         fallback_row_metric: RowMetricsSnapshot,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
+        output: &mut TextWindowOutputRenderState<'_, '_>,
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
             row_metrics,
             self.text_matrix_row_base + cursor.matrix_row,
             fallback_row_metric,
         );
-        output_emitter.set_logical_cursor(cursor.logical_cursor_position(
+        output.set_logical_cursor(cursor.logical_cursor_position(
             row_metric,
             self.text_matrix_row_base,
             self.text_area_left,
@@ -805,7 +802,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             return CapturedTextWindowCursorPublishOutcome::Clipped;
         }
 
-        TextWindowCursorInstaller::new(builder, output_emitter).publish_cursor(TextWindowCursor {
+        output.publish_cursor(TextWindowCursor {
             selected: self.params.selected,
             window_id: resolved_cursor.window_id(),
             charpos: self.point_charpos.max(0) as usize,
@@ -877,8 +874,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
 
     pub(crate) fn publish_visual_cursors(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &WindowOutputEmitter,
+        output: &mut TextWindowOutputRenderState<'_, '_>,
     ) -> VisualTextWindowCursorPublishSummary {
         let mut summary = VisualTextWindowCursorPublishSummary::default();
 
@@ -888,7 +884,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 summary.no_cursor += 1;
                 continue;
             };
-            let Some(point) = output_emitter
+            let Some(point) = output
                 .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(spec.charpos))
             else {
                 summary.missing_point += 1;
@@ -913,19 +909,17 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 summary.clipped += 1;
                 continue;
             }
-            TextWindowCursorInstaller::without_output(builder).publish_decorative_cursor(
-                TextWindowDecorativeCursor {
-                    window_id: resolved_cursor.window_id(),
-                    slot_id: resolved_cursor.slot_id,
-                    x: resolved_cursor.x,
-                    y: resolved_cursor.y,
-                    width: resolved_cursor.width,
-                    height: resolved_cursor.height,
-                    style: resolved_cursor.style,
-                    color: resolved_cursor.color,
-                    effects: spec.effects.clone(),
-                },
-            );
+            output.publish_decorative_cursor(TextWindowDecorativeCursor {
+                window_id: resolved_cursor.window_id(),
+                slot_id: resolved_cursor.slot_id,
+                x: resolved_cursor.x,
+                y: resolved_cursor.y,
+                width: resolved_cursor.width,
+                height: resolved_cursor.height,
+                style: resolved_cursor.style,
+                color: resolved_cursor.color,
+                effects: spec.effects.clone(),
+            });
             summary.published += 1;
         }
 
