@@ -1,6 +1,6 @@
-//! Overlay before/after-string rendering — GNU `load_overlay_strings` / the
-//! `it->overlay_strings` consumption (xdisp.c). Relocated out of
-//! display_row_append.rs (pure move, no behavior change).
+//! Overlay string rendering — GNU `load_overlay_strings` / the
+//! `it->overlay_strings` consumption (xdisp.c). Overlay strings render from the
+//! single GNU-ordered before/after list exposed by the buffer bridge.
 
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
@@ -142,13 +142,6 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct BufferOverlayStringRenderContext<'a> {
-    enabled: bool,
-    window_id: u64,
-    row_context: OverlayStringRenderRowContext<'a>,
-}
-
 pub(crate) struct OverlayStringRenderState<'a> {
     pub(crate) source_render: TextRowSourceRenderState<'a>,
     pub(crate) x: &'a mut f32,
@@ -224,13 +217,11 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         }
     }
 
-    fn overlay_context(
+    fn row_context(
         self,
         active_face_state: &DisplayRowActiveFaceState,
-    ) -> BufferOverlayStringRenderContext<'a> {
-        BufferOverlayStringRenderContext::for_text_row(
-            self.enabled,
-            self.window_id,
+    ) -> OverlayStringRenderRowContext<'a> {
+        OverlayStringRenderRowContext::new(
             self.append_surface,
             active_face_state,
             self.char_h,
@@ -241,129 +232,24 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         )
     }
 
-    pub(crate) fn render_before_at<B: LayoutBufferView>(
+    pub(crate) fn render_at<B: LayoutBufferView>(
         self,
         buffer: &B,
         anchor_charpos: i64,
         active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_before_at(buffer, anchor_charpos, state);
-    }
-
-    pub(crate) fn render_after_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_after_at(buffer, anchor_charpos, state);
-    }
-
-    pub(crate) fn render_both_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_both_at(buffer, anchor_charpos, state);
-    }
-}
-
-impl<'a> BufferOverlayStringRenderContext<'a> {
-    pub(crate) fn new(
-        enabled: bool,
-        window_id: u64,
-        row_context: OverlayStringRenderRowContext<'a>,
-    ) -> Self {
-        Self {
-            enabled,
-            window_id,
-            row_context,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_text_row(
-        enabled: bool,
-        window_id: u64,
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &DisplayRowActiveFaceState,
-        char_h: f32,
-        default_row_ascent: f32,
-        text_y: f32,
-        row_base: usize,
-        max_rows: usize,
-    ) -> Self {
-        Self::new(
-            enabled,
-            window_id,
-            OverlayStringRenderRowContext::new(
-                append_surface,
-                active_face_state,
-                char_h,
-                default_row_ascent,
-                text_y,
-                row_base,
-                max_rows,
-            ),
-        )
-    }
-
-    pub(crate) fn render_before_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::Before, state);
-    }
-
-    pub(crate) fn render_after_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::After, state);
-    }
-
-    pub(crate) fn render_both_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_before_at(buffer, anchor_charpos, state);
-        self.render_after_at(buffer, anchor_charpos, state);
-    }
-
-    fn render_at_kind<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        kind: OverlayStringKind,
         state: &mut OverlayStringRenderState<'_>,
     ) {
         if !self.enabled {
             return;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        // overlay_strings_at now returns one GNU-ordered interleaved list; pick
-        // the entries of this kind (within-kind order is preserved, so this is
-        // behavior-neutral vs the old per-kind sort).
-        let want_after = matches!(kind, OverlayStringKind::After);
-        let overlay_strings: Vec<_> = text_props
-            .overlay_strings_at(anchor_charpos)
-            .into_iter()
-            .filter(|entry| entry.after_string_p == want_after)
-            .collect();
-        for overlay_string in overlay_strings {
+        let row_context = self.row_context(active_face_state);
+        for overlay_string in text_props.overlay_strings_at(anchor_charpos) {
+            let kind = if overlay_string.after_string_p {
+                OverlayStringKind::After
+            } else {
+                OverlayStringKind::Before
+            };
             render_overlay_string(
                 buffer,
                 OverlayStringRenderSource::new(
@@ -371,7 +257,7 @@ impl<'a> BufferOverlayStringRenderContext<'a> {
                     CharPos0::new(anchor_charpos as usize),
                     kind,
                 ),
-                self.row_context,
+                row_context,
                 state,
             );
         }

@@ -2535,6 +2535,7 @@ impl BufferTextWindowLoopRequestContext {
         self,
         source_char: BufferTextSourceStepChar,
         text: &'a [u8],
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferTextLineBreakRenderRequest<'a> {
         BufferTextLineBreakRenderRequest::new(
@@ -2554,6 +2555,7 @@ impl BufferTextWindowLoopRequestContext {
                 text_matrix_row_base: self.text_matrix_row_base,
                 max_rows: self.max_rows,
                 row_limit: self.row_limit,
+                overlay_context,
             },
         )
     }
@@ -2946,6 +2948,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     loop_context,
                     source_char,
                     text,
+                    overlay_context,
                     active_face_state,
                     buffer,
                 )
@@ -3275,10 +3278,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         context: BufferTextWindowLoopRequestContext,
         source_char: BufferTextSourceStepChar,
         text: &'request [u8],
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        let request = context.line_break_request(source_char, text, active_face_state);
+        let request =
+            context.line_break_request(source_char, text, overlay_context, active_face_state);
         self.render_line_break(request, buffer)
     }
 
@@ -3422,6 +3427,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 hit_rows: self.hit_rows,
                 hit_row_range: self.hit_row_range,
                 row_y_positions: self.row_y_positions,
+                face_ids: self.face_ids,
             },
         )
     }

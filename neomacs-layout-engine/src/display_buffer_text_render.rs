@@ -402,7 +402,7 @@ impl BufferEndOfBufferTailAction {
         active_face_state: &DisplayRowActiveFaceState,
         state: &mut OverlayStringRenderState<'_>,
     ) {
-        render_context.render_both_at(buffer, self.cursor.charpos, active_face_state, state);
+        render_context.render_at(buffer, self.cursor.charpos, active_face_state, state);
     }
 }
 
@@ -691,6 +691,7 @@ pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
@@ -1136,7 +1137,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             row_y_positions,
             face_ids,
         );
-        context.overlay_context.render_after_at(
+        context.overlay_context.render_at(
             buffer,
             *charpos,
             context.active_face_state,
@@ -1464,6 +1465,7 @@ pub(crate) struct BufferTextLineBreakRenderContext<'a> {
     pub(crate) text_matrix_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
 }
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
@@ -1502,6 +1504,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             hit_rows,
             hit_row_range,
             row_y_positions,
+            face_ids,
         } = state;
         let mut source_render = source_render;
         let context = self.context;
@@ -1512,6 +1515,25 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             context.char_h,
             context.extra_line_spacing,
         );
+        {
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+            );
+            context.overlay_context.render_at(
+                buffer,
+                *charpos,
+                context.active_face_state,
+                &mut overlay_state,
+            );
+        }
         line_break_action.capture_cursor_if_point(
             cursor_info,
             context.active_face_state,
@@ -3186,7 +3208,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 row_y_positions,
                 face_ids,
             );
-            context.overlay_context.render_before_at(
+            context.overlay_context.render_at(
                 buffer,
                 *charpos,
                 &active_face_state,
@@ -3239,26 +3261,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         }
         if let Some(end_charpos) = source_end_charpos {
             *charpos = (*charpos).max(end_charpos);
-        }
-
-        {
-            let mut overlay_state = OverlayStringRenderState::from_source_render(
-                source_render.reborrow(),
-                x,
-                col,
-                row_geometry,
-                cursor_info,
-                hit_rows,
-                hit_row_range,
-                row_y_positions,
-                face_ids,
-            );
-            context.overlay_context.render_after_at(
-                buffer,
-                *charpos,
-                &active_face_state,
-                &mut overlay_state,
-            );
         }
 
         BufferTextSourceCharRenderOutcome::Rendered

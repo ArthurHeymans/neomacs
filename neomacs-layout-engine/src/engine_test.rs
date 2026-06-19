@@ -9366,6 +9366,85 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
 }
 
 #[test]
+fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let eob = buf.point_max_emacs_byte_pos().get();
+
+        let after_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(after_overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            after_overlay,
+            Value::symbol("after-string"),
+            Value::string("A"),
+        );
+
+        let before_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(before_overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            before_overlay,
+            Value::symbol("before-string"),
+            Value::string("B"),
+        );
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(eob));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-eob-overlay-interleaved-order",
+        640,
+        180,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rendered = enabled_window_row_texts(entry).join("\n");
+
+    assert!(
+        rendered.contains("xAB"),
+        "GNU compare_overlay_entries renders after-strings from other overlays before before-strings, rows={rendered:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
     let mut eval = Context::new();
     let buf_id = eval

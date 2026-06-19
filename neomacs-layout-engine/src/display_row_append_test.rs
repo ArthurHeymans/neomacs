@@ -2555,6 +2555,18 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let mut face_ids = FrameFaceIdAllocator::new(20);
 
     let continuation = BufferTextLineBreakRenderRequest::new(
         source_char,
@@ -2573,6 +2585,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             text_matrix_row_base: 0,
             max_rows: 4,
             row_limit,
+            overlay_context,
         },
     )
     .render_and_apply(
@@ -2602,6 +2615,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
             row_y_positions: &mut context.row_y_positions,
+            face_ids: &mut face_ids,
         },
     );
 
@@ -4549,7 +4563,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut ctx.row_y_positions,
             &mut face_ids,
         );
-        render_context.render_before_at(&buffer, 5, &active_face, &mut state);
+        render_context.render_at(&buffer, 5, &active_face, &mut state);
     }
 
     assert_eq!(x, 24.0);
