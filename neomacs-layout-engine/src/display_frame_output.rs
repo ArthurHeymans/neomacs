@@ -17,7 +17,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowTransitionHint, WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::{
-    CursorItem, FrameChromeRow, FrameDisplayState, GlyphRow, ScrollBarItem,
+    CursorItem, FrameChromeRow, FrameDisplayState, ScrollBarItem,
 };
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::emacs_core::Context;
@@ -245,10 +245,6 @@ impl<'a> FrameOutputSurface<'a> {
 
     fn cursors(&self) -> &[CursorItem] {
         self.builder.cursors()
-    }
-
-    pub(crate) fn install_display_row(&mut self, matrix_row: usize, row: &GlyphRow) {
-        DisplayRowInstallSurface::from_builder(self.builder).install_row(matrix_row, row);
     }
 }
 

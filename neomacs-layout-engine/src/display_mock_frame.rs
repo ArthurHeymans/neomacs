@@ -9,6 +9,7 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
+use crate::display_row_matrix_install::DisplayRowInstallSurface;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -20,6 +21,10 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 use neovm_core::face::FaceTable;
+
+fn install_mock_display_row(builder: &mut GlyphMatrixBuilder, row_index: usize, row: &GlyphRow) {
+    DisplayRowInstallSurface::from_builder(builder).install_row(row_index, row);
+}
 
 const MOCK_DISPLAY_SOURCE_ID: u64 = 0x6d6f_636b;
 
@@ -402,7 +407,7 @@ pub(crate) fn layout_mock_frame_content(
                 font_metrics,
                 &mut mock_face_ids,
             );
-            FrameOutputSurface::from_builder(&mut builder).install_display_row(row_idx, &row);
+            install_mock_display_row(&mut builder, row_idx, &row);
         }
 
         let mode_line_row = window.lines.len();
@@ -422,7 +427,7 @@ pub(crate) fn layout_mock_frame_content(
             font_metrics,
             &mut mock_face_ids,
         );
-        FrameOutputSurface::from_builder(&mut builder).install_display_row(mode_line_row, &row);
+        install_mock_display_row(&mut builder, mode_line_row, &row);
 
         TextWindowMatrixOutputSurface::from_builder(&mut builder).close_text_window_output();
     }
@@ -459,7 +464,7 @@ pub(crate) fn layout_mock_frame_content(
                 font_metrics,
                 &mut mock_face_ids,
             );
-            FrameOutputSurface::from_builder(&mut builder).install_display_row(row_idx, &row);
+            install_mock_display_row(&mut builder, row_idx, &row);
         }
 
         if has_mode_line {
@@ -480,7 +485,7 @@ pub(crate) fn layout_mock_frame_content(
                 font_metrics,
                 &mut mock_face_ids,
             );
-            FrameOutputSurface::from_builder(&mut builder).install_display_row(mode_line_row, &row);
+            install_mock_display_row(&mut builder, mode_line_row, &row);
         }
 
         TextWindowMatrixOutputSurface::from_builder(&mut builder).close_text_window_output();
@@ -541,7 +546,7 @@ pub(crate) fn layout_mock_frame_content(
                 font_metrics,
                 &mut mock_face_ids,
             );
-            FrameOutputSurface::from_builder(&mut cb).install_display_row(ri, &row);
+            install_mock_display_row(&mut cb, ri, &row);
         }
         TextWindowMatrixOutputSurface::from_builder(&mut cb).close_text_window_output();
         let cs = cb.finish(
