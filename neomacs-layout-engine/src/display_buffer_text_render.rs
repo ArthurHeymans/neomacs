@@ -13,7 +13,9 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_source::{
-    BufferTextReplacementItem, BufferTextSourceItem, BufferTextSourceStepChar,
+    BufferTextConsumedSourceItem, BufferTextReplacementItem, BufferTextSourceCursor,
+    BufferTextSourceItem, BufferTextSourceItemStep, BufferTextSourceItemStepper,
+    BufferTextSourceStepChar,
 };
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
@@ -57,10 +59,11 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
-use crate::display_source::SyntheticTextItemSource;
+use crate::display_source::{DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_source_resolver::{
     DisplayPropertyReplacementAppendRequestResolver, DisplaySourceFaceBasis,
-    DisplaySourceFallbackMetrics, DisplaySourceResolveParams, PendingDisplaySourceFace,
+    DisplaySourceFallbackMetrics, DisplaySourcePropertyResolver, DisplaySourceResolveParams,
+    DisplaySourceResolveState, PendingDisplaySourceFace,
 };
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{
@@ -216,6 +219,64 @@ pub(crate) struct BufferTextWindowTailDecorationOutcome {
     pub(crate) left_continuation_rows: usize,
     pub(crate) empty_line_fringe_rows: usize,
     pub(crate) fill_column_rows: usize,
+}
+
+pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
+    loop_context: BufferTextWindowLoopRequestContext,
+    append_state: &'emit mut BufferTextRowAppendState,
+    text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    byte_idx: &'emit mut usize,
+    charpos: &'emit mut i64,
+    col: &'emit mut usize,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit mut BoxFaceRowState,
+    x: &'emit mut f32,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    cursor_info: &'emit mut CursorCaptureState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    append_surface: &'surface DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+}
+
+pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
+    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    source_step: BufferTextSourceItemStep,
+    text: &'a [u8],
+    active_face_state: &'a DisplayRowActiveFaceState,
+    params: &'a WindowParams,
+}
+
+pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
+    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    source_item: BufferTextSourceItem,
+    item_stepper: &'a mut BufferTextSourceItemStepper,
+    text: &'a [u8],
+    active_face_state: &'a DisplayRowActiveFaceState,
+    params: &'a WindowParams,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextWindowLoopStepOutcome {
+    ContinueBufferWalk,
+    StopBufferWalk,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextWindowPreSourceOutcome {
+    ReadyForSourceItem,
+    ContinueBufferWalk,
+    StopBufferWalk,
 }
 
 impl BufferTextWindowLoopRequestContext {
@@ -734,6 +795,737 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        loop_context: BufferTextWindowLoopRequestContext,
+        append_state: &'emit mut BufferTextRowAppendState,
+        text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        byte_idx: &'emit mut usize,
+        charpos: &'emit mut i64,
+        col: &'emit mut usize,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit mut BoxFaceRowState,
+        x: &'emit mut f32,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        row_y_positions: &'rows mut DisplayRowYPositions,
+        cursor_info: &'emit mut CursorCaptureState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        append_surface: &'surface DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+    ) -> Self {
+        Self {
+            loop_context,
+            append_state,
+            text_property_checkpoints,
+            byte_idx,
+            charpos,
+            col,
+            source_render,
+            row_extend,
+            box_face,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+            cursor_info,
+            face_ids,
+            append_surface,
+            overlay_context,
+        }
+    }
+
+    pub(crate) fn hscroll_should_skip(&self) -> bool {
+        self.hscroll_skip.should_skip()
+    }
+
+    pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
+        &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'request, B>,
+        source_resolve_state: &mut DisplaySourceResolveState,
+        item_stepper: &mut BufferTextSourceItemStepper,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) where
+        'surface: 'request,
+    {
+        while *self.byte_idx < text.len()
+            && self
+                .row_geometry
+                .current_row_is_visible(self.loop_context.row_visibility_limit())
+        {
+            if matches!(
+                self.render_next_step(
+                    source_cursor,
+                    source_resolve_state,
+                    item_stepper,
+                    row_prelude_context,
+                    face_resolution_context.clone(),
+                    text,
+                    params,
+                    active_face_state,
+                    buffer,
+                ),
+                BufferTextWindowLoopStepOutcome::StopBufferWalk
+            ) {
+                break;
+            }
+        }
+    }
+
+    pub(crate) fn render_next_step<'request, B: LayoutBufferView>(
+        &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'request, B>,
+        source_resolve_state: &mut DisplaySourceResolveState,
+        item_stepper: &mut BufferTextSourceItemStepper,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'surface: 'request,
+    {
+        match self.render_pre_source_checkpoints_for_context(
+            row_prelude_context,
+            face_resolution_context,
+            text,
+            params,
+            active_face_state,
+            buffer,
+        ) {
+            BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
+            BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
+                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            }
+            BufferTextWindowPreSourceOutcome::StopBufferWalk => {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+        }
+
+        let Some(consumed_source) = self.consume_source_item(
+            source_cursor,
+            source_resolve_state,
+            item_stepper,
+            face_resolution_context,
+            active_face_state,
+        ) else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+
+        let source_item = match consumed_source {
+            BufferTextConsumedSourceItem::PendingStep(source_step) => {
+                return self.render_source_item_step_for_context(
+                    BufferTextSourceItemStepRenderRequest {
+                        layout_resolution_context: face_resolution_context
+                            .source_item_layout_resolution_context(),
+                        source_step,
+                        text,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                );
+            }
+            BufferTextConsumedSourceItem::SourceItem(source_item) => source_item,
+            BufferTextConsumedSourceItem::Replacement(replacement) => {
+                return self.render_replacement_source_item_for_context(
+                    replacement,
+                    item_stepper,
+                    face_resolution_context.source_item_layout_resolution_context(),
+                    text,
+                    active_face_state,
+                    params,
+                    buffer,
+                );
+            }
+        };
+
+        self.render_source_item_for_context(
+            BufferTextSourceItemRenderRequest {
+                layout_resolution_context: face_resolution_context
+                    .source_item_layout_resolution_context(),
+                source_item,
+                item_stepper,
+                text,
+                active_face_state,
+                params,
+            },
+            buffer,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_pre_source_checkpoints_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        _params: &'request WindowParams,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferTextWindowPreSourceOutcome
+    where
+        'surface: 'request,
+    {
+        self.render_row_prelude(row_prelude_context, active_face_state, buffer);
+
+        if self
+            .render_invisible_text_for_context(text, active_face_state, buffer)
+            .should_continue_buffer_walk()
+        {
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
+        }
+
+        if self.hscroll_should_skip() {
+            if self
+                .render_hscroll_skip_for_context(text, active_face_state)
+                .should_break()
+            {
+                return BufferTextWindowPreSourceOutcome::StopBufferWalk;
+            }
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
+        }
+
+        self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
+
+        let display_property_walk = self.render_display_property_checkpoint_for_context(buffer);
+        if display_property_walk.should_continue_buffer_walk() {
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
+        }
+
+        BufferTextWindowPreSourceOutcome::ReadyForSourceItem
+    }
+
+    pub(crate) fn render_source_item_step_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceItemStepRenderRequest<'request>,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome {
+        let BufferTextSourceItemStepRenderRequest {
+            layout_resolution_context,
+            source_step,
+            text,
+            active_face_state,
+            params,
+        } = request;
+        let selective_display_outcome = self.render_selective_display_tail_for_context(
+            source_step.source_char(),
+            text,
+            active_face_state,
+            buffer,
+        );
+        if selective_display_outcome.should_break() {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        }
+        if selective_display_outcome.should_continue_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        let is_explicit_line_break = source_step.is_explicit_line_break();
+        let end_charpos = source_step.end_charpos();
+        let (source_char, source_item) = source_step.into_parts();
+        if is_explicit_line_break {
+            if self
+                .render_line_break_for_context(source_char, text, active_face_state, buffer)
+                .should_break()
+            {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+        } else {
+            let char_render_outcome = self.render_source_char_for_context(
+                layout_resolution_context,
+                source_char,
+                source_item,
+                text,
+                active_face_state,
+                params,
+                buffer,
+            );
+            if char_render_outcome.should_break() {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+            if char_render_outcome.should_continue_buffer_walk() {
+                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            }
+            *self.charpos = (*self.charpos).max(end_charpos);
+        }
+
+        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+    }
+
+    pub(crate) fn render_source_item_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceItemRenderRequest<'request>,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome {
+        let BufferTextSourceItemRenderRequest {
+            layout_resolution_context,
+            source_item,
+            item_stepper,
+            text,
+            active_face_state,
+            params,
+        } = request;
+
+        let Some(source_step) =
+            item_stepper.item_step_from_source_item(source_item, self.byte_idx, *self.charpos)
+        else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+
+        self.render_source_item_step_for_context(
+            BufferTextSourceItemStepRenderRequest {
+                layout_resolution_context,
+                source_step,
+                text,
+                active_face_state,
+                params,
+            },
+            buffer,
+        )
+    }
+
+    pub(crate) fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        replacement: BufferTextReplacementItem,
+        item_stepper: &mut BufferTextSourceItemStepper,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        params: &'request WindowParams,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'surface: 'request,
+    {
+        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
+            replacement,
+            self.loop_context.text_start_byte(),
+            text,
+            self.loop_context.buffer_id(),
+            self.loop_context.content_x(),
+            params,
+            0.0,
+            self.loop_context.char_height(),
+            active_face_state,
+            self.loop_context.point_charpos(),
+        );
+        match request.render_and_apply(
+            buffer,
+            BufferDisplayPropertyTextReplacementRenderState {
+                source_render: self.source_render.reborrow(),
+                face_ids: self.face_ids,
+                append_surface: self.append_surface,
+                row_geometry: self.row_geometry,
+                cursor_info: self.cursor_info,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                x: self.x,
+                col: self.col,
+            },
+        ) {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Continue => {
+                BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => self
+                .render_source_item_for_context(
+                    BufferTextSourceItemRenderRequest {
+                        layout_resolution_context,
+                        source_item,
+                        item_stepper,
+                        text,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                ),
+            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
+                BufferTextWindowLoopStepOutcome::StopBufferWalk
+            }
+        }
+    }
+
+    pub(crate) fn render_row_prelude<B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowRowPreludeRequestContext,
+        active_face_state: &DisplayRowActiveFaceState,
+        buffer: &B,
+    ) {
+        context
+            .line_number_margin_request()
+            .render_pending_with_source_state(
+                self.line_numbers,
+                &mut self.source_render,
+                self.face_ids,
+                self.row_geometry,
+                self.face_scan,
+                context.char_width(),
+            );
+
+        context
+            .line_prefix_request(
+                self.append_surface,
+                self.row_geometry,
+                active_face_state,
+                0.0,
+                DisplayRowPosition {
+                    x_px: *self.x,
+                    col: *self.col,
+                },
+            )
+            .render_requested_with_source_state_and_apply(
+                self.prefix_request,
+                &mut self.source_render,
+                buffer,
+                *self.charpos,
+                self.face_ids,
+                self.x,
+                self.col,
+            );
+    }
+
+    pub(crate) fn consume_source_item<B: LayoutBufferView>(
+        &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'_, B>,
+        source_resolve_state: &mut DisplaySourceResolveState,
+        item_stepper: &mut BufferTextSourceItemStepper,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        _active_face_state: &DisplayRowActiveFaceState,
+    ) -> Option<BufferTextConsumedSourceItem> {
+        // One persistent typed source cursor feeds the row walk. The source
+        // side owns pending text-run splitting so direct single-character
+        // items can still stay typed through render.
+        let mut pending_faces = Vec::new();
+        let source_item = {
+            let params = face_resolution_context.source_resolve_params(None);
+            let mut resolver = DisplaySourcePropertyResolver::new(
+                params,
+                source_resolve_state,
+                self.face_ids,
+                &mut pending_faces,
+            );
+            let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
+            item_stepper.next_consumed_source_item(
+                source_cursor,
+                &mut source_context,
+                self.byte_idx,
+                *self.charpos,
+            )
+        };
+        {
+            let mut source_render = self.source_render.reborrow();
+            face_resolution_context.install_pending_source_faces(
+                &mut source_render,
+                self.row_geometry,
+                pending_faces,
+            );
+        }
+        source_item
+    }
+
+    pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferInvisibleTextRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.invisible_text_request(
+            text,
+            self.append_surface,
+            self.overlay_context,
+            active_face_state,
+            0.0,
+        );
+        self.render_invisible_text_at_checkpoint(request, buffer)
+    }
+
+    pub(crate) fn render_hscroll_skip_for_context<'request>(
+        &mut self,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+    ) -> DisplayRowTransitionContinuation
+    where
+        'surface: 'request,
+    {
+        let request =
+            self.loop_context
+                .hscroll_skip_request(text, self.append_surface, active_face_state);
+        self.render_hscroll_skip(request)
+    }
+
+    pub(crate) fn render_face_checkpoint_for_context<B: LayoutBufferView>(
+        &mut self,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        active_face_state: &mut DisplayRowActiveFaceState,
+    ) {
+        face_resolution_context.resolve_at_checkpoint_with_source_state(
+            &mut self.source_render.reborrow(),
+            self.face_scan,
+            self.face_ids,
+            active_face_state,
+            self.row_geometry,
+            self.row_extend,
+            self.box_face,
+            *self.x,
+            *self.charpos,
+        );
+    }
+
+    pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        buffer: &'request B,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        let request = self
+            .loop_context
+            .display_property_checkpoint_request(buffer, *self.charpos);
+        self.render_display_property_checkpoint(request)
+    }
+
+    pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        source_step_char: BufferTextSourceStepChar,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferSelectiveDisplayTailRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.selective_display_tail_request(
+            source_step_char,
+            text,
+            self.append_surface,
+            active_face_state,
+            0.0,
+        );
+        self.render_selective_display_tail(request, buffer)
+    }
+
+    pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        source_char: BufferTextSourceStepChar,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.line_break_request(
+            source_char,
+            text,
+            self.overlay_context,
+            active_face_state,
+        );
+        self.render_line_break(request, buffer)
+    }
+
+    pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
+        source_char: BufferTextSourceStepChar,
+        source_item: DisplayItem,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        params: &'request WindowParams,
+        buffer: &B,
+    ) -> BufferTextSourceCharRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.source_char_request(
+            layout_resolution_context,
+            source_char,
+            source_item,
+            text,
+            self.append_surface,
+            self.overlay_context,
+            active_face_state,
+            params,
+            0.0,
+        );
+        self.render_source_char(request, buffer)
+    }
+
+    fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
+        &mut self,
+        request: BufferInvisibleTextRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferInvisibleTextRenderOutcome {
+        request.render_at_checkpoint_and_apply(
+            buffer,
+            BufferInvisibleTextRenderRequestState {
+                checkpoints: self.text_property_checkpoints,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                source_render: self.source_render.reborrow(),
+                x: self.x,
+                col: self.col,
+                row_geometry: self.row_geometry,
+                cursor_info: self.cursor_info,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                row_y_positions: self.row_y_positions,
+                face_ids: self.face_ids,
+            },
+        )
+    }
+
+    fn render_hscroll_skip(
+        &mut self,
+        request: BufferHscrollSkipRenderRequest<'_>,
+    ) -> DisplayRowTransitionContinuation {
+        request.render_next_and_apply(BufferHscrollSkipRenderState {
+            byte_idx: self.byte_idx,
+            charpos: self.charpos,
+            hscroll_skip: self.hscroll_skip,
+            row_extend: self.row_extend,
+            source_render: self.source_render.reborrow(),
+            x: self.x,
+            col: self.col,
+            prefix_request: self.prefix_request,
+            line_numbers: self.line_numbers,
+            word_wrap: self.word_wrap,
+            trailing_whitespace: self.trailing_whitespace,
+            row_geometry: self.row_geometry,
+            row_flags: self.row_flags,
+            hit_rows: self.hit_rows,
+            hit_row_range: self.hit_row_range,
+            cursor_info: self.cursor_info,
+            row_y_positions: self.row_y_positions,
+        })
+    }
+
+    fn render_display_property_checkpoint<B: LayoutBufferView>(
+        &mut self,
+        request: BufferDisplayPropertyCheckpointRenderRequest<'_, B>,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        request.render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
+            self.text_property_checkpoints,
+        ))
+    }
+
+    fn render_selective_display_tail<B: LayoutBufferView>(
+        &mut self,
+        request: BufferSelectiveDisplayTailRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferSelectiveDisplayTailRenderOutcome {
+        request.render_if_needed_and_apply(
+            buffer,
+            BufferSelectiveDisplayTailRenderState {
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                col: self.col,
+                source_render: self.source_render.reborrow(),
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+                x: self.x,
+                line_numbers: self.line_numbers,
+                row_geometry: self.row_geometry,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                prefix_request: self.prefix_request,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                trailing_whitespace: self.trailing_whitespace,
+                row_y_positions: self.row_y_positions,
+            },
+        )
+    }
+
+    fn render_line_break<B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextLineBreakRenderRequest<'_>,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        request.render_and_apply(
+            buffer,
+            BufferTextLineBreakRenderState {
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                cursor_info: self.cursor_info,
+                row_geometry: self.row_geometry,
+                trailing_whitespace: self.trailing_whitespace,
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+                source_render: self.source_render.reborrow(),
+                x: self.x,
+                col: self.col,
+                prefix_request: self.prefix_request,
+                line_numbers: self.line_numbers,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                row_y_positions: self.row_y_positions,
+                face_ids: self.face_ids,
+            },
+        )
+    }
+
+    fn render_source_char<B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceCharRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferTextSourceCharRenderOutcome {
+        request.render_and_apply(
+            buffer,
+            BufferTextSourceCharRenderRequestState {
+                append_state: self.append_state,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                col: self.col,
+                source_render: self.source_render.reborrow(),
+                row_extend: self.row_extend,
+                x: self.x,
+                line_numbers: self.line_numbers,
+                row_geometry: self.row_geometry,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                prefix_request: self.prefix_request,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                trailing_whitespace: self.trailing_whitespace,
+                face_scan: self.face_scan,
+                row_y_positions: self.row_y_positions,
+                cursor_info: self.cursor_info,
+                face_ids: self.face_ids,
+            },
+        )
     }
 }
 
