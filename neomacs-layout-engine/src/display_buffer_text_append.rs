@@ -22,9 +22,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBeginOutputState, TextWindowBodyOutputInstall,
-    TextWindowCursorEffects, TextWindowLiveOutputState, TextWindowOutputRenderState,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
-    TextWindowTerminalRightBorder, WindowOutputEmitter,
+    TextWindowCursorEffects, TextWindowFinishOutputState, TextWindowLiveOutputState,
+    TextWindowOutputRenderState, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -258,9 +258,7 @@ pub(crate) struct BufferTextWindowFinishRequest {
 }
 
 pub(crate) struct BufferTextWindowFinishState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: WindowOutputEmitter,
-    evaluator: &'a mut Context,
+    output: TextWindowFinishOutputState<'a>,
     hit_rows: Vec<HitRow>,
 }
 
@@ -377,16 +375,9 @@ impl<'a> BufferTextWindowFinishState<'a> {
         hit_rows: Vec<HitRow>,
     ) -> Self {
         Self {
-            builder,
-            output_emitter,
-            evaluator,
+            output: TextWindowFinishOutputState::new(builder, output_emitter, evaluator),
             hit_rows,
         }
-    }
-
-    fn close_text_window_output(&mut self) {
-        TextWindowOutputRenderState::new(self.builder, &mut self.output_emitter)
-            .close_text_window_output();
     }
 
     fn finish_snapshot(
@@ -396,8 +387,7 @@ impl<'a> BufferTextWindowFinishState<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> (Vec<HitRow>, WindowDisplaySnapshot) {
-        let snapshot = self.output_emitter.finish_snapshot(
-            self.evaluator,
+        let snapshot = self.output.finish_snapshot(
             text_area_left_offset,
             mode_line_height,
             header_line_height,
@@ -718,8 +708,6 @@ impl BufferTextWindowFinishRequest {
         self,
         state: BufferTextWindowFinishState<'_>,
     ) -> BufferTextWindowFinishOutput {
-        let mut state = state;
-        state.close_text_window_output();
         let (hit_rows, snapshot) = state.finish_snapshot(
             self.text_area_left_offset,
             self.mode_line_height,

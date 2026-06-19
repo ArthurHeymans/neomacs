@@ -471,6 +471,12 @@ pub(crate) struct TextWindowBeginOutputState<'a> {
     evaluator: &'a mut Context,
 }
 
+pub(crate) struct TextWindowFinishOutputState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: WindowOutputEmitter,
+    evaluator: &'a mut Context,
+}
+
 pub(crate) struct TextWindowLiveOutputState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
@@ -493,6 +499,37 @@ impl<'a> TextWindowBeginOutputState<'a> {
     ) {
         TextWindowOutputRenderState::new(self.builder, output_emitter)
             .begin_text_window_output(self.evaluator, begin);
+    }
+}
+
+impl<'a> TextWindowFinishOutputState<'a> {
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+        }
+    }
+
+    pub(crate) fn finish_snapshot(
+        self,
+        text_area_left_offset: i64,
+        mode_line_height: i64,
+        header_line_height: i64,
+        tab_line_height: i64,
+    ) -> WindowDisplaySnapshot {
+        close_text_window_matrix_output(self.builder);
+        self.output_emitter.finish_snapshot(
+            self.evaluator,
+            text_area_left_offset,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        )
     }
 }
 
@@ -1202,10 +1239,6 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
             .expect("text-window output state requires an output emitter");
         TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
             .finish_pending_row(request)
-    }
-
-    pub(crate) fn close_text_window_output(&mut self) {
-        close_text_window_matrix_output(self.builder);
     }
 }
 
