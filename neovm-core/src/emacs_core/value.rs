@@ -387,7 +387,12 @@ fn string_text_prop_plist_put(plist: &mut Vec<(Value, Value)>, key: Value, value
             return;
         }
     }
-    plist.insert(0, (key, value));
+    // Preserve source order. The reader applies the whole property list at
+    // once with `Fset_text_properties` semantics (GNU lread.c
+    // `string_props_from_rev_list`), which keeps the plist in the written
+    // order. Appending (not prepending) makes `text-properties-at` on a read
+    // `#("..." S E (k1 v1 k2 v2 ...))` return `(k1 v1 k2 v2 ...)` like GNU.
+    plist.push((key, value));
 }
 
 pub fn get_string_text_properties_for_value(value: Value) -> Option<Vec<StringTextPropertyRun>> {
