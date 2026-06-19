@@ -322,11 +322,7 @@ pub(crate) struct BufferTextWindowPostLoopRenderState<'emit> {
 }
 
 pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'emit FaceResolver,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
     pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
@@ -1039,13 +1035,7 @@ impl BufferTextWindowWalkSetup {
     ) -> BufferTextWindowPostLoopRenderOutcome {
         self.render_visible_steps(
             &mut BufferTextWindowWalkRenderState {
-                source_render: TextRowSourceRenderState::new(
-                    state.builder,
-                    state.output_emitter,
-                    state.evaluator,
-                    state.font_metrics,
-                    state.face_resolver,
-                ),
+                source_render: state.source_render.reborrow(),
                 line_numbers: state.line_numbers,
                 face_scan: state.face_scan,
                 active_face_state: state.active_face_state,
@@ -1062,13 +1052,7 @@ impl BufferTextWindowWalkSetup {
 
         self.render_tail_and_decide_retry(
             &mut BufferTextWindowPostLoopRenderState {
-                source_render: TextRowSourceRenderState::new(
-                    state.builder,
-                    state.output_emitter,
-                    state.evaluator,
-                    state.font_metrics,
-                    state.face_resolver,
-                ),
+                source_render: state.source_render.reborrow(),
                 face_ids: state.face_ids,
             },
             loop_context,
@@ -1107,11 +1091,13 @@ impl BufferTextWindowWalkSetup {
         });
         let post_loop = self.render_body_and_tail(
             &mut BufferTextWindowBodyRenderState {
-                builder: state.builder,
-                output_emitter: &mut output_emitter,
-                evaluator: state.evaluator,
-                font_metrics: state.font_metrics,
-                face_resolver: state.face_resolver,
+                source_render: TextRowSourceRenderState::new(
+                    state.builder,
+                    &mut output_emitter,
+                    state.evaluator,
+                    state.font_metrics,
+                    state.face_resolver,
+                ),
                 line_numbers,
                 face_scan,
                 active_face_state,
