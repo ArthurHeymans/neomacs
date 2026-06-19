@@ -159,22 +159,10 @@ fn row_installer_installs_complete_row_metrics_and_cursor() {
 
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
-    builder.row_installer().install_complete_row(
-        MatrixRowBeginRequest {
-            row: 0,
-            role: GlyphRowRole::Text,
-            mode_line: false,
-        },
-        row,
-    );
-    builder.row_installer().set_metrics(
-        0,
-        MatrixRowMetricsRequest {
-            pixel_y: 12.0,
-            height_px: 18.0,
-            ascent_px: 13.0,
-        },
-    );
+    builder
+        .row_installer()
+        .install_complete_row(0, GlyphRowRole::Text, false, row);
+    builder.row_installer().set_metrics(0, 12.0, 18.0, 13.0);
     builder
         .row_installer()
         .set_cursor(0, 1, CursorStyle::Bar(2.0));

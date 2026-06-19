@@ -4,6 +4,7 @@ use super::TextMatrixRowBegin;
 use super::TextMatrixRowGeometryTransition;
 use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
+use super::TextMatrixRowStoredMetrics;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
 use super::TextWindowBodyOutputInstall;
@@ -552,7 +553,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
 
     assert_eq!(
         outcome.metrics,
-        crate::matrix_builder::MatrixRowMetricsRequest {
+        TextMatrixRowStoredMetrics {
             pixel_y: 16.0,
             height_px: 16.0,
             ascent_px: 11.0,

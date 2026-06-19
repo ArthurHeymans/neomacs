@@ -12,8 +12,7 @@ use crate::display_row_builder::{
 };
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{
-    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixRowBeginRequest,
-    ResolvedMatrixMediaInstallTarget,
+    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
@@ -93,14 +92,9 @@ impl<'a> MatrixDisplayRowInstallRequest<'a> {
         row.pixel_y = self.pixel_y - context.pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
-        builder.row_installer().install_complete_row(
-            MatrixRowBeginRequest {
-                row: self.matrix_row,
-                role: row.role,
-                mode_line: row.mode_line,
-            },
-            row,
-        );
+        builder
+            .row_installer()
+            .install_complete_row(self.matrix_row, row.role, row.mode_line, row);
     }
 }
 

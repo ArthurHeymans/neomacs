@@ -32,12 +32,13 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
-    MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest, MatrixRowMetricsRequest,
-    MatrixWindowBeginRequest,
+    MatrixLastWindowRowsDecorationRequest,
 };
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -428,7 +429,14 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowFinish {
     pub(crate) matrix_row: usize,
-    pub(crate) metrics: MatrixRowMetricsRequest,
+    pub(crate) metrics: TextMatrixRowStoredMetrics,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextMatrixRowStoredMetrics {
+    pub(crate) pixel_y: f32,
+    pub(crate) height_px: f32,
+    pub(crate) ascent_px: f32,
 }
 
 pub(crate) struct TextMatrixRowOutput<'a> {
@@ -451,11 +459,9 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) -> usize {
-        self.builder.row_installer().begin(MatrixRowBeginRequest {
-            row: begin.matrix_row,
-            role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
-            mode_line: false,
-        });
+        self.builder
+            .row_installer()
+            .begin(begin.matrix_row, GlyphRowRole::Text, false);
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
             begin.matrix_row,
@@ -470,9 +476,12 @@ impl<'a> TextMatrixRowOutput<'a> {
     pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        self.builder
-            .row_installer()
-            .set_metrics(matrix_row, matrix_metrics);
+        self.builder.row_installer().set_metrics(
+            matrix_row,
+            matrix_metrics.pixel_y,
+            matrix_metrics.height_px,
+            matrix_metrics.ascent_px,
+        );
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
         TextMatrixRowFinish {
@@ -583,14 +592,14 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
 }
 
 fn begin_text_window_matrix(builder: &mut GlyphMatrixBuilder, request: TextWindowMatrixBegin) {
-    builder.window_installer().begin(MatrixWindowBeginRequest {
-        window_id: request.window_id,
-        nrows: request.rows,
-        ncols: request.cols,
-        pixel_bounds: request.bounds,
-        text_pixel_bounds: request.text_bounds,
-        selected: request.selected,
-    });
+    builder.window_installer().begin(
+        request.window_id,
+        request.rows,
+        request.cols,
+        request.bounds,
+        request.text_bounds,
+        request.selected,
+    );
 }
 
 fn record_text_window_display_range_in_matrix(
@@ -1218,11 +1227,9 @@ fn finish_text_window_output_rows(
     for metric in output_emitter.row_metrics() {
         builder.row_installer().set_metrics(
             metric.matrix_row,
-            MatrixRowMetricsRequest {
-                pixel_y: metric.pixel_y - window_y,
-                height_px: metric.height,
-                ascent_px: metric.ascent,
-            },
+            metric.pixel_y - window_y,
+            metric.height,
+            metric.ascent,
         );
     }
     if let Some(metric) = output_emitter.row_metrics().last() {
@@ -1233,9 +1240,9 @@ fn finish_text_window_output_rows(
 fn text_matrix_row_metrics_request(
     builder: &GlyphMatrixBuilder,
     metrics: TextMatrixRowMetrics,
-) -> MatrixRowMetricsRequest {
+) -> TextMatrixRowStoredMetrics {
     let window_y = builder.current_window_row_install_context().pixel_bounds.y;
-    MatrixRowMetricsRequest {
+    TextMatrixRowStoredMetrics {
         pixel_y: metrics.y - window_y,
         height_px: metrics.height,
         ascent_px: metrics.ascent,
