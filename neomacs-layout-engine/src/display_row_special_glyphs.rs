@@ -3,7 +3,7 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_output_builder::MatrixRowDecorator;
+use crate::display_output_builder::OutputRowDecorator;
 use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
@@ -171,7 +171,7 @@ impl<'a, 'resolver, 'frame> RightEdgeMarkerRowDecorator<'a, 'resolver, 'frame> {
     }
 }
 
-impl MatrixRowDecorator for RightEdgeMarkerRowDecorator<'_, '_, '_> {
+impl OutputRowDecorator for RightEdgeMarkerRowDecorator<'_, '_, '_> {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize) {
         install_right_edge_marker_from_source_request(
             row,
@@ -370,7 +370,7 @@ impl<'a, 'resolver, 'frame> RightBorderRowsDecorator<'a, 'resolver, 'frame> {
     }
 }
 
-impl MatrixRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
+impl OutputRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize) {
         if matrix_cols == 0 {
             return;

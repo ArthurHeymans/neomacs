@@ -26,7 +26,7 @@ use std::collections::HashMap;
 pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum MatrixMediaInstallKind {
+enum OutputMediaInstallKind {
     Image {
         image_id: u32,
     },
@@ -41,9 +41,9 @@ enum MatrixMediaInstallKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct MatrixMediaInstallRequest {
-    target: ResolvedMatrixMediaInstallTarget,
-    kind: MatrixMediaInstallKind,
+struct OutputMediaInstallRequest {
+    target: ResolvedOutputMediaInstallTarget,
+    kind: OutputMediaInstallKind,
     x: f32,
     y: f32,
     width: f32,
@@ -51,17 +51,17 @@ struct MatrixMediaInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct ResolvedMatrixMediaInstallTarget {
+struct ResolvedOutputMediaInstallTarget {
     window_id: i64,
     role: GlyphRowRole,
     clip: Option<Rect>,
     slot_id: DisplaySlotId,
 }
 
-impl MatrixMediaInstallRequest {
+impl OutputMediaInstallRequest {
     fn new(
-        target: ResolvedMatrixMediaInstallTarget,
-        kind: MatrixMediaInstallKind,
+        target: ResolvedOutputMediaInstallTarget,
+        kind: OutputMediaInstallKind,
         x: f32,
         y: f32,
         width: f32,
@@ -80,7 +80,7 @@ impl MatrixMediaInstallRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         let target = self.target;
         match self.kind {
-            MatrixMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
+            OutputMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
                 window_id: target.window_id,
                 row_role: target.role,
                 clip_rect: target.clip,
@@ -91,7 +91,7 @@ impl MatrixMediaInstallRequest {
                 width: self.width,
                 height: self.height,
             }),
-            MatrixMediaInstallKind::Video {
+            OutputMediaInstallKind::Video {
                 video_id,
                 loop_count,
                 autoplay,
@@ -108,7 +108,7 @@ impl MatrixMediaInstallRequest {
                 loop_count,
                 autoplay,
             }),
-            MatrixMediaInstallKind::Xwidget { xwidget_id } => builder.xwidgets.push(XwidgetItem {
+            OutputMediaInstallKind::Xwidget { xwidget_id } => builder.xwidgets.push(XwidgetItem {
                 window_id: target.window_id,
                 row_role: target.role,
                 clip_rect: target.clip,
@@ -124,7 +124,7 @@ impl MatrixMediaInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct MatrixCursorInstallRequest {
+struct OutputCursorInstallRequest {
     window_id: i64,
     slot_id: DisplaySlotId,
     x: f32,
@@ -135,7 +135,7 @@ struct MatrixCursorInstallRequest {
     color: Color,
 }
 
-impl MatrixCursorInstallRequest {
+impl OutputCursorInstallRequest {
     fn cursor_item(self) -> CursorItem {
         CursorItem {
             window_id: self.window_id,
@@ -151,7 +151,7 @@ impl MatrixCursorInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-enum MatrixFrameArtifactInstallRequest {
+enum OutputFrameArtifactInstallRequest {
     Background {
         bounds: Rect,
         color: Color,
@@ -170,7 +170,7 @@ enum MatrixFrameArtifactInstallRequest {
     EffectHint(WindowEffectHint),
 }
 
-impl MatrixFrameArtifactInstallRequest {
+impl OutputFrameArtifactInstallRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Background { bounds, color } => {
@@ -202,7 +202,7 @@ impl MatrixFrameArtifactInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-struct MatrixFrameIdentityInstallRequest {
+struct OutputFrameIdentityInstallRequest {
     frame_id: u64,
     parent_id: u64,
     parent_x: f32,
@@ -216,8 +216,8 @@ struct MatrixFrameIdentityInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-enum MatrixFrameStateInstallRequest {
-    Identity(MatrixFrameIdentityInstallRequest),
+enum OutputFrameStateInstallRequest {
+    Identity(OutputFrameIdentityInstallRequest),
     BackgroundColor(Color),
     FontPixelSize(f32),
     Face {
@@ -230,7 +230,7 @@ enum MatrixFrameStateInstallRequest {
     },
 }
 
-impl MatrixFrameStateInstallRequest {
+impl OutputFrameStateInstallRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Identity(identity) => {
@@ -258,7 +258,7 @@ impl MatrixFrameStateInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct MatrixWindowBeginRequest {
+struct OutputWindowBeginRequest {
     window_id: u64,
     nrows: usize,
     ncols: usize,
@@ -268,12 +268,12 @@ struct MatrixWindowBeginRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum MatrixWindowLifecycleRequest {
-    Begin(MatrixWindowBeginRequest),
+enum OutputWindowLifecycleRequest {
+    Begin(OutputWindowBeginRequest),
     End,
 }
 
-impl MatrixWindowLifecycleRequest {
+impl OutputWindowLifecycleRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => {
@@ -300,14 +300,14 @@ impl MatrixWindowLifecycleRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct MatrixRowBeginRequest {
+struct OutputRowBeginRequest {
     row: usize,
     role: GlyphRowRole,
     mode_line: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct MatrixRowMetricsRequest {
+struct OutputRowMetricsRequest {
     /// Stored row Y, relative to the window matrix origin.
     pixel_y: f32,
     height_px: f32,
@@ -315,19 +315,19 @@ struct MatrixRowMetricsRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum MatrixCurrentRowDecorationRequest {
+enum OutputCurrentRowDecorationRequest {
     MarkTruncatedLeft,
 }
 
 #[derive(Clone, Debug)]
-enum MatrixRowLifecycleRequest {
-    Begin(MatrixRowBeginRequest),
+enum OutputRowLifecycleRequest {
+    Begin(OutputRowBeginRequest),
     ReplaceCurrent {
         row: GlyphRow,
     },
     Metrics {
         row: usize,
-        metrics: MatrixRowMetricsRequest,
+        metrics: OutputRowMetricsRequest,
     },
     Finalize {
         row: usize,
@@ -337,23 +337,23 @@ enum MatrixRowLifecycleRequest {
         col: u16,
         style: CursorStyle,
     },
-    CurrentDecoration(MatrixCurrentRowDecorationRequest),
+    CurrentDecoration(OutputCurrentRowDecorationRequest),
 }
 
-impl MatrixRowLifecycleRequest {
+impl OutputRowLifecycleRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => builder.begin_current_row(begin),
             Self::ReplaceCurrent { row } => builder.replace_current_row(row),
             Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
-            Self::Finalize { row } => builder.finalize_matrix_row(row),
+            Self::Finalize { row } => builder.finalize_output_row(row),
             Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
             Self::CurrentDecoration(decoration) => builder.decorate_current_row(decoration),
         }
     }
 }
 
-pub(crate) trait MatrixRowDecorator {
+pub(crate) trait OutputRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
 }
 
@@ -400,17 +400,17 @@ pub(crate) struct DisplayOutputBuilder {
     no_accept_focus: bool,
 }
 
-pub(crate) struct MatrixRowInstaller<'a> {
+pub(crate) struct OutputRowInstaller<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-impl MatrixRowInstaller<'_> {
-    fn install(&mut self, request: MatrixRowLifecycleRequest) {
+impl OutputRowInstaller<'_> {
+    fn install(&mut self, request: OutputRowLifecycleRequest) {
         self.builder.install_row_lifecycle(request);
     }
 
     pub(crate) fn begin(&mut self, row: usize, role: GlyphRowRole, mode_line: bool) {
-        self.install(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+        self.install(OutputRowLifecycleRequest::Begin(OutputRowBeginRequest {
             row,
             role,
             mode_line,
@@ -430,7 +430,7 @@ impl MatrixRowInstaller<'_> {
     }
 
     pub(crate) fn replace_current_row(&mut self, row: GlyphRow) {
-        self.install(MatrixRowLifecycleRequest::ReplaceCurrent { row });
+        self.install(OutputRowLifecycleRequest::ReplaceCurrent { row });
     }
 
     pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
@@ -438,9 +438,9 @@ impl MatrixRowInstaller<'_> {
     }
 
     pub(crate) fn set_metrics(&mut self, row: usize, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.install(MatrixRowLifecycleRequest::Metrics {
+        self.install(OutputRowLifecycleRequest::Metrics {
             row,
-            metrics: MatrixRowMetricsRequest {
+            metrics: OutputRowMetricsRequest {
                 pixel_y,
                 height_px,
                 ascent_px,
@@ -449,26 +449,26 @@ impl MatrixRowInstaller<'_> {
     }
 
     pub(crate) fn finalize(&mut self, row: usize) {
-        self.install(MatrixRowLifecycleRequest::Finalize { row });
+        self.install(OutputRowLifecycleRequest::Finalize { row });
     }
 
     pub(crate) fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.install(MatrixRowLifecycleRequest::Cursor { row, col, style });
+        self.install(OutputRowLifecycleRequest::Cursor { row, col, style });
     }
 
     pub(crate) fn mark_current_truncated_left(&mut self) {
-        self.install(MatrixRowLifecycleRequest::CurrentDecoration(
-            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
+        self.install(OutputRowLifecycleRequest::CurrentDecoration(
+            OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
         ));
     }
 }
 
-pub(crate) struct MatrixWindowInstaller<'a> {
+pub(crate) struct OutputWindowInstaller<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-impl MatrixWindowInstaller<'_> {
-    fn install(&mut self, request: MatrixWindowLifecycleRequest) {
+impl OutputWindowInstaller<'_> {
+    fn install(&mut self, request: OutputWindowLifecycleRequest) {
         self.builder.install_window_lifecycle(request);
     }
 
@@ -481,8 +481,8 @@ impl MatrixWindowInstaller<'_> {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.install(MatrixWindowLifecycleRequest::Begin(
-            MatrixWindowBeginRequest {
+        self.install(OutputWindowLifecycleRequest::Begin(
+            OutputWindowBeginRequest {
                 window_id,
                 nrows,
                 ncols,
@@ -494,16 +494,16 @@ impl MatrixWindowInstaller<'_> {
     }
 
     pub(crate) fn end(&mut self) {
-        self.install(MatrixWindowLifecycleRequest::End);
+        self.install(OutputWindowLifecycleRequest::End);
     }
 }
 
-pub(crate) struct MatrixArtifactInstaller<'a> {
+pub(crate) struct OutputArtifactInstaller<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-impl MatrixArtifactInstaller<'_> {
-    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+impl OutputArtifactInstaller<'_> {
+    fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
         self.builder.install_frame_state(request);
     }
 
@@ -520,8 +520,8 @@ impl MatrixArtifactInstaller<'_> {
         background_alpha: f32,
         no_accept_focus: bool,
     ) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::Identity(
-            MatrixFrameIdentityInstallRequest {
+        self.install_frame_state(OutputFrameStateInstallRequest::Identity(
+            OutputFrameIdentityInstallRequest {
                 frame_id,
                 parent_id,
                 parent_x,
@@ -537,15 +537,15 @@ impl MatrixArtifactInstaller<'_> {
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(color));
+        self.install_frame_state(OutputFrameStateInstallRequest::BackgroundColor(color));
     }
 
     pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(size));
+        self.install_frame_state(OutputFrameStateInstallRequest::FontPixelSize(size));
     }
 
     pub(crate) fn set_face(&mut self, id: u32, face: Face) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::Face { id, face });
+        self.install_frame_state(OutputFrameStateInstallRequest::Face { id, face });
     }
 
     pub(crate) fn set_resolved_display_row_face(
@@ -559,18 +559,18 @@ impl MatrixArtifactInstaller<'_> {
     }
 
     pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::CursorEffects {
+        self.install_frame_state(OutputFrameStateInstallRequest::CursorEffects {
             window_id,
             effects,
         });
     }
 
-    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+    fn install_frame_artifact(&mut self, request: OutputFrameArtifactInstallRequest) {
         self.builder.install_frame_artifact(request);
     }
 
     pub(crate) fn add_background(&mut self, bounds: Rect, color: Color) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::Background {
             bounds,
             color,
         });
@@ -585,7 +585,7 @@ impl MatrixArtifactInstaller<'_> {
         height: f32,
         color: Color,
     ) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::Border {
             window_id,
             x,
             y,
@@ -596,22 +596,22 @@ impl MatrixArtifactInstaller<'_> {
     }
 
     pub(crate) fn add_scroll_bar(&mut self, item: ScrollBarItem) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(item));
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::ScrollBar(item));
     }
 
     pub(crate) fn add_window_info(&mut self, info: WindowInfo) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(info));
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::WindowInfo(info));
     }
 
     pub(crate) fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::TransitionHint(hint));
     }
 
     pub(crate) fn add_effect_hint(&mut self, hint: WindowEffectHint) {
-        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(hint));
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::EffectHint(hint));
     }
 
-    fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+    fn install_cursor(&mut self, request: OutputCursorInstallRequest) {
         self.builder.install_cursor(request);
     }
 
@@ -626,7 +626,7 @@ impl MatrixArtifactInstaller<'_> {
         style: CursorStyle,
         color: Color,
     ) {
-        self.install_cursor(MatrixCursorInstallRequest {
+        self.install_cursor(OutputCursorInstallRequest {
             window_id,
             slot_id,
             x,
@@ -638,7 +638,7 @@ impl MatrixArtifactInstaller<'_> {
         });
     }
 
-    fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+    fn install_media(&mut self, request: OutputMediaInstallRequest) {
         self.builder.install_media(request);
     }
 
@@ -648,14 +648,14 @@ impl MatrixArtifactInstaller<'_> {
         role: GlyphRowRole,
         clip: Option<Rect>,
         slot_id: DisplaySlotId,
-        kind: MatrixMediaInstallKind,
+        kind: OutputMediaInstallKind,
         x: f32,
         y: f32,
         width: f32,
         height: f32,
     ) {
-        self.install_media(MatrixMediaInstallRequest::new(
-            ResolvedMatrixMediaInstallTarget {
+        self.install_media(OutputMediaInstallRequest::new(
+            ResolvedOutputMediaInstallTarget {
                 window_id,
                 role,
                 clip,
@@ -686,7 +686,7 @@ impl MatrixArtifactInstaller<'_> {
             role,
             clip,
             slot_id,
-            MatrixMediaInstallKind::Image { image_id },
+            OutputMediaInstallKind::Image { image_id },
             x,
             y,
             width,
@@ -713,7 +713,7 @@ impl MatrixArtifactInstaller<'_> {
             role,
             clip,
             slot_id,
-            MatrixMediaInstallKind::Video {
+            OutputMediaInstallKind::Video {
                 video_id,
                 loop_count,
                 autoplay,
@@ -742,7 +742,7 @@ impl MatrixArtifactInstaller<'_> {
             role,
             clip,
             slot_id,
-            MatrixMediaInstallKind::Xwidget { xwidget_id },
+            OutputMediaInstallKind::Xwidget { xwidget_id },
             x,
             y,
             width,
@@ -898,24 +898,24 @@ impl DisplayOutputBuilder {
         self.window_installer().end();
     }
 
-    fn install_window_lifecycle(&mut self, request: MatrixWindowLifecycleRequest) {
+    fn install_window_lifecycle(&mut self, request: OutputWindowLifecycleRequest) {
         request.install(self);
     }
 
-    fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+    fn install_row_lifecycle(&mut self, request: OutputRowLifecycleRequest) {
         request.install(self);
     }
 
-    pub(crate) fn row_installer(&mut self) -> MatrixRowInstaller<'_> {
-        MatrixRowInstaller { builder: self }
+    pub(crate) fn row_installer(&mut self) -> OutputRowInstaller<'_> {
+        OutputRowInstaller { builder: self }
     }
 
-    pub(crate) fn window_installer(&mut self) -> MatrixWindowInstaller<'_> {
-        MatrixWindowInstaller { builder: self }
+    pub(crate) fn window_installer(&mut self) -> OutputWindowInstaller<'_> {
+        OutputWindowInstaller { builder: self }
     }
 
-    pub(crate) fn artifact_installer(&mut self) -> MatrixArtifactInstaller<'_> {
-        MatrixArtifactInstaller { builder: self }
+    pub(crate) fn artifact_installer(&mut self) -> OutputArtifactInstaller<'_> {
+        OutputArtifactInstaller { builder: self }
     }
 
     #[cfg(test)]
@@ -952,9 +952,9 @@ impl DisplayOutputBuilder {
         self.with_current_row_mut(f)
     }
 
-    fn decorate_current_row(&mut self, decoration: MatrixCurrentRowDecorationRequest) {
+    fn decorate_current_row(&mut self, decoration: OutputCurrentRowDecorationRequest) {
         let _ = self.with_current_row_mut(|row| match decoration {
-            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft => {
+            OutputCurrentRowDecorationRequest::MarkTruncatedLeft => {
                 row.truncated_left = true;
             }
         });
@@ -970,7 +970,7 @@ impl DisplayOutputBuilder {
         self.current_row_for_render()
     }
 
-    fn write_row_metrics_at(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
+    fn write_row_metrics_at(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
         if let Some(ref mut matrix) = self.current_matrix
             && row < matrix.rows.len()
         {
@@ -1015,7 +1015,7 @@ impl DisplayOutputBuilder {
             .install_complete_row(row_index, row.role, row.mode_line, row);
     }
 
-    fn begin_current_row(&mut self, begin: MatrixRowBeginRequest) {
+    fn begin_current_row(&mut self, begin: OutputRowBeginRequest) {
         self.current_row = begin.row;
         if let Some(ref mut matrix) = self.current_matrix
             && begin.row < matrix.rows.len()
@@ -1026,7 +1026,7 @@ impl DisplayOutputBuilder {
         }
     }
 
-    fn finalize_matrix_row(&mut self, row: usize) {
+    fn finalize_output_row(&mut self, row: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
             let matrix_ncols = matrix.ncols;
             let Some(matrix_row) = matrix.rows.get_mut(row) else {
@@ -1055,15 +1055,15 @@ impl DisplayOutputBuilder {
     // Non-grid item installation
     // -----------------------------------------------------------------------
 
-    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+    fn install_frame_artifact(&mut self, request: OutputFrameArtifactInstallRequest) {
         request.install(self);
     }
 
-    fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+    fn install_cursor(&mut self, request: OutputCursorInstallRequest) {
         self.cursors.push(request.cursor_item());
     }
 
-    fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+    fn install_media(&mut self, request: OutputMediaInstallRequest) {
         request.install(self);
     }
 
@@ -1128,7 +1128,7 @@ impl DisplayOutputBuilder {
         self.phys_cursor = Some(cursor);
     }
 
-    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+    fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
         request.install(self);
     }
 
@@ -1179,7 +1179,7 @@ impl DisplayOutputBuilder {
 
     pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, mut decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         let Some(matrix) = self.current_matrix.as_mut() else {
             return;
@@ -1192,7 +1192,7 @@ impl DisplayOutputBuilder {
 
     pub(crate) fn decorate_last_window_rows<D>(&mut self, mut decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         let Some(entry) = self.windows.last_mut() else {
             return;

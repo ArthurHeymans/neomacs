@@ -1,7 +1,7 @@
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 use crate::display_output_builder::{
-    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, MatrixRowDecorator,
+    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRowDecorator,
 };
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
@@ -626,14 +626,14 @@ impl<'builder> DisplayRowDecorationInstaller<'builder> {
 
     fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         self.builder.decorate_current_window_row(row_idx, decorator);
     }
 
     fn decorate_last_window_rows<D>(&mut self, decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         self.builder.decorate_last_window_rows(decorator);
     }
@@ -648,7 +648,7 @@ impl<'builder> DisplayRowDecorationSurface<'builder> {
 
     pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         self.installer
             .decorate_current_window_row(row_idx, decorator);
@@ -656,7 +656,7 @@ impl<'builder> DisplayRowDecorationSurface<'builder> {
 
     pub(crate) fn decorate_last_window_rows<D>(&mut self, decorator: D)
     where
-        D: MatrixRowDecorator,
+        D: OutputRowDecorator,
     {
         self.installer.decorate_last_window_rows(decorator);
     }
