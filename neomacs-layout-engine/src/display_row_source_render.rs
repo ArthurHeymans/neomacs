@@ -31,7 +31,7 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
-    TextWindowLiveOutputSurface, TextWindowOutputRenderState, TextWindowRowDecorationRequest,
+    TextWindowLiveOutputSurface, TextWindowRowDecorationRequest, TextWindowRowOutputSurface,
     WindowOutputEmitter,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -399,7 +399,7 @@ impl<'a> TextRowOutputRenderState<'a> {
 
     pub(crate) fn with_text_window_output<R>(
         self,
-        f: impl FnOnce(&mut TextWindowOutputRenderState<'_, '_>, &mut Context) -> R,
+        f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
     ) -> R {
         self.output.with_text_window_output(f)
     }

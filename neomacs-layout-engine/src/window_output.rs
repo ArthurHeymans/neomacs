@@ -507,7 +507,7 @@ impl<'a> TextWindowBeginOutputSurface<'a> {
         output_emitter: &mut WindowOutputEmitter,
         begin: TextWindowBegin,
     ) {
-        TextWindowOutputRenderState::new(self.builder, output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.builder, output_emitter)
             .begin_text_window_output(self.evaluator, begin);
     }
 }
@@ -566,9 +566,9 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
 
     pub(crate) fn with_text_window_output<R>(
         self,
-        f: impl FnOnce(&mut TextWindowOutputRenderState<'_, '_>, &mut Context) -> R,
+        f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
     ) -> R {
-        let mut output = TextWindowOutputRenderState::new(self.builder, self.output_emitter);
+        let mut output = TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter);
         f(&mut output, self.evaluator)
     }
 
@@ -643,7 +643,7 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
-        TextWindowOutputRenderState::new(self.builder, self.output_emitter)
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .install_body_output(request, render_services)
     }
 
@@ -652,11 +652,8 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         request: WindowChromeRowsRenderRequest<'_, '_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        TextWindowOutputRenderState::new(self.builder, self.output_emitter).render_chrome_rows(
-            self.evaluator,
-            request,
-            render_services,
-        );
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .render_chrome_rows(self.evaluator, request, render_services);
     }
 
     pub(crate) fn current_row_evaluator_state(
@@ -1080,7 +1077,7 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
     }
 }
 
-pub(crate) struct TextWindowOutputRenderState<'builder, 'output> {
+pub(crate) struct TextWindowRowOutputSurface<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
     output_emitter: &'output mut WindowOutputEmitter,
 }
@@ -1109,8 +1106,8 @@ impl TextWindowOutputRetryCheckpoint {
     }
 }
 
-impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
-    pub(crate) fn new(
+impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
+    pub(crate) fn from_parts(
         builder: &'builder mut GlyphMatrixBuilder,
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> Self {

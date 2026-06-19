@@ -5,7 +5,7 @@ use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowOutputRenderState,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowRowOutputSurface,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
@@ -762,7 +762,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         cursor: CapturedCursorInfo,
         row_metrics: &[RowMetricsSnapshot],
         fallback_row_metric: RowMetricsSnapshot,
-        output: &mut TextWindowOutputRenderState<'_, '_>,
+        output: &mut TextWindowRowOutputSurface<'_, '_>,
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
             row_metrics,
@@ -874,7 +874,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
 
     pub(crate) fn publish_visual_cursors(
         self,
-        output: &mut TextWindowOutputRenderState<'_, '_>,
+        output: &mut TextWindowRowOutputSurface<'_, '_>,
     ) -> VisualTextWindowCursorPublishSummary {
         let mut summary = VisualTextWindowCursorPublishSummary::default();
 

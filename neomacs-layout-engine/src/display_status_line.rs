@@ -13,7 +13,7 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
-use super::window_output::{ChromeRowOutput, TextWindowOutputRenderState};
+use super::window_output::{ChromeRowOutput, TextWindowRowOutputSurface};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameChromeOutputSurface;
 use crate::display_origin::DisplayOrigin;
@@ -658,7 +658,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face> {
-    output: &'state mut TextWindowOutputRenderState<'builder, 'output>,
+    output: &'state mut TextWindowRowOutputSurface<'builder, 'output>,
     evaluator: &'state mut Context,
     render_services: ChromeRowRenderServices<'services, 'face>,
 }
@@ -667,7 +667,7 @@ impl<'state, 'builder, 'output, 'services, 'face>
     WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face>
 {
     pub(crate) fn new(
-        output: &'state mut TextWindowOutputRenderState<'builder, 'output>,
+        output: &'state mut TextWindowRowOutputSurface<'builder, 'output>,
         evaluator: &'state mut Context,
         render_services: ChromeRowRenderServices<'services, 'face>,
     ) -> Self {
