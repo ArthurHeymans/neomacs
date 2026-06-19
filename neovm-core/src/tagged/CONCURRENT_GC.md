@@ -5,13 +5,16 @@ with the mutator, so the mutator only stops for short safe-point handshakes
 (root snapshot + mark termination), each sub-millisecond. This is the Go-style
 design: concurrent tri-color mark, SATB write barrier, cooperative safe points.
 
-STATUS: the concurrent collector is now the DEFAULT (Phases 1-5 done, TSan-
-verified, full suite + fresh-build green). Set `NEOVM_GC_CONCURRENT=0` to fall
-back to the (sliced, mutator-side) incremental collector, which stays as the
-fallback path. When the concurrent collector is fully matured in production, the
-fallback + the incremental slicer can be removed and the concurrent path made
-unconditional (mirroring how the incremental collector itself became default in
-`9ba9859b6`). Tradeoff note: under gc_stress the concurrent STW termination
+STATUS: the concurrent collector is the ONLY sliced/marking collector. The
+incremental slicer + the `NEOVM_GC_CONCURRENT` / `NEOVM_GC_SATB` env gates were
+REMOVED in the GC-modernization path-collapse (branch `neovm-gc-modernization`,
+2026-06-19); `NEOVM_GC_CONCURRENT=0` is now a no-op. A stop-the-world full
+collection survives ONLY as an internal phase — first-cycle bootstrap (before the
+dump partition is blackened) and explicit `garbage-collect` — not as a rival path.
+`complete_collection` marks on the GC thread; `should_run_concurrent` is just
+`partition_dump && dump_blackened`. (Historical: Phases 1-5 done, TSan-verified;
+the incremental collector had been default since `9ba9859b6` before removal.)
+Tradeoff note: under gc_stress the concurrent STW termination
 (~500-668us) is higher than the incremental one (~200us), but the cons-spine
 MARK runs off the mutator thread, so the mutator spends no time marking (better
 on large heaps / multi-core); both are sub-ms and imperceptible.
