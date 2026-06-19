@@ -1126,8 +1126,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         row_limit,
     })
     .render_next_and_apply(BufferHscrollSkipRenderState {
-        byte_idx: &mut byte_idx,
-        charpos: &mut charpos,
+        progress: BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
         hscroll_skip: &mut hscroll_skip,
         row_extend: &mut row_extend,
         source_render: TextRowSourceRenderState::new(
@@ -1137,8 +1136,6 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
             &mut font_metrics,
             &face_resolver,
         ),
-        x: &mut x,
-        col: &mut col,
         prefix_request: &mut prefix_request,
         line_numbers: &mut line_numbers,
         word_wrap: &mut word_wrap,
@@ -1650,8 +1647,12 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
         &snapshot,
         BufferInvisibleTextRenderRequestState {
             checkpoints: &mut checkpoints,
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             source_render: TextRowSourceRenderState::new(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -1659,8 +1660,6 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            x: &mut x,
-            col: &mut col,
             row_geometry: &mut context.geometry,
             cursor_info: &mut cursor_info,
             hit_rows: &mut context.hit_rows,
@@ -2590,8 +2589,12 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     .render_and_apply(
         &snapshot,
         BufferTextLineBreakRenderState {
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             cursor_info: &mut cursor_info,
             row_geometry: &mut context.geometry,
             trailing_whitespace: &mut trailing_whitespace,
@@ -2604,8 +2607,6 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
                 &mut font_metrics,
                 &face_resolver,
             ),
-            x: &mut x,
-            col: &mut col,
             prefix_request: &mut prefix_request,
             line_numbers: &mut line_numbers,
             hscroll_skip: &mut hscroll_skip,
@@ -2756,9 +2757,12 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     .render_if_needed_and_apply(
         &snapshot,
         BufferSelectiveDisplayTailRenderState {
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
-            col: &mut col,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             source_render: TextRowSourceRenderState::new(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -2768,7 +2772,6 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
             ),
             row_extend: &mut row_extend,
             box_face: &mut box_face,
-            x: &mut x,
             line_numbers: &mut line_numbers,
             row_geometry: &mut context.geometry,
             row_flags: &mut context.row_flags,
@@ -3182,9 +3185,12 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     .render_if_needed_and_apply(
         &snapshot,
         BufferTextSpecialOverflowRenderState {
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
-            col: &mut col,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             source_render: TextRowSourceRenderState::new(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -3193,7 +3199,6 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
                 &face_resolver,
             ),
             row_extend: &mut row_extend,
-            x: &mut x,
             line_numbers: &mut line_numbers,
             row_geometry: &mut context.geometry,
             row_flags: &mut context.row_flags,
@@ -3424,9 +3429,12 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     .render_if_needed_and_apply(
         text,
         BufferTextOverflowRenderState {
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
-            col: &mut col,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             source_render: TextRowSourceRenderState::new(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -3435,7 +3443,6 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
                 &face_resolver,
             ),
             row_extend: &mut row_extend,
-            x: &mut x,
             line_numbers: &mut line_numbers,
             row_geometry: &mut context.geometry,
             row_flags: &mut context.row_flags,
@@ -6222,9 +6229,12 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         &snapshot,
         BufferTextSourceCharRenderRequestState {
             append_state: &mut append_state,
-            byte_idx: &mut byte_idx,
-            charpos: &mut charpos,
-            col: &mut col,
+            progress: BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+            ),
             source_render: TextRowSourceRenderState::new(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -6233,7 +6243,6 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
                 &face_resolver,
             ),
             row_extend: &mut row_extend,
-            x: &mut x,
             line_numbers: &mut line_numbers,
             row_geometry: &mut context.geometry,
             row_flags: &mut context.row_flags,

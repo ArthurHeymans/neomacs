@@ -501,6 +501,15 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
     pub(crate) fn charpos(&self) -> i64 {
         *self.charpos
     }
+
+    pub(crate) fn reborrow(&mut self) -> BufferTextWindowProgressState<'_> {
+        BufferTextWindowProgressState {
+            byte_idx: self.byte_idx,
+            charpos: self.charpos,
+            x: self.x,
+            col: self.col,
+        }
+    }
 }
 
 pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
@@ -2564,10 +2573,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 append_surface: self.append_surface,
                 row_geometry: self.row_geometry,
                 cursor_info: self.cursor_info,
-                byte_idx: self.progress.byte_idx,
-                charpos: self.progress.charpos,
-                x: self.progress.x,
-                col: self.progress.col,
+                progress: self.progress.reborrow(),
             },
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Continue => {
@@ -2802,11 +2808,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             buffer,
             BufferInvisibleTextRenderRequestState {
                 checkpoints: self.text_property_checkpoints,
-                byte_idx: self.progress.byte_idx,
-                charpos: self.progress.charpos,
+                progress: self.progress.reborrow(),
                 source_render: self.source_render.reborrow(),
-                x: self.progress.x,
-                col: self.progress.col,
                 row_geometry: self.row_geometry,
                 cursor_info: self.cursor_info,
                 hit_rows: self.hit_rows,
@@ -2822,13 +2825,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
         request.render_next_and_apply(BufferHscrollSkipRenderState {
-            byte_idx: self.progress.byte_idx,
-            charpos: self.progress.charpos,
+            progress: self.progress.reborrow(),
             hscroll_skip: self.hscroll_skip,
             row_extend: self.row_extend,
             source_render: self.source_render.reborrow(),
-            x: self.progress.x,
-            col: self.progress.col,
             prefix_request: self.prefix_request,
             line_numbers: self.line_numbers,
             word_wrap: self.word_wrap,
@@ -2859,13 +2859,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request.render_if_needed_and_apply(
             buffer,
             BufferSelectiveDisplayTailRenderState {
-                byte_idx: self.progress.byte_idx,
-                charpos: self.progress.charpos,
-                col: self.progress.col,
+                progress: self.progress.reborrow(),
                 source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
                 box_face: self.box_face,
-                x: self.progress.x,
                 line_numbers: self.line_numbers,
                 row_geometry: self.row_geometry,
                 row_flags: self.row_flags,
@@ -2888,16 +2885,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request.render_and_apply(
             buffer,
             BufferTextLineBreakRenderState {
-                byte_idx: self.progress.byte_idx,
-                charpos: self.progress.charpos,
+                progress: self.progress.reborrow(),
                 cursor_info: self.cursor_info,
                 row_geometry: self.row_geometry,
                 trailing_whitespace: self.trailing_whitespace,
                 row_extend: self.row_extend,
                 box_face: self.box_face,
                 source_render: self.source_render.reborrow(),
-                x: self.progress.x,
-                col: self.progress.col,
                 prefix_request: self.prefix_request,
                 line_numbers: self.line_numbers,
                 hscroll_skip: self.hscroll_skip,
@@ -2920,12 +2914,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             buffer,
             BufferTextSourceCharRenderRequestState {
                 append_state: self.append_state,
-                byte_idx: self.progress.byte_idx,
-                charpos: self.progress.charpos,
-                col: self.progress.col,
+                progress: self.progress.reborrow(),
                 source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
-                x: self.progress.x,
                 line_numbers: self.line_numbers,
                 row_geometry: self.row_geometry,
                 row_flags: self.row_flags,
@@ -3284,13 +3275,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
 }
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) word_wrap: &'emit mut WordWrapRenderState,
@@ -3783,13 +3771,10 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         state: BufferHscrollSkipRenderState<'_, '_>,
     ) -> DisplayRowTransitionContinuation {
         let BufferHscrollSkipRenderState {
-            byte_idx,
-            charpos,
+            progress,
             hscroll_skip,
             row_extend,
             source_render,
-            x,
-            col,
             prefix_request,
             line_numbers,
             word_wrap,
@@ -3801,6 +3786,12 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             cursor_info,
             row_y_positions,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -3894,16 +3885,13 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
 }
 
 pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
@@ -3941,13 +3929,10 @@ pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
-    pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
@@ -3980,11 +3965,8 @@ pub(crate) struct BufferInvisibleTextRenderContext<'a> {
 
 pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
     pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
@@ -4050,13 +4032,10 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         };
 
         let BufferSelectiveDisplayTailRenderState {
-            byte_idx,
-            charpos,
-            col,
+            progress,
             source_render,
             row_extend,
             box_face,
-            x,
             line_numbers,
             row_geometry,
             row_flags,
@@ -4068,6 +4047,12 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
 
         let mut synthetic_text_state =
@@ -4306,11 +4291,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
     ) -> BufferInvisibleTextRenderOutcome {
         let BufferInvisibleTextRenderRequestState {
             checkpoints,
-            byte_idx,
-            charpos,
+            progress,
             source_render,
-            x,
-            col,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -4318,6 +4300,12 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             row_y_positions,
             face_ids,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -4707,16 +4695,13 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         state: BufferTextLineBreakRenderState<'_, '_>,
     ) -> DisplayRowTransitionContinuation {
         let BufferTextLineBreakRenderState {
-            byte_idx,
-            charpos,
+            progress,
             cursor_info,
             row_geometry,
             trailing_whitespace,
             row_extend,
             box_face,
             source_render,
-            x,
-            col,
             prefix_request,
             line_numbers,
             hscroll_skip,
@@ -4727,6 +4712,12 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             row_y_positions,
             face_ids,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -5864,10 +5855,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
     pub(crate) append_surface: &'emit DisplayRowAppendSurface,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
 }
 
 impl BufferDisplayPropertyTextWalkOutcome {
@@ -5925,8 +5913,16 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
         buffer: &B,
-        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
     ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        let BufferDisplayPropertyTextReplacementRenderState {
+            mut source_render,
+            face_ids,
+            append_surface,
+            row_geometry,
+            cursor_info,
+            progress,
+        } = state;
         let Some(source_text) = self
             .replacement
             .source_text(self.text_start_byte, self.text)
@@ -5935,28 +5931,23 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         };
         let display_property = classify_display_property(self.replacement.value());
         let append_request =
-            state
-                .source_render
-                .with_font_metrics_and_display_host(|font_metrics, host| {
-                    DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-                        &display_property,
-                        self.replacement.replacement_source(),
-                        self.replacement.value(),
-                        self.replacement.start_charpos0(),
-                        source_text,
-                        self.active_face_state,
-                        *state.x,
-                        self.content_x,
-                        self.params,
-                        self.glyph_y_offset,
-                        self.default_row_height,
-                        DisplayRowPosition {
-                            x_px: *state.x,
-                            col: *state.col,
-                        },
-                    )
-                    .resolve(font_metrics, host)
-                });
+            source_render.with_font_metrics_and_display_host(|font_metrics, host| {
+                DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
+                    &display_property,
+                    self.replacement.replacement_source(),
+                    self.replacement.value(),
+                    self.replacement.start_charpos0(),
+                    source_text,
+                    self.active_face_state,
+                    *progress.x,
+                    self.content_x,
+                    self.params,
+                    self.glyph_y_offset,
+                    self.default_row_height,
+                    progress.row_position(),
+                )
+                .resolve(font_metrics, host)
+            });
         let Some(request) = append_request else {
             let Some(source_item) = self.replacement.fallback_source_item(
                 self.text_start_byte,
@@ -5969,10 +5960,10 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         };
         let outcome = request.append_to_text_row(
             buffer,
-            &mut state.source_render.reborrow(),
-            state.face_ids,
-            state.append_surface,
-            state.row_geometry,
+            &mut source_render.reborrow(),
+            face_ids,
+            append_surface,
+            row_geometry,
             self.active_face_state,
         );
         let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
@@ -5980,19 +5971,19 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
             skip_to: self.replacement.end_charpos(),
         };
         replacement_outcome.capture_cursor_info_if_point(
-            state.cursor_info,
+            cursor_info,
             self.active_face_state,
-            state.row_geometry,
+            row_geometry,
             self.point_charpos,
             self.replacement.start_charpos(),
-            *state.byte_idx,
+            *progress.byte_idx,
         );
         replacement_outcome.apply_to_walk_state(
             self.text,
-            state.byte_idx,
-            state.charpos,
-            state.x,
-            state.col,
+            progress.byte_idx,
+            progress.charpos,
+            progress.x,
+            progress.col,
         );
         BufferDisplayPropertyTextReplacementRenderOutcome::Continue
     }
@@ -6070,12 +6061,9 @@ impl BufferDisplayPropertyTextReplacementOutcome {
 }
 
 pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
@@ -6090,12 +6078,9 @@ pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
@@ -6138,12 +6123,9 @@ pub(crate) struct BufferTextSourceCharRenderContext<'a> {
 
 pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
     pub(crate) append_state: &'emit mut BufferTextRowAppendState,
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
@@ -6356,12 +6338,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
     ) -> BufferTextSourceCharRenderOutcome {
         let BufferTextSourceCharRenderRequestState {
             append_state,
-            byte_idx,
-            charpos,
-            col,
+            mut progress,
             source_render,
             row_extend,
-            x,
             line_numbers,
             row_geometry,
             row_flags,
@@ -6407,8 +6386,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.char_h,
         );
         let append_position = DisplayRowPosition {
-            x_px: *x,
-            col: *col,
+            x_px: *progress.x,
+            col: *progress.col,
         };
         let append_geometry = *row_geometry;
 
@@ -6437,7 +6416,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     BufferTextSpecialOverflowRenderContext {
                         text: context.text,
                         text_start_byte: context.text_start_byte,
-                        x_px: *x,
+                        x_px: *progress.x,
                         right_edge_px: context.append_surface.full_text_right_edge(),
                         wrap_mode: context.params.wrap_mode,
                         row_visibility_limit: context.row_visibility_limit,
@@ -6452,12 +6431,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 .render_if_needed_and_apply(
                     buffer,
                     BufferTextSpecialOverflowRenderState {
-                        byte_idx,
-                        charpos,
-                        col,
+                        progress: progress.reborrow(),
                         source_render: source_render.reborrow(),
                         row_extend,
-                        x,
                         line_numbers,
                         row_geometry,
                         row_flags,
@@ -6487,9 +6463,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                             source_render.reborrow(),
                             face_scan,
                             word_wrap,
-                            x,
-                            col,
-                            charpos,
+                            progress.x,
+                            progress.col,
+                            progress.charpos,
                         ),
                     )
                     .should_break()
@@ -6523,12 +6499,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         .render_if_needed_and_apply(
             context.text,
             BufferTextOverflowRenderState {
-                byte_idx,
-                charpos,
-                col,
+                progress: progress.reborrow(),
                 source_render: source_render.reborrow(),
                 row_extend,
-                x,
                 line_numbers,
                 row_geometry,
                 row_flags,
@@ -6552,8 +6525,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         {
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
-                x,
-                col,
+                progress.x,
+                progress.col,
                 row_geometry,
                 cursor_info,
                 hit_rows,
@@ -6563,7 +6536,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             );
             context.overlay_context.render_at(
                 buffer,
-                *charpos,
+                *progress.charpos,
                 &active_face_state,
                 &mut overlay_state,
             );
@@ -6573,22 +6546,27 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             cursor_info,
             &active_face_state,
             row_geometry,
-            *x,
+            *progress.x,
             source_step_char.start_byte_idx(),
-            *col,
+            *progress.col,
             ch == '\t',
-            *charpos,
+            *progress.charpos,
             context.point_charpos,
         );
         if cursor_info.is_missing()
-            && source_end_charpos
-                .is_some_and(|end| context.point_charpos > *charpos && context.point_charpos < end)
+            && source_end_charpos.is_some_and(|end| {
+                context.point_charpos > *progress.charpos && context.point_charpos < end
+            })
         {
             capture_cursor_info(
                 cursor_info,
                 prepared_append.cursor_info_for_main_char(
                     &active_face_state,
-                    row_geometry.text_position(*x, source_step_char.start_byte_idx(), *col),
+                    row_geometry.text_position(
+                        *progress.x,
+                        source_step_char.start_byte_idx(),
+                        *progress.col,
+                    ),
                     ch == '\t',
                 ),
             );
@@ -6603,9 +6581,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     source_render.reborrow(),
                     trailing_whitespace,
                     word_wrap,
-                    x,
-                    col,
-                    charpos,
+                    progress.x,
+                    progress.col,
+                    progress.charpos,
                 ),
             )
             .should_break()
@@ -6613,7 +6591,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             return BufferTextSourceCharRenderOutcome::Stop;
         }
         if let Some(end_charpos) = source_end_charpos {
-            *charpos = (*charpos).max(end_charpos);
+            *progress.charpos = (*progress.charpos).max(end_charpos);
         }
 
         BufferTextSourceCharRenderOutcome::Rendered
@@ -6639,12 +6617,9 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         state: BufferTextOverflowRenderState<'_, '_>,
     ) -> BufferTextOverflowRenderOutcome {
         let BufferTextOverflowRenderState {
-            byte_idx,
-            charpos,
-            col,
+            progress,
             source_render,
             row_extend,
-            x,
             line_numbers,
             row_geometry,
             row_flags,
@@ -6657,6 +6632,12 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             face_scan,
             row_y_positions,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -7191,12 +7172,9 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         state: BufferTextSpecialOverflowRenderState<'_, '_>,
     ) -> BufferTextSpecialOverflowRenderOutcome {
         let BufferTextSpecialOverflowRenderState {
-            byte_idx,
-            charpos,
-            col,
+            progress,
             source_render,
             row_extend,
-            x,
             line_numbers,
             row_geometry,
             row_flags,
@@ -7208,6 +7186,12 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
+        let BufferTextWindowProgressState {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
