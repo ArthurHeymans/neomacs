@@ -43,6 +43,16 @@ pub(crate) struct DisplayOutputTextRowMetricsInstallRequest {
     ascent_px: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayOutputTextWindowBeginInstallRequest {
+    window_id: u64,
+    rows: usize,
+    cols: usize,
+    bounds: Rect,
+    text_bounds: Rect,
+    selected: bool,
+}
+
 impl<'a> DisplayRowOutputInstall<'a> {
     fn from_row(display_row_index: usize, row: &'a GlyphRow) -> Self {
         Self {
@@ -82,6 +92,37 @@ impl<'a> DisplayRowOutputInstall<'a> {
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
         builder.install_complete_output_row(self.display_row_index, row.role, row.mode_line, row);
+    }
+}
+
+impl DisplayOutputTextWindowBeginInstallRequest {
+    pub(crate) fn new(
+        window_id: u64,
+        rows: usize,
+        cols: usize,
+        bounds: Rect,
+        text_bounds: Rect,
+        selected: bool,
+    ) -> Self {
+        Self {
+            window_id,
+            rows,
+            cols,
+            bounds,
+            text_bounds,
+            selected,
+        }
+    }
+
+    fn install(self, builder: &mut DisplayOutputBuilder) {
+        builder.begin_output_window(
+            self.window_id,
+            self.rows,
+            self.cols,
+            self.bounds,
+            self.text_bounds,
+            self.selected,
+        );
     }
 }
 
@@ -139,6 +180,17 @@ impl DisplayOutputTextRowMetricsInstallRequest {
         );
         metrics
     }
+}
+
+pub(crate) fn begin_text_output_window(
+    builder: &mut DisplayOutputBuilder,
+    request: DisplayOutputTextWindowBeginInstallRequest,
+) {
+    request.install(builder);
+}
+
+pub(crate) fn end_text_output_window(builder: &mut DisplayOutputBuilder) {
+    builder.end_output_window();
 }
 
 pub(crate) fn begin_text_output_row(

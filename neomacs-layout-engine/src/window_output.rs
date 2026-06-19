@@ -27,7 +27,8 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_output_install::{
     DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
-    begin_text_output_row, finalize_text_output_row, finish_text_output_row,
+    DisplayOutputTextWindowBeginInstallRequest, begin_text_output_row, begin_text_output_window,
+    end_text_output_window, finalize_text_output_row, finish_text_output_row,
     install_text_output_row_metrics,
 };
 use crate::display_row_special_glyphs::{
@@ -183,6 +184,19 @@ impl From<TextWindowBegin> for TextWindowOutputBegin {
     }
 }
 
+impl TextWindowOutputBegin {
+    fn into_output_install_request(self) -> DisplayOutputTextWindowBeginInstallRequest {
+        DisplayOutputTextWindowBeginInstallRequest::new(
+            self.window_id,
+            self.rows,
+            self.cols,
+            self.bounds,
+            self.text_bounds,
+            self.selected,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowDisplayRange {
     pub(crate) window_id: u64,
@@ -254,14 +268,7 @@ pub(crate) fn begin_text_window_output(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowOutputBegin,
 ) {
-    output_builder.begin_output_window(
-        request.window_id,
-        request.rows,
-        request.cols,
-        request.bounds,
-        request.text_bounds,
-        request.selected,
-    );
+    begin_text_output_window(output_builder, request.into_output_install_request());
 }
 
 pub(crate) fn record_text_window_display_range(
@@ -457,7 +464,7 @@ pub(crate) fn render_window_chrome_rows(
 }
 
 pub(crate) fn close_text_window_output(output_builder: &mut DisplayOutputBuilder) {
-    output_builder.end_output_window();
+    end_text_output_window(output_builder);
 }
 
 pub(crate) fn install_text_window_finished_rows(
