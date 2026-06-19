@@ -1,4 +1,4 @@
-use crate::display_buffer_text_render::BufferTextWindowProgressState;
+use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source::{BufferTextReplacementItem, BufferTextSourceItem};
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
