@@ -19,9 +19,9 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_render::{
-    BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSession,
+    BufferTextWindowCursorEffectsOutput, BufferTextWindowDefaultFacePlan,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRenderAttemptOutcome,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderAttemptState, BufferTextWindowWalkSetupRequest,
 };
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
@@ -918,7 +918,10 @@ impl LayoutEngine {
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
-        BufferTextWindowOutputSession::install_cursor_effects(&mut self.matrix_builder, params);
+        BufferTextWindowCursorEffectsOutput::install_cursor_effects(
+            &mut self.matrix_builder,
+            params,
+        );
 
         let char_w = params.char_width;
         let char_h = params.char_height;
@@ -1023,15 +1026,6 @@ impl LayoutEngine {
             return;
         }
 
-        // Load the frame-wide face-id counter so this window's
-        // glyph/mode-line/header-line faces get IDs that do NOT
-        // collide with earlier siblings' faces in the frame-scoped
-        // `matrix_builder.faces` HashMap. Write back below before
-        // returning. Mirrors GNU's single `face_cache->used`
-        // counter per frame at `src/xfaces.c::lookup_face` /
-        // `init_frame_faces`.
-        let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-
         // GNU `display_echo_area_1` (xdisp.c:13194) renders the echo area by just
         // calling `resize_mini_window` + `try_window` over the echo-area buffer —
         // i.e. the ordinary window walk. The inactive mini-window's `buf_id` was
@@ -1075,23 +1069,17 @@ impl LayoutEngine {
             reserve_right_special_col,
             reserve_right_border_col,
         );
-        let mut output_session = BufferTextWindowOutputSession::new(
-            &mut self.matrix_builder,
-            evaluator,
-            &mut self.font_metrics,
-            face_resolver,
-            &mut face_ids,
-        );
-        let rendered_body = body_plan.begin_render_body_and_tail(
+        let render_outcome = body_plan.render_attempt(
             &mut walk_setup,
-            &mut output_session,
-            text,
-            params,
-            buffer,
-            &buf_access,
-        );
-        let render_outcome = rendered_body.finish_or_prepare_retry(
-            &mut walk_setup,
+            BufferTextWindowRenderAttemptState::new(
+                &mut self.matrix_builder,
+                evaluator,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut self.frame_face_id_counter,
+                &mut self.hit_data,
+                &mut self.display_snapshots,
+            ),
             chrome_plan.render_request(
                 params,
                 geometry.mode_line_matrix_row,
@@ -1100,11 +1088,11 @@ impl LayoutEngine {
                 font_ascent,
                 &buffer_name,
             ),
-            &mut output_session,
-            &mut self.hit_data,
-            &mut self.display_snapshots,
-            &mut self.frame_face_id_counter,
             remaining_visibility_retries,
+            text,
+            params,
+            buffer,
+            &buf_access,
         );
 
         let redisplay_positions = match render_outcome {
@@ -1112,7 +1100,6 @@ impl LayoutEngine {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
                 retry_params.window_end = 0;
-                drop(output_session);
                 self.layout_window_rust(
                     evaluator,
                     frame_id,

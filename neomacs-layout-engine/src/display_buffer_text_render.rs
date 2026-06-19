@@ -349,13 +349,25 @@ pub(crate) struct BufferTextWindowBodyOutputState<'emit> {
     face_resolver: &'emit FaceResolver,
 }
 
-pub(crate) struct BufferTextWindowOutputSession<'emit> {
+struct BufferTextWindowOutputSession<'emit> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: FrameFaceIdAllocator,
     retry_checkpoint: TextWindowOutputRetryCheckpoint,
+}
+
+pub(crate) struct BufferTextWindowCursorEffectsOutput;
+
+pub(crate) struct BufferTextWindowRenderAttemptState<'a, 'face> {
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    frame_face_id_counter: &'a mut u32,
+    hit_data: &'a mut Vec<WindowHitData>,
+    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
@@ -1251,7 +1263,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
     }
 }
 
-impl<'emit> BufferTextWindowOutputSession<'emit> {
+impl BufferTextWindowCursorEffectsOutput {
     pub(crate) fn install_cursor_effects(
         builder: &mut GlyphMatrixBuilder,
         params: &WindowParams,
@@ -1259,13 +1271,38 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
             .install_and_apply(&mut TextWindowOutputRenderState::without_output(builder))
     }
+}
 
+impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        frame_face_id_counter: &'a mut u32,
+        hit_data: &'a mut Vec<WindowHitData>,
+        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self {
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            frame_face_id_counter,
+            hit_data,
+            display_snapshots,
+        }
+    }
+}
+
+impl<'emit> BufferTextWindowOutputSession<'emit> {
+    fn new(
         builder: &'emit mut GlyphMatrixBuilder,
         evaluator: &'emit mut Context,
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'emit FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        frame_face_id_counter: u32,
     ) -> Self {
         let retry_checkpoint = TextWindowMatrixOutputState::new(builder).capture_retry_checkpoint();
         Self {
@@ -1273,7 +1310,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
             evaluator,
             font_metrics,
             face_resolver,
-            face_ids,
+            face_ids: FrameFaceIdAllocator::new(frame_face_id_counter),
             retry_checkpoint,
         }
     }
@@ -1286,7 +1323,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
                 font_metrics: self.font_metrics,
                 face_resolver: self.face_resolver,
             },
-            face_ids: self.face_ids,
+            face_ids: &mut self.face_ids,
         }
     }
 
@@ -1301,7 +1338,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
             render_services: ChromeRowRenderServices::new(
                 self.font_metrics,
                 self.face_resolver,
-                self.face_ids,
+                &mut self.face_ids,
             ),
             hit_data,
             display_snapshots,
@@ -1986,7 +2023,54 @@ impl<'a, 'surface, B> BufferTextWindowBodyPlan<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
-    pub(crate) fn begin_render_body_and_tail<'buf>(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_attempt<'buf>(
+        self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        state: BufferTextWindowRenderAttemptState<'_, '_>,
+        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
+        remaining_visibility_retries: usize,
+        text: &'a [u8],
+        params: &'a WindowParams,
+        buffer: &B,
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowRenderAttemptOutcome {
+        let BufferTextWindowRenderAttemptState {
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            frame_face_id_counter,
+            hit_data,
+            display_snapshots,
+        } = state;
+        let mut output_session = BufferTextWindowOutputSession::new(
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            *frame_face_id_counter,
+        );
+        let rendered_body = self.begin_render_body_and_tail(
+            walk_setup,
+            &mut output_session,
+            text,
+            params,
+            buffer,
+            buf_access,
+        );
+        rendered_body.finish_or_prepare_retry(
+            walk_setup,
+            chrome_request,
+            &mut output_session,
+            hit_data,
+            display_snapshots,
+            frame_face_id_counter,
+            remaining_visibility_retries,
+        )
+    }
+
+    fn begin_render_body_and_tail<'buf>(
         self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         output_session: &mut BufferTextWindowOutputSession<'_>,
@@ -2096,7 +2180,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         redisplay_positions
     }
 
-    pub(crate) fn finish_or_prepare_retry(
+    fn finish_or_prepare_retry(
         self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
