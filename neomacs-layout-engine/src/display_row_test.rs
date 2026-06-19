@@ -163,6 +163,35 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
 }
 
 #[test]
+fn current_display_row_cluster_tail_reports_live_text_row_tail() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+
+    assert_eq!(current_display_row_cluster_tail(&builder), None);
+
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_wide_char_to_row(row, '\u{1F1EF}', 3, 100, 0.0);
+        })
+        .expect("current row");
+    assert_eq!(
+        current_display_row_cluster_tail(&builder),
+        Some(('\u{1F1EF}', true))
+    );
+
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_cluster_continuation_to_row(row, '\u{1F1F5}', 3, 101);
+        })
+        .expect("current row");
+    assert_eq!(
+        current_display_row_cluster_tail(&builder),
+        Some(('\u{1F1F5}', false))
+    );
+}
+
+#[test]
 fn insert_resolved_display_row_face_applies_metric_overrides() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let face = base_face();

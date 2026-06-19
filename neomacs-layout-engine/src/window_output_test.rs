@@ -18,7 +18,6 @@ use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
 use super::WindowOutputEmitter;
 use super::close_text_window_output;
-use super::current_text_window_cluster_tail;
 use super::emit_text_matrix_row_transition;
 use super::emit_text_matrix_row_transition_with_limit;
 use super::finish_and_end_text_matrix_row_output;
@@ -62,32 +61,6 @@ fn write_char_to_current_row(
     builder
         .with_current_row_mut(|row| {
             crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, 0.0);
-        })
-        .expect("current row");
-}
-
-fn write_wide_char_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
-    ch: char,
-    face_id: u32,
-    charpos: usize,
-) {
-    builder
-        .with_current_row_mut(|row| {
-            crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, 0.0);
-        })
-        .expect("current row");
-}
-
-fn write_cluster_continuation_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
-    ch: char,
-    face_id: u32,
-    charpos: usize,
-) {
-    builder
-        .with_current_row_mut(|row| {
-            crate::glyph_row_writer::push_cluster_continuation_to_row(row, ch, face_id, charpos);
         })
         .expect("current row");
 }
@@ -846,27 +819,6 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     assert_eq!(state.cursor_effects_by_window.get(&42), Some(&effects));
     assert!(state.cursors.is_empty());
     assert!(state.phys_cursor.is_none());
-}
-
-#[test]
-fn current_text_window_cluster_tail_reports_live_text_row_tail() {
-    let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-
-    assert_eq!(current_text_window_cluster_tail(&builder), None);
-
-    write_wide_char_to_current_row(&mut builder, '\u{1F1EF}', 3, 100);
-    assert_eq!(
-        current_text_window_cluster_tail(&builder),
-        Some(('\u{1F1EF}', true))
-    );
-
-    write_cluster_continuation_to_current_row(&mut builder, '\u{1F1F5}', 3, 101);
-    assert_eq!(
-        current_text_window_cluster_tail(&builder),
-        Some(('\u{1F1F5}', false))
-    );
 }
 
 #[test]

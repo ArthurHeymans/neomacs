@@ -1,23 +1,90 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
     trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::DisplayRowFlagKind;
+use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
     MatrixLastWindowRowsDecorationRequest, MatrixRowDecorator,
 };
 use crate::neovm_bridge::ResolvedFace;
-use crate::window_output::{
-    RightEdgeMarkerItemSource, TextWindowRightBorder, TextWindowRightEdgeMarkers,
-    right_border_text_source,
-};
+use crate::window_output::{TextWindowRightBorder, TextWindowRightEdgeMarkers};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+
+const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
+const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;
+
+fn right_border_text_source(
+    text: impl Into<Box<str>>,
+    face_id: u32,
+    start_offset: usize,
+) -> SyntheticTextItemSource {
+    SyntheticTextItemSource::new(
+        RIGHT_BORDER_SOURCE_ID,
+        text,
+        RenderFaceRef::FaceId(face_id),
+        start_offset,
+    )
+}
+
+struct RightEdgeMarkerItemSource {
+    items: std::vec::IntoIter<DisplayItem>,
+}
+
+impl RightEdgeMarkerItemSource {
+    fn new(padding_cols: usize, marker: char, face_id: u32) -> Self {
+        let mut source_offset = 0usize;
+        let mut items = Vec::with_capacity(usize::from(padding_cols > 0) + 1);
+        if padding_cols > 0 {
+            items.push(synthetic_special_glyph_text_item(
+                RIGHT_EDGE_MARKER_SOURCE_ID,
+                " ".repeat(padding_cols),
+                face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(padding_cols);
+        }
+        items.push(synthetic_special_glyph_text_item(
+            RIGHT_EDGE_MARKER_SOURCE_ID,
+            marker.to_string(),
+            face_id,
+            source_offset,
+        ));
+        Self {
+            items: items.into_iter(),
+        }
+    }
+}
+
+impl DisplayItemSource for RightEdgeMarkerItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
+    }
+}
+
+fn synthetic_special_glyph_text_item(
+    source_id: u64,
+    text: impl Into<Box<str>>,
+    face_id: u32,
+    start_offset: usize,
+) -> DisplayItem {
+    let text = text.into();
+    let end_offset = start_offset.saturating_add(text.chars().count());
+    DisplayItem::new(
+        SourceSpan::synthetic(source_id, start_offset, end_offset),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+    )
+}
 
 fn render_right_edge_marker_source(
     row: &mut GlyphRow,

@@ -6,7 +6,6 @@
 //! handoff.
 
 use super::display_status_line::DisplayRowOutputProgress;
-use crate::composition::last_text_cluster_tail_in_row;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_item::{
@@ -20,7 +19,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
-use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentRowDecorationRequest, MatrixCursorInstallRequest,
@@ -38,8 +37,6 @@ use neovm_core::window::{
 };
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
-const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
-const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
@@ -783,69 +780,6 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-pub(crate) fn right_border_text_source(
-    text: impl Into<Box<str>>,
-    face_id: u32,
-    start_offset: usize,
-) -> SyntheticTextItemSource {
-    SyntheticTextItemSource::new(
-        RIGHT_BORDER_SOURCE_ID,
-        text,
-        RenderFaceRef::FaceId(face_id),
-        start_offset,
-    )
-}
-
-pub(crate) struct RightEdgeMarkerItemSource {
-    items: std::vec::IntoIter<DisplayItem>,
-}
-
-impl RightEdgeMarkerItemSource {
-    pub(crate) fn new(padding_cols: usize, marker: char, face_id: u32) -> Self {
-        let mut source_offset = 0usize;
-        let mut items = Vec::with_capacity(usize::from(padding_cols > 0) + 1);
-        if padding_cols > 0 {
-            items.push(synthetic_window_marker_text_item(
-                RIGHT_EDGE_MARKER_SOURCE_ID,
-                " ".repeat(padding_cols),
-                face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(padding_cols);
-        }
-        items.push(synthetic_window_marker_text_item(
-            RIGHT_EDGE_MARKER_SOURCE_ID,
-            marker.to_string(),
-            face_id,
-            source_offset,
-        ));
-        Self {
-            items: items.into_iter(),
-        }
-    }
-}
-
-impl DisplayItemSource for RightEdgeMarkerItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.items.next()
-    }
-}
-
-fn synthetic_window_marker_text_item(
-    source_id: u64,
-    text: impl Into<Box<str>>,
-    face_id: u32,
-    start_offset: usize,
-) -> DisplayItem {
-    let text = text.into();
-    let end_offset = start_offset.saturating_add(text.chars().count());
-    DisplayItem::new(
-        SourceSpan::synthetic(source_id, start_offset, end_offset),
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
-    )
-}
-
 pub(crate) fn publish_text_window_cursor(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -967,14 +901,6 @@ pub(crate) fn install_text_window_cursor_effects(
         window_id: request.window_id,
         effects: request.effects,
     });
-}
-
-pub(crate) fn current_text_window_cluster_tail(
-    builder: &GlyphMatrixBuilder,
-) -> Option<(char, bool)> {
-    builder
-        .current_row()
-        .and_then(last_text_cluster_tail_in_row)
 }
 
 pub(crate) fn finish_text_window_output_rows(

@@ -12,7 +12,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendRenderPolicy,
+    DisplaySourceAppendRenderPolicy, current_display_row_cluster_tail,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -38,7 +38,7 @@ use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::{LineWrapMode, WindowParams};
-use crate::window_output::{WindowOutputEmitter, current_text_window_cluster_tail};
+use crate::window_output::WindowOutputEmitter;
 use neovm_core::buffer::BufferId;
 
 impl ResolvedBufferTextSourceAdvance {
@@ -420,7 +420,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         request: BufferTextSourceDisplayItemPreparationRequest<'_>,
         state: &mut BufferTextSourceCharPreparationState<'_>,
     ) -> BufferTextPreparedSourceCharAppend {
-        let cluster_tail = current_text_window_cluster_tail(state.measure.builder);
+        let cluster_tail = current_display_row_cluster_tail(state.measure.builder);
         self.prepare_source_item_char_at(
             &request.geometry,
             state.append_state,

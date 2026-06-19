@@ -1,3 +1,4 @@
+use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
@@ -2189,6 +2190,28 @@ struct DisplayRowCurrentTextSourceStepResult {
 
 struct DisplayRowCurrentRowSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
+}
+
+struct DisplayRowCurrentRowReadSurface<'a> {
+    builder: &'a GlyphMatrixBuilder,
+}
+
+impl<'a> DisplayRowCurrentRowReadSurface<'a> {
+    fn new(builder: &'a GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn cluster_tail(&self) -> Option<(char, bool)> {
+        self.builder
+            .current_row()
+            .and_then(last_text_cluster_tail_in_row)
+    }
+}
+
+pub(crate) fn current_display_row_cluster_tail(
+    builder: &GlyphMatrixBuilder,
+) -> Option<(char, bool)> {
+    DisplayRowCurrentRowReadSurface::new(builder).cluster_tail()
 }
 
 impl<'a> DisplayRowCurrentRowSurface<'a> {
