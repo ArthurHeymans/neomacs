@@ -14,8 +14,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{BoxFaceRowState, FaceScanCheckpoint};
 use crate::display_source_resolver::{
-    DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
-    PendingDisplaySourceFace,
+    DisplaySourceFaceBasis, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
@@ -195,10 +194,10 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
                 self.face_resolver,
                 u32::from(BasicFaceId::Default),
                 self.default_resolved,
-                DisplaySourceFallbackMetrics::new(
+                DisplayRowFallbackMetrics::from_default_face_extents(
                     self.default_face_char_w,
-                    self.default_face_ascent,
                     self.default_face_h,
+                    self.default_face_ascent,
                 ),
             ),
             display_host,

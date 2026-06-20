@@ -7,7 +7,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
 };
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
 use crate::display_source::{
@@ -27,42 +27,13 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplaySourceFallbackMetrics {
-    char_width: f32,
-    ascent: f32,
-    row_height: f32,
-}
-
-impl DisplaySourceFallbackMetrics {
-    pub(crate) fn new(char_width: f32, ascent: f32, row_height: f32) -> Self {
-        Self {
-            char_width,
-            ascent,
-            row_height,
-        }
-    }
-
-    pub(crate) fn char_width(self) -> f32 {
-        self.char_width
-    }
-
-    pub(crate) fn ascent(self) -> f32 {
-        self.ascent
-    }
-
-    pub(crate) fn row_height(self) -> f32 {
-        self.row_height
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct DisplaySourceFaceBasis<'a> {
     face_resolver: &'a FaceResolver,
     base_face_id: u32,
     base_face: &'a ResolvedFace,
     canonical_face: &'a ResolvedFace,
-    fallback_metrics: DisplaySourceFallbackMetrics,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl<'a> DisplaySourceFaceBasis<'a> {
@@ -70,7 +41,7 @@ impl<'a> DisplaySourceFaceBasis<'a> {
         face_resolver: &'a FaceResolver,
         base_face_id: u32,
         base_face: &'a ResolvedFace,
-        fallback_metrics: DisplaySourceFallbackMetrics,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             face_resolver,
@@ -97,7 +68,7 @@ impl<'a> DisplaySourceFaceBasis<'a> {
         self.canonical_face
     }
 
-    pub(crate) fn fallback_metrics(self) -> DisplaySourceFallbackMetrics {
+    pub(crate) fn fallback_metrics(self) -> DisplayRowFallbackMetrics {
         self.fallback_metrics
     }
 

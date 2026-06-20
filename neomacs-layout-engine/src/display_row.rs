@@ -17,8 +17,8 @@ use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
-    DisplaySourceResolveState, ResolvedDisplaySourceItem, resolve_next_display_source_item,
+    DisplaySourceFaceBasis, DisplaySourceResolveParams, DisplaySourceResolveState,
+    ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
 use crate::display_text_run_measurement::{
     ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
@@ -515,6 +515,18 @@ impl DisplayRowFallbackMetrics {
             row_height,
             ascent,
         }
+    }
+
+    pub(crate) fn char_width(self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn row_height(self) -> f32 {
+        self.row_height
+    }
+
+    pub(crate) fn ascent(self) -> f32 {
+        self.ascent
     }
 }
 
@@ -1147,10 +1159,10 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
             face_resolver,
             base_face_id,
             base_face,
-            DisplaySourceFallbackMetrics::new(
+            DisplayRowFallbackMetrics::from_default_face_extents(
                 fallback_char_width,
-                fallback_ascent,
                 fallback_row_height,
+                fallback_ascent,
             ),
         );
         let resolved = self.state.next_resolved_item(
@@ -2319,7 +2331,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
         &self,
         base_face_id: u32,
         base_face: &'b ResolvedFace,
-        fallback: DisplaySourceFallbackMetrics,
+        fallback: DisplayRowFallbackMetrics,
     ) -> DisplaySourceResolveParams<'b>
     where
         'a: 'b,
@@ -2507,8 +2519,11 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
-        let fallback_metrics =
-            DisplaySourceFallbackMetrics::new(char_width, geometry.ascent, geometry.height);
+        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
+            char_width,
+            geometry.height,
+            geometry.ascent,
+        );
         let stop = loop {
             let params =
                 context.source_resolve_params(row_face.face_id, base_face, fallback_metrics);

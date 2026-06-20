@@ -509,7 +509,7 @@ fn display_row_render_context_builds_source_resolve_params() {
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let context = DisplayRowRenderContext::new(&face_resolver, None, &mut face_ids);
     let fallback =
-        crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0);
+        crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0);
 
     let params = context.source_resolve_params(7, base_face, fallback);
 
@@ -805,8 +805,8 @@ fn display_row_source_state_reuses_face_cache_across_items() {
                         &face_resolver,
                         0,
                         base_face,
-                        crate::display_source_resolver::DisplaySourceFallbackMetrics::new(
-                            8.0, 12.0, 16.0,
+                        crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(
+                            8.0, 16.0, 12.0,
                         ),
                     ),
                     None,
