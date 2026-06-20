@@ -4,6 +4,7 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
+use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
@@ -758,25 +759,6 @@ impl<'a> BufferHscrollSkipRenderContext<'a> {
     }
 }
 
-pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
-    progress: BufferTextWindowProgressState<'emit>,
-    cursor_info: &'emit mut CursorCaptureState,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    box_face: &'emit mut BoxFaceRowState,
-    source_render: TextRowSourceRenderState<'emit>,
-    prefix_request: &'emit mut DisplayRowPrefixRequest,
-    line_numbers: &'emit mut LineNumberRenderState,
-    hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    word_wrap: &'emit mut WordWrapRenderState,
-    row_flags: &'emit mut DisplayRowFlags,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    row_y_positions: &'a mut DisplayRowYPositions,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
     source_char: BufferTextSourceStepChar,
     context: BufferSelectiveDisplayTailRenderContext<'a>,
@@ -800,23 +782,6 @@ pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
-}
-
-pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
-    progress: BufferTextWindowProgressState<'emit>,
-    source_render: TextRowSourceRenderState<'emit>,
-    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    box_face: &'emit mut BoxFaceRowState,
-    line_numbers: &'emit mut LineNumberRenderState,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    row_flags: &'emit mut DisplayRowFlags,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    prefix_request: &'emit mut DisplayRowPrefixRequest,
-    hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    word_wrap: &'emit mut WordWrapRenderState,
-    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    row_y_positions: &'a mut DisplayRowYPositions,
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
@@ -847,84 +812,6 @@ pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
     hit_row_range: &'emit mut HitRowRangeTracker,
     row_y_positions: &'a mut DisplayRowYPositions,
     face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-impl<'a, 'emit> BufferTextLineBreakRenderState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        progress: BufferTextWindowProgressState<'emit>,
-        cursor_info: &'emit mut CursorCaptureState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        box_face: &'emit mut BoxFaceRowState,
-        source_render: TextRowSourceRenderState<'emit>,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        line_numbers: &'emit mut LineNumberRenderState,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        row_y_positions: &'a mut DisplayRowYPositions,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            progress,
-            cursor_info,
-            row_geometry,
-            trailing_whitespace,
-            row_extend,
-            box_face,
-            source_render,
-            prefix_request,
-            line_numbers,
-            hscroll_skip,
-            word_wrap,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        }
-    }
-}
-
-impl<'a, 'emit> BufferSelectiveDisplayTailRenderState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        progress: BufferTextWindowProgressState<'emit>,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        box_face: &'emit mut BoxFaceRowState,
-        line_numbers: &'emit mut LineNumberRenderState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        row_y_positions: &'a mut DisplayRowYPositions,
-    ) -> Self {
-        Self {
-            progress,
-            source_render,
-            row_extend,
-            box_face,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-            row_y_positions,
-        }
-    }
 }
 
 impl<'a, 'emit> BufferInvisibleTextRenderRequestState<'a, 'emit> {
@@ -1068,7 +955,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferSelectiveDisplayTailRenderState<'_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
         let context = self.context;
         let selective_display = BufferSelectiveDisplayContext::new(
@@ -1081,7 +968,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             return BufferSelectiveDisplayTailRenderOutcome::NotHidden;
         };
 
-        let BufferSelectiveDisplayTailRenderState {
+        let BufferTextWindowLoopMutableState {
             mut progress,
             source_render,
             row_extend,
@@ -1096,6 +983,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             word_wrap,
             trailing_whitespace,
             row_y_positions,
+            ..
         } = state;
         let mut source_render = source_render;
 
@@ -1764,9 +1652,9 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextLineBreakRenderState<'_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {
-        let BufferTextLineBreakRenderState {
+        let BufferTextWindowLoopMutableState {
             mut progress,
             cursor_info,
             row_geometry,
@@ -1783,6 +1671,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            ..
         } = state;
         let mut source_render = source_render;
         let context = self.context;

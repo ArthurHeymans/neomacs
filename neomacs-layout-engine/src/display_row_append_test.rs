@@ -2668,6 +2668,9 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut append_state = BufferTextRowAppendState::default();
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
+    let mut face_scan = FaceScanCheckpoint::initial();
     let row_limit = context.row_limit;
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
@@ -2709,13 +2712,10 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     .render_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextLineBreakRenderState::new(
+        BufferTextWindowLoopMutableState::new(
+            &mut append_state,
+            &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-            &mut cursor_info,
-            &mut context.geometry,
-            &mut trailing_whitespace,
-            &mut row_extend,
-            &mut box_face,
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -2723,15 +2723,23 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
                 &mut font_metrics,
                 &face_resolver,
             ),
-            &mut prefix_request,
+            &mut row_extend,
+            &mut box_face,
             &mut line_numbers,
-            &mut hscroll_skip,
-            &mut word_wrap,
+            &mut context.geometry,
             &mut context.row_flags,
             &mut context.hit_rows,
             &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
             &mut context.row_y_positions,
+            &mut cursor_info,
             &mut face_ids,
+            &surface,
+            overlay_context,
         ),
     );
 
@@ -2847,6 +2855,13 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut append_state = BufferTextRowAppendState::default();
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut font_metrics = None;
     let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
@@ -2874,7 +2889,9 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     .render_if_needed_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferSelectiveDisplayTailRenderState::new(
+        BufferTextWindowLoopMutableState::new(
+            &mut append_state,
+            &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
@@ -2894,7 +2911,12 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
             &mut hscroll_skip,
             &mut word_wrap,
             &mut trailing_whitespace,
+            &mut face_scan,
             &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
         ),
     );
 
@@ -3315,7 +3337,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     .render_if_needed_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextSpecialOverflowRenderState::new(BufferTextWindowLoopMutableState::new(
+        BufferTextWindowLoopMutableState::new(
             &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -3343,7 +3365,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
             &mut face_ids,
             &surface,
             overlay_context,
-        )),
+        ),
     );
 
     assert_eq!(
@@ -3564,7 +3586,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     .render_if_needed_and_apply(
         &mut source_walk,
         text,
-        BufferTextOverflowRenderState::new(BufferTextWindowLoopMutableState::new(
+        BufferTextWindowLoopMutableState::new(
             &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -3592,7 +3614,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
             &mut face_ids,
             &surface,
             overlay_context,
-        )),
+        ),
     );
 
     assert_eq!(

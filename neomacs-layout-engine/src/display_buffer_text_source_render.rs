@@ -16,13 +16,11 @@ use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
     BufferTextOverflowRenderContext, BufferTextOverflowRenderRequest,
-    BufferTextOverflowRenderState, BufferTextSpecialOverflowRenderContext,
-    BufferTextSpecialOverflowRenderRequest, BufferTextSpecialOverflowRenderState,
+    BufferTextSpecialOverflowRenderContext, BufferTextSpecialOverflowRenderRequest,
 };
 use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
-    BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState,
+    BufferTextLineBreakRenderRequest,
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::{
@@ -260,7 +258,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             .render_if_needed_and_apply(
                 source_walk,
                 buffer,
-                BufferTextSpecialOverflowRenderState::new(BufferTextWindowLoopMutableState::new(
+                BufferTextWindowLoopMutableState::new(
                     append_state,
                     invisible_text_checkpoint,
                     progress.reborrow(),
@@ -282,7 +280,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                     face_ids,
                     append_surface,
                     overlay_context,
-                )),
+                ),
             );
             if special_overflow_outcome.should_break() {
                 return BufferTextSourceItemRenderOutcome::Stop;
@@ -336,7 +334,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     .render_if_needed_and_apply(
         source_walk,
         context.text,
-        BufferTextOverflowRenderState::new(BufferTextWindowLoopMutableState::new(
+        BufferTextWindowLoopMutableState::new(
             append_state,
             invisible_text_checkpoint,
             progress.reborrow(),
@@ -358,7 +356,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             face_ids,
             append_surface,
             overlay_context,
-        )),
+        ),
     );
     if overflow_outcome.should_break() {
         return BufferTextSourceItemRenderOutcome::Stop;
@@ -693,26 +691,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         request: BufferSelectiveDisplayTailRenderRequest<'_>,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
-        request.render_if_needed_and_apply(
-            source_walk,
-            buffer,
-            BufferSelectiveDisplayTailRenderState::new(
-                self.state.progress.reborrow(),
-                self.state.source_render.reborrow(),
-                self.state.row_extend,
-                self.state.box_face,
-                self.state.line_numbers,
-                self.state.row_geometry,
-                self.state.row_flags,
-                self.state.hit_rows,
-                self.state.hit_row_range,
-                self.state.prefix_request,
-                self.state.hscroll_skip,
-                self.state.word_wrap,
-                self.state.trailing_whitespace,
-                self.state.row_y_positions,
-            ),
-        )
+        request.render_if_needed_and_apply(source_walk, buffer, self.state.reborrow())
     }
 
     fn render_line_break<B: LayoutBufferView>(
@@ -721,27 +700,6 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         request: BufferTextLineBreakRenderRequest<'_>,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        request.render_and_apply(
-            source_walk,
-            buffer,
-            BufferTextLineBreakRenderState::new(
-                self.state.progress.reborrow(),
-                self.state.cursor_info,
-                self.state.row_geometry,
-                self.state.trailing_whitespace,
-                self.state.row_extend,
-                self.state.box_face,
-                self.state.source_render.reborrow(),
-                self.state.prefix_request,
-                self.state.line_numbers,
-                self.state.hscroll_skip,
-                self.state.word_wrap,
-                self.state.row_flags,
-                self.state.hit_rows,
-                self.state.hit_row_range,
-                self.state.row_y_positions,
-                self.state.face_ids,
-            ),
-        )
+        request.render_and_apply(source_walk, buffer, self.state.reborrow())
     }
 }

@@ -31,26 +31,6 @@ use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::EmacsBytePos;
 
-pub(crate) struct BufferTextOverflowRenderState<'rows, 'emit, 'surface> {
-    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
-pub(crate) struct BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
-    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
-impl<'rows, 'emit, 'surface> BufferTextOverflowRenderState<'rows, 'emit, 'surface> {
-    pub(crate) fn new(state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>) -> Self {
-        Self { state }
-    }
-}
-
-impl<'rows, 'emit, 'surface> BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
-    pub(crate) fn new(state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>) -> Self {
-        Self { state }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceCharOverflowAction {
     Fits,
@@ -197,9 +177,8 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &[u8],
-        state: BufferTextOverflowRenderState<'_, '_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferTextOverflowRenderOutcome {
-        let BufferTextOverflowRenderState { state } = state;
         let BufferTextWindowLoopMutableState {
             mut progress,
             source_render,
@@ -802,9 +781,8 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextSpecialOverflowRenderState<'_, '_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferTextSpecialOverflowRenderOutcome {
-        let BufferTextSpecialOverflowRenderState { state } = state;
         let BufferTextWindowLoopMutableState {
             mut progress,
             source_render,
