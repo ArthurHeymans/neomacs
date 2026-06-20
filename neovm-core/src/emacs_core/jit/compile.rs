@@ -1915,11 +1915,54 @@ fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
     false
 }
 
+/// True if `v` is provably a fixnum at this point — a fixnum constant
+/// ([`is_fixnum_const`]) OR the output of [`retag_fixnum`], i.e.
+/// `bor_imm(ishl_imm(_, k>=FIXNUM_SHIFT), FIXNUM_CHECK_VALUE)`, whose low tag
+/// bits are exactly `0b10`. In either case a fixnum guard on `v` would always
+/// pass, so it can be elided. The retag case extends redundant-guard elimination
+/// to chained arithmetic WITHIN a block: the range-checked, retagged inner result
+/// of `(+ (+ a b) c)` / `(< (1+ i) n)` is re-guarded for nothing. (Sound even if
+/// some non-retag op produced the same bit pattern — any value with low bits
+/// `0b10` passes the guard. opt_level=none keeps the instruction sequence stable.)
+fn is_known_fixnum(fb: &FunctionBuilder, v: ClifValue) -> bool {
+    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    if is_fixnum_const(fb, v) {
+        return true;
+    }
+    let ValueDef::Result(bor, _) = fb.func.dfg.value_def(v) else {
+        return false;
+    };
+    let InstructionData::BinaryImm64 {
+        opcode: Opcode::BorImm,
+        imm,
+        arg,
+    } = fb.func.dfg.insts[bor]
+    else {
+        return false;
+    };
+    if imm.bits() != FIXNUM_CHECK_VALUE as i64 {
+        return false;
+    }
+    // The bor operand must clear the low FIXNUM_SHIFT bits (a left shift by at
+    // least FIXNUM_SHIFT), so `v`'s low two bits are exactly the fixnum tag.
+    let ValueDef::Result(shl, _) = fb.func.dfg.value_def(arg) else {
+        return false;
+    };
+    matches!(
+        fb.func.dfg.insts[shl],
+        InstructionData::BinaryImm64 {
+            opcode: Opcode::IshlImm,
+            imm: shift,
+            ..
+        } if shift.bits() >= FIXNUM_SHIFT as i64
+    )
+}
+
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
 fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue) {
-    // Redundant-guard elimination: a compile-time fixnum constant is provably a
-    // fixnum, so no runtime guard (and no deopt edge) is needed for it.
-    if is_fixnum_const(fb, v) {
+    // Redundant-guard elimination: a value provably a fixnum (a constant, or a
+    // range-checked + retagged arithmetic result) needs no runtime guard.
+    if is_known_fixnum(fb, v) {
         return;
     }
     let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
@@ -5023,6 +5066,16 @@ mod tests {
         assert!(is_fixnum_const(&fb, fixnum), "a fixnum iconst is a fixnum constant");
         assert!(!is_fixnum_const(&fb, nil), "nil (symbol tag) is not a fixnum");
         assert!(!is_fixnum_const(&fb, sum), "an iadd result is not a constant");
+
+        // is_known_fixnum additionally recognizes a retag_fixnum output (a
+        // range-checked arithmetic result), eliding the re-guard on chained
+        // arithmetic; a bare untagged iadd is not recognized.
+        let shifted = fb.ins().ishl_imm(sum, FIXNUM_SHIFT as i64);
+        let retagged = fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64);
+        assert!(is_known_fixnum(&fb, retagged), "retag_fixnum output is a known fixnum");
+        assert!(is_known_fixnum(&fb, fixnum), "a fixnum constant is a known fixnum");
+        assert!(!is_known_fixnum(&fb, sum), "a bare iadd is not a known fixnum");
+        assert!(!is_known_fixnum(&fb, nil), "nil is not a known fixnum");
     }
 
     #[test]
