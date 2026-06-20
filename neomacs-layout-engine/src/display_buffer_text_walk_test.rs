@@ -2,7 +2,7 @@ use super::*;
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetupRequest;
-use crate::display_buffer_text_tail_decoration::BufferTextWindowTailDecorationState;
+use crate::display_buffer_text_tail_render::BufferTextWindowTailDecorationState;
 use crate::display_buffer_text_tail_render::BufferTextWindowTailRequestContext;
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowGeometryState, DisplayRowMarker};
 use crate::types::WindowKind;
