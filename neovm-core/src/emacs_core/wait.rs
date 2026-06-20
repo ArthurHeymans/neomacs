@@ -831,6 +831,18 @@ impl super::eval::Context {
         }
 
         loop {
+            // GNU `wait_reading_process_output` runs `maybe_quit` at the top of
+            // every `while(1)` iteration when `read_kbd >= 0` (process.c:5399-5400),
+            // and `Fsleep_for`/`Faccept_process_output` pass `read_kbd >= 0`.  We
+            // have no internal-no-quit (`read_kbd < 0`) wait policy, so this applies
+            // to all of our waits.  Placing it first means a quit pending before the
+            // first block is caught on iteration 1 (before blocking) and every
+            // iteration thereafter, so C-g interrupts `sleep-for` / poll loops
+            // within one iteration instead of running for the full deadline.  It is
+            // inhibit-quit-safe: `maybe_quit` returns `Ok` when `inhibit-quit` is
+            // non-nil, so `accept-process-output` keeps blocking with quit inhibited.
+            self.maybe_quit()?;
+
             let now = Instant::now();
             if request.deadline_elapsed(now) {
                 return Ok(WaitCompletion::DeadlineElapsed);

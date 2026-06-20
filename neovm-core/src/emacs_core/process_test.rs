@@ -3353,6 +3353,68 @@ fn accept_process_output_window_close_honors_throw_on_input_before_quit() {
     assert!(matches!(flow, Flow::Signal(ref sig) if sig.symbol_name() == "quit"));
 }
 
+/// GNU `wait_reading_process_output` runs `maybe_quit` at the top of every
+/// `while(1)` iteration when `read_kbd >= 0` (process.c:5399-5400).  `Fsleep_for`
+/// passes `read_kbd = 0`, so a pending C-g promotes to a `quit` signal within one
+/// iteration instead of running for the full deadline.  Before the fix our wait
+/// loop omitted `maybe_quit`, so `(sleep-for N)` ignored C-g for its full
+/// duration.  Here we set the cross-thread `quit_requested` atomic (as the input
+/// bridge does) and assert a 5s wait returns a `quit` signal PROMPTLY.
+#[test]
+fn wait_until_honors_pending_quit_request_promptly() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // Simulate the input-bridge thread flagging a pending C-g while the
+    // evaluator is blocked in a wait.
+    ev.quit_requested
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let start = std::time::Instant::now();
+    let flow = ev
+        .wait_until(deadline)
+        .expect_err("a pending quit must interrupt the wait with a quit signal");
+    let elapsed = start.elapsed();
+
+    assert!(
+        matches!(flow, Flow::Signal(ref sig) if sig.symbol_name() == "quit"),
+        "expected a `quit' signal, got {flow:?}"
+    );
+    // Must return WELL under the 5s deadline — within one wait iteration.
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "wait should honor the pending quit promptly, took {elapsed:?}"
+    );
+    // The atomic must be drained so a subsequent poll doesn't re-fire.
+    assert!(
+        !ev.quit_requested.load(std::sync::atomic::Ordering::Relaxed),
+        "quit_requested should be cleared after the wait drains it"
+    );
+}
+
+/// GNU `maybe_quit` returns without signaling when `inhibit-quit` is non-nil;
+/// `accept-process-output` is documented to block with quit inhibited.  A pending
+/// quit under `inhibit-quit` must therefore NOT interrupt the wait — it must run
+/// to its deadline.  Guards that the per-iteration `maybe_quit` stays
+/// inhibit-quit-safe.
+#[test]
+fn wait_until_respects_inhibit_quit() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // Set inhibit-quit through the normal setq path so the cached runtime
+    // field stays in sync (GNU's specbind of Qinhibit_quit).
+    ev.eval_str("(setq inhibit-quit t)")
+        .expect("bind inhibit-quit");
+    ev.quit_requested
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+
+    let deadline = std::time::Instant::now() + Duration::from_millis(50);
+    ev.wait_until(deadline)
+        .expect("inhibit-quit must suppress the pending quit, letting the wait elapse");
+}
+
 #[test]
 fn process_mark_type_thread_send_and_running_child_runtime_surface() {
     crate::test_utils::init_test_tracing();

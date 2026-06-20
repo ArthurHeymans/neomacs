@@ -195,6 +195,54 @@ fn interactive_switch_synchronous_shell_command_stays_responsive() {
     assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
 }
 
+/// C-g must interrupt a blocking `(sleep-for 20)` promptly. GNU's
+/// `wait_reading_process_output` runs `maybe_quit` at the top of every
+/// `while(1)` iteration when `read_kbd >= 0` (process.c:5399-5400), and
+/// `Fsleep_for` passes `read_kbd = 0`, so a C-g raised while the editor sits in
+/// `sleep-for` promotes to a `quit` signal within one iteration — the echo area
+/// shows `Quit` and the command loop becomes responsive again. Before the fix
+/// our wait loop omitted `maybe_quit`, so `(sleep-for 20)` ignored C-g for its
+/// full 20 s. This guards the fix end-to-end through the real PTY/command-loop
+/// stack; the deterministic unit guard is
+/// `wait_until_honors_pending_quit_request_promptly` in neovm-core.
+#[test]
+fn keyboard_quit_interrupts_blocking_sleep_for() {
+    let mut neo = boot_neo("");
+
+    // Open the eval minibuffer and start a long blocking sleep.
+    neo.send_key("M-:");
+    let prompt_ready = |grid: &[String]| grid.last().is_some_and(|row| row.contains("Eval:"));
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    neo.read(Duration::from_millis(300));
+    neo.send(b"(sleep-for 20)");
+    neo.send_key("RET");
+
+    // Let the command loop enter the blocking sleep, then fire C-g (\x07).
+    neo.read(Duration::from_millis(500));
+    let start = std::time::Instant::now();
+    neo.send(b"\x07");
+
+    // The quit must surface (echo area "Quit") WELL before the 20 s sleep would
+    // otherwise elapse.
+    let quit_shown = |grid: &[String]| grid.iter().any(|row| row.contains("Quit"));
+    neo.read_until(Duration::from_secs(6), quit_shown);
+    let elapsed = start.elapsed();
+
+    assert!(
+        quit_shown(&neo.text_grid()),
+        "C-g should interrupt (sleep-for 20) and echo `Quit` (took {elapsed:?}):\n{}",
+        neo.text_grid().join("\n")
+    );
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "C-g should interrupt sleep-for promptly, not after the full 20 s \
+         (took {elapsed:?})"
+    );
+
+    // The command loop must be responsive again: an eval round-trips.
+    assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
+}
+
 /// The form `M-:`-evaluated by
 /// [`accept_process_output_drains_while_command_input_pending`].
 ///
