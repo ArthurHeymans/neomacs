@@ -1,7 +1,7 @@
 use super::*;
+use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
 use crate::display_buffer_text_render::{
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowWalkSetupRequest,
 };
 use crate::display_buffer_text_tail_decoration::BufferTextWindowTailDecorationState;
 use crate::display_buffer_text_tail_render::BufferTextWindowTailRequestContext;

@@ -1,122 +1,54 @@
 //! Buffer-text source rendering requests and actions.
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
-use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
+use crate::display_buffer_text_append::BufferTextWindowBeginRequest;
+use crate::display_buffer_text_body_render::{
+    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 pub(crate) use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_loop_render::BufferTextWindowLoopRenderState;
 use crate::display_buffer_text_output_session::{
-    BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyInstallRenderState,
-    BufferTextWindowBodyPassOutcome, BufferTextWindowBodyPassState, BufferTextWindowOutputSession,
-    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
-    BufferTextWindowRenderedBodyCompleteState, BufferTextWindowRenderedBodyFinishState,
-    BufferTextWindowRetryPlan,
+    BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
+    BufferTextWindowOutputSession, BufferTextWindowOutputState,
+    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyCompleteState,
+    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRetryPlan,
 };
 pub(crate) use crate::display_buffer_text_output_session::{
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
-};
-pub(crate) use crate::display_buffer_text_progress::{
-    BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::{
     BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
-use crate::display_buffer_text_source_walk::*;
 use crate::display_buffer_text_tail_render::{
     BufferTextWindowBodyInstallContext, BufferTextWindowPostLoopRenderOutcome,
-    BufferTextWindowPostLoopRenderState, BufferTextWindowPostLoopState,
     BufferTextWindowRetryBounds, BufferTextWindowTailRequestContext,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
     BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
 };
-use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append_context::DisplayRowAppendSurface;
-use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
-    DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
-};
-use crate::display_row_lisp_string::DisplayRowPrefixRequest;
+use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_row_walk_state::{
-    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
-    InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
-};
+use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_status_line::{
     WindowChromeRowsPlan, WindowChromeRowsRenderRequest, max_mini_window_lines,
     max_mini_window_lines_for_buffer,
 };
 use crate::font_metrics::FontMetricsService;
-use crate::hit_test::{HitRow, WindowHitData};
+use crate::hit_test::WindowHitData;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
-use crate::types::{FrameParams, LineWrapMode, WindowParams};
+use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
     TextWindowRedisplayPositions, WindowOutputEmitter, render_window_chrome_rows,
 };
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
-
-pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
-    window_start: i64,
-    content_x: f32,
-    text_x: f32,
-    text_width: f32,
-    text_y: f32,
-    window_top: f32,
-    line_number_pixel_width: f32,
-    max_rows: usize,
-    char_width: f32,
-    char_height: f32,
-    default_face_ascent: f32,
-    wrap_mode: LineWrapMode,
-    hscroll: i32,
-    word_wrap: bool,
-    has_prefix: bool,
-    has_line_default_prefix: bool,
-    reserve_right_border_col: bool,
-    reserve_right_special_col: bool,
-    tab_width: i32,
-    tab_stop_list: &'a [i32],
-    trailing_whitespace_enabled: bool,
-    trailing_whitespace_bg: u32,
-}
-
-pub(crate) struct BufferTextWindowWalkSetup {
-    pub(crate) x: f32,
-    pub(crate) col: usize,
-    pub(crate) byte_idx: usize,
-    pub(crate) charpos: i64,
-    pub(crate) text_area_left: f32,
-    pub(crate) window_top: f32,
-    pub(crate) invisible_text_checkpoint: InvisibleTextScanCheckpoint,
-    pub(crate) row_flags: DisplayRowFlags,
-    pub(crate) hscroll_skip: HorizontalScrollSkipState,
-    pub(crate) word_wrap: WordWrapRenderState,
-    pub(crate) prefix_request: DisplayRowPrefixRequest,
-    pub(crate) text_append_surface: DisplayRowAppendSurface,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) row_geometry: DisplayRowGeometryState,
-    pub(crate) row_y_positions: DisplayRowYPositions,
-    pub(crate) trailing_whitespace: TrailingWhitespaceRenderState,
-    pub(crate) buffer_text_append_state: BufferTextRowAppendState,
-    pub(crate) row_extend: DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) box_face: BoxFaceRowState,
-    pub(crate) cursor_info: CursorCaptureState,
-    pub(crate) hit_rows: Vec<HitRow>,
-    pub(crate) hit_row_range: HitRowRangeTracker,
-}
 
 pub(crate) struct BufferTextWindowOutputSetupRequest {
     frame_id: FrameId,
@@ -151,22 +83,6 @@ pub(crate) struct BufferTextWindowDefaultFacePlan {
     measurement_policy: DisplayRowMeasurementPolicy,
 }
 
-struct BufferTextWindowWalkRenderState<'emit> {
-    source_render: TextRowSourceRenderState<'emit>,
-    line_numbers: &'emit mut LineNumberRenderState,
-    face_scan: &'emit mut FaceScanCheckpoint,
-    active_face_state: &'emit mut DisplayRowActiveFaceState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-struct BufferTextWindowBodyRenderState<'emit> {
-    source_render: TextRowSourceRenderState<'emit>,
-    line_numbers: &'emit mut LineNumberRenderState,
-    face_scan: &'emit mut FaceScanCheckpoint,
-    active_face_state: &'emit mut DisplayRowActiveFaceState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
 pub(crate) struct BufferTextWindowRenderRequest<'a, B>
 where
     B: LayoutBufferView,
@@ -187,42 +103,6 @@ struct BufferTextWindowRenderedBody<'a> {
     retry_bounds: BufferTextWindowRetryBounds,
     publish_request: BufferTextWindowRedisplayPublishRequest,
     tail_context: BufferTextWindowTailRequestContext<'a>,
-}
-
-impl<'emit> BufferTextWindowWalkRenderState<'emit> {
-    fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        line_numbers: &'emit mut LineNumberRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        active_face_state: &'emit mut DisplayRowActiveFaceState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            line_numbers,
-            face_scan,
-            active_face_state,
-            face_ids,
-        }
-    }
-}
-
-impl<'emit> BufferTextWindowBodyRenderState<'emit> {
-    fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        line_numbers: &'emit mut LineNumberRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        active_face_state: &'emit mut DisplayRowActiveFaceState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            line_numbers,
-            face_scan,
-            active_face_state,
-            face_ids,
-        }
-    }
 }
 
 struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
@@ -276,146 +156,6 @@ pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
     default_resolved: &'a ResolvedFace,
     default_face_char_width: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
-}
-
-impl<'a> BufferTextWindowWalkSetupRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        window_start: i64,
-        content_x: f32,
-        text_x: f32,
-        text_width: f32,
-        text_y: f32,
-        window_top: f32,
-        line_number_pixel_width: f32,
-        max_rows: usize,
-        char_width: f32,
-        char_height: f32,
-        default_face_ascent: f32,
-        wrap_mode: LineWrapMode,
-        hscroll: i32,
-        word_wrap: bool,
-        has_prefix: bool,
-        has_line_default_prefix: bool,
-        reserve_right_border_col: bool,
-        reserve_right_special_col: bool,
-        tab_width: i32,
-        tab_stop_list: &'a [i32],
-        trailing_whitespace_enabled: bool,
-        trailing_whitespace_bg: u32,
-    ) -> Self {
-        Self {
-            window_start,
-            content_x,
-            text_x,
-            text_width,
-            text_y,
-            window_top,
-            line_number_pixel_width,
-            max_rows,
-            char_width,
-            char_height,
-            default_face_ascent,
-            wrap_mode,
-            hscroll,
-            word_wrap,
-            has_prefix,
-            has_line_default_prefix,
-            reserve_right_border_col,
-            reserve_right_special_col,
-            tab_width,
-            tab_stop_list,
-            trailing_whitespace_enabled,
-            trailing_whitespace_bg,
-        }
-    }
-
-    pub(crate) fn from_window_geometry(
-        source: BufferTextWindowSource,
-        params: &'a WindowParams,
-        geometry: &BufferTextWindowGeometry,
-        local_display_policy: &BufferTextWindowLocalDisplayPolicy,
-        default_face: &BufferTextWindowDefaultFacePlan,
-        reserve_right_border_col: bool,
-        reserve_right_special_col: bool,
-    ) -> Self {
-        Self::new(
-            source.window_start(),
-            geometry.content_x,
-            geometry.text_x,
-            geometry.text_width,
-            geometry.text_y,
-            params.bounds.y,
-            geometry.line_number_pixel_width,
-            geometry.max_rows,
-            geometry.char_width,
-            geometry.char_height,
-            default_face.ascent(),
-            params.wrap_mode,
-            params.hscroll,
-            params.word_wrap,
-            local_display_policy.has_prefix(),
-            local_display_policy.has_line_default_prefix(),
-            reserve_right_border_col,
-            reserve_right_special_col,
-            params.tab_width,
-            &params.tab_stop_list,
-            params.show_trailing_whitespace,
-            params.trailing_ws_bg,
-        )
-    }
-
-    pub(crate) fn into_setup(self) -> BufferTextWindowWalkSetup {
-        let row_geometry_defaults = DisplayRowGeometryDefaults::new(
-            self.text_y,
-            self.char_height,
-            self.default_face_ascent,
-        );
-
-        BufferTextWindowWalkSetup {
-            x: self.content_x,
-            col: 0,
-            byte_idx: 0,
-            charpos: self.window_start,
-            text_area_left: self.text_x,
-            window_top: self.window_top,
-            invisible_text_checkpoint: InvisibleTextScanCheckpoint::new(self.window_start),
-            row_flags: DisplayRowFlags::new(self.max_rows),
-            hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
-            word_wrap: WordWrapRenderState::new(self.word_wrap),
-            prefix_request: DisplayRowPrefixRequest::initial(
-                self.has_prefix,
-                self.has_line_default_prefix,
-            ),
-            text_append_surface: TextWindowAppendSurfaceRequest::new(
-                self.content_x,
-                self.text_width,
-                self.line_number_pixel_width,
-                self.reserve_right_border_col,
-                self.reserve_right_special_col,
-                self.char_width,
-                self.tab_width,
-                self.tab_stop_list,
-            )
-            .into_surface(),
-            row_geometry_defaults,
-            row_geometry: row_geometry_defaults.initial_state(),
-            row_y_positions: DisplayRowYPositions::with_capacity_and_first_row(
-                self.max_rows,
-                self.text_y,
-            ),
-            trailing_whitespace: TrailingWhitespaceRenderState::new(
-                self.trailing_whitespace_enabled,
-                self.trailing_whitespace_bg,
-            ),
-            buffer_text_append_state: BufferTextRowAppendState::default(),
-            row_extend: DisplayRowScopedValue::inactive(),
-            box_face: BoxFaceRowState::inactive(),
-            cursor_info: CursorCaptureState::new(),
-            hit_rows: Vec::new(),
-            hit_row_range: HitRowRangeTracker::new(self.window_start),
-        }
-    }
 }
 
 impl<'a, B> BufferTextWindowRenderRequest<'a, B>
@@ -640,242 +380,6 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
             evaluator,
             request,
             self.render_services.reborrow(),
-        );
-    }
-}
-
-impl BufferTextWindowWalkSetup {
-    #[allow(clippy::too_many_arguments)]
-    fn render_visible_steps<'request, B: LayoutBufferView>(
-        &mut self,
-        state: &mut BufferTextWindowWalkRenderState<'_>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
-        text: &'request [u8],
-        params: &WindowParams,
-        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
-        buffer: &B,
-    ) {
-        let mut source_walk = BufferTextWindowSourceWalk::new(
-            loop_context.buffer_id(),
-            buffer,
-            self.charpos,
-            loop_context.text_start_byte(),
-        );
-
-        BufferTextWindowLoopRenderState::new(
-            loop_context,
-            &mut self.buffer_text_append_state,
-            &mut self.invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(
-                &mut self.byte_idx,
-                &mut self.charpos,
-                &mut self.x,
-                &mut self.col,
-            ),
-            state.source_render.reborrow(),
-            &mut self.row_extend,
-            &mut self.box_face,
-            state.line_numbers,
-            &mut self.row_geometry,
-            &mut self.row_flags,
-            &mut self.hit_rows,
-            &mut self.hit_row_range,
-            &mut self.prefix_request,
-            &mut self.hscroll_skip,
-            &mut self.word_wrap,
-            &mut self.trailing_whitespace,
-            state.face_scan,
-            &mut self.row_y_positions,
-            &mut self.cursor_info,
-            state.face_ids,
-            &self.text_append_surface,
-            overlay_text_row_context,
-        )
-        .render_visible_steps(
-            &mut source_walk,
-            row_prelude_context,
-            face_resolution_context,
-            text,
-            params,
-            state.active_face_state,
-            buffer,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
-        &mut self,
-        state: &mut BufferTextWindowPostLoopRenderState<'_>,
-        loop_context: BufferTextWindowLoopRequestContext,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text: &'request [u8],
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
-        active_face_state: &'request DisplayRowActiveFaceState,
-        buffer: &B,
-        buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowPostLoopRenderOutcome {
-        BufferTextWindowPostLoopState::new(
-            loop_context,
-            state.source_render.reborrow(),
-            BufferTextWindowRowProgressState::new(&mut self.x, &mut self.col),
-            &mut self.row_geometry,
-            &mut self.cursor_info,
-            &mut self.hit_rows,
-            &mut self.hit_row_range,
-            &mut self.row_y_positions,
-            state.face_ids,
-            &self.row_flags,
-            &self.row_extend,
-            &self.box_face,
-            &self.text_append_surface,
-            overlay_context,
-        )
-        .render_tail_and_decide_retry(
-            tail_context,
-            text,
-            self.byte_idx,
-            self.charpos,
-            active_face_state,
-            buffer,
-            buf_access,
-        )
-    }
-
-    fn install_body(
-        &mut self,
-        state: BufferTextWindowBodyInstallRenderState<'_, '_, '_>,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-    ) -> TextWindowRedisplayPositions {
-        tail_context
-            .body_install_request(self.byte_idx, &self.row_flags)
-            .install_and_apply(BufferTextWindowBodyInstallState::new(
-                state.output,
-                state.output_emitter,
-                state.render_services,
-            ))
-    }
-
-    fn install_body_and_publish_redisplay(
-        &mut self,
-        state: BufferTextWindowBodyInstallPublishState<'_, '_, '_>,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        publish_request: BufferTextWindowRedisplayPublishRequest,
-    ) -> TextWindowRedisplayPositions {
-        let BufferTextWindowBodyInstallPublishState {
-            output,
-            output_emitter,
-            evaluator,
-            render_services,
-        } = state;
-        let redisplay_positions = self.install_body(
-            BufferTextWindowBodyInstallRenderState::new(output, output_emitter, render_services),
-            tail_context,
-        );
-        // GNU status-line percent specs read the live window state from the
-        // just-produced redisplay. Publish before chrome rows are evaluated.
-        publish_request.publish(evaluator, redisplay_positions);
-        redisplay_positions
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
-        &mut self,
-        state: &mut BufferTextWindowBodyRenderState<'_>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text: &'request [u8],
-        params: &'request WindowParams,
-        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
-        buffer: &B,
-        buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowPostLoopRenderOutcome {
-        self.render_visible_steps(
-            &mut BufferTextWindowWalkRenderState::new(
-                state.source_render.reborrow(),
-                state.line_numbers,
-                state.face_scan,
-                state.active_face_state,
-                state.face_ids,
-            ),
-            row_prelude_context,
-            loop_context,
-            face_resolution_context,
-            text,
-            params,
-            overlay_text_row_context,
-            buffer,
-        );
-
-        self.render_tail_and_decide_retry(
-            &mut BufferTextWindowPostLoopRenderState::new(
-                state.source_render.reborrow(),
-                state.face_ids,
-            ),
-            loop_context,
-            tail_context,
-            text,
-            overlay_text_row_context,
-            state.active_face_state,
-            buffer,
-            buf_access,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
-        &mut self,
-        begin_request: BufferTextWindowBeginRequest,
-        state: &mut BufferTextWindowBodyPassState<'_>,
-        line_numbers: &mut LineNumberRenderState,
-        face_scan: &mut FaceScanCheckpoint,
-        active_face_state: &mut DisplayRowActiveFaceState,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text: &'request [u8],
-        params: &'request WindowParams,
-        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
-        buffer: &B,
-        buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowBodyPassOutcome {
-        let mut output_emitter = state.output.begin_text_window_output(begin_request);
-        let post_loop = self.render_body_and_tail(
-            &mut BufferTextWindowBodyRenderState::new(
-                state.output.source_render_state(&mut output_emitter),
-                line_numbers,
-                face_scan,
-                active_face_state,
-                state.face_ids,
-            ),
-            row_prelude_context,
-            loop_context,
-            face_resolution_context,
-            tail_context,
-            text,
-            params,
-            overlay_text_row_context,
-            buffer,
-            buf_access,
-        );
-        BufferTextWindowBodyPassOutcome {
-            output_emitter,
-            post_loop,
-        }
-    }
-
-    fn finish_window_and_install(
-        &mut self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        state: BufferTextWindowRenderedBodyFinishState<'_>,
-        output_emitter: WindowOutputEmitter,
-    ) {
-        tail_context.finish_and_install(
-            state.finish_install_state(output_emitter, std::mem::take(&mut self.hit_rows)),
         );
     }
 }

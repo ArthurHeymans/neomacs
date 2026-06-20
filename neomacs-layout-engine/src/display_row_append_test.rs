@@ -11,6 +11,9 @@ use crate::display_buffer_text_append::{
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_overflow::*;
+use crate::display_buffer_text_progress::{
+    BufferTextWindowProgressState, BufferTextWindowRowProgressState,
+};
 use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
