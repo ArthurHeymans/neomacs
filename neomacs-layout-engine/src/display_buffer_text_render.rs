@@ -42,6 +42,7 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_frame_output::FrameOutputOwner;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -1464,6 +1465,27 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
             hit_data,
             display_snapshots,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_frame_output_owner(
+        frame_output: &'a mut FrameOutputOwner,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        frame_face_id_counter: &'a mut u32,
+        hit_data: &'a mut Vec<WindowHitData>,
+        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self::new(
+            frame_output.text_window_output_builder(),
+            evaluator,
+            font_metrics,
+            face_resolver,
+            frame_face_id_counter,
+            hit_data,
+            display_snapshots,
+        )
     }
 }
 

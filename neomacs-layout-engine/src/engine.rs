@@ -928,8 +928,8 @@ impl LayoutEngine {
             reserve_right_border_col,
         )
         .render_into(
-            BufferTextWindowRenderAttemptContext::new(
-                self.frame_output.text_window_output_builder(),
+            BufferTextWindowRenderAttemptContext::from_frame_output_owner(
+                &mut self.frame_output,
                 evaluator,
                 &mut self.font_metrics,
                 face_resolver,
