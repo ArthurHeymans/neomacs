@@ -23,16 +23,20 @@ use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
-    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementDescriptor,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
-use crate::display_source_resolver::DisplayStringBaseFace;
+use crate::display_source_resolver::{
+    DisplayPropertyReplacementSourceResolveRequest, DisplayStringBaseFace,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
+use crate::types::WindowParams;
 #[cfg(test)]
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::eval::DisplayHost;
 
 pub(crate) struct DisplayReplacementStringItemMeasurer {
     active_face_state: DisplayRowActiveFaceState,
@@ -445,6 +449,42 @@ impl DisplayPropertyReplacementAppendRequest {
 
     pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
         self.item.cursor_policy()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_typed_replacement_descriptor(
+        descriptor: &DisplayPropertyReplacementDescriptor,
+        source_text: &[u8],
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        params: &WindowParams,
+        display_host: Option<&dyn DisplayHost>,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+    ) -> Option<Self> {
+        let item = DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
+            descriptor.classification(),
+            descriptor.value(),
+            descriptor.anchor_charpos(),
+            source_text,
+            active_face_state,
+            font_metrics,
+            current_x,
+            content_x,
+            params,
+            display_host,
+        )
+        .resolve()?;
+        Some(Self::new(
+            descriptor.replacement_source(),
+            item,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+        ))
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {

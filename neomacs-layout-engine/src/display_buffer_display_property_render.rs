@@ -12,7 +12,6 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -121,22 +120,21 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         else {
             return BufferDisplayPropertyTextReplacementResolveOutcome::Stop;
         };
+        let descriptor = self.replacement.descriptor();
         let append_request =
-            DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-                self.replacement.classification(),
-                self.replacement.replacement_source(),
-                self.replacement.value(),
-                self.replacement.start_charpos0(),
+            DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+                descriptor,
                 source_text,
                 self.active_face_state,
+                font_metrics,
                 current_x,
                 self.content_x,
                 self.params,
+                display_host,
                 self.glyph_y_offset,
                 self.default_row_height,
                 start_position,
-            )
-            .resolve(font_metrics, display_host);
+            );
         let Some(request) = append_request else {
             let Some(source_item) = self.replacement.fallback_render_item(
                 self.text_start_byte,
@@ -150,7 +148,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(
             BufferDisplayPropertyTextReplacementRenderRequest::new(
                 request,
-                self.replacement.end_charpos(),
+                descriptor.skip_to_charpos(),
             ),
         )
     }

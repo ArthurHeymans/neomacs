@@ -86,19 +86,17 @@ use crate::display_source::*;
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferTextSourceRenderPlanRequest,
     BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
-    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    DisplayPropertyReplacementDescriptor, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     NaturalDisplayRowAppendRenderPolicy,
 };
-use crate::display_source_resolver::{
-    DisplayPropertyReplacementAppendRequestResolver, DisplayPropertyReplacementSourceResolveRequest,
-};
+use crate::display_source_resolver::DisplayPropertyReplacementSourceResolveRequest;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
@@ -8973,8 +8971,9 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let request = DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-        &classification,
+    let descriptor = DisplayPropertyReplacementDescriptor::new(
+        value,
+        classification,
         BufferDisplayReplacementSource::spanning(
             buf_id,
             CharPos0::new(3),
@@ -8982,18 +8981,22 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        value,
         CharPos0::new(3),
+        CharPos0::new(4),
+    );
+    let request = DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+        &descriptor,
         b"x",
         &active_face,
+        &mut font_metrics,
         24.0,
         8.0,
         &params,
+        None,
         -2.0,
         18.0,
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .resolve(&mut font_metrics, None)
     .expect("display replacement append request");
 
     assert_eq!(
@@ -9144,8 +9147,9 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let request = DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-        &classification,
+    let descriptor = DisplayPropertyReplacementDescriptor::new(
+        value,
+        classification,
         BufferDisplayReplacementSource::spanning(
             buf_id,
             CharPos0::new(3),
@@ -9153,18 +9157,22 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        value,
         CharPos0::new(3),
+        CharPos0::new(4),
+    );
+    let request = DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+        &descriptor,
         b"x",
         &active_face,
+        &mut font_metrics,
         24.0,
         8.0,
         &params,
+        None,
         -2.0,
         18.0,
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .resolve(&mut font_metrics, None)
     .expect("display replacement append request");
     let outcome = request.append_to_text_row(
         &buffer,

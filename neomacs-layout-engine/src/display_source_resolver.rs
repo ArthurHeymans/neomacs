@@ -9,15 +9,12 @@ use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
 };
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
-use crate::display_row_builder::DisplayRowPosition;
-use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
-use crate::display_source::{
-    BufferDisplayReplacementSource, DisplayPropertyReplacementSourceInputs,
-    DisplayPropertyReplacementSourceItem, DisplayPropertyReplacementSourceMetrics,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem,
-};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
+use crate::display_source::{
+    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
+    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
@@ -428,81 +425,6 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             source_metrics,
             source_inputs,
         )
-    }
-}
-
-pub(crate) struct DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
-    display_property: &'a DisplayPropertyClassification,
-    replacement_source: BufferDisplayReplacementSource,
-    replacement_value: Value,
-    anchor_charpos: CharPos0,
-    source_text: &'source [u8],
-    active_face_state: &'a DisplayRowActiveFaceState,
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    start_position: DisplayRowPosition,
-}
-
-impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_typed_replacement(
-        display_property: &'a DisplayPropertyClassification,
-        replacement_source: BufferDisplayReplacementSource,
-        replacement_value: Value,
-        anchor_charpos: CharPos0,
-        source_text: &'source [u8],
-        active_face_state: &'a DisplayRowActiveFaceState,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            display_property,
-            replacement_source,
-            replacement_value,
-            anchor_charpos,
-            source_text,
-            active_face_state,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
-        }
-    }
-
-    pub(crate) fn resolve(
-        self,
-        font_metrics: &mut Option<FontMetricsService>,
-        display_host: Option<&dyn DisplayHost>,
-    ) -> Option<DisplayPropertyReplacementAppendRequest> {
-        let item = DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
-            self.display_property,
-            self.replacement_value,
-            self.anchor_charpos,
-            self.source_text,
-            self.active_face_state,
-            font_metrics,
-            self.current_x,
-            self.content_x,
-            self.params,
-            display_host,
-        )
-        .resolve()?;
-        Some(DisplayPropertyReplacementAppendRequest::new(
-            self.replacement_source,
-            item,
-            self.glyph_y_offset,
-            self.default_row_height,
-            self.start_position,
-        ))
     }
 }
 

@@ -3,15 +3,13 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
-use crate::display_source::BufferDisplayReplacementSource;
+use crate::display_source::{BufferDisplayReplacementSource, DisplayPropertyReplacementDescriptor};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextReplacementItem {
-    value: Value,
-    classification: DisplayPropertyClassification,
-    replacement_source: BufferDisplayReplacementSource,
+    descriptor: DisplayPropertyReplacementDescriptor,
     start_byte_pos: EmacsBytePos,
     end_byte_pos: EmacsBytePos,
     start_charpos: CharPos0,
@@ -35,9 +33,13 @@ impl BufferTextReplacementItem {
         end_charpos: CharPos0,
     ) -> Self {
         Self {
-            value,
-            classification,
-            replacement_source,
+            descriptor: DisplayPropertyReplacementDescriptor::new(
+                value,
+                classification,
+                replacement_source,
+                start_charpos,
+                end_charpos,
+            ),
             start_byte_pos,
             end_byte_pos,
             start_charpos,
@@ -45,16 +47,8 @@ impl BufferTextReplacementItem {
         }
     }
 
-    pub(crate) fn value(&self) -> Value {
-        self.value
-    }
-
-    pub(crate) fn classification(&self) -> &DisplayPropertyClassification {
-        &self.classification
-    }
-
-    pub(crate) fn replacement_source(&self) -> BufferDisplayReplacementSource {
-        self.replacement_source
+    pub(crate) fn descriptor(&self) -> &DisplayPropertyReplacementDescriptor {
+        &self.descriptor
     }
 
     pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
@@ -73,14 +67,6 @@ impl BufferTextReplacementItem {
 
     pub(crate) fn start_charpos(&self) -> i64 {
         self.start_charpos.get() as i64
-    }
-
-    pub(crate) fn start_charpos0(&self) -> CharPos0 {
-        self.start_charpos
-    }
-
-    pub(crate) fn end_charpos(&self) -> i64 {
-        self.end_charpos.get() as i64
     }
 
     pub(crate) fn source_text<'a>(
@@ -104,15 +90,16 @@ impl BufferTextReplacementItem {
             return None;
         }
         let source_char = source_text.chars().next();
+        let replacement_source = self.descriptor.replacement_source();
         let item = DisplayItem::new(
             SourceSpan::new(
                 DisplaySourcePosition::buffer(
-                    self.replacement_source.buffer_id(),
+                    replacement_source.buffer_id(),
                     self.start_charpos,
                     self.start_byte_pos,
                 ),
                 DisplaySourcePosition::buffer(
-                    self.replacement_source.buffer_id(),
+                    replacement_source.buffer_id(),
                     self.end_charpos,
                     self.end_byte_pos,
                 ),

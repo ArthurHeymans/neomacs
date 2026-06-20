@@ -815,6 +815,53 @@ impl BufferDisplayReplacementSource {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayPropertyReplacementDescriptor {
+    value: Value,
+    classification: DisplayPropertyClassification,
+    replacement_source: BufferDisplayReplacementSource,
+    anchor_charpos: CharPos0,
+    skip_to_charpos: CharPos0,
+}
+
+impl DisplayPropertyReplacementDescriptor {
+    pub(crate) fn new(
+        value: Value,
+        classification: DisplayPropertyClassification,
+        replacement_source: BufferDisplayReplacementSource,
+        anchor_charpos: CharPos0,
+        skip_to_charpos: CharPos0,
+    ) -> Self {
+        Self {
+            value,
+            classification,
+            replacement_source,
+            anchor_charpos,
+            skip_to_charpos,
+        }
+    }
+
+    pub(crate) fn value(&self) -> Value {
+        self.value
+    }
+
+    pub(crate) fn classification(&self) -> &DisplayPropertyClassification {
+        &self.classification
+    }
+
+    pub(crate) fn replacement_source(&self) -> BufferDisplayReplacementSource {
+        self.replacement_source
+    }
+
+    pub(crate) fn anchor_charpos(&self) -> CharPos0 {
+        self.anchor_charpos
+    }
+
+    pub(crate) fn skip_to_charpos(&self) -> i64 {
+        self.skip_to_charpos.get() as i64
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayReplacementSourceMappedTextItem {
     text: Box<str>,
