@@ -5,6 +5,7 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_item_append::*;
+use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
@@ -23,7 +24,6 @@ use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
 use crate::display_buffer_text_source_render::*;
-use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -1154,7 +1154,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         .expect("current buffer")
         .id();
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, 0, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, 0, 0);
 
     let continuation = BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext::new(
         b"\tabc",
@@ -1719,7 +1719,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, 0, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, 0, 0);
 
     let outcome = BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext::new(
         b"folded rest",
@@ -2713,7 +2713,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let continuation = BufferTextLineBreakRenderRequest::new(
         source_char,
@@ -2887,7 +2887,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut font_metrics = None;
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferSelectiveDisplayTailRenderRequest::new(
         source_step_char,
@@ -3334,7 +3334,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let surface = test_advance_resolution_surface();
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferTextSpecialOverflowRenderRequest::new(
         &prepared_append,
@@ -3584,7 +3584,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferTextOverflowRenderRequest::new(
         &prepared_append,
@@ -6406,7 +6406,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
-    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let face_resolution_context = BufferCurrentFaceResolutionContext::new(
         &snapshot,
         &face_resolver,

@@ -4,8 +4,8 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
+use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
@@ -514,7 +514,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
 
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {
         let BufferTextWindowLoopMutableState {
@@ -824,7 +824,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
 
     pub(crate) fn render_if_needed_and_apply<B: LayoutBufferView>(
         self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
@@ -1078,7 +1078,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
 
     pub(crate) fn render_at_checkpoint_and_apply<B: LayoutBufferView>(
         self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferInvisibleTextRenderOutcome {
@@ -1514,7 +1514,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {

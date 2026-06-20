@@ -6,6 +6,7 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
+use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
@@ -18,7 +19,6 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferTextLineBreakRenderRequest,
 };
-use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -129,7 +129,7 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
 fn render_source_item_and_apply<B: LayoutBufferView>(
     source_item: DisplaySourceItem,
     context: BufferTextSourceItemRenderContext<'_>,
-    source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+    source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
@@ -158,7 +158,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     source_end_byte_idx: Option<usize>,
     source_item: crate::display_item::DisplayItem,
     context: BufferTextSourceItemRenderContext<'_>,
-    source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+    source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
@@ -446,7 +446,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         buffer: &B,
     ) -> bool
@@ -477,7 +477,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn consume_replacement<B: LayoutBufferView>(
         mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         replacement: BufferDisplayPropertyReplacementItem,
         buffer: &B,
@@ -546,7 +546,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_source_item<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: DisplaySourceItem,
         buffer: &B,
@@ -595,7 +595,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_selective_display_tail_for_context<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         source_step_char: DisplaySourceStepChar,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome
@@ -614,7 +614,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_line_break_for_context<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         source_char: DisplaySourceStepChar,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation
@@ -632,7 +632,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_text_source_item_for_context<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: DisplaySourceItem,
         buffer: &B,
@@ -670,7 +670,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_selective_display_tail<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         request: BufferSelectiveDisplayTailRenderRequest<'_>,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
@@ -679,7 +679,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
 
     fn render_line_break<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         request: BufferTextLineBreakRenderRequest<'_>,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {

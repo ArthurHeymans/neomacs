@@ -25,36 +25,19 @@ use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_item_append::DisplaySourceRowAppendState;
 use crate::display_source_progress::DisplaySourceProgressState;
-use crate::display_source_resolver::{
-    DisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
-};
+use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
+use crate::display_source_walk::{DisplaySourcePositionConsumption, DisplaySourceWalkConsumption};
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::{BufferId, CharPos0};
 
-pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
+pub(crate) struct BufferSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_consumption: BufferTextSourceConsumptionState,
     append_state: DisplaySourceRowAppendState,
 }
 
-struct BufferTextWindowSourceConsumption {
-    source_item: Option<DisplaySourceItem>,
-    source_position: DisplaySourceTextPosition,
-    pending_faces: Vec<PendingDisplaySourceFace>,
-}
-
-impl BufferTextWindowSourceConsumption {
-    fn apply_to_progress(
-        self,
-        progress: &mut DisplaySourceProgressState<'_>,
-    ) -> (Option<DisplaySourceItem>, Vec<PendingDisplaySourceFace>) {
-        if self.source_item.is_none() {
-            progress.apply_source_position(self.source_position);
-        }
-        (self.source_item, self.pending_faces)
-    }
-
+impl DisplaySourceWalkConsumption {
     fn apply_to_render_progress<B: LayoutBufferView>(
         self,
         progress: &mut DisplaySourceProgressState<'_>,
@@ -72,7 +55,7 @@ impl BufferTextWindowSourceConsumption {
     }
 }
 
-impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
+impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'request B,
@@ -102,7 +85,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         mut source_position: DisplaySourceTextPosition,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> BufferTextWindowSourceConsumption {
+    ) -> DisplaySourceWalkConsumption {
         let mut pending_faces = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
@@ -119,11 +102,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 &mut source_position,
             )
         };
-        BufferTextWindowSourceConsumption {
-            source_item,
-            source_position,
-            pending_faces,
-        }
+        DisplaySourceWalkConsumption::new(source_item, source_position, pending_faces)
     }
 
     pub(crate) fn consume_source_item_for_render(
@@ -153,11 +132,11 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         source_position: DisplaySourceTextPosition,
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
-    ) -> BufferTextWindowSourcePositionConsumption<Option<BufferHscrollSkipAction>> {
+    ) -> DisplaySourcePositionConsumption<Option<BufferHscrollSkipAction>> {
         let mut source_position = source_position;
         let action =
             consume_hscroll_skip_from_position(text, &mut source_position, hscroll_skip, tab_width);
-        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+        DisplaySourcePositionConsumption::new(action, source_position)
     }
 
     pub(crate) fn consume_invisible_checkpoint(
@@ -166,21 +145,21 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         context: BufferInvisibleTextScanContext<'_>,
         checkpoints: &mut InvisibleTextScanCheckpoint,
         source_position: DisplaySourceTextPosition,
-    ) -> BufferTextWindowSourcePositionConsumption<BufferInvisibleTextScanAction> {
+    ) -> DisplaySourcePositionConsumption<BufferInvisibleTextScanAction> {
         let mut source_position = source_position;
         let action = context.consume_at_checkpoint(buffer, checkpoints, &mut source_position);
-        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+        DisplaySourcePositionConsumption::new(action, source_position)
     }
 
     pub(crate) fn consume_selective_display_tail(
         &mut self,
         selective_display: BufferSelectiveDisplayContext<'_>,
         source_position: DisplaySourceTextPosition,
-    ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayLineTailAction> {
+    ) -> DisplaySourcePositionConsumption<BufferSelectiveDisplayLineTailAction> {
         let mut source_position = source_position;
         let action =
             selective_display.skip_rest_of_line_after_carriage_return(&mut source_position);
-        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+        DisplaySourcePositionConsumption::new(action, source_position)
     }
 
     pub(crate) fn consume_hidden_indented_lines_after_line_break(
@@ -188,50 +167,31 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         selective_display: BufferSelectiveDisplayContext<'_>,
         source_position: DisplaySourceTextPosition,
         line_numbers: &mut LineNumberRenderState,
-    ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayHiddenLines> {
+    ) -> DisplaySourcePositionConsumption<BufferSelectiveDisplayHiddenLines> {
         let mut source_position = source_position;
         let hidden_lines = selective_display
             .apply_hidden_indented_lines_after_line_break(&mut source_position, line_numbers);
-        BufferTextWindowSourcePositionConsumption::new(hidden_lines, source_position)
+        DisplaySourcePositionConsumption::new(hidden_lines, source_position)
     }
 
     pub(crate) fn consume_truncation_skip(
         &mut self,
         text: &[u8],
         source_position: DisplaySourceTextPosition,
-    ) -> BufferTextWindowSourcePositionConsumption<BufferTextTruncationSkipAction> {
+    ) -> DisplaySourcePositionConsumption<BufferTextTruncationSkipAction> {
         self.source_consumption.clear_pending_render_items();
         let mut source_position = source_position;
         let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
             text,
             &mut source_position,
         );
-        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+        DisplaySourcePositionConsumption::new(action, source_position)
     }
 
     pub(crate) fn source_position_update(
         &mut self,
         source_position: DisplaySourceTextPosition,
-    ) -> BufferTextWindowSourcePositionConsumption<()> {
-        BufferTextWindowSourcePositionConsumption::new((), source_position)
-    }
-}
-
-pub(crate) struct BufferTextWindowSourcePositionConsumption<T> {
-    value: T,
-    source_position: DisplaySourceTextPosition,
-}
-
-impl<T> BufferTextWindowSourcePositionConsumption<T> {
-    fn new(value: T, source_position: DisplaySourceTextPosition) -> Self {
-        Self {
-            value,
-            source_position,
-        }
-    }
-
-    pub(crate) fn apply_to_progress(self, progress: &mut DisplaySourceProgressState<'_>) -> T {
-        progress.apply_source_position(self.source_position);
-        self.value
+    ) -> DisplaySourcePositionConsumption<()> {
+        DisplaySourcePositionConsumption::new((), source_position)
     }
 }

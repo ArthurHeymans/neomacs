@@ -1,5 +1,6 @@
 //! Buffer text body walk setup and render pass driver.
 
+use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
 };
@@ -12,7 +13,6 @@ use crate::display_buffer_text_render_attempt::{
 use crate::display_buffer_text_render_plan::BufferTextWindowDefaultFacePlan;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::BufferTextWindowSource;
-use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_buffer_text_tail_render::{
     BufferTextWindowPostLoopRenderOutcome, BufferTextWindowTailRequestContext,
     render_buffer_text_window_tail_and_decide_retry,
@@ -301,7 +301,7 @@ impl BufferTextWindowWalkSetup {
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
     ) {
-        let mut source_walk = BufferTextWindowSourceWalk::new(
+        let mut source_walk = BufferSourceWalk::new(
             loop_context.buffer_id(),
             buffer,
             self.charpos,

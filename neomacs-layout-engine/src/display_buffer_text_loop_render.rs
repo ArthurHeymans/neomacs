@@ -1,5 +1,6 @@
 //! Buffer text visible-loop rendering.
 
+use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
@@ -9,7 +10,6 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
-use crate::display_buffer_text_source_walk::*;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
@@ -19,7 +19,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
         loop_context: BufferTextWindowLoopRequestContext,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
+        source_walk: &mut BufferSourceWalk<'request, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
@@ -125,7 +125,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
     fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
         loop_context: BufferTextWindowLoopRequestContext,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
@@ -145,7 +145,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
 
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         request: BufferInvisibleTextRenderRequest<'_>,
         buffer: &B,
     ) -> BufferInvisibleTextRenderOutcome {
@@ -155,7 +155,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
     fn render_hscroll_skip_for_context<'request, B: LayoutBufferView>(
         &mut self,
         loop_context: BufferTextWindowLoopRequestContext,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
     ) -> DisplayRowTransitionContinuation
@@ -169,7 +169,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
 
     fn render_hscroll_skip<B: LayoutBufferView>(
         &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
         request.render_next_and_apply(source_walk, self.reborrow())
