@@ -1,9 +1,6 @@
 //! Buffer text loop request builders.
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_overflow::{
-    BufferTextSourceItemRenderContext, BufferTextSourceItemRenderRequest,
-};
 use crate::display_buffer_text_row_lifecycle::{
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
     BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest,
@@ -13,6 +10,9 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
+use crate::display_buffer_text_source_render::{
+    BufferTextSourceItemRenderContext, BufferTextSourceItemRenderRequest,
+};
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{

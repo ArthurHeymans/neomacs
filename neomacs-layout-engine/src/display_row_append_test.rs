@@ -26,6 +26,7 @@ use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
+use crate::display_buffer_text_source_render::*;
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
