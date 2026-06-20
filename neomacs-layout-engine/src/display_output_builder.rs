@@ -6,12 +6,12 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
+use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_cursor::{CursorVisualColumnResolutionContext, CursorVisualColumnRows};
+use crate::display_output_row_grid::{OutputWindowGridEntry, OutputWindowRowGrid};
 #[cfg(test)]
 use crate::display_row::resolved_display_row_face;
-use crate::display_row_finalizer::GlyphRowFinalizationContext;
 #[cfg(test)]
 use crate::font_metrics::FontMetrics;
 #[cfg(test)]
@@ -542,6 +542,18 @@ impl OutputRowBeginRequest {
             mode_line,
         }
     }
+
+    pub(crate) fn row(self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn role(self) -> GlyphRowRole {
+        self.role
+    }
+
+    pub(crate) fn mode_line(self) -> bool {
+        self.mode_line
+    }
 }
 
 impl OutputCompleteRowInstallRequest {
@@ -567,6 +579,18 @@ impl OutputRowMetricsRequest {
             height_px,
             ascent_px,
         }
+    }
+
+    pub(crate) fn pixel_y(self) -> f32 {
+        self.pixel_y
+    }
+
+    pub(crate) fn height_px(self) -> f32 {
+        self.height_px
+    }
+
+    pub(crate) fn ascent_px(self) -> f32 {
+        self.ascent_px
     }
 }
 
@@ -617,163 +641,6 @@ impl OutputRowLifecycleRequest {
     }
 }
 
-struct OutputWindowRowGrid {
-    matrix: GlyphMatrix,
-}
-
-struct OutputWindowGridEntry {
-    window_id: u64,
-    grid: OutputWindowRowGrid,
-    pixel_bounds: Rect,
-    text_pixel_bounds: Rect,
-    selected: bool,
-}
-
-impl OutputWindowRowGrid {
-    fn new(nrows: usize, ncols: usize) -> Self {
-        Self {
-            matrix: GlyphMatrix::new(nrows, ncols),
-        }
-    }
-
-    fn into_matrix(self) -> GlyphMatrix {
-        self.matrix
-    }
-
-    fn ensure_hashes(&mut self) {
-        self.matrix.ensure_hashes();
-    }
-
-    fn enabled_row_count(&self) -> usize {
-        self.matrix.rows.iter().filter(|row| row.enabled).count()
-    }
-
-    fn cursor_rows(&self) -> CursorVisualColumnRows<'_> {
-        CursorVisualColumnRows::new(&self.matrix.rows, self.matrix.ncols)
-    }
-
-    fn row(&self, row: usize) -> Option<&GlyphRow> {
-        self.matrix.rows.get(row)
-    }
-
-    fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
-        self.matrix.rows.get_mut(row)
-    }
-
-    fn edit_row_with_matrix_cols<R>(
-        &mut self,
-        row: usize,
-        f: impl FnOnce(&mut GlyphRow, usize) -> R,
-    ) -> Option<R> {
-        let ncols = self.matrix.ncols;
-        let row = self.row_mut(row)?;
-        Some(f(row, ncols))
-    }
-
-    fn edit_rows_with_matrix_cols(&mut self, mut f: impl FnMut(&mut GlyphRow, usize)) {
-        let ncols = self.matrix.ncols;
-        for row in &mut self.matrix.rows {
-            f(row, ncols);
-        }
-    }
-
-    fn write_row_metrics(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
-        let Some(row) = self.row_mut(row) else {
-            return;
-        };
-        DisplayOutputBuilder::write_row_metrics(
-            row,
-            metrics.pixel_y,
-            metrics.height_px,
-            metrics.ascent_px,
-        );
-    }
-
-    fn write_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        let Some(row) = self.row_mut(row) else {
-            return;
-        };
-        row.cursor_col = Some(col);
-        row.cursor_type = Some(style);
-    }
-
-    fn replace_row(&mut self, row: usize, source: GlyphRow) {
-        let Some(row) = self.row_mut(row) else {
-            return;
-        };
-        *row = source;
-    }
-
-    fn begin_row(&mut self, begin: OutputRowBeginRequest) {
-        let Some(row) = self.row_mut(begin.row) else {
-            return;
-        };
-        row.role = begin.role;
-        row.enabled = true;
-        row.mode_line = begin.mode_line;
-    }
-
-    fn finalize_row(
-        &mut self,
-        window_id: u64,
-        row: usize,
-        pixel_bounds: Rect,
-        phys_cursor: Option<&mut PhysCursor>,
-    ) {
-        let matrix_ncols = self.matrix.ncols;
-        let Some(matrix_row) = self.row_mut(row) else {
-            return;
-        };
-        GlyphRowFinalizationContext::new(window_id, row, pixel_bounds).finalize_row(
-            matrix_row,
-            matrix_ncols,
-            phys_cursor,
-        );
-    }
-}
-
-impl OutputWindowGridEntry {
-    fn new(
-        window_id: u64,
-        grid: OutputWindowRowGrid,
-        pixel_bounds: Rect,
-        text_pixel_bounds: Rect,
-        selected: bool,
-    ) -> Self {
-        Self {
-            window_id,
-            grid,
-            pixel_bounds,
-            text_pixel_bounds,
-            selected,
-        }
-    }
-
-    fn edit_rows_with_matrix_cols(&mut self, f: impl FnMut(&mut GlyphRow, usize)) {
-        self.grid.edit_rows_with_matrix_cols(f);
-    }
-
-    fn enabled_row_count(&self) -> usize {
-        self.grid.enabled_row_count()
-    }
-
-    #[cfg(test)]
-    fn window_id(&self) -> u64 {
-        self.window_id
-    }
-
-    fn into_window_matrix_entry(mut self) -> WindowMatrixEntry {
-        self.grid.ensure_hashes();
-        WindowMatrixEntry {
-            window_id: self.window_id,
-            matrix: self.grid.into_matrix(),
-            pixel_bounds: self.pixel_bounds,
-            text_pixel_bounds: self.text_pixel_bounds,
-            selected: self.selected,
-        }
-    }
-}
-
 pub(crate) struct DisplayOutputBuilder {
     windows: Vec<OutputWindowGridEntry>,
     current_row_grid: Option<OutputWindowRowGrid>,
@@ -818,12 +685,6 @@ pub(crate) struct DisplayOutputBuilder {
 }
 
 impl DisplayOutputBuilder {
-    fn write_row_metrics(row: &mut GlyphRow, pixel_y_rel: f32, height_px: f32, ascent_px: f32) {
-        row.pixel_y = pixel_y_rel;
-        row.height_px = height_px.max(0.0);
-        row.ascent_px = ascent_px.max(0.0).min(row.height_px.max(0.0));
-    }
-
     pub(crate) fn new() -> Self {
         Self {
             windows: Vec::new(),
