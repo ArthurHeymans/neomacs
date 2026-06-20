@@ -5994,7 +5994,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "split-char",
-        |_ctx, args| builtin_split_char(args),
+        |_ctx, args| super::charset::builtin_split_char(args),
         1,
         Some(1),
     );

@@ -1422,21 +1422,17 @@ pub(crate) fn builtin_set_charset_priority(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-/// `(char-charset CH &optional RESTRICTION)` -- return charset for character.
-/// Mirrors Emacs baseline behavior:
-/// - ASCII characters map to `ascii`
-/// - BMP non-ASCII characters map to `unicode-bmp`
-/// - non-BMP Unicode characters map to `unicode`
-pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
-    expect_min_args("char-charset", &args, 1)?;
-    expect_max_args("char-charset", &args, 2)?;
-    let ch = encode_char_input(&args[0])?;
-    // GNU `char_charset` (charset.c) classifies the high code ranges by the
-    // internal char boundaries: codes above MAX_5_BYTE_CHAR (0x3FFF7F) are
-    // raw bytes in the `eight-bit` charset, codes above the Unicode maximum
-    // (0x10FFFF) but within MAX_5_BYTE_CHAR are in the internal `emacs`
-    // charset, and the rest are Unicode.
-    let charset = if (0..=0x7F).contains(&ch) {
+/// Classify a character code into the name of the highest-priority charset
+/// that contains it, mirroring GNU's `CHAR_CHARSET` for the default priority
+/// order.  Used by both `char-charset` and `split-char`.
+///
+/// GNU `char_charset` (charset.c) classifies the high code ranges by the
+/// internal char boundaries: codes above MAX_5_BYTE_CHAR (0x3FFF7F) are raw
+/// bytes in the `eight-bit` charset, codes above the Unicode maximum
+/// (0x10FFFF) but within MAX_5_BYTE_CHAR are in the internal `emacs` charset,
+/// and the rest are Unicode (`unicode-bmp` for the BMP, `unicode` above).
+pub(crate) fn char_charset_name(ch: i64) -> &'static str {
+    if (0..=0x7F).contains(&ch) {
         "ascii"
     } else if ch > 0x3F_FF7F {
         "eight-bit"
@@ -1446,8 +1442,52 @@ pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
         "unicode-bmp"
     } else {
         "unicode"
-    };
-    Ok(Value::symbol(charset))
+    }
+}
+
+/// `(char-charset CH &optional RESTRICTION)` -- return charset for character.
+/// Mirrors Emacs baseline behavior:
+/// - ASCII characters map to `ascii`
+/// - BMP non-ASCII characters map to `unicode-bmp`
+/// - non-BMP Unicode characters map to `unicode`
+pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
+    expect_min_args("char-charset", &args, 1)?;
+    expect_max_args("char-charset", &args, 2)?;
+    let ch = encode_char_input(&args[0])?;
+    Ok(Value::symbol(char_charset_name(ch)))
+}
+
+/// `(split-char CH)` -- return a list of the charset symbol and the one to
+/// four position-codes of CH in that charset.
+///
+/// GNU `Fsplit_char` (src/charset.c): validates CHARACTER, classifies the
+/// char into its highest-priority charset (`CHAR_CHARSET`), encodes it
+/// (`ENCODE_CHAR`) to a code point, then splits that code into
+/// `CHARSET_DIMENSION` bytes big-endian and conses the charset name onto the
+/// front.  Examples (UTF-8 language environment): `(split-char ?A)` =>
+/// `(ascii 65)`, `(split-char ?世)` => `(unicode-bmp 78 22)`.
+pub(crate) fn builtin_split_char(args: Vec<Value>) -> EvalResult {
+    expect_args("split-char", &args, 1)?;
+    // CHECK_CHARACTER: reject non-characters like GNU (encode_char_input
+    // enforces the 0..=0x3FFFFF character range and signals otherwise).
+    let ch = encode_char_input(&args[0])?;
+    let charset_name = char_charset_name(ch);
+    let charset_sym = intern(charset_name);
+    // ENCODE_CHAR: the code point of CH within its charset. For the
+    // unicode/ascii/eight-bit/emacs charsets this is an identity-ish map, but
+    // we go through the registry so any code-offset is honored like GNU.
+    let code = charset_encode_char(charset_sym, ch).unwrap_or(ch);
+    let dimension = charset_dimension_by_sym(charset_sym).unwrap_or(1).max(1);
+    // Split the code into `dimension` bytes, big-endian, as in GNU.
+    let mut codes = Vec::with_capacity(dimension as usize);
+    for shift in (0..dimension).rev() {
+        let byte = (code >> (8 * shift)) & 0xFF;
+        codes.push(Value::fixnum(byte));
+    }
+    let mut elems = Vec::with_capacity(dimension as usize + 1);
+    elems.push(Value::from_sym_id(charset_sym));
+    elems.extend(codes);
+    Ok(Value::list(elems))
 }
 
 /// `(charset-plist CHARSET)` -- return property list for CHARSET.

@@ -6232,10 +6232,15 @@ fn pure_dispatch_sort_subr_placeholder_cluster_matches_compat_contracts() {
         .expect("builtin sort-charsets should evaluate");
     assert!(sort_charsets.is_nil());
 
+    // GNU `Fsplit_char` returns the charset name and the position-codes of the
+    // character: `(split-char ?A)` => `(ascii 65)`.
     let split_char = dispatch_builtin_pure("split-char", vec![Value::fixnum(65)])
         .expect("builtin split-char should resolve")
         .expect("builtin split-char should evaluate");
-    assert!(split_char.is_nil());
+    assert_eq!(
+        split_char,
+        Value::list(vec![Value::symbol("ascii"), Value::fixnum(65)])
+    );
 
     let string_distance = dispatch_builtin_pure(
         "string-distance",

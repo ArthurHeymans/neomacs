@@ -3243,11 +3243,6 @@ pub(crate) fn builtin_sort_charsets(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_split_char(args: Vec<Value>) -> EvalResult {
-    expect_args("split-char", &args, 1)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_string_distance(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-distance", &args, 2, 3)?;
     let s1 = args[0].as_lisp_string().ok_or_else(|| {
