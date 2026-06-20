@@ -241,9 +241,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             DisplayHeightFaceBasis {
                 canonical_face: self.default_resolved,
                 base_face: self.default_resolved,
-                fallback_char_width: self.default_face_metrics.char_width(),
-                fallback_ascent: self.default_face_metrics.ascent(),
-                fallback_row_height: self.default_face_metrics.row_height(),
+                fallback_metrics: self.default_face_metrics,
             },
             factor,
         ) else {

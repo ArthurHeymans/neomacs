@@ -4583,22 +4583,28 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let values = DisplayRowPrefixValues::default_values(Some(Value::string("=>")), None);
     let mut prefix_request = DisplayRowPrefixRequest::Line;
 
-    let end =
-        BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0)
-            .render_requested_to_text_row_and_emit(
-                &mut prefix_request,
-                &mut text_row_source_render_state(
-                    &mut builder,
-                    &mut output_emitter,
-                    &mut eval,
-                    &mut font_metrics,
-                    &face_resolver,
-                ),
-                &snapshot,
-                0,
-                &mut face_ids,
-                DisplayRowPosition { x_px: 0.0, col: 0 },
-            );
+    let end = BufferLinePrefixRenderContext::new(
+        values,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
+    .render_requested_to_text_row_and_emit(
+        &mut prefix_request,
+        &mut text_row_source_render_state(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        &snapshot,
+        0,
+        &mut face_ids,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
 
     assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
@@ -4678,7 +4684,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
                 &geometry,
                 &active_face,
                 0.0,
-                16.0,
+                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
             DisplayRowPosition { x_px: x, col },
         )

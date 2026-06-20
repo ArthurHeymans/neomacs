@@ -1,6 +1,7 @@
 use crate::display_item::{
     DisplayImageItem, DisplayMediaReplacement, DisplayVideoItem, DisplayXwidgetItem,
 };
+use crate::display_row::DisplayRowFallbackMetrics;
 use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_spec::{
     parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,
@@ -13,8 +14,7 @@ pub(crate) struct DisplayMediaResolveParams<'a> {
     pub(crate) display_host: &'a dyn DisplayHost,
     pub(crate) default_fg: u32,
     pub(crate) default_bg: u32,
-    pub(crate) fallback_char_width: f32,
-    pub(crate) fallback_row_height: f32,
+    pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 pub(crate) fn resolve_display_media_property(
@@ -56,8 +56,8 @@ fn resolve_video_display_property(
 ) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_video_layout(
         display_prop,
-        DisplayRowCharWidthPolicy::new(params.fallback_char_width).fallback() * 40.0,
-        params.fallback_row_height * 12.0,
+        DisplayRowCharWidthPolicy::new(params.fallback_metrics.char_width()).fallback() * 40.0,
+        params.fallback_metrics.row_height() * 12.0,
     )?;
     let resolved = params
         .display_host
@@ -79,8 +79,8 @@ fn resolve_webkit_display_property(
 ) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_webkit_layout(
         display_prop,
-        DisplayRowCharWidthPolicy::new(params.fallback_char_width).fallback() * 40.0,
-        params.fallback_row_height * 12.0,
+        DisplayRowCharWidthPolicy::new(params.fallback_metrics.char_width()).fallback() * 40.0,
+        params.fallback_metrics.row_height() * 12.0,
     )?;
     let resolved = params
         .display_host

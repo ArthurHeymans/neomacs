@@ -93,9 +93,7 @@ where
             state.face_resolver,
             &mut *state.font_metrics,
             frame_params.window_system,
-            char_w,
-            char_h,
-            font_ascent,
+            window_metrics,
         );
         let default_resolved = default_face.face();
 

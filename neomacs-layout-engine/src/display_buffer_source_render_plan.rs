@@ -175,9 +175,7 @@ impl BufferSourceDefaultFacePlan {
         face_resolver: &FaceResolver,
         font_metrics: &mut Option<FontMetricsService>,
         window_system: bool,
-        fallback_char_width: f32,
-        fallback_row_height: f32,
-        fallback_ascent: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         let face = face_resolver.default_face().clone();
         let (char_width, row_height, ascent) = if window_system && let Some(service) = font_metrics
@@ -190,7 +188,11 @@ impl BufferSourceDefaultFacePlan {
             );
             (metrics.char_width, metrics.line_height, metrics.ascent)
         } else {
-            (fallback_char_width, fallback_row_height, fallback_ascent)
+            (
+                fallback_metrics.char_width(),
+                fallback_metrics.row_height(),
+                fallback_metrics.ascent(),
+            )
         };
 
         Self {
@@ -290,6 +292,11 @@ impl BufferSourceOutputSetup {
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         );
+        let row_fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
+            geometry.char_width,
+            geometry.char_height,
+            default_face.ascent(),
+        );
         let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
@@ -298,22 +305,15 @@ impl BufferSourceOutputSetup {
             params,
             geometry.content_x,
             local_display_policy.has_prefix(),
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                geometry.char_width,
-                geometry.char_height,
-                default_face.ascent(),
-            ),
+            row_fallback_metrics,
             self.row_visibility_limit,
             walk_setup.row_geometry_defaults,
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
             self.row_limit,
         );
-        let row_prelude_context = local_display_policy.row_prelude_context(
-            line_number_cols,
-            geometry.char_width,
-            geometry.char_height,
-        );
+        let row_prelude_context =
+            local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);
         let fallback_metrics = default_face.metrics();
         let tail_context = BufferSourceTailRequestContext::new(
             params,

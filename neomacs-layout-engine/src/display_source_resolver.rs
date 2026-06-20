@@ -71,13 +71,10 @@ impl<'a> DisplaySourceFaceBasis<'a> {
     }
 
     fn height_basis(self) -> DisplayHeightFaceBasis<'a> {
-        let fallback = self.fallback_metrics();
         DisplayHeightFaceBasis {
             canonical_face: self.canonical_face(),
             base_face: self.base_face(),
-            fallback_char_width: fallback.char_width(),
-            fallback_ascent: fallback.ascent(),
-            fallback_row_height: fallback.row_height(),
+            fallback_metrics: self.fallback_metrics(),
         }
     }
 }
@@ -571,8 +568,7 @@ pub(crate) fn resolve_display_property_media(
             display_host: display_host?,
             default_fg: resolved_face.fg,
             default_bg: resolved_face.bg,
-            fallback_char_width: fallback_metrics.char_width(),
-            fallback_row_height: fallback_metrics.row_height(),
+            fallback_metrics,
         },
     )
 }

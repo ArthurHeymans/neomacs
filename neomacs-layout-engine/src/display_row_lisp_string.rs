@@ -494,7 +494,7 @@ pub(crate) struct BufferLinePrefixRenderContext<'a> {
     row_geometry: &'a DisplayRowGeometryState,
     active_face_state: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 pub(crate) struct BufferLinePrefixRenderRequest<'a> {
@@ -509,7 +509,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
         row_geometry: &'a DisplayRowGeometryState,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             values,
@@ -517,7 +517,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             row_geometry,
             active_face_state,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
         }
     }
 
@@ -554,11 +554,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             self.row_geometry,
             self.active_face_state,
             self.glyph_y_offset,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                self.active_face_state.metrics().char_width,
-                self.default_row_height,
-                self.active_face_state.metrics().ascent,
-            ),
+            self.fallback_metrics,
         )
         .render_prefix_source_to_text_row_and_emit(
             state,

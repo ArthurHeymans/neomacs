@@ -280,8 +280,15 @@ fn loop_request_context_carries_buffer_and_window_policy() {
 fn row_prelude_request_context_carries_margin_and_prefix_policy() {
     let prefix_values =
         crate::display_row_lisp_string::DisplayRowPrefixValues::default_values(None, None);
-    let context =
-        BufferSourceRowPreludeRequestContext::new(2, true, 3, 4, 5, prefix_values, 8.0, 16.0);
+    let context = BufferSourceRowPreludeRequestContext::new(
+        2,
+        true,
+        3,
+        4,
+        5,
+        prefix_values,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
 
     assert_eq!(context.line_number_mode(), 2);
     assert_eq!(context.prefix_values(), prefix_values);
@@ -293,7 +300,10 @@ fn local_display_policy_builds_row_prelude_context() {
     let prefix_values =
         crate::display_row_lisp_string::DisplayRowPrefixValues::default_values(None, None);
     let policy = BufferWindowLocalDisplayPolicy::from_parts(2, false, 3, prefix_values);
-    let context = policy.row_prelude_context(6, 8.0, 16.0);
+    let context = policy.row_prelude_context(
+        6,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
 
     assert!(!policy.has_prefix());
     assert!(!policy.has_line_default_prefix());

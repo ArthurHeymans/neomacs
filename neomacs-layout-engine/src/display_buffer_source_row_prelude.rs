@@ -3,7 +3,7 @@
 //! Converts local display policy into the line-number and prefix requests
 //! emitted before ordinary buffer source items.
 
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -20,8 +20,7 @@ pub(crate) struct BufferSourceRowPreludeRequestContext {
     line_number_major_tick: i32,
     line_number_cols: i32,
     prefix_values: DisplayRowPrefixValues,
-    char_width: f32,
-    char_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl BufferSourceRowPreludeRequestContext {
@@ -33,8 +32,7 @@ impl BufferSourceRowPreludeRequestContext {
         line_number_major_tick: i32,
         line_number_cols: i32,
         prefix_values: DisplayRowPrefixValues,
-        char_width: f32,
-        char_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             line_number_mode,
@@ -43,8 +41,7 @@ impl BufferSourceRowPreludeRequestContext {
             line_number_major_tick,
             line_number_cols,
             prefix_values,
-            char_width,
-            char_height,
+            fallback_metrics,
         }
     }
 
@@ -73,14 +70,14 @@ impl BufferSourceRowPreludeRequestContext {
                 row_geometry,
                 active_face_state,
                 glyph_y_offset,
-                self.char_height,
+                self.fallback_metrics,
             ),
             position,
         )
     }
 
     pub(crate) fn char_width(self) -> f32 {
-        self.char_width
+        self.fallback_metrics.char_width()
     }
 
     #[cfg(test)]

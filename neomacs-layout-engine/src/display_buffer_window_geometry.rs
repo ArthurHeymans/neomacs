@@ -298,8 +298,7 @@ impl BufferWindowLocalDisplayPolicy {
     pub(crate) fn row_prelude_context(
         self,
         line_number_cols: i32,
-        char_width: f32,
-        char_height: f32,
+        fallback_metrics: crate::display_row::DisplayRowFallbackMetrics,
     ) -> BufferSourceRowPreludeRequestContext {
         BufferSourceRowPreludeRequestContext::new(
             self.line_number_mode,
@@ -308,8 +307,7 @@ impl BufferWindowLocalDisplayPolicy {
             self.line_number_major_tick,
             line_number_cols,
             self.prefix_values,
-            char_width,
-            char_height,
+            fallback_metrics,
         )
     }
 
