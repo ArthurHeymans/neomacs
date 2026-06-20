@@ -14,7 +14,8 @@
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{
-    ChromeRowOutput, DisplayProgressSink, TextWindowOutputTarget, WindowOutputEmitter,
+    ChromeRowOutput, ChromeRowProgress, DisplayProgressSink, TextWindowOutputTarget,
+    WindowOutputEmitter,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
@@ -730,9 +731,6 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
         self,
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
     ) -> Option<MeasuredDisplayRow> {
-        state
-            .output_emitter
-            .begin_chrome_progress(state.evaluator, self.output);
         let rendered = self.render_measured(
             &mut state.render_services,
             state.evaluator.display_host.as_deref(),
@@ -741,10 +739,10 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
         state
             .output
             .install_measured_window_display_row(&rendered.measured);
-        state
-            .output_emitter
-            .emit_chrome_progress(state.evaluator, rendered.output, progress);
-        state.output_emitter.finish_chrome_progress(progress);
+        state.output_emitter.emit_chrome_progress(
+            state.evaluator,
+            ChromeRowProgress::new(rendered.output, progress),
+        );
         Some(rendered.measured)
     }
 }

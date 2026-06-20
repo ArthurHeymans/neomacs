@@ -143,6 +143,18 @@ pub(crate) struct ChromeRowOutput {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ChromeRowProgress {
+    pub(crate) output: ChromeRowOutput,
+    pub(crate) progress: DisplayRowOutputProgress,
+}
+
+impl ChromeRowProgress {
+    pub(crate) fn new(output: ChromeRowOutput, progress: DisplayRowOutputProgress) -> Self {
+        Self { output, progress }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayTextRowMetrics {
     pub(crate) y: f32,
     pub(crate) height: f32,
@@ -1120,16 +1132,7 @@ pub(crate) trait DisplayProgressSink {
         progress: &DisplayRowAppendProgress,
     );
 
-    fn begin_chrome_progress(&mut self, evaluator: &mut Context, output: ChromeRowOutput);
-
-    fn emit_chrome_progress(
-        &mut self,
-        evaluator: &mut Context,
-        output: ChromeRowOutput,
-        progress: DisplayRowOutputProgress,
-    );
-
-    fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress);
+    fn emit_chrome_progress(&mut self, evaluator: &mut Context, progress: ChromeRowProgress);
 }
 
 pub(crate) struct WindowOutputEmitter {
@@ -1159,21 +1162,10 @@ impl DisplayProgressSink for WindowOutputEmitter {
         self.emit_text_source_slots(evaluator, output, &progress.slots, progress.end);
     }
 
-    fn begin_chrome_progress(&mut self, evaluator: &mut Context, output: ChromeRowOutput) {
-        self.begin_chrome_row(evaluator, output.row, output.y);
-    }
-
-    fn emit_chrome_progress(
-        &mut self,
-        evaluator: &mut Context,
-        output: ChromeRowOutput,
-        progress: DisplayRowOutputProgress,
-    ) {
-        self.move_chrome_output_to(evaluator, output.row, progress);
-    }
-
-    fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress) {
-        self.push_chrome_row_progress(progress);
+    fn emit_chrome_progress(&mut self, evaluator: &mut Context, progress: ChromeRowProgress) {
+        self.begin_chrome_row(evaluator, progress.output.row, progress.output.y);
+        self.move_chrome_output_to(evaluator, progress.output.row, progress.progress);
+        self.push_chrome_row_progress(progress.progress);
     }
 }
 

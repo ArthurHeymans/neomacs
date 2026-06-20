@@ -1,4 +1,5 @@
 use super::ChromeRowOutput;
+use super::ChromeRowProgress;
 use super::DisplayProgressSink;
 use super::DisplayTextRowBegin;
 use super::DisplayTextRowGeometryTransition;
@@ -442,9 +443,7 @@ fn display_progress_sink_records_chrome_row_progress() {
         height: 14.0,
     };
 
-    emitter.begin_chrome_progress(&mut eval, output);
-    emitter.emit_chrome_progress(&mut eval, output, progress);
-    emitter.finish_chrome_progress(progress);
+    emitter.emit_chrome_progress(&mut eval, ChromeRowProgress::new(output, progress));
 
     let display = eval
         .frame_manager()
