@@ -18,6 +18,7 @@ pub(crate) mod display_buffer_text_face_resolution;
 pub(crate) mod display_buffer_text_item_append;
 pub(crate) mod display_buffer_text_loop_context;
 pub(crate) mod display_buffer_text_loop_render;
+pub(crate) mod display_buffer_text_loop_state;
 pub(crate) mod display_buffer_text_loop_step_render;
 pub(crate) mod display_buffer_text_output_session;
 pub(crate) mod display_buffer_text_overflow;
