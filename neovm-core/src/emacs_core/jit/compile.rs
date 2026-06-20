@@ -53,7 +53,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 use smallvec::SmallVec;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::backend::BackendError;
@@ -1959,10 +1959,13 @@ fn is_known_fixnum(fb: &FunctionBuilder, v: ClifValue) -> bool {
 }
 
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
-fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue) {
-    // Redundant-guard elimination: a value provably a fixnum (a constant, or a
-    // range-checked + retagged arithmetic result) needs no runtime guard.
-    if is_known_fixnum(fb, v) {
+fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue, known: &HashSet<ClifValue>) {
+    // Redundant-guard elimination: a value provably a fixnum needs no runtime
+    // guard. Within-block: a fixnum constant or range-checked+retagged arithmetic
+    // result ([`is_known_fixnum`]). Cross-block: an operand the dataflow analysis
+    // proved fixnum at this block's entry ([`compute_known_fixnum_slots`], seeded
+    // into `known` by `lower_leaf_full`).
+    if is_known_fixnum(fb, v) || known.contains(&v) {
         return;
     }
     let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
@@ -1987,9 +1990,10 @@ fn lower_fixnum_binop(
     is_sub: bool,
     a: ClifValue,
     b: ClifValue,
+    known: &HashSet<ClifValue>,
 ) -> ClifValue {
-    guard_fixnum(fb, deopt, a);
-    guard_fixnum(fb, deopt, b);
+    guard_fixnum(fb, deopt, a, known);
+    guard_fixnum(fb, deopt, b, known);
 
     // Untag (arithmetic shift right by 2 == GNU XFIXNUM), compute, range-check.
     let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
@@ -2040,8 +2044,9 @@ fn lower_fixnum_unop(
     deopt: Block,
     kind: UnaryKind,
     a: ClifValue,
+    known: &HashSet<ClifValue>,
 ) -> ClifValue {
-    guard_fixnum(fb, deopt, a);
+    guard_fixnum(fb, deopt, a, known);
     let n = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
 
     // The only input that leaves fixnum range is the op's boundary value.
@@ -2069,9 +2074,10 @@ fn lower_fixnum_compare(
     cc: IntCC,
     a: ClifValue,
     b: ClifValue,
+    known: &HashSet<ClifValue>,
 ) -> ClifValue {
-    guard_fixnum(fb, deopt, a);
-    guard_fixnum(fb, deopt, b);
+    guard_fixnum(fb, deopt, a, known);
+    guard_fixnum(fb, deopt, b, known);
     let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
     let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
     let cond = fb.ins().icmp(cc, av, bv);
@@ -2091,9 +2097,10 @@ fn lower_fixnum_mul(
     deopt: Block,
     a: ClifValue,
     b: ClifValue,
+    known: &HashSet<ClifValue>,
 ) -> ClifValue {
-    guard_fixnum(fb, deopt, a);
-    guard_fixnum(fb, deopt, b);
+    guard_fixnum(fb, deopt, a, known);
+    guard_fixnum(fb, deopt, b, known);
     let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
     let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
 
@@ -2127,9 +2134,10 @@ fn lower_fixnum_divrem(
     is_rem: bool,
     a: ClifValue,
     b: ClifValue,
+    known: &HashSet<ClifValue>,
 ) -> ClifValue {
-    guard_fixnum(fb, deopt, a);
-    guard_fixnum(fb, deopt, b);
+    guard_fixnum(fb, deopt, a, known);
+    guard_fixnum(fb, deopt, b, known);
     let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
     let nonzero = fb.ins().icmp_imm(IntCC::NotEqual, bv, 0);
     emit_guard(fb, deopt, nonzero);
@@ -2355,7 +2363,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
                         let a = map(&cval, *a)?;
                         let b = map(&cval, *b)?;
-                        cval[r] = Some(lower_fixnum_binop(&mut fb, d, is_sub, a, b));
+                        cval[r] = Some(lower_fixnum_binop(&mut fb, d, is_sub, a, b, &HashSet::new()));
                     }
                     MirOp::Unary(kind, a) => {
                         let k = match kind {
@@ -2365,7 +2373,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         };
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
                         let a = map(&cval, *a)?;
-                        cval[r] = Some(lower_fixnum_unop(&mut fb, d, k, a));
+                        cval[r] = Some(lower_fixnum_unop(&mut fb, d, k, a, &HashSet::new()));
                     }
                     MirOp::Cmp(kind, a, b) => {
                         let cc = match kind {
@@ -2378,7 +2386,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
                         let a = map(&cval, *a)?;
                         let b = map(&cval, *b)?;
-                        cval[r] = Some(lower_fixnum_compare(&mut fb, d, cc, a, b));
+                        cval[r] = Some(lower_fixnum_compare(&mut fb, d, cc, a, b, &HashSet::new()));
                     }
                     MirOp::Pred(kind, a) => {
                         let k = match kind {
@@ -2952,6 +2960,7 @@ fn emit_pending_dispatches(
 /// (the live CLIF SSA values within the current basic block). Terminators
 /// (`Return`/`Goto`/`GotoIf*`) are handled by the block lowerer before this.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn lower_simple_op(
     fb: &mut FunctionBuilder,
     pc: usize,
@@ -2964,6 +2973,10 @@ fn lower_simple_op(
     pending: &mut Vec<PendingDispatch>,
     spec: Option<(u32, u64, i64)>,
     op: &Op,
+    // Cross-block known-fixnum operand values at this block (seeded by
+    // `lower_leaf_full` from `compute_known_fixnum_slots`); `guard_fixnum` elides
+    // guards for members.
+    known: &HashSet<ClifValue>,
 ) -> Result<(), CompileError> {
     match op {
         Op::Constant(idx) => {
@@ -3023,20 +3036,20 @@ fn lower_simple_op(
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_sub = matches!(op, Op::Sub);
-            stack.push(lower_fixnum_binop(fb, dsite, is_sub, a, b));
+            stack.push(lower_fixnum_binop(fb, dsite, is_sub, a, b, known));
         }
         Op::Mul => {
             let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            stack.push(lower_fixnum_mul(fb, dsite, a, b));
+            stack.push(lower_fixnum_mul(fb, dsite, a, b, known));
         }
         Op::Div | Op::Rem => {
             let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_rem = matches!(op, Op::Rem);
-            stack.push(lower_fixnum_divrem(fb, dsite, is_rem, a, b));
+            stack.push(lower_fixnum_divrem(fb, dsite, is_rem, a, b, known));
         }
         Op::Eq => {
             // Bit-equal -> t natively; differing bits -> the read-only slow-path
@@ -3109,7 +3122,7 @@ fn lower_simple_op(
                 Op::Negate => UnaryKind::Negate,
                 _ => unreachable!("matched Add1/Sub1/Negate above"),
             };
-            stack.push(lower_fixnum_unop(fb, dsite, kind, a));
+            stack.push(lower_fixnum_unop(fb, dsite, kind, a, known));
         }
         Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
             let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
@@ -3123,7 +3136,7 @@ fn lower_simple_op(
                 Op::Geq => IntCC::SignedGreaterThanOrEqual,
                 _ => unreachable!("matched comparison ops above"),
             };
-            stack.push(lower_fixnum_compare(fb, dsite, cc, a, b));
+            stack.push(lower_fixnum_compare(fb, dsite, cc, a, b, known));
         }
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -3155,8 +3168,8 @@ fn lower_simple_op(
             let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            guard_fixnum(fb, dsite, a);
-            guard_fixnum(fb, dsite, b);
+            guard_fixnum(fb, dsite, a, known);
+            guard_fixnum(fb, dsite, b, known);
             let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
             let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
             let cc = if matches!(op, Op::Max) {
@@ -4583,6 +4596,9 @@ pub fn lower_leaf_full(
     obarray: Option<&Obarray>,
 ) -> Result<CompiledLeaf, CompileError> {
     let cfg = analyze_cfg(ops, constants, offset_map, arity)?;
+    // Cross-block redundant-guard elimination: per-block-entry known-fixnum slots
+    // (empty if the function has an op the analysis doesn't model -> no elision).
+    let known_fixnum_slots = compute_known_fixnum_slots(ops, constants, &cfg);
     let n = ops.len();
     // Direct-call speculation sites + their armed-epoch slots. The Box's heap
     // storage is address-stable: slot pointers are baked into the generated
@@ -4870,6 +4886,20 @@ pub fn lower_leaf_full(
             // Materialize the incoming operand stack from the slot variables.
             let depth = cfg.entry_depth[&l];
             let mut stack: Vec<ClifValue> = (0..depth).map(|k| fb.use_var(vars[k])).collect();
+            // Cross-block known-fixnum operands at this block's entry: each slot
+            // the dataflow analysis proved fixnum maps to its just-materialized
+            // ClifValue. StackRef/Dup keep the same ClifValue, so the set stays
+            // valid as the block runs; `guard_fixnum` elides guards for members.
+            let known_fixnum: HashSet<ClifValue> = known_fixnum_slots
+                .get(&l)
+                .map(|slots| {
+                    slots
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(k, &is_fix)| (is_fix).then(|| stack.get(k).copied()).flatten())
+                        .collect()
+                })
+                .unwrap_or_default();
             // Active handler frames at block entry (static), kept in sync as
             // PopHandler ops run; signal sites inside a protected extent queue
             // a dispatch block here, filled after the block's terminator.
@@ -5173,6 +5203,7 @@ pub fn lower_leaf_full(
                             &mut pending,
                             spec,
                             other,
+                            &known_fixnum,
                         )?
                     }
                 }
