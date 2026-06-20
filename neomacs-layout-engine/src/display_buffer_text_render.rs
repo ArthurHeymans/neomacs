@@ -5068,7 +5068,9 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             &mut synced_source_position,
             hit_row_range,
         );
-        progress.apply_source_position(synced_source_position);
+        source_walk
+            .source_position_update(synced_source_position)
+            .apply_to_progress(&mut progress);
         if continuation.should_break() {
             return BufferSelectiveDisplayTailRenderOutcome::Stop;
         }
@@ -5794,7 +5796,9 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             box_face,
             context.content_x,
         );
-        progress.apply_source_position(synced_source_position);
+        source_walk
+            .source_position_update(synced_source_position)
+            .apply_to_progress(&mut progress);
         if continuation.should_break() {
             return continuation;
         }
