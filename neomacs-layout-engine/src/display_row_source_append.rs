@@ -78,22 +78,6 @@ pub(crate) struct BufferSyntheticTextRenderContext<'a> {
     default_char_width: f32,
 }
 
-struct DisplayItemSourceAppendRequest<'frame, 'face> {
-    base_face: &'face ResolvedFace,
-    base_face_id: u32,
-    frame: &'frame DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    kind: DisplayRowAppendKind,
-}
-
-struct DisplayItemSourceMeasureRequest<'frame, 'face> {
-    base_face: &'face ResolvedFace,
-    base_face_id: u32,
-    frame: &'frame DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    kind: DisplayRowAppendKind,
-}
-
 struct SingleDisplayItemSourceRequest<'frame, 'face> {
     base_face: &'face ResolvedFace,
     fallback_face_id: u32,
@@ -457,19 +441,40 @@ impl<'face> DisplayItemSourceAppendContext<'face> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let request = DisplayItemSourceAppendRequest::new(
-            self.base_face,
-            self.face_id,
-            &self.frame,
-            position,
-            kind,
-        );
-        render_display_item_source_with_policy(
-            state,
+        let row_request =
+            self.frame
+                .source_append_render_request(position, self.face_id, self.base_face, kind);
+        state.render_display_item_source_into_current_text_row_and_emit(
             face_ids,
             source,
             source_state,
-            request,
+            row_request,
+            render_policy,
+        )
+    }
+
+    fn measure_with_policy<S, P>(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        let row_request =
+            self.frame
+                .source_append_measure_request(position, self.face_id, self.base_face, kind);
+        state.measure_display_item_source_against_current_text_row(
+            face_ids,
+            source,
+            source_state,
+            row_request,
             render_policy,
         )
     }
@@ -609,42 +614,6 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     }
 }
 
-impl<'frame, 'face> DisplayItemSourceAppendRequest<'frame, 'face> {
-    pub(crate) fn new(
-        base_face: &'face ResolvedFace,
-        base_face_id: u32,
-        frame: &'frame DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        kind: DisplayRowAppendKind,
-    ) -> Self {
-        Self {
-            base_face,
-            base_face_id,
-            frame,
-            position,
-            kind,
-        }
-    }
-}
-
-impl<'frame, 'face> DisplayItemSourceMeasureRequest<'frame, 'face> {
-    pub(crate) fn new(
-        base_face: &'face ResolvedFace,
-        base_face_id: u32,
-        frame: &'frame DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        kind: DisplayRowAppendKind,
-    ) -> Self {
-        Self {
-            base_face,
-            base_face_id,
-            frame,
-            position,
-            kind,
-        }
-    }
-}
-
 impl<'frame, 'face> SingleDisplayItemSourceRequest<'frame, 'face> {
     pub(crate) fn new(
         base_face: &'face ResolvedFace,
@@ -674,60 +643,6 @@ impl<'frame, 'face> SingleDisplayItemSourceRequest<'frame, 'face> {
     }
 }
 
-fn render_display_item_source_with_policy<S, P>(
-    state: &mut TextRowSourceRenderState<'_>,
-    face_ids: &mut FrameFaceIdAllocator,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    request: DisplayItemSourceAppendRequest<'_, '_>,
-    render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome>
-where
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
-{
-    let row_request = request.frame.source_append_render_request(
-        request.position,
-        request.base_face_id,
-        request.base_face,
-        request.kind,
-    );
-    state.render_display_item_source_into_current_text_row_and_emit(
-        face_ids,
-        source,
-        source_state,
-        row_request,
-        render_policy,
-    )
-}
-
-fn measure_display_item_source_with_policy<S, P>(
-    state: &mut TextRowSourceMeasureState<'_>,
-    face_ids: &mut FrameFaceIdAllocator,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    request: DisplayItemSourceMeasureRequest<'_, '_>,
-    render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome>
-where
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
-{
-    let row_request = request.frame.source_append_measure_request(
-        request.position,
-        request.base_face_id,
-        request.base_face,
-        request.kind,
-    );
-    state.measure_display_item_source_against_current_text_row(
-        face_ids,
-        source,
-        source_state,
-        row_request,
-        render_policy,
-    )
-}
-
 fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     state: &mut TextRowSourceRenderState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
@@ -739,19 +654,14 @@ fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     let mut face_ids = FrameFaceIdAllocator::new(prepared.face_id.saturating_add(1));
     let mut source = DisplayItemOnceSource::new(prepared.item);
     let mut source_state = DisplayRowSourceState::default();
-    let request = DisplayItemSourceAppendRequest::new(
-        base_face,
-        prepared.face_id,
-        frame,
-        prepared.position,
-        prepared.kind,
-    );
-    let outcome = render_display_item_source_with_policy(
+    let context = DisplayItemSourceAppendContext::new(base_face, prepared.face_id, frame.clone());
+    let outcome = context.render_with_policy(
         state,
         &mut face_ids,
         &mut source,
         &mut source_state,
-        request,
+        prepared.position,
+        prepared.kind,
         render_policy,
     )?;
     Some(outcome.into_append_progress(prepared.position))
@@ -773,22 +683,17 @@ fn measure_single_display_item_width_with_policy<P: DisplayRowRenderPolicy>(
     let base_face = request.base_face;
     let frame = request.frame;
     let prepared = request.prepare();
-    let request = DisplayItemSourceMeasureRequest::new(
-        base_face,
-        prepared.face_id,
-        frame,
-        prepared.position,
-        prepared.kind,
-    );
+    let context = DisplayItemSourceAppendContext::new(base_face, prepared.face_id, frame.clone());
     let mut face_ids = FrameFaceIdAllocator::new(prepared.face_id.saturating_add(1));
     let mut source = DisplayItemOnceSource::new(prepared.item);
     let mut source_state = DisplayRowSourceState::default();
-    let outcome = measure_display_item_source_with_policy(
+    let outcome = context.measure_with_policy(
         state,
         &mut face_ids,
         &mut source,
         &mut source_state,
-        request,
+        prepared.position,
+        prepared.kind,
         render_policy,
     )?;
     Some(
@@ -828,20 +733,15 @@ fn append_synthetic_text_to_display_row(
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let request = DisplayItemSourceAppendRequest::new(
-        base_face,
-        face_id,
-        &frame,
-        position,
-        DisplayRowAppendKind::SourceText,
-    );
+    let context = DisplayItemSourceAppendContext::new(base_face, face_id, frame);
     let mut source_state = DisplayRowSourceState::default();
-    let outcome = render_display_item_source_with_policy(
+    let outcome = context.render_with_policy(
         state,
         &mut face_ids,
         &mut source,
         &mut source_state,
-        request,
+        position,
+        DisplayRowAppendKind::SourceText,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress(start))
