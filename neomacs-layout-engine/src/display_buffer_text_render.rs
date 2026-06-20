@@ -35,7 +35,6 @@ pub(crate) use crate::display_buffer_text_progress::{
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::{
-    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem, BufferTextSourceStepChar,
     BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
 use crate::display_buffer_text_source_walk::*;

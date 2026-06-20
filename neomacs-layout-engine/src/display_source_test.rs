@@ -1,7 +1,7 @@
 use super::*;
-use crate::display_buffer_text_source::{
-    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState, BufferTextSourceCursor,
-    BufferTextSourcePosition,
+use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
+use crate::display_buffer_text_source_walk::{
+    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
 };
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,

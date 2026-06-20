@@ -11,10 +11,10 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_source::{
-    BufferTextConsumedDisplayItem, BufferTextSourcePosition, BufferTextSourceStepChar,
+use crate::display_buffer_text_source::BufferTextSourcePosition;
+use crate::display_buffer_text_source_walk::{
+    BufferTextConsumedDisplayItem, BufferTextSourceStepChar, BufferTextWindowSourceWalk,
 };
-use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;

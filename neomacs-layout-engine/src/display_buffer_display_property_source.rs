@@ -1,4 +1,4 @@
-use crate::display_buffer_text_source::BufferTextSourceItem;
+use crate::display_buffer_text_source_walk::BufferTextSourceItem;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
