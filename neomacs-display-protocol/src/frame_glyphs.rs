@@ -781,6 +781,82 @@ pub struct FrameGlyphBuffer {
     pub stipple_patterns: HashMap<i32, StipplePattern>,
 }
 
+/// Derive a transition hint by comparing previous/current window metadata.
+///
+/// This centralizes transition geometry decisions outside any concrete glyph
+/// buffer materialization path.
+pub fn derive_window_transition_hint(
+    prev: &WindowInfo,
+    curr: &WindowInfo,
+) -> Option<WindowTransitionHint> {
+    if curr.is_minibuffer {
+        return None;
+    }
+
+    if prev.buffer_id != 0 && curr.buffer_id != 0 && prev.buffer_id != curr.buffer_id {
+        return Some(WindowTransitionHint {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            kind: WindowTransitionKind::Crossfade,
+            effect: None,
+            easing: None,
+        });
+    }
+
+    if prev.window_start != curr.window_start {
+        let top_chrome = curr.tab_line_height + curr.header_line_height;
+        let content_height = curr.bounds.height - curr.mode_line_height - top_chrome;
+        if content_height < 50.0 {
+            return None;
+        }
+
+        let direction = if curr.window_start > prev.window_start {
+            1
+        } else {
+            -1
+        };
+
+        let content_bounds = Rect::new(
+            curr.bounds.x,
+            curr.bounds.y + top_chrome,
+            curr.bounds.width,
+            content_height,
+        );
+
+        // Keep legacy estimate shape to preserve current feel.
+        let cols = (curr.bounds.width / curr.char_height).max(1.0);
+        let char_delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
+        let est_lines = (char_delta / cols).max(1.0);
+        let scroll_px = (est_lines * curr.char_height).min(content_height);
+
+        return Some(WindowTransitionHint {
+            window_id: curr.window_id,
+            bounds: content_bounds,
+            kind: WindowTransitionKind::ScrollSlide {
+                direction,
+                scroll_distance: scroll_px,
+            },
+            effect: None,
+            easing: None,
+        });
+    }
+
+    if (prev.char_height - curr.char_height).abs() > 1.0
+        || (prev.bounds.width - curr.bounds.width).abs() > 2.0
+        || (prev.bounds.height - curr.bounds.height).abs() > 2.0
+    {
+        return Some(WindowTransitionHint {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            kind: WindowTransitionKind::Crossfade,
+            effect: None,
+            easing: None,
+        });
+    }
+
+    None
+}
+
 impl FrameGlyphBuffer {
     fn synthesize_face(
         &self,
@@ -1435,81 +1511,6 @@ impl FrameGlyphBuffer {
     /// Add an explicit effect hint.
     pub fn add_effect_hint(&mut self, hint: WindowEffectHint) {
         self.effect_hints.push(hint);
-    }
-
-    /// Derive a transition hint by comparing previous/current window metadata.
-    ///
-    /// This centralizes transition geometry decisions outside the renderer.
-    pub fn derive_transition_hint(
-        prev: &WindowInfo,
-        curr: &WindowInfo,
-    ) -> Option<WindowTransitionHint> {
-        if curr.is_minibuffer {
-            return None;
-        }
-
-        if prev.buffer_id != 0 && curr.buffer_id != 0 && prev.buffer_id != curr.buffer_id {
-            return Some(WindowTransitionHint {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                kind: WindowTransitionKind::Crossfade,
-                effect: None,
-                easing: None,
-            });
-        }
-
-        if prev.window_start != curr.window_start {
-            let top_chrome = curr.tab_line_height + curr.header_line_height;
-            let content_height = curr.bounds.height - curr.mode_line_height - top_chrome;
-            if content_height < 50.0 {
-                return None;
-            }
-
-            let direction = if curr.window_start > prev.window_start {
-                1
-            } else {
-                -1
-            };
-
-            let content_bounds = Rect::new(
-                curr.bounds.x,
-                curr.bounds.y + top_chrome,
-                curr.bounds.width,
-                content_height,
-            );
-
-            // Keep legacy estimate shape to preserve current feel.
-            let cols = (curr.bounds.width / curr.char_height).max(1.0);
-            let char_delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-            let est_lines = (char_delta / cols).max(1.0);
-            let scroll_px = (est_lines * curr.char_height).min(content_height);
-
-            return Some(WindowTransitionHint {
-                window_id: curr.window_id,
-                bounds: content_bounds,
-                kind: WindowTransitionKind::ScrollSlide {
-                    direction,
-                    scroll_distance: scroll_px,
-                },
-                effect: None,
-                easing: None,
-            });
-        }
-
-        if (prev.char_height - curr.char_height).abs() > 1.0
-            || (prev.bounds.width - curr.bounds.width).abs() > 2.0
-            || (prev.bounds.height - curr.bounds.height).abs() > 2.0
-        {
-            return Some(WindowTransitionHint {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                kind: WindowTransitionKind::Crossfade,
-                effect: None,
-                easing: None,
-            });
-        }
-
-        None
     }
 
     /// Set the authoritative physical cursor for the frame.

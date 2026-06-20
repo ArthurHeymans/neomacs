@@ -10,8 +10,8 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::{
-    FrameGlyphBuffer, FrameTabBarState, GlyphRowRole, WindowEffectHint, WindowInfo,
-    WindowTransitionHint, WindowTransitionKind,
+    FrameTabBarState, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    WindowTransitionKind, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
@@ -492,7 +492,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
             return;
         };
-        if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, curr) {
+        if let Some(hint) = derive_window_transition_hint(prev, curr) {
             state.add_transition_hint(hint);
         }
     }

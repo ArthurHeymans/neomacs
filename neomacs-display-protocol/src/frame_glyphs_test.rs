@@ -843,7 +843,7 @@ fn derive_transition_hint_buffer_switch_crossfade() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
 
-    let hint = FrameGlyphBuffer::derive_transition_hint(&prev, &curr).unwrap();
+    let hint = derive_window_transition_hint(&prev, &curr).unwrap();
     assert_eq!(hint.window_id, 1);
     assert_eq!(hint.bounds, curr.bounds);
     assert!(matches!(hint.kind, WindowTransitionKind::Crossfade));
@@ -854,7 +854,7 @@ fn derive_transition_hint_scroll_slide() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 100, 42, Rect::new(0.0, 0.0, 800.0, 600.0));
 
-    let hint = FrameGlyphBuffer::derive_transition_hint(&prev, &curr).unwrap();
+    let hint = derive_window_transition_hint(&prev, &curr).unwrap();
     assert_eq!(hint.window_id, 1);
     match hint.kind {
         WindowTransitionKind::ScrollSlide {
@@ -874,7 +874,7 @@ fn derive_transition_hint_skips_minibuffer() {
     let mut curr = make_window_info(1, 100, 20, Rect::new(0.0, 0.0, 800.0, 600.0));
     curr.is_minibuffer = true;
 
-    assert!(FrameGlyphBuffer::derive_transition_hint(&prev, &curr).is_none());
+    assert!(derive_window_transition_hint(&prev, &curr).is_none());
 }
 
 // =======================================================================

@@ -1,8 +1,8 @@
 //! Types for the Rust layout engine.
 //!
 //! These are the intermediate representation between buffer data and rendering.
-//! The layout engine produces LayoutOutput which is then converted to
-//! FrameGlyphBuffer for the existing renderer.
+//! The layout engine produces display rows and frame display state snapshots
+//! that renderers consume without owning display semantics.
 
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::types::{Color, Rect};
