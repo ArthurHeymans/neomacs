@@ -1,9 +1,9 @@
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
 };
+use crate::display_text_output_install::install_output_resolved_face;
 use crate::display_text_window_row_lifecycle::TextWindowTerminalRightBorderRequest;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;

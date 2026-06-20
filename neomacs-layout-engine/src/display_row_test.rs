@@ -1,8 +1,9 @@
 use super::*;
 use crate::display_row_output_install::{
-    DisplayRowCurrentRowOutput, install_display_row, install_measured_window_display_row,
+    DisplayRowCurrentRowOutput, install_measured_window_display_row,
 };
 use crate::display_row_source_render::TextRowSourceMeasureState;
+use crate::display_text_output_install::install_display_row;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;

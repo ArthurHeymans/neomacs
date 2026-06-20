@@ -10,11 +10,11 @@ use crate::display_row_builder::{
     trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
-use crate::display_row_output_install::{
-    edit_current_text_output_row, edit_last_text_output_rows, install_output_resolved_face,
-};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
+use crate::display_text_output_install::{
+    edit_current_text_output_row, edit_last_text_output_rows, install_output_resolved_face,
+};
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};

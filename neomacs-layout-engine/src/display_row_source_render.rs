@@ -20,15 +20,14 @@ use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
-use crate::display_row_output_install::{
-    DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
-};
+use crate::display_row_output_install::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
 };
+use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{

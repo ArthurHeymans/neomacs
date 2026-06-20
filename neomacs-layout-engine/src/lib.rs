@@ -75,6 +75,7 @@ pub(crate) mod display_source_walk;
 pub mod display_space;
 pub mod display_spec;
 pub mod display_status_line;
+pub(crate) mod display_text_output_install;
 pub(crate) mod display_text_run_measurement;
 pub(crate) mod display_text_window_row_lifecycle;
 pub mod engine;

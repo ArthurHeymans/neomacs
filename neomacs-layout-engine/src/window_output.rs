@@ -18,22 +18,25 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_output_install::{
-    DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
-    DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
-    DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest, begin_text_output_row,
-    begin_text_output_window, end_text_output_window, finalize_text_output_row,
-    finish_text_output_row, install_measured_window_display_row, install_output_resolved_face,
-    install_rendered_display_row_fragment_assets, install_text_output_cursor_artifact,
-    install_text_output_cursor_effects, install_text_output_display_range,
-    install_text_output_row_cursor, install_text_output_row_decoration,
-    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
-    store_text_output_phys_cursor,
+    DisplayRowCurrentRowOutput, install_measured_window_display_row,
+    install_rendered_display_row_fragment_assets,
 };
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
 use crate::display_row_text_output::{TextOutputSpan, TextRowOutput};
 use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_text_output_install::{
+    DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
+    DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
+    TextWindowRowDecorationRequest, begin_text_output_row, begin_text_output_window,
+    end_text_output_window, finalize_text_output_row, finish_text_output_row,
+    install_output_resolved_face, install_text_output_cursor_artifact,
+    install_text_output_cursor_effects, install_text_output_display_range,
+    install_text_output_row_cursor, install_text_output_row_decoration,
+    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
+    store_text_output_phys_cursor,
+};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;

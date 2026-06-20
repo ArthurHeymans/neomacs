@@ -14,8 +14,6 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
-#[cfg(test)]
-use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_row_source_append::DisplayItemSourceAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
@@ -24,6 +22,8 @@ use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::DisplayStringBaseFace;
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
+#[cfg(test)]
+use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
