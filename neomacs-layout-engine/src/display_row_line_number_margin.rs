@@ -1,12 +1,29 @@
 //! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
 
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
+    DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
-use crate::window_output::{LineNumberMarginItemSource, TextWindowLineNumberMargin};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
+
+const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TextWindowLineNumberMargin<'a> {
+    text: &'a str,
+    cols: i32,
+    face_id: u32,
+}
+
+struct LineNumberMarginItemSource {
+    items: std::vec::IntoIter<DisplayItem>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferLineNumberMarginRenderRequest {
@@ -89,5 +106,69 @@ impl BufferLineNumberMarginRenderRequest {
         face_scan.invalidate();
         line_numbers.consume_render_request();
         true
+    }
+}
+
+fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
+    let end_offset = start_offset.saturating_add(text.chars().count());
+    DisplayItem::new(
+        SourceSpan::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, start_offset, end_offset),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text.to_owned())),
+    )
+}
+
+fn line_number_margin_stretch_item(cols: u16, face_id: u32, start_offset: usize) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::synthetic(
+            LINE_NUMBER_MARGIN_SOURCE_ID,
+            start_offset,
+            start_offset.saturating_add(usize::from(cols)),
+        ),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Columns(cols)),
+            height: None,
+            ascent: None,
+        }),
+    )
+}
+
+impl LineNumberMarginItemSource {
+    fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
+        let mut items = Vec::new();
+        let mut source_offset = 0usize;
+        let padding = (request.cols - 1) - request.text.chars().count() as i32;
+        if padding > 0 {
+            let cols = padding.min(i32::from(u16::MAX)) as u16;
+            items.push(line_number_margin_stretch_item(
+                cols,
+                request.face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(usize::from(cols));
+        }
+        if !request.text.is_empty() {
+            items.push(line_number_margin_text_item(
+                request.text,
+                request.face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(request.text.chars().count());
+        }
+        items.push(line_number_margin_stretch_item(
+            1,
+            request.face_id,
+            source_offset,
+        ));
+        Self {
+            items: items.into_iter(),
+        }
+    }
+}
+
+impl DisplayItemSource for LineNumberMarginItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
     }
 }

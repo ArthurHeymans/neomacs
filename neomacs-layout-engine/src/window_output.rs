@@ -11,10 +11,7 @@ use super::display_status_line::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
-};
+use crate::display_item::DisplaySourcePosition;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
@@ -41,7 +38,6 @@ use crate::display_row_special_glyphs::{
     text_window_right_edge_marker_decorations,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
-use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -56,8 +52,6 @@ use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot,
 };
-
-const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
@@ -672,13 +666,6 @@ pub(crate) struct TextWindowTerminalRightBorder {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextWindowLineNumberMargin<'a> {
-    pub(crate) text: &'a str,
-    pub(crate) cols: i32,
-    pub(crate) face_id: u32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowCursor {
     pub(crate) selected: bool,
     pub(crate) window_id: i64,
@@ -827,74 +814,6 @@ impl TextWindowRedisplayPositions {
             window_start: self.window_start,
             window_end: self.window_end,
         }
-    }
-}
-
-fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
-    let end_offset = start_offset.saturating_add(text.chars().count());
-    DisplayItem::new(
-        SourceSpan::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, start_offset, end_offset),
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::TextRun(DisplayTextRun::new(text.to_owned())),
-    )
-}
-
-fn line_number_margin_stretch_item(cols: u16, face_id: u32, start_offset: usize) -> DisplayItem {
-    DisplayItem::new(
-        SourceSpan::synthetic(
-            LINE_NUMBER_MARGIN_SOURCE_ID,
-            start_offset,
-            start_offset.saturating_add(usize::from(cols)),
-        ),
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Columns(cols)),
-            height: None,
-            ascent: None,
-        }),
-    )
-}
-
-pub(crate) struct LineNumberMarginItemSource {
-    items: std::vec::IntoIter<DisplayItem>,
-}
-
-impl LineNumberMarginItemSource {
-    pub(crate) fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
-        let mut items = Vec::new();
-        let mut source_offset = 0usize;
-        let padding = (request.cols - 1) - request.text.chars().count() as i32;
-        if padding > 0 {
-            let cols = padding.min(i32::from(u16::MAX)) as u16;
-            items.push(line_number_margin_stretch_item(
-                cols,
-                request.face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(usize::from(cols));
-        }
-        if !request.text.is_empty() {
-            items.push(line_number_margin_text_item(
-                request.text,
-                request.face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(request.text.chars().count());
-        }
-        items.push(line_number_margin_stretch_item(
-            1,
-            request.face_id,
-            source_offset,
-        ));
-        Self {
-            items: items.into_iter(),
-        }
-    }
-}
-
-impl DisplayItemSource for LineNumberMarginItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.items.next()
     }
 }
 
