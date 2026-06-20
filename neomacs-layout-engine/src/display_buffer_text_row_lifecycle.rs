@@ -1044,11 +1044,12 @@ impl BufferInvisibleTextSkip {
         self,
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
-        state: &mut BufferInvisibleTextRenderState<'_>,
+        cursor_info: &mut CursorCaptureState,
+        synthetic_text: &mut BufferSyntheticTextRenderState<'_>,
     ) {
-        let position = state.synthetic_text.position();
+        let position = synthetic_text.position();
         self.capture_cursor_if_point(
-            state.cursor_info,
+            cursor_info,
             render_context.active_face(),
             row_geometry,
             position.x_px,
@@ -1058,27 +1059,7 @@ impl BufferInvisibleTextSkip {
         let Some(request) = self.ellipsis_append_request(position) else {
             return;
         };
-        state
-            .synthetic_text
-            .append_request_to_text_row(render_context, row_geometry, request);
-    }
-}
-
-pub(crate) struct BufferInvisibleTextRenderState<'a> {
-    synthetic_text: BufferSyntheticTextRenderState<'a>,
-    cursor_info: &'a mut CursorCaptureState,
-}
-
-impl<'a> BufferInvisibleTextRenderState<'a> {
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'a>,
-        cursor_info: &'a mut CursorCaptureState,
-        row_progress: BufferTextWindowRowProgressState<'a>,
-    ) -> Self {
-        Self {
-            synthetic_text: BufferSyntheticTextRenderState::new(source_render, row_progress),
-            cursor_info,
-        }
+        synthetic_text.append_request_to_text_row(render_context, row_geometry, request);
     }
 }
 
@@ -1125,11 +1106,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
 
-        let mut hidden_text_state = BufferInvisibleTextRenderState::new(
-            source_render.reborrow(),
-            cursor_info,
-            progress.row.reborrow(),
-        );
+        let mut synthetic_text_state =
+            BufferSyntheticTextRenderState::new(source_render.reborrow(), progress.row.reborrow());
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -1140,7 +1118,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
                 context.char_w,
             ),
             row_geometry,
-            &mut hidden_text_state,
+            cursor_info,
+            &mut synthetic_text_state,
         );
 
         let overlay_charpos = progress.charpos();
