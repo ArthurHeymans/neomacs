@@ -1220,6 +1220,22 @@ impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplaySourceAppendMeasurementKind {
+    NaturalRenderedSource,
+    ResolvedComplexRun,
+}
+
+impl DisplaySourceAppendMeasurementKind {
+    pub(crate) fn for_char(ch: char) -> Self {
+        if crate::composition::needs_complex_shaping(ch) {
+            Self::ResolvedComplexRun
+        } else {
+            Self::NaturalRenderedSource
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplaySourceAppendRenderPlan {
     advance_px: f32,

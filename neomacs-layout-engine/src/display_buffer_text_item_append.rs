@@ -13,7 +13,8 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendRenderPlan, DisplaySourceAppendRenderPolicy,
+    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
+    DisplaySourceAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -34,11 +35,11 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::{
-    BufferTextSourceAdvancePath, BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem,
-    BufferTextSourceChar, BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceRange,
+    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
+    BufferTextSourceItemRequest, BufferTextSourceRange, BufferTextSourceRenderPlanRequest,
     BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
     BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest,
+    DisplaySourceNaturalMeasurementRequest,
 };
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
@@ -63,22 +64,22 @@ impl BufferTextSourceTextRequest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-struct BufferTextSourceAdvanceResolver {
+struct DisplaySourceAppendRenderPlanResolver {
     complex_run: ComplexTextRunAdvanceResolver,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct BufferTextRowAppendState {
-    advance_resolver: BufferTextSourceAdvanceResolver,
+    render_plan_resolver: DisplaySourceAppendRenderPlanResolver,
 }
 
 impl BufferTextRowAppendState {
-    fn advance_resolver(&mut self) -> &mut BufferTextSourceAdvanceResolver {
-        &mut self.advance_resolver
+    fn render_plan_resolver(&mut self) -> &mut DisplaySourceAppendRenderPlanResolver {
+        &mut self.render_plan_resolver
     }
 }
 
-impl BufferTextSourceNaturalAdvanceRequest {
+impl DisplaySourceNaturalMeasurementRequest {
     #[allow(clippy::too_many_arguments)]
     fn measure_to_text_row(
         self,
@@ -285,17 +286,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_advance_request_to_text_row(
+    pub(crate) fn resolve_source_render_plan_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
+        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
     ) -> DisplaySourceAppendRenderPlan {
         let frame = self.active_face_context(geometry).active_face_frame();
         append_state
-            .advance_resolver()
-            .resolve_source_advance_request_to_text_row(
+            .render_plan_resolver()
+            .resolve_source_render_plan_request_to_text_row(
                 measure_state,
                 self.active_face,
                 frame,
@@ -308,15 +309,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
+        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
     ) -> BufferTextSourceCharAppendPlan {
-        let resolved_advance = self.resolve_source_advance_request_to_text_row(
+        let render_plan = self.resolve_source_render_plan_request_to_text_row(
             geometry,
             append_state,
             measure_state,
             request,
         );
-        request.append_plan(resolved_advance)
+        request.append_plan(render_plan)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -332,7 +333,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         source_item: &DisplayItem,
         cluster_tail: Option<(char, bool)>,
     ) -> BufferTextSourceCharPreparedAppend {
-        let request = source_char.advance_request_for_item_at(
+        let request = source_char.render_plan_request_for_item_at(
             text,
             byte_idx,
             position,
@@ -719,17 +720,17 @@ impl BufferTextSourceCharAppendOutcome {
     }
 }
 
-impl BufferTextSourceAdvanceResolver {
-    fn resolve_source_advance_request_to_text_row(
+impl DisplaySourceAppendRenderPlanResolver {
+    fn resolve_source_render_plan_request_to_text_row(
         &mut self,
         state: &mut TextRowSourceMeasureState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
+        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
     ) -> DisplaySourceAppendRenderPlan {
         let ch = request.cluster().ch();
-        match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
-            BufferTextSourceAdvancePath::ResolvedComplexRun => {
+        match request.measurement_kind() {
+            DisplaySourceAppendMeasurementKind::ResolvedComplexRun => {
                 let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
                     active_face_state,
                     state.font_metrics(),
@@ -743,8 +744,8 @@ impl BufferTextSourceAdvanceResolver {
                 );
                 DisplaySourceAppendRenderPlan::resolved_advance(advance_px)
             }
-            BufferTextSourceAdvancePath::NaturalRenderedSource => {
-                let advance_px = BufferTextSourceNaturalAdvanceRequest::for_range_and_cluster(
+            DisplaySourceAppendMeasurementKind::NaturalRenderedSource => {
+                let advance_px = DisplaySourceNaturalMeasurementRequest::for_range_and_cluster(
                     request.range(),
                     request.cluster(),
                 )
@@ -794,15 +795,15 @@ impl BufferTextSourceStepChar {
 }
 
 impl BufferTextSourceChar {
-    fn advance_request_for_item_at<'text, 'item>(
+    fn render_plan_request_for_item_at<'text, 'item>(
         &self,
         text: &'text [u8],
         byte_idx: usize,
         position: DisplayRowPosition,
         source_item: &'item DisplayItem,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
-        BufferTextSourcePositionedAdvanceRequest::new(
+    ) -> BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
+        BufferTextSourcePositionedRenderPlanRequest::new(
             self.advance_request(text, byte_idx, tail),
             position,
             source_item,
@@ -1029,15 +1030,15 @@ impl BufferTextSourceCharAppendPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
-    source: BufferTextSourceAdvanceRequest<'text>,
+pub(crate) struct BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
+    source: BufferTextSourceRenderPlanRequest<'text>,
     position: DisplayRowPosition,
     source_item: &'item DisplayItem,
 }
 
-impl<'text, 'item> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
+impl<'text, 'item> BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
     pub(crate) fn new(
-        source: BufferTextSourceAdvanceRequest<'text>,
+        source: BufferTextSourceRenderPlanRequest<'text>,
         position: DisplayRowPosition,
         source_item: &'item DisplayItem,
     ) -> Self {
@@ -1066,6 +1067,10 @@ impl<'text, 'item> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
 
     fn cluster(self) -> BufferTextSourceClusterState {
         self.source.cluster()
+    }
+
+    fn measurement_kind(self) -> DisplaySourceAppendMeasurementKind {
+        self.source.measurement_kind()
     }
 
     fn source_item(self) -> &'item DisplayItem {

@@ -28,7 +28,8 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState, DisplaySourceAppendRenderPlan,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState, DisplaySourceAppendMeasurementKind,
+    DisplaySourceAppendRenderPlan,
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
@@ -64,7 +65,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::*;
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
+    BufferDisplayReplacementStringRequest, BufferTextSourceRenderPlanRequest,
     BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
     DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
@@ -3692,12 +3693,12 @@ fn test_advance_resolution_surface() -> DisplayRowAppendSurface {
 }
 
 #[test]
-fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
+fn fallback_display_source_natural_measurement_uses_frame_tab_policy() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));
     let mut font_metrics = None;
 
-    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+    let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
         BufferTextSourceClusterState::for_char('\t', None),
     )
     .resolve_to_text_row(
@@ -3712,12 +3713,12 @@ fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
 }
 
 #[test]
-fn fallback_buffer_text_source_natural_advance_zeroes_cluster_continuation() {
+fn fallback_display_source_natural_measurement_zeroes_cluster_continuation() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+    let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
         BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
     )
     .resolve_to_text_row(
@@ -3732,12 +3733,12 @@ fn fallback_buffer_text_source_natural_advance_zeroes_cluster_continuation() {
 }
 
 #[test]
-fn fallback_buffer_text_source_natural_advance_uses_face_columns() {
+fn fallback_display_source_natural_measurement_uses_face_columns() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+    let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
         BufferTextSourceClusterState::for_char('中', None),
     )
     .resolve_to_text_row(
@@ -3752,36 +3753,36 @@ fn fallback_buffer_text_source_natural_advance_uses_face_columns() {
 }
 
 #[test]
-fn buffer_text_source_natural_fallback_advance_names_width_policy() {
+fn display_row_text_natural_advance_kind_names_width_policy() {
     assert_eq!(
-        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
             BufferTextSourceClusterState::for_char('\t', None),
         ),
-        BufferTextSourceNaturalFallbackAdvance::Tab
+        DisplayRowTextNaturalAdvanceKind::Tab
     );
     assert_eq!(
-        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
             BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
         ),
-        BufferTextSourceNaturalFallbackAdvance::ClusterContinuation
+        DisplayRowTextNaturalAdvanceKind::ClusterContinuation
     );
     assert_eq!(
-        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
             BufferTextSourceClusterState::for_char('x', None),
         ),
-        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 1 }
+        DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 1 }
     );
     assert_eq!(
-        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
             BufferTextSourceClusterState::for_char('中', None),
         ),
-        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 2 }
+        DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 2 }
     );
 }
 
 #[test]
-fn buffer_text_source_natural_advance_request_names_source_and_fallback() {
-    let request = BufferTextSourceNaturalAdvanceRequest::for_range_and_cluster(
+fn display_source_natural_measurement_request_names_source_and_fallback() {
+    let request = DisplaySourceNaturalMeasurementRequest::for_range_and_cluster(
         BufferTextSourceRange::new(CharPos0::new(2), CharPos0::new(3)),
         BufferTextSourceClusterState::for_char('中', None),
     );
@@ -3795,42 +3796,31 @@ fn buffer_text_source_natural_advance_request_names_source_and_fallback() {
     );
     assert_eq!(
         request.fallback(),
-        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 2 }
+        DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 2 }
     );
 }
 
 #[test]
-fn buffer_text_source_advance_path_names_measurement_mode() {
+fn display_source_append_measurement_kind_names_measurement_mode() {
     assert_eq!(
-        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
-            'x', None,
-        )),
-        BufferTextSourceAdvancePath::NaturalRenderedSource
+        DisplaySourceAppendMeasurementKind::for_char('x'),
+        DisplaySourceAppendMeasurementKind::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
-            '\t', None,
-        )),
-        BufferTextSourceAdvancePath::NaturalRenderedSource
+        DisplaySourceAppendMeasurementKind::for_char('\t'),
+        DisplaySourceAppendMeasurementKind::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
-            '\u{301}',
-            Some(('e', false)),
-        )),
-        BufferTextSourceAdvancePath::NaturalRenderedSource
+        DisplaySourceAppendMeasurementKind::for_char('\u{301}'),
+        DisplaySourceAppendMeasurementKind::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
-            '中', None,
-        )),
-        BufferTextSourceAdvancePath::NaturalRenderedSource
+        DisplaySourceAppendMeasurementKind::for_char('中'),
+        DisplaySourceAppendMeasurementKind::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
-            '\u{0633}', None,
-        )),
-        BufferTextSourceAdvancePath::ResolvedComplexRun
+        DisplaySourceAppendMeasurementKind::for_char('\u{0633}'),
+        DisplaySourceAppendMeasurementKind::ResolvedComplexRun
     );
 }
 
@@ -3957,7 +3947,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
 
-    let resolved = append_context.resolve_source_advance_request_to_text_row(
+    let resolved = append_context.resolve_source_render_plan_request_to_text_row(
         &geometry,
         &mut append_state,
         &mut text_row_source_measure_state(
@@ -3966,8 +3956,8 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextSourcePositionedAdvanceRequest::new(
-            BufferTextSourceAdvanceRequest::new(
+        BufferTextSourcePositionedRenderPlanRequest::new(
+            BufferTextSourceRenderPlanRequest::new(
                 b"x",
                 0,
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
@@ -4004,7 +3994,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
 
-    let resolved = append_context.resolve_source_advance_request_to_text_row(
+    let resolved = append_context.resolve_source_render_plan_request_to_text_row(
         &geometry,
         &mut append_state,
         &mut text_row_source_measure_state(
@@ -4013,8 +4003,8 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextSourcePositionedAdvanceRequest::new(
-            BufferTextSourceAdvanceRequest::new(
+        BufferTextSourcePositionedRenderPlanRequest::new(
+            BufferTextSourceRenderPlanRequest::new(
                 "\u{0633}".as_bytes(),
                 0,
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
@@ -7180,7 +7170,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let mut append_state = BufferTextRowAppendState::default();
     let measured_width = append_context
-        .resolve_source_advance_request_to_text_row(
+        .resolve_source_render_plan_request_to_text_row(
             &geometry,
             &mut append_state,
             &mut text_row_source_measure_state(
@@ -7189,8 +7179,8 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                 &mut font_metrics,
                 &face_resolver,
             ),
-            BufferTextSourcePositionedAdvanceRequest::new(
-                BufferTextSourceAdvanceRequest::new(
+            BufferTextSourcePositionedRenderPlanRequest::new(
+                BufferTextSourceRenderPlanRequest::new(
                     b"b",
                     0,
                     source_range,

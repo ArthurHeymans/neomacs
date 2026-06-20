@@ -8,7 +8,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
-use crate::display_row::DisplaySourceAppendRenderPlan;
+use crate::display_row::{DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan};
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
@@ -366,8 +366,13 @@ impl BufferTextSourceChar {
         text: &'text [u8],
         byte_idx: usize,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourceAdvanceRequest<'text> {
-        BufferTextSourceAdvanceRequest::new(text, byte_idx, self.range(), self.cluster_state(tail))
+    ) -> BufferTextSourceRenderPlanRequest<'text> {
+        BufferTextSourceRenderPlanRequest::new(
+            text,
+            byte_idx,
+            self.range(),
+            self.cluster_state(tail),
+        )
     }
 }
 
@@ -584,17 +589,21 @@ impl BufferTextSourceClusterState {
     pub(crate) fn has_tail(self) -> bool {
         self.tail.is_some()
     }
+
+    pub(crate) fn append_measurement_kind(self) -> DisplaySourceAppendMeasurementKind {
+        DisplaySourceAppendMeasurementKind::for_char(self.ch)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceAdvanceRequest<'text> {
+pub(crate) struct BufferTextSourceRenderPlanRequest<'text> {
     text: &'text [u8],
     byte_idx: usize,
     range: BufferTextSourceRange,
     cluster: BufferTextSourceClusterState,
 }
 
-impl<'text> BufferTextSourceAdvanceRequest<'text> {
+impl<'text> BufferTextSourceRenderPlanRequest<'text> {
     pub(crate) fn new(
         text: &'text [u8],
         byte_idx: usize,
@@ -625,6 +634,10 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
         self.cluster
     }
 
+    pub(crate) fn measurement_kind(self) -> DisplaySourceAppendMeasurementKind {
+        self.cluster.append_measurement_kind()
+    }
+
     pub(crate) fn into_text_request(
         self,
         render_plan: DisplaySourceAppendRenderPlan,
@@ -636,28 +649,10 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceAdvancePath {
-    NaturalRenderedSource,
-    ResolvedComplexRun,
-}
-
-impl BufferTextSourceAdvancePath {
-    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
-        if crate::composition::needs_complex_shaping(cluster.ch()) {
-            Self::ResolvedComplexRun
-        } else {
-            Self::NaturalRenderedSource
-        }
-    }
-}
-
-pub(crate) type BufferTextSourceNaturalFallbackAdvance = DisplayRowTextNaturalAdvanceKind;
-
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceNaturalAdvanceRequest {
+pub(crate) struct DisplaySourceNaturalMeasurementRequest {
     source_item: BufferTextSourceTextItemRequest,
-    fallback: BufferTextSourceNaturalFallbackAdvance,
+    fallback: DisplayRowTextNaturalAdvanceKind,
 }
 
 impl DisplayRowTextNaturalAdvanceKind {
@@ -666,14 +661,14 @@ impl DisplayRowTextNaturalAdvanceKind {
     }
 }
 
-impl BufferTextSourceNaturalAdvanceRequest {
+impl DisplaySourceNaturalMeasurementRequest {
     pub(crate) fn for_range_and_cluster(
         range: BufferTextSourceRange,
         cluster: BufferTextSourceClusterState,
     ) -> Self {
         Self {
             source_item: BufferTextSourceTextItemRequest::for_range_and_cluster(range, cluster),
-            fallback: BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster),
+            fallback: DisplayRowTextNaturalAdvanceKind::for_cluster_state(cluster),
         }
     }
 
@@ -681,7 +676,7 @@ impl BufferTextSourceNaturalAdvanceRequest {
         self.source_item
     }
 
-    pub(crate) fn fallback(self) -> BufferTextSourceNaturalFallbackAdvance {
+    pub(crate) fn fallback(self) -> DisplayRowTextNaturalAdvanceKind {
         self.fallback
     }
 }
