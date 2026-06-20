@@ -45,12 +45,6 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextWindowSourceRenderOutcome {
-    ContinueBufferWalk,
-    StopBufferWalk,
-}
-
 #[derive(Clone, Copy)]
 struct BufferTextSourceItemRenderContext<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
@@ -92,12 +86,6 @@ pub(crate) struct BufferTextWindowSourceRenderRequest<'rows, 'request, 'emit, 's
     params: &'request WindowParams,
     active_face_state: &'face DisplayRowActiveFaceState,
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
-impl BufferTextWindowSourceRenderOutcome {
-    pub(crate) fn should_stop_buffer_walk(&self) -> bool {
-        matches!(self, Self::StopBufferWalk)
-    }
 }
 
 impl<'a> BufferTextSourceItemRenderContext<'a> {
@@ -498,7 +486,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         buffer: &B,
-    ) -> BufferTextWindowSourceRenderOutcome
+    ) -> bool
     where
         'surface: 'request,
     {
@@ -511,7 +499,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             &mut self.state.source_render.reborrow(),
             self.state.row_geometry,
         ) else {
-            return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
+            return false;
         };
 
         match source_item {
@@ -533,7 +521,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         replacement: BufferTextReplacementItem,
         buffer: &B,
-    ) -> BufferTextWindowSourceRenderOutcome
+    ) -> bool
     where
         'surface: 'request,
     {
@@ -564,14 +552,12 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
                 self.apply_replacement_outcome(outcome, start_charpos);
-                BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
+                true
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
-            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
-                BufferTextWindowSourceRenderOutcome::StopBufferWalk
-            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => false,
         }
     }
 
@@ -604,20 +590,20 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: BufferTextSourceItem,
         buffer: &B,
-    ) -> BufferTextWindowSourceRenderOutcome
+    ) -> bool
     where
         'surface: 'request,
     {
         let Some(source_step_char) = source_item.source_step_char() else {
-            return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
+            return false;
         };
         let selective_display_outcome =
             self.render_selective_display_tail_for_context(source_walk, source_step_char, buffer);
         if selective_display_outcome.should_break() {
-            return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
+            return false;
         }
         if selective_display_outcome.should_continue_buffer_walk() {
-            return BufferTextWindowSourceRenderOutcome::ContinueBufferWalk;
+            return true;
         }
 
         let is_explicit_line_break = source_item.is_explicit_line_break();
@@ -630,9 +616,9 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 .render_line_break_for_context(source_walk, source_step_char, buffer)
                 .should_break()
             {
-                return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
+                return false;
             }
-            return BufferTextWindowSourceRenderOutcome::ContinueBufferWalk;
+            return true;
         }
 
         let char_render_outcome = self.render_text_source_item_for_context(
@@ -642,9 +628,9 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             buffer,
         );
         if char_render_outcome.should_break() {
-            return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
+            return false;
         }
-        BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
+        true
     }
 
     fn render_selective_display_tail_for_context<B: LayoutBufferView>(

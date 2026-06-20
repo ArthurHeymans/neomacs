@@ -6397,7 +6397,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         context.row_limit,
     );
 
-    let outcome = BufferTextWindowSourceRenderRequest::new(
+    let continue_buffer_walk = BufferTextWindowSourceRenderRequest::new(
         loop_context,
         text,
         &params,
@@ -6434,10 +6434,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     )
     .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
 
-    assert_eq!(
-        outcome,
-        BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
-    );
+    assert!(continue_buffer_walk);
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 8.0);

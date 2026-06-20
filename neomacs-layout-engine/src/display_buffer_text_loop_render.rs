@@ -105,7 +105,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 .row_geometry
                 .current_row_is_visible(self.loop_context.row_visibility_limit())
         {
-            if BufferTextWindowLoopStepRenderState::new(self.loop_context, self.state.reborrow())
+            if !BufferTextWindowLoopStepRenderState::new(self.loop_context, self.state.reborrow())
                 .render_next(
                     source_walk,
                     row_prelude_context,
@@ -115,7 +115,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     active_face_state,
                     buffer,
                 )
-                .should_stop_buffer_walk()
             {
                 break;
             }

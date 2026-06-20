@@ -13,21 +13,9 @@ use crate::display_row::DisplayRowActiveFaceState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextWindowLoopStepOutcome {
-    ContinueBufferWalk,
-    StopBufferWalk,
-}
-
 pub(crate) struct BufferTextWindowLoopStepRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
-impl BufferTextWindowLoopStepOutcome {
-    pub(crate) fn should_stop_buffer_walk(self) -> bool {
-        matches!(self, Self::StopBufferWalk)
-    }
 }
 
 impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, 'surface> {
@@ -50,7 +38,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
         params: &'request WindowParams,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome
+    ) -> bool
     where
         'surface: 'request,
     {
@@ -67,14 +55,14 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
         match pre_source_outcome {
             BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
             BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
-                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+                return true;
             }
             BufferTextWindowPreSourceOutcome::StopBufferWalk => {
-                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                return false;
             }
         }
 
-        let source_outcome = BufferTextWindowSourceRenderRequest::new(
+        let continue_buffer_walk = BufferTextWindowSourceRenderRequest::new(
             self.loop_context,
             text,
             params,
@@ -83,9 +71,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
         )
         .render_next_and_apply(source_walk, face_resolution_context.clone(), buffer);
 
-        if source_outcome.should_stop_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        if !continue_buffer_walk {
+            return false;
         }
-        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+        true
     }
 }
