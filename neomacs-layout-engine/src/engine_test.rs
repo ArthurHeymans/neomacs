@@ -20,7 +20,7 @@ use crate::display_row_transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
+    DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
@@ -270,7 +270,7 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
     let empty_wrap = WordWrapRenderState::new(true);
 
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char(
+        DisplayRowTextOverflowDecision::for_char(
             'x',
             4.0,
             6.0,
@@ -278,10 +278,10 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
             LineWrapMode::Truncate,
             empty_wrap
         ),
-        BufferTextRowOverflowDecision::Fits
+        DisplayRowTextOverflowDecision::Fits
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char(
+        DisplayRowTextOverflowDecision::for_char(
             '\t',
             12.0,
             16.0,
@@ -289,10 +289,10 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
             LineWrapMode::Truncate,
             empty_wrap
         ),
-        BufferTextRowOverflowDecision::Fits
+        DisplayRowTextOverflowDecision::Fits
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char(
+        DisplayRowTextOverflowDecision::for_char(
             'x',
             5.0,
             6.0,
@@ -300,10 +300,10 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
             LineWrapMode::Truncate,
             empty_wrap
         ),
-        BufferTextRowOverflowDecision::Truncate
+        DisplayRowTextOverflowDecision::Truncate
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char(
+        DisplayRowTextOverflowDecision::for_char(
             'x',
             5.0,
             6.0,
@@ -311,7 +311,7 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
             LineWrapMode::Wrap,
             empty_wrap
         ),
-        BufferTextRowOverflowDecision::CharacterWrap
+        DisplayRowTextOverflowDecision::CharacterWrap
     );
 
     let mut word_wrap = WordWrapRenderState::new(true);
@@ -319,8 +319,15 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
     word_wrap.record_candidate('a', 7, 11, 2, (Some(LispCharPos1::new(3)), None));
 
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, LineWrapMode::Wrap, word_wrap),
-        BufferTextRowOverflowDecision::WordWrap {
+        DisplayRowTextOverflowDecision::for_char(
+            'x',
+            5.0,
+            6.0,
+            10.0,
+            LineWrapMode::Wrap,
+            word_wrap
+        ),
+        DisplayRowTextOverflowDecision::WordWrap {
             break_candidate: word_wrap.candidate(),
         }
     );

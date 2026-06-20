@@ -112,7 +112,7 @@ pub(crate) enum SpecialTextRowOverflowDecision {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum BufferTextRowOverflowDecision {
+pub(crate) enum DisplayRowTextOverflowDecision {
     Fits,
     Truncate,
     WordWrap {
@@ -201,7 +201,7 @@ impl SpecialTextRowOverflowDecision {
     }
 }
 
-impl BufferTextRowOverflowDecision {
+impl DisplayRowTextOverflowDecision {
     pub(crate) fn for_char(
         ch: char,
         x_px: f32,

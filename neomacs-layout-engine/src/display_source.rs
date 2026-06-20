@@ -9,6 +9,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
+use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
@@ -70,6 +71,39 @@ impl Default for DisplaySourceContext<'_> {
 
 pub(crate) trait DisplayItemSource {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplaySourceAppendContinuation {
+    Rendered,
+    Stopped,
+}
+
+impl DisplaySourceAppendContinuation {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(self, Self::Stopped)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplaySourceRangeItemAppendRequest {
+    item: DisplayItem,
+    append_kind: DisplayRowAppendKind,
+}
+
+impl DisplaySourceRangeItemAppendRequest {
+    pub(crate) fn new(item: DisplayItem, append_kind: DisplayRowAppendKind) -> Self {
+        Self { item, append_kind }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_kind(&self) -> DisplayRowAppendKind {
+        self.append_kind
+    }
+
+    pub(crate) fn into_item(self) -> DisplayItem {
+        self.item
+    }
 }
 
 pub(crate) struct DisplayItemOnceSource {

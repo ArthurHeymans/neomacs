@@ -1,7 +1,3 @@
-use crate::display_buffer_text_overflow::{
-    BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction,
-};
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
@@ -18,19 +14,23 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, SpecialTextRowOverflowDecision,
+    DisplayRowTextOverflowDecision, FaceScanCheckpoint, SpecialTextRowOverflowDecision,
     TrailingWhitespaceRenderState, WordWrapRenderState,
 };
-use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::{
-    DisplaySourceAppendItem, DisplaySourceClusterState, DisplaySourceItemRequest,
-    DisplaySourceNaturalMeasurementRequest, DisplaySourceRenderPlanRequest,
-    DisplaySourceSpecialDisplayKind, DisplaySourceTextChar, DisplaySourceTextItemRequest,
-    DisplaySourceTextRange, DisplaySourceTextRequest, DisplaySpecialSourceCharRequest,
+    DisplaySourceAppendContinuation, DisplaySourceAppendItem, DisplaySourceClusterState,
+    DisplaySourceItemRequest, DisplaySourceNaturalMeasurementRequest,
+    DisplaySourceRangeItemAppendRequest, DisplaySourceRenderPlanRequest,
+    DisplaySourceSpecialDisplayKind, DisplaySourceStepChar, DisplaySourceTextChar,
+    DisplaySourceTextItemRequest, DisplaySourceTextRange, DisplaySourceTextRequest,
+    DisplaySpecialSourceCharRequest,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     DisplaySourceAppendRenderPolicy,
+};
+use crate::display_source_overflow::{
+    DisplaySourceSpecialCharOverflowAction, DisplaySourceTextCharOverflowAction,
 };
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
@@ -50,7 +50,7 @@ impl DisplaySourceTextRequest {
         buffer_id: BufferId,
         buffer: &B,
         face_id: u32,
-    ) -> Option<BufferTextSourceRangeItemAppendRequest> {
+    ) -> Option<DisplaySourceRangeItemAppendRequest> {
         buffer_text_source_text_item_append_request(self.source_item(), buffer_id, buffer, face_id)
     }
 }
@@ -122,40 +122,16 @@ impl DisplaySourceNaturalMeasurementRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceRangeItemAppendRequest {
-    item: DisplayItem,
-    append_kind: DisplayRowAppendKind,
-}
-
-impl BufferTextSourceRangeItemAppendRequest {
-    fn new(item: DisplayItem, append_kind: DisplayRowAppendKind) -> Self {
-        Self { item, append_kind }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn append_kind(&self) -> DisplayRowAppendKind {
-        self.append_kind
-    }
-
-    pub(crate) fn into_item(self) -> DisplayItem {
-        self.item
-    }
-}
-
 #[cfg(test)]
 pub(crate) fn buffer_text_source_text_item_append_request<B: LayoutBufferView + ?Sized>(
     source_item: DisplaySourceTextItemRequest,
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-) -> Option<BufferTextSourceRangeItemAppendRequest> {
+) -> Option<DisplaySourceRangeItemAppendRequest> {
     let append_kind = source_item.append_kind();
     let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
-    Some(BufferTextSourceRangeItemAppendRequest::new(
-        item,
-        append_kind,
-    ))
+    Some(DisplaySourceRangeItemAppendRequest::new(item, append_kind))
 }
 
 #[derive(Clone, Copy)]
@@ -232,7 +208,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             self.buffer,
             self.active_face.face_id(),
         )
-        .map(BufferTextSourceRangeItemAppendRequest::into_item)
+        .map(DisplaySourceRangeItemAppendRequest::into_item)
         .unwrap_or_else(|| source_item.clone())
     }
 
@@ -243,7 +219,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         request: DisplaySpecialSourceCharRequest,
         position: DisplayRowPosition,
         source_item: &DisplayItem,
-    ) -> BufferTextSpecialSourceCharPreparedAppend {
+    ) -> DisplaySourceSpecialCharPreparedAppend {
         let display_item = self.source_display_item_for_special_source_char(&request, source_item);
         let measured_width_px = request.requires_overflow_measurement().then(|| {
             self.item_active_face(geometry)
@@ -321,7 +297,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
         source_item: &DisplayItem,
         cluster_tail: Option<(char, bool)>,
-    ) -> BufferTextSourceCharPreparedAppend {
+    ) -> DisplaySourceTextCharPreparedAppend {
         let request = source_char.render_plan_request_for_item_at(
             text,
             byte_idx,
@@ -329,7 +305,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             source_item,
             cluster_tail,
         );
-        BufferTextSourceCharPreparedAppend {
+        DisplaySourceTextCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
                 append_state,
@@ -351,19 +327,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
         source_item: &DisplayItem,
         cluster_tail: Option<(char, bool)>,
-    ) -> BufferTextPreparedSourceCharAppend {
+    ) -> DisplaySourcePreparedCharAppend {
         if let Some(request) = source_char.special_request(cluster_tail) {
-            return BufferTextPreparedSourceCharAppend::Special(
-                self.prepare_special_source_char_at(
-                    geometry,
-                    measure_state,
-                    request,
-                    position,
-                    source_item,
-                ),
-            );
+            return DisplaySourcePreparedCharAppend::Special(self.prepare_special_source_char_at(
+                geometry,
+                measure_state,
+                request,
+                position,
+                source_item,
+            ));
         }
-        BufferTextPreparedSourceCharAppend::Text(self.prepare_text_source_item_char_at(
+        DisplaySourcePreparedCharAppend::Text(self.prepare_text_source_item_char_at(
             geometry,
             append_state,
             measure_state,
@@ -387,7 +361,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         byte_idx: usize,
         position: DisplayRowPosition,
         source_item: &DisplayItem,
-    ) -> BufferTextPreparedSourceCharAppend {
+    ) -> DisplaySourcePreparedCharAppend {
         let mut measure = source_render.measure_state();
         let cluster_tail = measure.current_cluster_tail();
         self.prepare_source_item_char_at(
@@ -472,14 +446,14 @@ fn matching_special_display_item(
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextPreparedSourceCharAppend {
-    Special(BufferTextSpecialSourceCharPreparedAppend),
-    Text(BufferTextSourceCharPreparedAppend),
+pub(crate) enum DisplaySourcePreparedCharAppend {
+    Special(DisplaySourceSpecialCharPreparedAppend),
+    Text(DisplaySourceTextCharPreparedAppend),
 }
 
-impl BufferTextPreparedSourceCharAppend {
+impl DisplaySourcePreparedCharAppend {
     #[cfg(test)]
-    pub(crate) fn into_text(self) -> Option<BufferTextSourceCharPreparedAppend> {
+    pub(crate) fn into_text(self) -> Option<DisplaySourceTextCharPreparedAppend> {
         match self {
             Self::Text(prepared_append) => Some(prepared_append),
             Self::Special(_) => None,
@@ -488,11 +462,11 @@ impl BufferTextPreparedSourceCharAppend {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharPreparedAppend {
+pub(crate) struct DisplaySourceTextCharPreparedAppend {
     pub(crate) plan: BufferTextSourceCharAppendPlan,
 }
 
-impl BufferTextSourceCharPreparedAppend {
+impl DisplaySourceTextCharPreparedAppend {
     fn advance_px(&self) -> f32 {
         self.plan.advance_px()
     }
@@ -536,8 +510,8 @@ impl BufferTextSourceCharPreparedAppend {
         right_edge_px: f32,
         wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
-    ) -> BufferTextRowOverflowDecision {
-        BufferTextRowOverflowDecision::for_char(
+    ) -> DisplayRowTextOverflowDecision {
+        DisplayRowTextOverflowDecision::for_char(
             ch,
             self.plan.position.x_px,
             self.advance_px(),
@@ -553,8 +527,8 @@ impl BufferTextSourceCharPreparedAppend {
         right_edge_px: f32,
         wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
-    ) -> BufferTextSourceCharOverflowAction {
-        BufferTextSourceCharOverflowAction::for_decision(self.overflow_decision(
+    ) -> DisplaySourceTextCharOverflowAction {
+        DisplaySourceTextCharOverflowAction::for_decision(self.overflow_decision(
             ch,
             right_edge_px,
             wrap_mode,
@@ -587,9 +561,9 @@ impl BufferTextSourceCharPreparedAppend {
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
-    ) -> Option<BufferTextSourceCharAppendOutcome> {
+    ) -> Option<DisplaySourceTextCharAppendOutcome> {
         let progress = context.append_source_char_plan_to_text_row(geometry, state, self.plan)?;
-        Some(BufferTextSourceCharAppendOutcome { progress })
+        Some(DisplaySourceTextCharAppendOutcome { progress })
     }
 
     pub(crate) fn append_to_text_row_and_apply<B: LayoutBufferView + ?Sized>(
@@ -601,9 +575,9 @@ impl BufferTextSourceCharPreparedAppend {
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
         word_wrap: &mut WordWrapRenderState,
         progress: &mut DisplaySourceProgressState<'_>,
-    ) -> BufferTextSourceAppendContinuation {
+    ) -> DisplaySourceAppendContinuation {
         let Some(outcome) = self.append_to_text_row(context, geometry, source_render) else {
-            return BufferTextSourceAppendContinuation::Stopped;
+            return DisplaySourceAppendContinuation::Stopped;
         };
         outcome.apply_rendered_char_to_walk_state(
             trailing_whitespace,
@@ -612,16 +586,16 @@ impl BufferTextSourceCharPreparedAppend {
             geometry,
             progress,
         );
-        BufferTextSourceAppendContinuation::Rendered
+        DisplaySourceAppendContinuation::Rendered
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharAppendOutcome {
+pub(crate) struct DisplaySourceTextCharAppendOutcome {
     progress: DisplayRowAppendProgress,
 }
 
-impl BufferTextSourceCharAppendOutcome {
+impl DisplaySourceTextCharAppendOutcome {
     pub(crate) fn apply_to_text_row_state(
         &self,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
@@ -703,13 +677,10 @@ pub(crate) fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Size
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-) -> Option<BufferTextSourceRangeItemAppendRequest> {
+) -> Option<DisplaySourceRangeItemAppendRequest> {
     let append_kind = source_item.append_kind();
     let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
-    Some(BufferTextSourceRangeItemAppendRequest::new(
-        item,
-        append_kind,
-    ))
+    Some(DisplaySourceRangeItemAppendRequest::new(item, append_kind))
 }
 
 impl DisplaySourceStepChar {
@@ -765,8 +736,8 @@ impl DisplaySpecialSourceCharRequest {
         position: DisplayRowPosition,
         measured_width_px: Option<f32>,
         display_item: DisplayItem,
-    ) -> BufferTextSpecialSourceCharPreparedAppend {
-        BufferTextSpecialSourceCharPreparedAppend {
+    ) -> DisplaySourceSpecialCharPreparedAppend {
+        DisplaySourceSpecialCharPreparedAppend {
             kind: self.kind(),
             append_plan: self.append_plan_at(position, display_item),
             measured_width_px,
@@ -785,13 +756,13 @@ impl DisplaySourceSpecialDisplayKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharPreparedAppend {
+pub(crate) struct DisplaySourceSpecialCharPreparedAppend {
     pub(crate) kind: DisplaySourceSpecialDisplayKind,
     pub(crate) append_plan: BufferTextSpecialSourceCharAppendPlan,
     pub(crate) measured_width_px: Option<f32>,
 }
 
-impl BufferTextSpecialSourceCharPreparedAppend {
+impl DisplaySourceSpecialCharPreparedAppend {
     #[cfg(test)]
     pub(crate) fn kind(&self) -> DisplaySourceSpecialDisplayKind {
         self.kind
@@ -833,8 +804,8 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         x_px: f32,
         right_edge_px: f32,
         wrap_mode: LineWrapMode,
-    ) -> Option<BufferTextSpecialSourceCharOverflowAction> {
-        Some(BufferTextSpecialSourceCharOverflowAction::for_decision(
+    ) -> Option<DisplaySourceSpecialCharOverflowAction> {
+        Some(DisplaySourceSpecialCharOverflowAction::for_decision(
             self.overflow_decision(x_px, right_edge_px, wrap_mode)?,
         ))
     }
@@ -869,14 +840,14 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         face_scan: &mut FaceScanCheckpoint,
         word_wrap: &mut WordWrapRenderState,
         progress: &mut DisplaySourceProgressState<'_>,
-    ) -> BufferTextSourceAppendContinuation {
+    ) -> DisplaySourceAppendContinuation {
         let Some(outcome) =
             self.append_to_text_row(context, geometry, params, face_ids, source_render)
         else {
-            return BufferTextSourceAppendContinuation::Stopped;
+            return DisplaySourceAppendContinuation::Stopped;
         };
         outcome.apply_rendered_special_char_to_walk_state(face_scan, word_wrap, progress);
-        BufferTextSourceAppendContinuation::Rendered
+        DisplaySourceAppendContinuation::Rendered
     }
 }
 

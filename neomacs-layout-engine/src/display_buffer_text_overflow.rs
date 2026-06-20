@@ -5,7 +5,7 @@
 //! source append pipeline.
 
 use crate::display_buffer_text_item_append::{
-    BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
+    DisplaySourceSpecialCharPreparedAppend, DisplaySourceTextCharPreparedAppend,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
@@ -19,11 +19,13 @@ use crate::display_row_transition::{
     DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState,
-    SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, WordWrapBreakCandidate,
+    FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate,
     WordWrapRenderState,
 };
 use crate::display_source::{DisplaySourceStepChar, DisplaySourceTextPosition};
+use crate::display_source_overflow::{
+    DisplaySourceSpecialCharOverflowAction, DisplaySourceTextCharOverflowAction,
+};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
@@ -31,47 +33,8 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::EmacsBytePos;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceCharOverflowAction {
-    Fits,
-    Truncate {
-        transition: DisplayRowOverflowTransitionPlan,
-    },
-    WordWrap {
-        break_candidate: WordWrapBreakCandidate,
-        transition: DisplayRowOverflowTransitionPlan,
-    },
-    CharacterWrap {
-        transition: DisplayRowOverflowTransitionPlan,
-    },
-}
-
-impl BufferTextSourceCharOverflowAction {
-    pub(crate) fn for_decision(decision: BufferTextRowOverflowDecision) -> Self {
-        match decision {
-            BufferTextRowOverflowDecision::Fits => Self::Fits,
-            BufferTextRowOverflowDecision::Truncate => Self::Truncate {
-                transition: DisplayRowOverflowTransitionPlan::truncation(
-                    TextRowTransitionStatePolicy::truncation(),
-                ),
-            },
-            BufferTextRowOverflowDecision::WordWrap { break_candidate } => Self::WordWrap {
-                break_candidate,
-                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
-                    TextRowTransitionStatePolicy::visual_wrap(),
-                ),
-            },
-            BufferTextRowOverflowDecision::CharacterWrap => Self::CharacterWrap {
-                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
-                    TextRowTransitionStatePolicy::character_wrap(),
-                ),
-            },
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextOverflowRenderRequest<'a> {
-    prepared_append: &'a BufferTextSourceCharPreparedAppend,
+    prepared_append: &'a DisplaySourceTextCharPreparedAppend,
     source_step_char: DisplaySourceStepChar,
     context: BufferTextOverflowRenderContext,
 }
@@ -128,18 +91,6 @@ pub(crate) enum BufferTextOverflowRenderOutcome {
     Transition(DisplayRowTransitionContinuation),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceAppendContinuation {
-    Rendered,
-    Stopped,
-}
-
-impl BufferTextSourceAppendContinuation {
-    pub(crate) fn should_break(self) -> bool {
-        matches!(self, Self::Stopped)
-    }
-}
-
 impl BufferTextOverflowRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(
@@ -161,7 +112,7 @@ impl BufferTextOverflowRenderOutcome {
 
 impl<'a> BufferTextOverflowRenderRequest<'a> {
     pub(crate) fn new(
-        prepared_append: &'a BufferTextSourceCharPreparedAppend,
+        prepared_append: &'a DisplaySourceTextCharPreparedAppend,
         source_step_char: DisplaySourceStepChar,
         context: BufferTextOverflowRenderContext,
     ) -> Self {
@@ -204,8 +155,8 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             context.wrap_mode,
             context.word_wrap,
         ) {
-            BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
-            BufferTextSourceCharOverflowAction::Truncate { transition } => {
+            DisplaySourceTextCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
+            DisplaySourceTextCharOverflowAction::Truncate { transition } => {
                 let truncation_skip = source_walk
                     .consume_truncation_skip(text, progress.source_position())
                     .apply_to_progress(&mut progress);
@@ -247,7 +198,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     truncation_skip.transition_continuation(row_transition),
                 )
             }
-            BufferTextSourceCharOverflowAction::WordWrap {
+            DisplaySourceTextCharOverflowAction::WordWrap {
                 break_candidate: wrap_break,
                 transition,
             } => {
@@ -305,7 +256,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     .apply_to_progress(&mut progress);
                 BufferTextOverflowRenderOutcome::Transition(continuation)
             }
-            BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
+            DisplaySourceTextCharOverflowAction::CharacterWrap { transition } => {
                 let character_wrap_action =
                     BufferTextCharacterWrapSourceAction::from_source_step_char(
                         self.source_step_char,
@@ -654,7 +605,7 @@ impl BufferTextCharacterWrapSourceAction {
 }
 
 pub(crate) struct BufferTextSpecialOverflowRenderRequest<'a> {
-    prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
+    prepared_append: &'a DisplaySourceSpecialCharPreparedAppend,
     context: BufferTextSpecialOverflowRenderContext<'a>,
 }
 
@@ -714,35 +665,6 @@ pub(crate) enum BufferTextSpecialOverflowRenderOutcome {
     ContinueBufferWalk(DisplayRowTransitionContinuation),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum BufferTextSpecialSourceCharOverflowAction {
-    Fits,
-    Truncate {
-        transition: DisplayRowOverflowTransitionPlan,
-    },
-    Wrap {
-        transition: DisplayRowOverflowTransitionPlan,
-    },
-}
-
-impl BufferTextSpecialSourceCharOverflowAction {
-    pub(crate) fn for_decision(decision: SpecialTextRowOverflowDecision) -> Self {
-        match decision {
-            SpecialTextRowOverflowDecision::Fits => Self::Fits,
-            SpecialTextRowOverflowDecision::Truncate => Self::Truncate {
-                transition: DisplayRowOverflowTransitionPlan::truncation(
-                    TextRowTransitionStatePolicy::special_truncation(),
-                ),
-            },
-            SpecialTextRowOverflowDecision::Wrap => Self::Wrap {
-                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
-                    TextRowTransitionStatePolicy::special_visual_wrap(),
-                ),
-            },
-        }
-    }
-}
-
 impl BufferTextSpecialOverflowRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(
@@ -767,7 +689,7 @@ impl BufferTextSpecialOverflowRenderOutcome {
 
 impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
     pub(crate) fn new(
-        prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
+        prepared_append: &'a DisplaySourceSpecialCharPreparedAppend,
         context: BufferTextSpecialOverflowRenderContext<'a>,
     ) -> Self {
         Self {
@@ -806,10 +728,10 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             context.right_edge_px,
             context.wrap_mode,
         ) {
-            None | Some(BufferTextSpecialSourceCharOverflowAction::Fits) => {
+            None | Some(DisplaySourceSpecialCharOverflowAction::Fits) => {
                 BufferTextSpecialOverflowRenderOutcome::Fits
             }
-            Some(BufferTextSpecialSourceCharOverflowAction::Truncate { transition }) => {
+            Some(DisplaySourceSpecialCharOverflowAction::Truncate { transition }) => {
                 let truncation_skip = source_walk
                     .consume_truncation_skip(context.text, progress.source_position())
                     .apply_to_progress(&mut progress);
@@ -864,7 +786,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     .apply_to_progress(&mut progress);
                 BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(continuation)
             }
-            Some(BufferTextSpecialSourceCharOverflowAction::Wrap { transition }) => {
+            Some(DisplaySourceSpecialCharOverflowAction::Wrap { transition }) => {
                 let special_wrap_action =
                     BufferTextSpecialWrapSourceAction::new(progress.charpos());
                 special_wrap_action.apply_before_row_transition(

@@ -75,7 +75,7 @@ use crate::display_row_source_render::{
 };
 use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
-    BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
+    BoxFaceRowState, DisplayRowTextOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
@@ -93,6 +93,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     NaturalDisplayRowAppendRenderPolicy,
 };
+use crate::display_source_overflow::DisplaySourceTextCharOverflowAction;
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_source_resolver::DisplayPropertyReplacementSourceResolveRequest;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
@@ -733,9 +734,9 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
     assert_eq!(line_ctx.row_y_positions.recorded(), &[0.0, 20.0]);
 
     let mut wrap_ctx = RowTransitionTestContext::new("transition-context-overflow");
-    let BufferTextSourceCharOverflowAction::CharacterWrap { transition } =
-        BufferTextSourceCharOverflowAction::for_decision(
-            BufferTextRowOverflowDecision::CharacterWrap,
+    let DisplaySourceTextCharOverflowAction::CharacterWrap { transition } =
+        DisplaySourceTextCharOverflowAction::for_decision(
+            DisplayRowTextOverflowDecision::CharacterWrap,
         )
     else {
         panic!("expected character wrap transition");
@@ -819,9 +820,9 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
     assert_eq!(line_ctx.row_y_positions.recorded(), &[0.0, 18.0]);
 
     let mut overflow_ctx = RowTransitionTestContext::new("text-window-transition-overflow");
-    let BufferTextSourceCharOverflowAction::CharacterWrap { transition } =
-        BufferTextSourceCharOverflowAction::for_decision(
-            BufferTextRowOverflowDecision::CharacterWrap,
+    let DisplaySourceTextCharOverflowAction::CharacterWrap { transition } =
+        DisplaySourceTextCharOverflowAction::for_decision(
+            DisplayRowTextOverflowDecision::CharacterWrap,
         )
     else {
         panic!("expected character wrap transition");
@@ -936,9 +937,9 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', ctx.geometry.start_marker_at_x(8.0));
     let mut col = 6;
-    let BufferTextSourceCharOverflowAction::CharacterWrap { transition } =
-        BufferTextSourceCharOverflowAction::for_decision(
-            BufferTextRowOverflowDecision::CharacterWrap,
+    let DisplaySourceTextCharOverflowAction::CharacterWrap { transition } =
+        DisplaySourceTextCharOverflowAction::for_decision(
+            DisplayRowTextOverflowDecision::CharacterWrap,
         )
     else {
         panic!("expected character wrap transition");
@@ -3192,10 +3193,10 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     );
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
-    let BufferTextSourceCharOverflowAction::WordWrap { transition, .. } =
-        BufferTextSourceCharOverflowAction::for_decision(BufferTextRowOverflowDecision::WordWrap {
-            break_candidate,
-        })
+    let DisplaySourceTextCharOverflowAction::WordWrap { transition, .. } =
+        DisplaySourceTextCharOverflowAction::for_decision(
+            DisplayRowTextOverflowDecision::WordWrap { break_candidate },
+        )
     else {
         panic!("expected word wrap transition");
     };
@@ -3283,7 +3284,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         buffer.insert("a");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let prepared_append = BufferTextSpecialSourceCharPreparedAppend {
+    let prepared_append = DisplaySourceSpecialCharPreparedAppend {
         kind: DisplaySourceSpecialDisplayKind::Control,
         append_plan: BufferTextSpecialSourceCharAppendPlan {
             source_item: DisplaySourceItemRequest::new(
@@ -3534,7 +3535,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let text = b"a";
     let mut byte_idx = 0;
     let source_step_char = DisplaySourceStepChar::new('a', 0, 21);
-    let prepared_append = BufferTextSourceCharPreparedAppend {
+    let prepared_append = DisplaySourceTextCharPreparedAppend {
         plan: BufferTextSourceCharAppendPlan {
             source_text: DisplaySourceTextRequest::new(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
@@ -3668,10 +3669,10 @@ fn display_row_transition_render_state_applies_overflow_wrap_policy() {
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
     let col = 7;
-    let BufferTextSourceCharOverflowAction::WordWrap { transition, .. } =
-        BufferTextSourceCharOverflowAction::for_decision(BufferTextRowOverflowDecision::WordWrap {
-            break_candidate,
-        })
+    let DisplaySourceTextCharOverflowAction::WordWrap { transition, .. } =
+        DisplaySourceTextCharOverflowAction::for_decision(
+            DisplayRowTextOverflowDecision::WordWrap { break_candidate },
+        )
     else {
         panic!("expected word wrap transition");
     };
@@ -6259,7 +6260,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             LineWrapMode::Wrap,
             WordWrapRenderState::new(false)
         ),
-        BufferTextRowOverflowDecision::Fits
+        DisplayRowTextOverflowDecision::Fits
     );
     assert!(matches!(
         prepared_append.overflow_action(
@@ -6268,7 +6269,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             LineWrapMode::Wrap,
             WordWrapRenderState::new(false)
         ),
-        BufferTextSourceCharOverflowAction::Fits
+        DisplaySourceTextCharOverflowAction::Fits
     ));
     assert!(matches!(
         prepared_append.overflow_action(
@@ -6277,7 +6278,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             LineWrapMode::Truncate,
             WordWrapRenderState::new(false)
         ),
-        BufferTextSourceCharOverflowAction::Truncate { .. }
+        DisplaySourceTextCharOverflowAction::Truncate { .. }
     ));
     assert!(matches!(
         prepared_append.overflow_action(
@@ -6286,7 +6287,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             LineWrapMode::Wrap,
             WordWrapRenderState::new(false)
         ),
-        BufferTextSourceCharOverflowAction::CharacterWrap { .. }
+        DisplaySourceTextCharOverflowAction::CharacterWrap { .. }
     ));
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
@@ -6299,7 +6300,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     );
     assert!(matches!(
         prepared_append.overflow_action('a', 4.0, LineWrapMode::Wrap, word_wrap),
-        BufferTextSourceCharOverflowAction::WordWrap { break_candidate, .. }
+        DisplaySourceTextCharOverflowAction::WordWrap { break_candidate, .. }
             if break_candidate.byte_idx() == 0
                 && break_candidate.charpos() == 0
                 && break_candidate.display_point_count() == 2
@@ -6328,7 +6329,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         &mut word_wrap,
         &mut progress,
     );
-    assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
+    assert_eq!(continuation, DisplaySourceAppendContinuation::Rendered);
     assert_eq!(
         trailing_whitespace
             .highlight_start_x(&geometry)
@@ -6571,7 +6572,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
             LineWrapMode::Wrap,
             WordWrapRenderState::new(false)
         ),
-        BufferTextRowOverflowDecision::Fits
+        DisplayRowTextOverflowDecision::Fits
     );
 }
 
@@ -8096,7 +8097,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         &mut word_wrap,
         &mut progress,
     );
-    assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
+    assert_eq!(continuation, DisplaySourceAppendContinuation::Rendered);
     assert!(face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 31);
 

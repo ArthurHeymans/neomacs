@@ -8,7 +8,7 @@ use crate::display_buffer_display_property_render::{
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_item_append::{
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext,
+    BufferTextRowAppendContext, DisplaySourcePreparedCharAppend,
 };
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
@@ -226,7 +226,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     );
 
     let prepared_append = match prepared_append {
-        BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
+        DisplaySourcePreparedCharAppend::Special(special_prepared_append) => {
             let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
                 &special_prepared_append,
                 BufferTextSpecialOverflowRenderContext::new(
@@ -297,7 +297,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             }
             return BufferTextSourceItemRenderOutcome::ContinueBufferWalk;
         }
-        BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
+        DisplaySourcePreparedCharAppend::Text(prepared_append) => prepared_append,
     };
 
     prepared_append
