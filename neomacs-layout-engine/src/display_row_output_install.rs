@@ -1,8 +1,11 @@
 use crate::composition::last_text_cluster_tail_in_row;
+use crate::display_output_builder::OutputRowLifecycleRequest;
 use crate::display_output_builder::{
     DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputCurrentRowDecorationRequest,
+};
+use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
-    OutputMediaInstallRequest, OutputRetryCheckpointRestoreRequest, OutputRowLifecycleRequest,
+    OutputMediaInstallRequest, OutputRetryCheckpointRestoreRequest,
     OutputTextWindowDisplayRangeInstallRequest, ResolvedOutputMediaInstallTarget,
 };
 #[cfg(test)]

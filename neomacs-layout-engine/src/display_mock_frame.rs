@@ -3,7 +3,8 @@ use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_output_builder::{DisplayOutputBuilder, OutputFrameStateInstallRequest};
+use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
     DisplayRowSourceFragmentFrame, DisplayRowSourceState,

@@ -9,6 +9,11 @@
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_output_install_request::{
+    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest,
+    OutputFrameIdentityInstallRequest, OutputFrameStateInstallRequest, OutputMediaInstallKind,
+    OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
+};
 use crate::display_output_row_grid::{OutputWindowGridEntry, OutputWindowRowGrid};
 #[cfg(test)]
 use crate::display_row::resolved_display_row_face;
@@ -18,361 +23,17 @@ use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
+#[cfg(test)]
+use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, StipplePattern, WindowEffectHint,
-    WindowInfo, WindowTransitionHint,
+    CursorStyle, GlyphRowRole, PhysCursor, StipplePattern, WindowEffectHint, WindowInfo,
+    WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::HashMap;
 
 pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum OutputMediaInstallKind {
-    Image {
-        image_id: u32,
-    },
-    Video {
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-    },
-    Xwidget {
-        xwidget_id: u32,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct OutputMediaInstallRequest {
-    target: ResolvedOutputMediaInstallTarget,
-    kind: OutputMediaInstallKind,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedOutputMediaInstallTarget {
-    window_id: i64,
-    role: GlyphRowRole,
-    clip: Option<Rect>,
-    slot_id: DisplaySlotId,
-}
-
-impl OutputMediaInstallRequest {
-    pub(crate) fn new(
-        target: ResolvedOutputMediaInstallTarget,
-        kind: OutputMediaInstallKind,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) -> Self {
-        Self {
-            target,
-            kind,
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    pub(crate) fn image(
-        target: ResolvedOutputMediaInstallTarget,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) -> Self {
-        Self::new(
-            target,
-            OutputMediaInstallKind::Image { image_id },
-            x,
-            y,
-            width,
-            height,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn video(
-        target: ResolvedOutputMediaInstallTarget,
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) -> Self {
-        Self::new(
-            target,
-            OutputMediaInstallKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            },
-            x,
-            y,
-            width,
-            height,
-        )
-    }
-
-    pub(crate) fn xwidget(
-        target: ResolvedOutputMediaInstallTarget,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) -> Self {
-        Self::new(
-            target,
-            OutputMediaInstallKind::Xwidget { xwidget_id },
-            x,
-            y,
-            width,
-            height,
-        )
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        let target = self.target;
-        match self.kind {
-            OutputMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                image_id,
-                x: self.x,
-                y: self.y,
-                width: self.width,
-                height: self.height,
-            }),
-            OutputMediaInstallKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => builder.videos.push(VideoItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                video_id,
-                x: self.x,
-                y: self.y,
-                width: self.width,
-                height: self.height,
-                loop_count,
-                autoplay,
-            }),
-            OutputMediaInstallKind::Xwidget { xwidget_id } => builder.xwidgets.push(XwidgetItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                xwidget_id,
-                x: self.x,
-                y: self.y,
-                width: self.width,
-                height: self.height,
-            }),
-        }
-    }
-}
-
-impl ResolvedOutputMediaInstallTarget {
-    pub(crate) fn new(
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-    ) -> Self {
-        Self {
-            window_id,
-            role,
-            clip,
-            slot_id,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct OutputCursorInstallRequest {
-    window_id: i64,
-    slot_id: DisplaySlotId,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    style: CursorStyle,
-    color: Color,
-}
-
-impl OutputCursorInstallRequest {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        style: CursorStyle,
-        color: Color,
-    ) -> Self {
-        Self {
-            window_id,
-            slot_id,
-            x,
-            y,
-            width,
-            height,
-            style,
-            color,
-        }
-    }
-
-    fn cursor_item(self) -> CursorItem {
-        CursorItem {
-            window_id: self.window_id,
-            slot_id: self.slot_id,
-            x: self.x,
-            y: self.y,
-            width: self.width,
-            height: self.height,
-            style: self.style,
-            color: self.color,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum OutputFrameArtifactInstallRequest {
-    Background {
-        bounds: Rect,
-        color: Color,
-    },
-    Border {
-        window_id: i64,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        color: Color,
-    },
-    ScrollBar(ScrollBarItem),
-    WindowInfo(WindowInfo),
-    TransitionHint(WindowTransitionHint),
-    EffectHint(WindowEffectHint),
-    PhysCursor(PhysCursor),
-}
-
-impl OutputFrameArtifactInstallRequest {
-    pub(crate) fn phys_cursor(cursor: PhysCursor) -> Self {
-        Self::PhysCursor(cursor)
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::Background { bounds, color } => {
-                builder.backgrounds.push(BackgroundItem { bounds, color });
-            }
-            Self::Border {
-                window_id,
-                x,
-                y,
-                width,
-                height,
-                color,
-            } => {
-                builder.borders.push(BorderItem {
-                    window_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                    color,
-                });
-            }
-            Self::ScrollBar(item) => builder.scroll_bars.push(item),
-            Self::WindowInfo(info) => builder.window_infos.push(info),
-            Self::TransitionHint(hint) => builder.transition_hints.push(hint),
-            Self::EffectHint(hint) => builder.effect_hints.push(hint),
-            Self::PhysCursor(cursor) => builder.phys_cursor = Some(cursor),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct OutputFrameIdentityInstallRequest {
-    frame_id: u64,
-    parent_id: u64,
-    parent_x: f32,
-    parent_y: f32,
-    z_order: i32,
-    undecorated: bool,
-    border_width: f32,
-    border_color: Color,
-    background_alpha: f32,
-    no_accept_focus: bool,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum OutputFrameStateInstallRequest {
-    Identity(OutputFrameIdentityInstallRequest),
-    BackgroundColor(Color),
-    FontPixelSize(f32),
-    Face {
-        id: u32,
-        face: Face,
-    },
-    CursorEffects {
-        window_id: i64,
-        effects: EffectsConfig,
-    },
-}
-
-impl OutputFrameStateInstallRequest {
-    pub(crate) fn face(id: u32, face: Face) -> Self {
-        Self::Face { id, face }
-    }
-
-    pub(crate) fn cursor_effects(window_id: i64, effects: EffectsConfig) -> Self {
-        Self::CursorEffects { window_id, effects }
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::Identity(identity) => {
-                builder.frame_id = identity.frame_id;
-                builder.parent_id = identity.parent_id;
-                builder.parent_x = identity.parent_x;
-                builder.parent_y = identity.parent_y;
-                builder.z_order = identity.z_order;
-                builder.undecorated = identity.undecorated;
-                builder.border_width = identity.border_width;
-                builder.border_color = identity.border_color;
-                builder.background_alpha = identity.background_alpha;
-                builder.no_accept_focus = identity.no_accept_focus;
-            }
-            Self::BackgroundColor(color) => builder.background_color = color,
-            Self::FontPixelSize(size) => builder.font_pixel_size = size,
-            Self::Face { id, face } => {
-                builder.faces.insert(id, face);
-            }
-            Self::CursorEffects { window_id, effects } => {
-                builder.cursor_effects_by_window.insert(window_id, effects);
-            }
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct OutputWindowBeginRequest {
@@ -388,25 +49,6 @@ struct OutputWindowBeginRequest {
 enum OutputWindowLifecycleRequest {
     Begin(OutputWindowBeginRequest),
     End,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct OutputTextWindowDisplayRangeInstallRequest {
-    window_id: i64,
-    window_start: i64,
-    window_end: i64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct OutputRetryCheckpointRestoreRequest {
-    transition_hints_len: usize,
-    effect_hints_len: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OutputWindowMetadataInstallRequest {
-    TextDisplayRange(OutputTextWindowDisplayRangeInstallRequest),
-    RestoreRetryCheckpoint(OutputRetryCheckpointRestoreRequest),
 }
 
 impl OutputWindowLifecycleRequest {
@@ -430,58 +72,6 @@ impl OutputWindowLifecycleRequest {
                         builder.current_selected,
                     ));
                 }
-            }
-        }
-    }
-}
-
-impl OutputTextWindowDisplayRangeInstallRequest {
-    pub(crate) fn new(window_id: i64, window_start: i64, window_end: i64) -> Self {
-        Self {
-            window_id,
-            window_start,
-            window_end,
-        }
-    }
-}
-
-impl OutputRetryCheckpointRestoreRequest {
-    pub(crate) fn new(transition_hints_len: usize, effect_hints_len: usize) -> Self {
-        Self {
-            transition_hints_len,
-            effect_hints_len,
-        }
-    }
-}
-
-impl From<OutputTextWindowDisplayRangeInstallRequest> for OutputWindowMetadataInstallRequest {
-    fn from(request: OutputTextWindowDisplayRangeInstallRequest) -> Self {
-        Self::TextDisplayRange(request)
-    }
-}
-
-impl From<OutputRetryCheckpointRestoreRequest> for OutputWindowMetadataInstallRequest {
-    fn from(request: OutputRetryCheckpointRestoreRequest) -> Self {
-        Self::RestoreRetryCheckpoint(request)
-    }
-}
-
-impl OutputWindowMetadataInstallRequest {
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::TextDisplayRange(range) => {
-                if let Some(info) = builder.window_infos.last_mut()
-                    && info.window_id == range.window_id
-                {
-                    info.window_start = range.window_start;
-                    info.window_end = range.window_end;
-                }
-            }
-            Self::RestoreRetryCheckpoint(checkpoint) => {
-                builder
-                    .transition_hints
-                    .truncate(checkpoint.transition_hints_len);
-                builder.effect_hints.truncate(checkpoint.effect_hints_len);
             }
         }
     }
@@ -854,7 +444,25 @@ impl DisplayOutputBuilder {
         &mut self,
         request: impl Into<OutputWindowMetadataInstallRequest>,
     ) {
-        request.into().install(self);
+        self.install_output_window_metadata(request.into());
+    }
+
+    fn install_output_window_metadata(&mut self, request: OutputWindowMetadataInstallRequest) {
+        match request {
+            OutputWindowMetadataInstallRequest::TextDisplayRange(range) => {
+                if let Some(info) = self.window_infos.last_mut()
+                    && info.window_id == range.window_id
+                {
+                    info.window_start = range.window_start;
+                    info.window_end = range.window_end;
+                }
+            }
+            OutputWindowMetadataInstallRequest::RestoreRetryCheckpoint(checkpoint) => {
+                self.transition_hints
+                    .truncate(checkpoint.transition_hints_len);
+                self.effect_hints.truncate(checkpoint.effect_hints_len);
+            }
+        }
     }
 
     pub(crate) fn install_output_row_lifecycle(&mut self, request: OutputRowLifecycleRequest) {
@@ -1062,7 +670,37 @@ impl DisplayOutputBuilder {
         &mut self,
         request: OutputFrameArtifactInstallRequest,
     ) {
-        request.install(self);
+        match request {
+            OutputFrameArtifactInstallRequest::Background { bounds, color } => {
+                self.backgrounds.push(BackgroundItem { bounds, color });
+            }
+            OutputFrameArtifactInstallRequest::Border {
+                window_id,
+                x,
+                y,
+                width,
+                height,
+                color,
+            } => {
+                self.borders.push(BorderItem {
+                    window_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                    color,
+                });
+            }
+            OutputFrameArtifactInstallRequest::ScrollBar(item) => self.scroll_bars.push(item),
+            OutputFrameArtifactInstallRequest::WindowInfo(info) => self.window_infos.push(info),
+            OutputFrameArtifactInstallRequest::TransitionHint(hint) => {
+                self.transition_hints.push(hint);
+            }
+            OutputFrameArtifactInstallRequest::EffectHint(hint) => self.effect_hints.push(hint),
+            OutputFrameArtifactInstallRequest::PhysCursor(cursor) => {
+                self.phys_cursor = Some(cursor)
+            }
+        }
     }
 
     pub(crate) fn install_output_cursor(&mut self, request: OutputCursorInstallRequest) {
@@ -1070,7 +708,48 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn install_output_media(&mut self, request: OutputMediaInstallRequest) {
-        request.install(self);
+        let target = request.target;
+        match request.kind {
+            OutputMediaInstallKind::Image { image_id } => self.images.push(ImageItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                image_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            }),
+            OutputMediaInstallKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => self.videos.push(VideoItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                video_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+                loop_count,
+                autoplay,
+            }),
+            OutputMediaInstallKind::Xwidget { xwidget_id } => self.xwidgets.push(XwidgetItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                xwidget_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            }),
+        }
     }
 
     pub(crate) fn set_output_frame_identity(
@@ -1243,7 +922,28 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn install_output_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
-        request.install(self);
+        match request {
+            OutputFrameStateInstallRequest::Identity(identity) => {
+                self.frame_id = identity.frame_id;
+                self.parent_id = identity.parent_id;
+                self.parent_x = identity.parent_x;
+                self.parent_y = identity.parent_y;
+                self.z_order = identity.z_order;
+                self.undecorated = identity.undecorated;
+                self.border_width = identity.border_width;
+                self.border_color = identity.border_color;
+                self.background_alpha = identity.background_alpha;
+                self.no_accept_focus = identity.no_accept_focus;
+            }
+            OutputFrameStateInstallRequest::BackgroundColor(color) => self.background_color = color,
+            OutputFrameStateInstallRequest::FontPixelSize(size) => self.font_pixel_size = size,
+            OutputFrameStateInstallRequest::Face { id, face } => {
+                self.faces.insert(id, face);
+            }
+            OutputFrameStateInstallRequest::CursorEffects { window_id, effects } => {
+                self.cursor_effects_by_window.insert(window_id, effects);
+            }
+        }
     }
 
     pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
