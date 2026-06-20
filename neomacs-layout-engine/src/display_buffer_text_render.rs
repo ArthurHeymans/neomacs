@@ -383,6 +383,40 @@ struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_adapter: BufferTextConsumedItemAdapter,
 }
 
+struct BufferTextWindowSourceConsumption {
+    source_item: Option<BufferTextConsumedSourceItem>,
+    source_position: BufferTextSourcePosition,
+    pending_faces: Vec<PendingDisplaySourceFace>,
+}
+
+struct BufferTextWindowFallbackSourceConsumption {
+    source_item: Option<BufferTextConsumedDisplayItem>,
+    source_position: BufferTextSourcePosition,
+}
+
+impl BufferTextWindowSourceConsumption {
+    fn apply_to_progress(
+        self,
+        progress: &mut BufferTextWindowProgressState<'_>,
+    ) -> (
+        Option<BufferTextConsumedSourceItem>,
+        Vec<PendingDisplaySourceFace>,
+    ) {
+        progress.apply_source_position(self.source_position);
+        (self.source_item, self.pending_faces)
+    }
+}
+
+impl BufferTextWindowFallbackSourceConsumption {
+    fn apply_to_progress(
+        self,
+        progress: &mut BufferTextWindowProgressState<'_>,
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        progress.apply_source_position(self.source_position);
+        self.source_item
+    }
+}
+
 struct BufferTextWindowOutputState<'emit> {
     output_builder: &'emit mut DisplayOutputBuilder,
     evaluator: &'emit mut Context,
@@ -1699,13 +1733,47 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         }
     }
 
-    fn fallback_consumed_display_item_from_source_item(
+    fn consume_source_item(
+        &mut self,
+        mut source_position: BufferTextSourcePosition,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> BufferTextWindowSourceConsumption {
+        let mut pending_faces = Vec::new();
+        let source_item = {
+            let params = face_resolution_context.source_resolve_params(None);
+            let mut resolver = DisplaySourcePropertyResolver::new(
+                params,
+                &mut self.source_resolve_state,
+                face_ids,
+                &mut pending_faces,
+            );
+            let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
+            self.source_adapter.next_consumed_source_item(
+                &mut self.source_cursor,
+                &mut source_context,
+                &mut source_position,
+            )
+        };
+        BufferTextWindowSourceConsumption {
+            source_item,
+            source_position,
+            pending_faces,
+        }
+    }
+
+    fn consume_fallback_source_item(
         &mut self,
         source_item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
-        self.source_adapter
-            .consumed_display_item_from_source_item(source_item, position)
+        mut source_position: BufferTextSourcePosition,
+    ) -> BufferTextWindowFallbackSourceConsumption {
+        let source_item = self
+            .source_adapter
+            .consumed_display_item_from_source_item(source_item, &mut source_position);
+        BufferTextWindowFallbackSourceConsumption {
+            source_item,
+            source_position,
+        }
     }
 }
 
@@ -2887,8 +2955,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             }
         }
 
-        let Some(consumed_source) =
-            self.consume_source_item(source_walk, face_resolution_context, active_face_state)
+        let Some(consumed_source) = self.consume_source_item(source_walk, face_resolution_context)
         else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
@@ -3066,16 +3133,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
-                let mut source_position = self.progress.source_position();
                 let Some(source_step) = source_walk
-                    .fallback_consumed_display_item_from_source_item(
-                        source_item,
-                        &mut source_position,
-                    )
+                    .consume_fallback_source_item(source_item, self.progress.source_position())
+                    .apply_to_progress(&mut self.progress)
                 else {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 };
-                self.progress.apply_source_position(source_position);
                 self.render_consumed_display_item_for_context(
                     BufferTextWindowConsumedDisplayItemRenderRequest {
                         layout_resolution_context,
@@ -3133,30 +3196,17 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
-        _active_face_state: &DisplayRowActiveFaceState,
     ) -> Option<BufferTextConsumedSourceItem> {
         // One persistent typed source cursor feeds the row walk. The source
         // side owns pending text-run splitting so direct single-character
         // items can still stay typed through render.
-        let mut pending_faces = Vec::new();
-        let source_item = {
-            let params = face_resolution_context.source_resolve_params(None);
-            let mut resolver = DisplaySourcePropertyResolver::new(
-                params,
-                &mut source_walk.source_resolve_state,
+        let (source_item, pending_faces) = source_walk
+            .consume_source_item(
+                self.progress.source_position(),
+                face_resolution_context,
                 self.face_ids,
-                &mut pending_faces,
-            );
-            let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            let mut source_position = self.progress.source_position();
-            let source_item = source_walk.source_adapter.next_consumed_source_item(
-                &mut source_walk.source_cursor,
-                &mut source_context,
-                &mut source_position,
-            );
-            self.progress.apply_source_position(source_position);
-            source_item
-        };
+            )
+            .apply_to_progress(&mut self.progress);
         {
             let mut source_render = self.source_render.reborrow();
             face_resolution_context.install_pending_source_faces(
