@@ -18,7 +18,7 @@ use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSource
 use crate::display_buffer_text_source_consumption::{
     BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
 };
-use crate::display_buffer_text_source_render_item::BufferTextSourceRenderItem;
+use crate::display_buffer_text_source_render_item::BufferTextDirectDisplayItem;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -37,7 +37,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_consumption: BufferTextSourceConsumptionState,
-    pending_render_items: VecDeque<BufferTextSourceRenderItem>,
+    pending_render_items: VecDeque<BufferTextDirectDisplayItem>,
 }
 
 struct BufferTextWindowSourceConsumption {
@@ -103,7 +103,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
     pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
-        I: IntoIterator<Item = BufferTextSourceRenderItem>,
+        I: IntoIterator<Item = BufferTextDirectDisplayItem>,
     {
         let items: Vec<_> = items.into_iter().collect();
         for item in items.into_iter().rev() {

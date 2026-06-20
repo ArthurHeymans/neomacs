@@ -12,7 +12,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
 };
 use crate::display_buffer_text_source_render_item::{
-    BufferTextSourceRenderItem, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -46,7 +46,7 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
 
 pub(crate) struct BufferTextWindowSourceItemRenderRequest<'a> {
     pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    pub(crate) source_item: BufferTextSourceRenderItem,
+    pub(crate) source_item: BufferTextDirectDisplayItem,
     pub(crate) text: &'a [u8],
     pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
     pub(crate) params: &'a WindowParams,
@@ -201,7 +201,7 @@ impl BufferTextWindowLoopRequestContext {
     pub(crate) fn source_item_request<'a>(
         self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-        source_item: BufferTextSourceRenderItem,
+        source_item: BufferTextDirectDisplayItem,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,

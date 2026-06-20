@@ -1129,8 +1129,9 @@ impl<'a> BufferTextItemAppendContext<'a> {
     }
 
     fn source_item_fallback_width(&self, source_item: &BufferTextSourceItemRequest) -> f32 {
-        self.frame
-            .width_for_columns(source_item.fallback_width_columns())
+        source_item
+            .fallback_width()
+            .resolve_to_text_row(&self.frame)
     }
 
     pub(crate) fn append_display_item_to_text_row_and_emit(

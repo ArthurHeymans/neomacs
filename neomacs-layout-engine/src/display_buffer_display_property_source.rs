@@ -1,5 +1,5 @@
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -98,7 +98,7 @@ impl BufferTextReplacementItem {
         text_start_byte: usize,
         text: &[u8],
         face: RenderFaceRef,
-    ) -> Option<BufferTextSourceRenderItem> {
+    ) -> Option<BufferTextDirectDisplayItem> {
         let start_byte_idx = self.start_byte_idx(text_start_byte)?;
         let end_byte_idx = self.end_byte_pos.get().checked_sub(text_start_byte)?;
         let source_text = std::str::from_utf8(text.get(start_byte_idx..end_byte_idx)?).ok()?;

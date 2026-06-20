@@ -10,7 +10,7 @@ use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionConte
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source_consumption::BufferTextSourceConsumptionItem;
-use crate::display_buffer_text_source_render_item::BufferTextSourceRenderItem;
+use crate::display_buffer_text_source_render_item::BufferTextDirectDisplayItem;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::neovm_bridge::LayoutBufferView;
@@ -18,7 +18,7 @@ use crate::types::WindowParams;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextWindowSourceRenderOutcome {
-    DisplayItem(BufferTextSourceRenderItem),
+    DisplayItem(BufferTextDirectDisplayItem),
     ContinueBufferWalk,
     StopBufferWalk,
 }

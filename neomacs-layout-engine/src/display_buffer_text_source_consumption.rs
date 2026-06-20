@@ -6,7 +6,7 @@ use crate::display_buffer_text_source::{
     BufferTextSourcePosition,
 };
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItemRequest, BufferTextSourceRenderItem,
+    BufferTextDirectDisplayItem, BufferTextDirectDisplayItemRequest,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
@@ -44,7 +44,7 @@ struct BufferTextSourceCursorReadRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceConsumptionItem {
-    DisplayItem(BufferTextSourceRenderItem),
+    DisplayItem(BufferTextDirectDisplayItem),
     Replacement(BufferTextReplacementItem),
 }
 
@@ -241,7 +241,7 @@ impl BufferTextSourceConsumptionState {
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
+    ) -> Option<BufferTextDirectDisplayItem> {
         let item = self.next_item_from_source(source, context, position)?;
         self.consume_aligned_display_item(item, position)
     }
@@ -275,7 +275,7 @@ impl BufferTextSourceConsumptionState {
         match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
             source,
             context,
-            BufferTextDisplayReplacementMode::LoweredSourceItem,
+            BufferTextDisplayReplacementMode::TypedReplacementItem,
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
                 .consume_aligned_display_item(item, position)
@@ -291,7 +291,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
+    ) -> Option<BufferTextDirectDisplayItem> {
         let item = BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
             .align_display_item(item)?;
         self.consume_aligned_display_item(item, position)
@@ -302,7 +302,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
+    ) -> Option<BufferTextDirectDisplayItem> {
         self.consume_aligned_display_item(item, position)
     }
 
@@ -310,7 +310,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
+    ) -> Option<BufferTextDirectDisplayItem> {
         BufferTextDirectDisplayItemRequest::new(item)
             .consume(position)
             .ok()

@@ -24,8 +24,6 @@ pub(crate) struct BufferTextDirectDisplayItem {
     item: DisplayItem,
 }
 
-pub(crate) type BufferTextSourceRenderItem = BufferTextDirectDisplayItem;
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextDirectDisplayItemRequest {
     item: BufferTextSourceItem,
@@ -125,7 +123,7 @@ impl BufferTextDirectDisplayItem {
     pub(crate) fn split_text_run_items(
         self,
         text_start_byte: usize,
-    ) -> Option<(Self, Vec<BufferTextSourceRenderItem>)> {
+    ) -> Option<(Self, Vec<BufferTextDirectDisplayItem>)> {
         if !self.is_multi_char_text_run() {
             return None;
         }
@@ -184,7 +182,7 @@ impl BufferTextDirectDisplayItemRequest {
     pub(crate) fn consume(
         self,
         position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextSourceRenderItem, BufferTextSourceItem> {
+    ) -> Result<BufferTextDirectDisplayItem, BufferTextSourceItem> {
         Self::try_into_direct_display_item(self.item, position)
     }
 

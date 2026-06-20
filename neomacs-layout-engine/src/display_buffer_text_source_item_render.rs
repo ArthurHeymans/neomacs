@@ -14,7 +14,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferTextLineBreakRenderState,
 };
 use crate::display_buffer_text_source_render_item::{
-    BufferTextSourceRenderItem, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -165,7 +165,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: BufferTextSourceRenderItem,
+        source_item: BufferTextDirectDisplayItem,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,

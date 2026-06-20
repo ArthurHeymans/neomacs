@@ -7861,7 +7861,7 @@ fn buffer_text_source_char_names_cluster_policy() {
 }
 
 #[test]
-fn buffer_text_source_append_item_names_fallback_columns_and_row_width() {
+fn buffer_text_source_append_item_names_fallback_widths() {
     let empty_source_mapped = BufferTextSourceAppendItem::SourceMappedText { text: "".into() };
     let glyphless = BufferTextSourceAppendItem::Glyphless {
         ch: '\u{200E}',
@@ -7870,30 +7870,33 @@ fn buffer_text_source_append_item_names_fallback_columns_and_row_width() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     assert_eq!(
-        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_columns(),
+        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }
+            .fallback_width()
+            .column_count(),
         2
     );
     assert_eq!(
         BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
-            .fallback_width_columns(),
+            .fallback_width()
+            .column_count(),
         2
     );
-    assert_eq!(empty_source_mapped.fallback_width_columns(), 1);
-    assert_eq!(glyphless.fallback_width_columns(), 1);
+    assert_eq!(empty_source_mapped.fallback_width().column_count(), 1);
+    assert_eq!(glyphless.fallback_width().column_count(), 1);
     assert_eq!(
-        frame.width_for_columns(empty_source_mapped.fallback_width_columns()),
+        empty_source_mapped
+            .fallback_width()
+            .resolve_to_text_row(&frame),
         8.0
     );
-    assert_eq!(
-        frame.width_for_columns(glyphless.fallback_width_columns()),
-        8.0
-    );
+    assert_eq!(glyphless.fallback_width().resolve_to_text_row(&frame), 8.0);
     assert_eq!(
         BufferTextSourceItemRequest::new(
             BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
             empty_source_mapped,
         )
-        .fallback_width_columns(),
+        .fallback_width()
+        .column_count(),
         1
     );
     assert_eq!(
@@ -7901,7 +7904,8 @@ fn buffer_text_source_append_item_names_fallback_columns_and_row_width() {
             BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
             glyphless,
         )
-        .fallback_width_columns(),
+        .fallback_width()
+        .column_count(),
         1
     );
 }

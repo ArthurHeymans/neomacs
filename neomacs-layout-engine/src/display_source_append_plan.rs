@@ -1,5 +1,6 @@
 use crate::display_item::{DisplayItem, DisplayItemKind};
 use crate::display_row::DisplayRowRenderPolicy;
+use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_builder::DisplayRowItemMeasurement;
 use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
 use crate::font_metrics::FontMetricsService;
@@ -68,6 +69,26 @@ impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
             Self::Natural(policy) => policy.measurement_for(item, face_id, font_metrics),
             Self::Resolved(policy) => policy.measurement_for(item, face_id, font_metrics),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplaySourceFallbackWidth {
+    columns: usize,
+}
+
+impl DisplaySourceFallbackWidth {
+    pub(crate) fn columns(columns: usize) -> Self {
+        Self { columns }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn column_count(self) -> usize {
+        self.columns
+    }
+
+    pub(crate) fn resolve_to_text_row(self, frame: &DisplayRowAppendFrame) -> f32 {
+        frame.width_for_columns(self.columns)
     }
 }
 

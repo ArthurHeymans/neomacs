@@ -10,7 +10,7 @@ use crate::display_property::{
 };
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_source_append_plan::{
-    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
+    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
@@ -530,8 +530,8 @@ impl BufferTextSourceItemRequest {
         &self.item
     }
 
-    pub(crate) fn fallback_width_columns(&self) -> usize {
-        self.item.fallback_width_columns()
+    pub(crate) fn fallback_width(&self) -> DisplaySourceFallbackWidth {
+        self.item.fallback_width()
     }
 
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
@@ -704,12 +704,13 @@ impl BufferTextSourceAppendItem {
         Some(Self::Glyphless { ch, method })
     }
 
-    pub(crate) fn fallback_width_columns(&self) -> usize {
-        match self {
+    pub(crate) fn fallback_width(&self) -> DisplaySourceFallbackWidth {
+        let columns = match self {
             Self::ControlChar { .. } => 2,
             Self::SourceMappedText { text } => text.chars().count().max(1),
             Self::Glyphless { .. } => 1,
-        }
+        };
+        DisplaySourceFallbackWidth::columns(columns)
     }
 
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {

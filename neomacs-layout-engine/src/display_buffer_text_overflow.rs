@@ -13,7 +13,7 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -52,7 +52,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
 }
 
 pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
-    source_item: BufferTextSourceRenderItem,
+    source_item: BufferTextDirectDisplayItem,
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
@@ -304,7 +304,7 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
 
 impl<'a> BufferTextSourceItemRenderRequest<'a> {
     pub(crate) fn new(
-        source_item: BufferTextSourceRenderItem,
+        source_item: BufferTextDirectDisplayItem,
         context: BufferTextSourceItemRenderContext<'a>,
     ) -> Self {
         debug_assert_ne!(source_item.source_char().ch(), '\n');
