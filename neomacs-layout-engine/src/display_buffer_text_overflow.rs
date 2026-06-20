@@ -1,4 +1,4 @@
-//! Buffer text overflow and lowered-item rendering.
+//! Buffer text overflow and split-text-run fallback rendering.
 //!
 //! This module owns the buffer-specific overflow lifecycle for main text and
 //! special display items while delegating actual item appends to the shared row
@@ -13,8 +13,8 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextLoweredDisplayItem, BufferTextSourceRenderItem,
-    BufferTextSourceRenderItemKind, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceRenderItemKind,
+    BufferTextSourceStepChar, BufferTextSplitTextRunDisplayItem,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -61,8 +61,8 @@ struct BufferTextDirectSourceItemRenderRequest<'a> {
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
-struct BufferTextLoweredSourceItemRenderRequest<'a> {
-    source_item: BufferTextLoweredDisplayItem,
+struct BufferTextSplitTextRunSourceItemRenderRequest<'a> {
+    source_item: BufferTextSplitTextRunDisplayItem,
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
@@ -329,8 +329,8 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
             BufferTextSourceRenderItemKind::Direct => {
                 self.render_direct_and_apply(source_walk, buffer, state)
             }
-            BufferTextSourceRenderItemKind::Lowered => {
-                self.render_lowered_and_apply(source_walk, buffer, state)
+            BufferTextSourceRenderItemKind::SplitTextRun => {
+                self.render_split_text_run_and_apply(source_walk, buffer, state)
             }
         }
     }
@@ -344,7 +344,7 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         let Ok(source_item) = self.source_item.into_direct() else {
             debug_assert!(
                 false,
-                "lowered buffer source item entered direct render branch"
+                "split-text-run buffer source item entered direct render branch"
             );
             return BufferTextSourceItemRenderOutcome::Stop;
         };
@@ -355,20 +355,20 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         .render_and_apply(source_walk, buffer, state)
     }
 
-    fn render_lowered_and_apply<B: LayoutBufferView>(
+    fn render_split_text_run_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        let Ok(source_item) = self.source_item.into_lowered() else {
+        let Ok(source_item) = self.source_item.into_split_text_run() else {
             debug_assert!(
                 false,
-                "direct buffer source item entered lowered render branch"
+                "direct buffer source item entered split-text-run render branch"
             );
             return BufferTextSourceItemRenderOutcome::Stop;
         };
-        BufferTextLoweredSourceItemRenderRequest {
+        BufferTextSplitTextRunSourceItemRenderRequest {
             source_item,
             context: self.context,
         }
@@ -393,7 +393,7 @@ impl<'a> BufferTextDirectSourceItemRenderRequest<'a> {
     }
 }
 
-impl<'a> BufferTextLoweredSourceItemRenderRequest<'a> {
+impl<'a> BufferTextSplitTextRunSourceItemRenderRequest<'a> {
     fn render_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,

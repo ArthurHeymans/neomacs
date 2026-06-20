@@ -21,7 +21,7 @@ pub(crate) struct BufferTextSourceStepChar {
 /// A typed display item consumed by the buffer text row walk after it has been
 /// aligned with the current buffer byte/char cursor.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextLoweredDisplayItem {
+pub(crate) struct BufferTextSplitTextRunDisplayItem {
     source_char: BufferTextSourceStepChar,
     item: DisplayItem,
 }
@@ -35,13 +35,13 @@ pub(crate) struct BufferTextDirectDisplayItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceRenderItem {
     Direct(BufferTextDirectDisplayItem),
-    Lowered(BufferTextLoweredDisplayItem),
+    SplitTextRun(BufferTextSplitTextRunDisplayItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextSourceRenderItemKind {
     Direct,
-    Lowered,
+    SplitTextRun,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,7 +117,7 @@ impl BufferTextSourceStepChar {
     }
 }
 
-impl BufferTextLoweredDisplayItem {
+impl BufferTextSplitTextRunDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
     }
@@ -151,21 +151,21 @@ impl BufferTextSourceRenderItem {
     pub(crate) fn kind(&self) -> BufferTextSourceRenderItemKind {
         match self {
             Self::Direct(_) => BufferTextSourceRenderItemKind::Direct,
-            Self::Lowered(_) => BufferTextSourceRenderItemKind::Lowered,
+            Self::SplitTextRun(_) => BufferTextSourceRenderItemKind::SplitTextRun,
         }
     }
 
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
         match self {
             Self::Direct(item) => item.source_char,
-            Self::Lowered(item) => item.source_char,
+            Self::SplitTextRun(item) => item.source_char,
         }
     }
 
     pub(crate) fn is_explicit_line_break(&self) -> bool {
         let item = match self {
             Self::Direct(item) => &item.item,
-            Self::Lowered(item) => &item.item,
+            Self::SplitTextRun(item) => &item.item,
         };
         matches!(
             item.kind,
@@ -177,20 +177,20 @@ impl BufferTextSourceRenderItem {
     pub(crate) fn end_charpos(&self) -> i64 {
         match self {
             Self::Direct(item) => item.end_charpos(),
-            Self::Lowered(item) => item.end_charpos(),
+            Self::SplitTextRun(item) => item.end_charpos(),
         }
     }
 
     pub(crate) fn into_direct(self) -> Result<BufferTextDirectDisplayItem, Self> {
         match self {
             Self::Direct(item) => Ok(item),
-            Self::Lowered(item) => Err(Self::Lowered(item)),
+            Self::SplitTextRun(item) => Err(Self::SplitTextRun(item)),
         }
     }
 
-    pub(crate) fn into_lowered(self) -> Result<BufferTextLoweredDisplayItem, Self> {
+    pub(crate) fn into_split_text_run(self) -> Result<BufferTextSplitTextRunDisplayItem, Self> {
         match self {
-            Self::Lowered(item) => Ok(item),
+            Self::SplitTextRun(item) => Ok(item),
             Self::Direct(item) => Err(Self::Direct(item)),
         }
     }
@@ -199,7 +199,7 @@ impl BufferTextSourceRenderItem {
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         match self {
             Self::Direct(item) => item.into_parts(),
-            Self::Lowered(item) => item.into_parts(),
+            Self::SplitTextRun(item) => item.into_parts(),
         }
     }
 }
@@ -225,12 +225,12 @@ impl BufferTextSplitTextRunState {
         let item = pending.next_item();
         let finished = pending.is_finished();
         let step = item.and_then(|item| {
-            Self::lowered_display_item_from_split_text_item(text_start_byte, item, position)
+            Self::split_text_run_display_item_from_split_text_item(text_start_byte, item, position)
         });
         if finished || step.is_none() {
             self.pending_text_run = None;
         }
-        step.map(BufferTextSourceRenderItem::Lowered)
+        step.map(BufferTextSourceRenderItem::SplitTextRun)
     }
 
     pub(crate) fn consume_text_run_item(
@@ -316,11 +316,11 @@ impl BufferTextSplitTextRunState {
         }
     }
 
-    fn lowered_display_item_from_split_text_item(
+    fn split_text_run_display_item_from_split_text_item(
         text_start_byte: usize,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSplitTextRunDisplayItem> {
         let alignment = BufferTextSplitItemAlignment::for_position(text_start_byte, *position);
         let (start_byte_idx, start_charpos) = alignment.split_text_item_start(&item)?;
         let ch = match &item.kind {
@@ -344,7 +344,7 @@ impl BufferTextSplitTextRunState {
         };
         let end_byte_idx = alignment.split_text_item_end_byte_idx(&item)?;
         position.advance_byte_idx_to(end_byte_idx);
-        Some(BufferTextLoweredDisplayItem::new(
+        Some(BufferTextSplitTextRunDisplayItem::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             item,
         ))

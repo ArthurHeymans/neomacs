@@ -325,7 +325,7 @@ impl BufferTextSourceConsumptionState {
     }
 
     #[cfg(test)]
-    pub(crate) fn lowered_display_item_from_item(
+    pub(crate) fn split_text_run_display_item_from_item(
         &mut self,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
@@ -336,7 +336,7 @@ impl BufferTextSourceConsumptionState {
     }
 
     #[cfg(test)]
-    pub(crate) fn lowered_display_item_from_source_item(
+    pub(crate) fn split_text_run_display_item_from_source_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,

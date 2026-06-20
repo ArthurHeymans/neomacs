@@ -1933,7 +1933,7 @@ fn buffer_text_source_consumption_state_preserves_single_char_source_item() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(text_start_byte)
-        .lowered_display_item_from_item(item, &mut position)
+        .split_text_run_display_item_from_item(item, &mut position)
         .expect("source step");
 
     let source_char = step.source_char();
@@ -2057,7 +2057,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .lowered_display_item_from_source_item(typed_item, &mut position)
+        .split_text_run_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should retain direct source char");
 
     assert_eq!(position.byte_idx(), 2);
@@ -2092,7 +2092,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
     let mut position = BufferTextSourcePosition::new(1, 1);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .lowered_display_item_from_source_item(typed_item, &mut position)
+        .split_text_run_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should advance over covered source span");
 
     assert_eq!(position.byte_idx(), 4);
@@ -2174,12 +2174,15 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
     let first_step = BufferTextSplitTextRunState::new(0)
         .consume_text_run_item(typed_item, &mut position)
         .expect("multi-char text run lowers through compatibility split-run renderer");
-    assert_eq!(first_step.kind(), BufferTextSourceRenderItemKind::Lowered);
+    assert_eq!(
+        first_step.kind(),
+        BufferTextSourceRenderItemKind::SplitTextRun
+    );
     assert_eq!(first_step.source_char().ch(), 'a');
     let (_, first_item) = first_step.into_parts();
     match &first_item.kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
-        other => panic!("expected lowered text run, got {other:?}"),
+        other => panic!("expected split text run, got {other:?}"),
     }
     assert_eq!(position, BufferTextSourcePosition::new(1, 0));
 
@@ -2219,7 +2222,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .lowered_display_item_from_item(source_item, &mut position)
+        .split_text_run_display_item_from_item(source_item, &mut position)
         .expect("source step");
 
     let (_, source_item) = step.into_parts();
@@ -2291,7 +2294,7 @@ fn buffer_text_source_consumption_state_rejects_non_buffer_items() {
     let mut position = BufferTextSourcePosition::new(3, 7);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .lowered_display_item_from_item(item, &mut position);
+        .split_text_run_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(3, 7));
@@ -2324,7 +2327,7 @@ fn buffer_text_source_consumption_state_rejects_replacement_items() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .lowered_display_item_from_item(item, &mut position);
+        .split_text_run_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
@@ -6370,7 +6373,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     );
 
     let outcome = BufferTextSourceItemRenderRequest::new(
-        BufferTextSourceRenderItem::Lowered(BufferTextLoweredDisplayItem::new(
+        BufferTextSourceRenderItem::SplitTextRun(BufferTextSplitTextRunDisplayItem::new(
             source_step_char,
             source_item,
         )),
