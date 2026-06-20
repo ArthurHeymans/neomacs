@@ -613,7 +613,7 @@ pub(crate) fn measure_single_display_item_width_naturally(
     measure_single_display_item_width_with_policy(state, request, &mut render_policy)
 }
 
-pub(crate) fn measure_single_display_item_width_naturally_or_fallback(
+pub(crate) fn measure_single_display_item_width_with_source_fallback(
     state: &mut TextRowSourceMeasureState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
     fallback_width: DisplaySourceFallbackWidth,

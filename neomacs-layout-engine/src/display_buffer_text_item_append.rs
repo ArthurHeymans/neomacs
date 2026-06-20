@@ -20,8 +20,8 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_source_append::measure_single_display_item_width_naturally;
 use crate::display_row_source_append::{
-    SingleDisplayItemSourceRequest, measure_single_display_item_width_naturally_or_fallback,
-    measure_single_display_item_width_with_policy, render_single_display_item_naturally,
+    SingleDisplayItemSourceRequest, measure_single_display_item_width_with_policy,
+    measure_single_display_item_width_with_source_fallback, render_single_display_item_naturally,
     render_single_display_item_with_policy,
 };
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
@@ -256,7 +256,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let display_item = self.source_display_item_for_special_source_char(&request, source_item);
         let measured_width_px = request.requires_overflow_measurement().then(|| {
             self.item_active_face(geometry)
-                .measure_source_display_item_width_or_item_fallback_to_text_row(
+                .measure_source_display_item_width_to_text_row(
                     state,
                     &display_item,
                     request.source_item_request(),
@@ -1146,7 +1146,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
         render_single_display_item_naturally(state, request)
     }
 
-    pub(crate) fn measure_source_display_item_width_or_item_fallback_to_text_row(
+    pub(crate) fn measure_source_display_item_width_to_text_row(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
         item: &DisplayItem,
@@ -1161,7 +1161,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
             position,
             source_item.append_kind(),
         );
-        measure_single_display_item_width_naturally_or_fallback(
+        measure_single_display_item_width_with_source_fallback(
             state,
             request,
             source_item.fallback_width(),
@@ -1217,7 +1217,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         render_single_display_item_naturally(state, request)
     }
 
-    pub(crate) fn measure_source_request_width_to_text_row(
+    pub(crate) fn try_measure_source_request_width_to_text_row(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
         source_item: BufferTextSourceItemRequest,
@@ -1242,7 +1242,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         measure_single_display_item_width_naturally(state, request)
     }
 
-    pub(crate) fn measure_source_request_width_or_item_fallback_to_text_row(
+    pub(crate) fn measure_source_request_width_to_text_row(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
         source_item: BufferTextSourceItemRequest,
@@ -1267,6 +1267,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
             position,
             kind,
         );
-        measure_single_display_item_width_naturally_or_fallback(state, request, fallback_width)
+        measure_single_display_item_width_with_source_fallback(state, request, fallback_width)
     }
 }

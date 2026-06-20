@@ -7627,7 +7627,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     let append_context =
         BufferTextSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
-        .measure_source_request_width_to_text_row(
+        .try_measure_source_request_width_to_text_row(
             &mut text_row_source_measure_state(
                 &mut builder,
                 &mut eval,
@@ -7641,7 +7641,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder
         .edit_current_row_for_test(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
-    let fallback_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
+    let fallback_width = append_context.measure_source_request_width_to_text_row(
         &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
@@ -7654,7 +7654,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         ),
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
-    let edge_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
+    let edge_width = append_context.measure_source_request_width_to_text_row(
         &mut text_row_source_measure_state(
             &mut builder,
             &mut eval,
