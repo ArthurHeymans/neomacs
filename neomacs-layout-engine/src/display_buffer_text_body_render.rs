@@ -375,10 +375,6 @@ impl BufferTextWindowWalkSetup {
             &mut self.hit_row_range,
             &mut self.row_y_positions,
             state.face_ids,
-            &self.row_flags,
-            &self.row_extend,
-            &self.box_face,
-            &self.text_append_surface,
             overlay_context,
         )
         .render_tail_and_decide_retry(

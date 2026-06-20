@@ -555,6 +555,7 @@ impl BoxFaceRowState {
         matches!(self, Self::Active { .. })
     }
 
+    #[cfg(test)]
     pub(crate) fn start_x(&self) -> Option<f32> {
         match self {
             Self::Active { start_x, .. } => Some(*start_x),
@@ -562,6 +563,7 @@ impl BoxFaceRowState {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn row(&self) -> DisplayRowMarker {
         match self {
             Self::Active { row, .. } => *row,

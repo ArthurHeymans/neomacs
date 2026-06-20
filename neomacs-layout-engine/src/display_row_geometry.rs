@@ -87,6 +87,7 @@ impl DisplayRowGeometryDefaults {
         DisplayRowGeometryState::new(0, self.text_y, 0.0, self.height, self.ascent)
     }
 
+    #[cfg(test)]
     pub(crate) fn row_y_fallback(self, row_extra_y: f32) -> DisplayRowYFallback {
         DisplayRowYFallback {
             text_y: self.text_y,
@@ -171,6 +172,7 @@ impl DisplayRowFlags {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowMarker {
+    #[cfg(test)]
     Inactive,
     Row(usize),
 }
@@ -498,10 +500,12 @@ impl DisplayRowGeometryState {
         self.row < limit.max_rows
     }
 
+    #[cfg(test)]
     pub(crate) fn rendered_row_count(&self, limit: DisplayRowLimit) -> usize {
         self.row.min(limit.max_rows)
     }
 
+    #[cfg(test)]
     pub(crate) fn first_row_below_current(&self, limit: DisplayRowLimit) -> usize {
         self.row.saturating_add(1).min(limit.max_rows)
     }
@@ -671,6 +675,7 @@ impl<T> DisplayRowScopedValue<T> {
         *self = Self::Inactive;
     }
 
+    #[cfg(test)]
     pub(crate) fn value(&self) -> Option<&T> {
         match self {
             Self::Active { value, .. } => Some(value),

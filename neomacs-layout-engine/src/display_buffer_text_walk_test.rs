@@ -2,11 +2,8 @@ use super::*;
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetup;
-use crate::display_buffer_text_tail_render::BufferTextWindowTailDecorationState;
-use crate::display_buffer_text_tail_render::BufferTextWindowTailRequestContext;
-use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowGeometryState, DisplayRowMarker};
 use crate::types::WindowKind;
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};
 
 fn window_params() -> WindowParams {
@@ -306,93 +303,4 @@ fn local_display_policy_builds_row_prelude_context() {
     assert_eq!(context.line_number_mode(), 2);
     assert_eq!(context.prefix_values(), prefix_values);
     assert_eq!(context.char_width(), 8.0);
-}
-
-#[test]
-fn tail_decoration_request_reports_rows_considered_for_decorations() {
-    let mut setup = setup_request().into_setup();
-    setup.row_geometry = DisplayRowGeometryState::new(2, 64.0, 0.0, 16.0, 11.0);
-    setup.row_y_positions.record(1, 48.0);
-    setup.row_y_positions.record(2, 64.0);
-    setup.row_flags.mark(0, DisplayRowFlagKind::Continued);
-    setup.row_flags.mark(0, DisplayRowFlagKind::Truncated);
-    setup.row_flags.mark(1, DisplayRowFlagKind::Continuation);
-    setup
-        .row_extend
-        .activate(DisplayRowMarker::Row(2), (Color::from_pixel(0x101010), 7));
-    setup.box_face.activate(DisplayRowMarker::Row(2), 24.0);
-
-    let params = window_params();
-    let output_setup = BufferTextWindowOutputSetup::new(
-        FrameId(3),
-        WindowId(9),
-        99,
-        2,
-        6,
-        1,
-        20,
-        params.bounds,
-        params.text_bounds,
-        params.selected,
-        32.0,
-        80.0,
-        112.0,
-        5,
-        &setup,
-    );
-
-    let context = BufferTextWindowTailRequestContext::new(
-        &params,
-        11,
-        1,
-        80,
-        4,
-        2,
-        setup.text_area_left,
-        setup.window_top,
-        32.0,
-        80.0,
-        24.0,
-        20,
-        8.0,
-        16.0,
-        Color::from_pixel(0x00ff_ffff),
-        5,
-        output_setup.row_limit,
-        setup.row_geometry_defaults,
-        output_setup.retry_bounds,
-        output_setup.body_install_context,
-        true,
-        false,
-        12.0,
-        0.0,
-        0.0,
-    );
-
-    assert_eq!(context.window_start(), 11);
-    assert_eq!(context.accessible_range(), (1, 80));
-
-    let outcome =
-        context
-            .tail_decoration_request()
-            .apply(BufferTextWindowTailDecorationState::new(
-                40.0,
-                &setup.text_append_surface,
-                &setup.row_geometry,
-                &setup.row_y_positions,
-                &setup.row_flags,
-                &setup.row_extend,
-                &setup.box_face,
-            ));
-
-    assert!(outcome.box_face_active);
-    assert!(outcome.row_extend_active);
-    assert!(outcome.current_row_extended);
-    assert_eq!(outcome.empty_extend_rows, 2);
-    assert_eq!(outcome.fringe_rows, 2);
-    assert_eq!(outcome.right_continuation_rows, 1);
-    assert_eq!(outcome.right_truncation_rows, 1);
-    assert_eq!(outcome.left_continuation_rows, 1);
-    assert_eq!(outcome.empty_line_fringe_rows, 3);
-    assert_eq!(outcome.fill_column_rows, 2);
 }

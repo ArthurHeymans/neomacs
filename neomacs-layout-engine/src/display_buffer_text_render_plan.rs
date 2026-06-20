@@ -38,7 +38,7 @@ use crate::window_output::{
     TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
     render_window_chrome_rows,
 };
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 
@@ -52,7 +52,6 @@ pub(crate) struct BufferTextWindowOutputSetup {
 
 pub(crate) struct BufferTextWindowDefaultFacePlan {
     face: ResolvedFace,
-    foreground: Color,
     char_width: f32,
     row_height: f32,
     ascent: f32,
@@ -233,7 +232,6 @@ impl BufferTextWindowDefaultFacePlan {
         };
 
         Self {
-            foreground: Color::from_pixel(face.fg),
             face,
             char_width,
             row_height,
@@ -244,10 +242,6 @@ impl BufferTextWindowDefaultFacePlan {
 
     pub(crate) fn face(&self) -> &ResolvedFace {
         &self.face
-    }
-
-    pub(crate) fn foreground(&self) -> Color {
-        self.foreground
     }
 
     pub(crate) fn char_width(&self) -> f32 {
@@ -355,13 +349,9 @@ impl BufferTextWindowOutputSetup {
             geometry.text_y,
             geometry.text_height,
             geometry.content_x,
-            geometry.cols,
             geometry.char_width,
             geometry.char_height,
-            default_face.foreground(),
-            geometry.max_rows,
             self.row_limit,
-            walk_setup.row_geometry_defaults,
             self.retry_bounds,
             self.body_install_context,
             reserve_right_special_col,
