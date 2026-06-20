@@ -13,8 +13,8 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderRequest,
     BufferTextLineBreakRenderState,
 };
+use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
-use crate::display_buffer_text_source_render_item::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;

@@ -3,17 +3,15 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
-    BufferTextSourcePosition,
-};
-use crate::display_buffer_text_source_render_item::{
-    BufferTextSourceStepChar, direct_text_run_char_item,
+    BufferTextSourcePosition, BufferTextSourceStepChar,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
+    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_source::DisplaySourceContext;
 use crate::neovm_bridge::LayoutBufferView;
-use neovm_core::buffer::CharPos0;
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceItem {
@@ -393,4 +391,34 @@ fn display_item_buffer_end_byte_idx(item: &DisplayItem, text_start_byte: usize) 
         return None;
     };
     end_byte_pos.get().checked_sub(text_start_byte)
+}
+
+fn direct_text_run_char_item(
+    buffer_id: BufferId,
+    face: RenderFaceRef,
+    layout: crate::display_item::DisplayItemLayout,
+    text_start_byte: usize,
+    start_byte_idx: usize,
+    start_charpos: i64,
+    ch: char,
+) -> DisplayItem {
+    let end_byte_idx = start_byte_idx.saturating_add(ch.len_utf8());
+    let end_charpos = start_charpos.saturating_add(1);
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                buffer_id,
+                CharPos0::new(start_charpos.max(0) as usize),
+                EmacsBytePos::new(text_start_byte.saturating_add(start_byte_idx)),
+            ),
+            DisplaySourcePosition::buffer(
+                buffer_id,
+                CharPos0::new(end_charpos.max(0) as usize),
+                EmacsBytePos::new(text_start_byte.saturating_add(end_byte_idx)),
+            ),
+        ),
+        face,
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new(ch.to_string())),
+    )
+    .with_layout(layout)
 }

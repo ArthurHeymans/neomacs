@@ -1,7 +1,7 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
+use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
-use crate::display_buffer_text_source_render_item::BufferTextSourceStepChar;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;

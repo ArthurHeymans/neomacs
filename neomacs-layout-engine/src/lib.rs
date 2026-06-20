@@ -31,7 +31,6 @@ pub(crate) mod display_buffer_text_source;
 pub(crate) mod display_buffer_text_source_consumption;
 pub(crate) mod display_buffer_text_source_item_render;
 pub(crate) mod display_buffer_text_source_render;
-pub(crate) mod display_buffer_text_source_render_item;
 pub(crate) mod display_buffer_text_source_walk;
 pub(crate) mod display_buffer_text_tail_decoration;
 pub(crate) mod display_buffer_text_tail_render;
