@@ -8,10 +8,10 @@ pub(crate) use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_render_plan::{
     BufferSourceDefaultFacePlan, BufferSourceOutputSetup,
 };
-use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
-use crate::display_buffer_text_walk::{
-    BufferTextWindowChromeHeights, BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy,
+use crate::display_buffer_text_source::BufferWindowSourceReadRequest;
+use crate::display_buffer_window_geometry::{
+    BufferWindowChromeHeights, BufferWindowGeometryPlan, BufferWindowGeometryRequest,
+    BufferWindowLocalDisplayPolicy,
 };
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
@@ -84,7 +84,7 @@ where
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
-        let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
+        let local_display_policy = BufferWindowLocalDisplayPolicy::from_buffer(buffer);
 
         let default_face = BufferSourceDefaultFacePlan::new(
             state.face_resolver,
@@ -117,7 +117,7 @@ where
             default_face.ascent(),
             default_face.row_height(),
         );
-        let chrome_heights = BufferTextWindowChromeHeights::new(
+        let chrome_heights = BufferWindowChromeHeights::new(
             chrome_plan.mode_line_height(),
             chrome_plan.header_line_height(),
             chrome_plan.tab_line_height(),
@@ -132,10 +132,10 @@ where
             .ceil()
             .max(1.0) as usize
         };
-        let BufferTextWindowGeometryPlan {
+        let BufferWindowGeometryPlan {
             geometry,
             line_number_columns,
-        } = BufferTextWindowGeometryRequest::new(
+        } = BufferWindowGeometryRequest::new(
             params,
             char_w,
             char_h,
@@ -146,7 +146,7 @@ where
         .with_max_mini_window_rows(max_mini_window_rows)
         .into_window_plan(&local_display_policy, &buf_access);
 
-        let text_source = BufferTextWindowSourceReadRequest::new(params, geometry.max_rows)
+        let text_source = BufferWindowSourceReadRequest::new(params, geometry.max_rows)
             .read_into(&buf_access, text_buf);
         let bytes_read = text_source.bytes_read();
         let text = if bytes_read > 0 {

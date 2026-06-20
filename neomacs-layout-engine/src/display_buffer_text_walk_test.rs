@@ -96,7 +96,7 @@ fn setup_request() -> BufferSourceWalkSetupRequest<'static> {
 #[test]
 fn geometry_request_derives_text_area_and_matrix_rows() {
     let params = window_params();
-    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 12.0, 10.0, 6.0);
+    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 12.0, 10.0, 6.0);
 
     assert_eq!(request.line_number_row_capacity(), 5);
 
@@ -125,12 +125,12 @@ fn geometry_request_only_forces_fractional_row_for_minibuffer() {
     params.text_bounds.height = 15.0;
 
     let ordinary =
-        BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
+        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(ordinary.max_rows, 0);
 
     params.kind = WindowKind::Minibuffer;
     let minibuffer =
-        BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
+        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(minibuffer.max_rows, 1);
 }
 
@@ -144,7 +144,7 @@ fn geometry_request_measures_minibuffer_up_to_max_mini_window_rows() {
     // One physical row tall (16px), but a ceiling of 3 rows.
     params.bounds.height = 16.0;
     params.text_bounds.height = 16.0;
-    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
         .with_max_mini_window_rows(3);
 
     let geometry = request.into_geometry(0);
@@ -162,7 +162,7 @@ fn geometry_request_does_not_apply_max_mini_window_rows_to_ordinary_windows() {
     let mut params = window_params();
     params.bounds.height = 16.0;
     params.text_bounds.height = 16.0;
-    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
         .with_max_mini_window_rows(5);
 
     let geometry = request.into_geometry(0);
@@ -284,7 +284,7 @@ fn row_prelude_request_context_carries_margin_and_prefix_policy() {
     let prefix_values =
         crate::display_row_lisp_string::DisplayRowPrefixValues::default_values(None, None);
     let context =
-        BufferTextWindowRowPreludeRequestContext::new(2, true, 3, 4, 5, prefix_values, 8.0, 16.0);
+        BufferSourceRowPreludeRequestContext::new(2, true, 3, 4, 5, prefix_values, 8.0, 16.0);
 
     assert_eq!(context.line_number_mode(), 2);
     assert_eq!(context.prefix_values(), prefix_values);
@@ -295,7 +295,7 @@ fn row_prelude_request_context_carries_margin_and_prefix_policy() {
 fn local_display_policy_builds_row_prelude_context() {
     let prefix_values =
         crate::display_row_lisp_string::DisplayRowPrefixValues::default_values(None, None);
-    let policy = BufferTextWindowLocalDisplayPolicy::from_parts(2, false, 3, prefix_values);
+    let policy = BufferWindowLocalDisplayPolicy::from_parts(2, false, 3, prefix_values);
     let context = policy.row_prelude_context(6, 8.0, 16.0);
 
     assert!(!policy.has_prefix());

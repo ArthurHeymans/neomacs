@@ -7,9 +7,9 @@ use crate::display_buffer_source_row_lifecycle::{
     BufferSourceHscrollSkipRenderRequest, BufferSourceInvisibleTextRenderOutcome,
     BufferSourceInvisibleTextRenderRequest,
 };
+use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
@@ -20,7 +20,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         &mut self,
         loop_context: BufferSourceLoopRequestContext,
         source_walk: &mut BufferSourceWalk<'request, B>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &'request WindowParams,
@@ -88,7 +88,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
 
     fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowRowPreludeRequestContext,
+        context: BufferSourceRowPreludeRequestContext,
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {

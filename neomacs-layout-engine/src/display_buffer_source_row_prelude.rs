@@ -1,7 +1,7 @@
-//! Buffer text row prelude requests.
+//! Buffer source row prelude requests.
 //!
 //! Converts local display policy into the line-number and prefix requests
-//! emitted before ordinary buffer text.
+//! emitted before ordinary buffer source items.
 
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -13,7 +13,7 @@ use crate::display_row_lisp_string::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowRowPreludeRequestContext {
+pub(crate) struct BufferSourceRowPreludeRequestContext {
     line_number_mode: u8,
     line_number_current_absolute: bool,
     line_number_offset: i64,
@@ -24,7 +24,7 @@ pub(crate) struct BufferTextWindowRowPreludeRequestContext {
     char_height: f32,
 }
 
-impl BufferTextWindowRowPreludeRequestContext {
+impl BufferSourceRowPreludeRequestContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         line_number_mode: u8,

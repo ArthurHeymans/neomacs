@@ -1,4 +1,4 @@
-use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
+use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_row_lisp_string::DisplayRowPrefixValues;
 use crate::display_row_walk_state::LineNumberRenderState;
 use crate::neovm_bridge::{
@@ -10,7 +10,7 @@ use crate::types::LineWrapMode;
 use crate::types::{WindowKind, WindowParams};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowGeometryRequest {
+pub(crate) struct BufferWindowGeometryRequest {
     text_x: f32,
     text_y: f32,
     text_width: f32,
@@ -31,7 +31,7 @@ pub(crate) struct BufferTextWindowGeometryRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowGeometry {
+pub(crate) struct BufferWindowGeometry {
     pub(crate) text_x: f32,
     pub(crate) text_y: f32,
     pub(crate) text_width: f32,
@@ -55,20 +55,20 @@ pub(crate) struct BufferTextWindowGeometry {
     pub(crate) visibility_bottom_y: f32,
 }
 
-pub(crate) struct BufferTextWindowGeometryPlan {
-    pub(crate) geometry: BufferTextWindowGeometry,
+pub(crate) struct BufferWindowGeometryPlan {
+    pub(crate) geometry: BufferWindowGeometry,
     pub(crate) line_number_columns: i32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowChromeHeights {
+pub(crate) struct BufferWindowChromeHeights {
     pub(crate) mode_line: f32,
     pub(crate) header_line: f32,
     pub(crate) tab_line: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowLocalDisplayPolicy {
+pub(crate) struct BufferWindowLocalDisplayPolicy {
     line_number_mode: u8,
     line_number_offset: i64,
     line_number_major_tick: i32,
@@ -78,7 +78,7 @@ pub(crate) struct BufferTextWindowLocalDisplayPolicy {
     prefix_values: DisplayRowPrefixValues,
 }
 
-impl BufferTextWindowGeometryRequest {
+impl BufferWindowGeometryRequest {
     pub(crate) fn new(
         params: &WindowParams,
         char_width: f32,
@@ -134,7 +134,7 @@ impl BufferTextWindowGeometryRequest {
         self.base_max_rows()
     }
 
-    pub(crate) fn into_geometry(self, line_number_columns: i32) -> BufferTextWindowGeometry {
+    pub(crate) fn into_geometry(self, line_number_columns: i32) -> BufferWindowGeometry {
         let max_rows = self.visible_max_rows();
         let line_number_pixel_width = line_number_columns as f32 * self.char_width;
         let display_text_row_base = self.top_chrome_rows;
@@ -155,7 +155,7 @@ impl BufferTextWindowGeometryRequest {
             physical_bottom_y
         };
 
-        BufferTextWindowGeometry {
+        BufferWindowGeometry {
             text_x: self.text_x,
             text_y: self.text_y,
             text_width: self.text_width,
@@ -211,20 +211,20 @@ impl BufferTextWindowGeometryRequest {
 
     pub(crate) fn into_window_plan<B: LayoutBufferView>(
         self,
-        local_display_policy: &BufferTextWindowLocalDisplayPolicy,
+        local_display_policy: &BufferWindowLocalDisplayPolicy,
         buffer_access: &RustBufferAccess<'_, B>,
-    ) -> BufferTextWindowGeometryPlan {
+    ) -> BufferWindowGeometryPlan {
         let line_number_columns = local_display_policy
             .line_number_columns(buffer_access, self.line_number_row_capacity());
         let geometry = self.into_geometry(line_number_columns);
-        BufferTextWindowGeometryPlan {
+        BufferWindowGeometryPlan {
             geometry,
             line_number_columns,
         }
     }
 }
 
-impl BufferTextWindowChromeHeights {
+impl BufferWindowChromeHeights {
     pub(crate) const fn new(mode_line: f32, header_line: f32, tab_line: f32) -> Self {
         Self {
             mode_line,
@@ -234,7 +234,7 @@ impl BufferTextWindowChromeHeights {
     }
 }
 
-impl BufferTextWindowLocalDisplayPolicy {
+impl BufferWindowLocalDisplayPolicy {
     pub(crate) fn from_buffer(buffer: &impl LayoutBufferView) -> Self {
         Self {
             line_number_mode: buffer_display_line_numbers_mode(buffer).engine_code(),
@@ -300,8 +300,8 @@ impl BufferTextWindowLocalDisplayPolicy {
         line_number_cols: i32,
         char_width: f32,
         char_height: f32,
-    ) -> BufferTextWindowRowPreludeRequestContext {
-        BufferTextWindowRowPreludeRequestContext::new(
+    ) -> BufferSourceRowPreludeRequestContext {
+        BufferSourceRowPreludeRequestContext::new(
             self.line_number_mode,
             self.line_number_current_absolute,
             self.line_number_offset,

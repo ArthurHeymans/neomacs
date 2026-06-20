@@ -69,8 +69,8 @@ fn request(
     accessible_end: i64,
     max_rows: usize,
     kind: WindowKind,
-) -> BufferTextWindowSourceRequest {
-    BufferTextWindowSourceRequest::new(
+) -> BufferWindowSourceRequest {
+    BufferWindowSourceRequest::new(
         requested_window_start,
         previous_window_end,
         point_charpos,
@@ -89,7 +89,7 @@ fn byte_at_charpos(text: &'static [u8]) -> impl Fn(i64) -> Option<u8> {
 #[test]
 fn source_request_from_window_params_carries_source_bounds() {
     let params = window_params();
-    let request = BufferTextWindowSourceRequest::from_window_params(&params, 6);
+    let request = BufferWindowSourceRequest::from_window_params(&params, 6);
 
     assert_eq!(request.requested_window_start, 17);
     assert_eq!(request.previous_window_end, Some(29));
@@ -108,7 +108,7 @@ fn source_request_from_window_params_uses_text_bounds_columns() {
     params.text_bounds.width = 48.0;
     params.char_width = 12.0;
 
-    let request = BufferTextWindowSourceRequest::from_window_params(&params, 6);
+    let request = BufferWindowSourceRequest::from_window_params(&params, 6);
 
     assert_eq!(request.visible_cols, 4);
 }

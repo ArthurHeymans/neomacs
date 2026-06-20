@@ -13,9 +13,9 @@ use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowFinishState,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_source::BufferTextWindowSource;
-use crate::display_buffer_text_walk::{
-    BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
+use crate::display_buffer_text_source::BufferWindowSource;
+use crate::display_buffer_window_geometry::{
+    BufferWindowChromeHeights, BufferWindowGeometry, BufferWindowLocalDisplayPolicy,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
@@ -91,7 +91,7 @@ impl BufferSourceOutputSetup {
         frame_id: FrameId,
         window_id: WindowId,
         params: &WindowParams,
-        geometry: &BufferTextWindowGeometry,
+        geometry: &BufferWindowGeometry,
         max_rows: usize,
         walk_setup: &BufferSourceWalkSetup,
     ) -> Self {
@@ -157,7 +157,7 @@ impl BufferSourceOutputSetup {
                 // Lifted to span `max_rows` for a minibuffer so the unclamped
                 // GNU `resize_mini_window` measurement can emit content rows
                 // beyond the window's current physical height (see
-                // `BufferTextWindowGeometry::visibility_bottom_y`).
+                // `BufferWindowGeometry::visibility_bottom_y`).
                 bottom_y: visibility_bottom_y,
             },
             row_limit: DisplayRowLimit { max_rows },
@@ -235,13 +235,13 @@ impl BufferSourceOutputSetup {
         state: BufferSourceRenderAttemptContext<'_, '_>,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
         remaining_visibility_retries: usize,
-        local_display_policy: BufferTextWindowLocalDisplayPolicy,
+        local_display_policy: BufferWindowLocalDisplayPolicy,
         line_number_cols: i32,
-        geometry: &BufferTextWindowGeometry,
-        chrome_heights: BufferTextWindowChromeHeights,
+        geometry: &BufferWindowGeometry,
+        chrome_heights: BufferWindowChromeHeights,
         buffer: &'a B,
         buffer_id: BufferId,
-        source: BufferTextWindowSource,
+        source: BufferWindowSource,
         params: &'a WindowParams,
         default_face: &'a BufferSourceDefaultFacePlan,
         font_ascent: f32,

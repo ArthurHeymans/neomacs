@@ -16,7 +16,7 @@ use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRan
 use neovm_core::emacs_core::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowSource {
+pub(crate) struct BufferWindowSource {
     window_start: i64,
     text_start_byte: usize,
     bytes_read: usize,
@@ -27,7 +27,7 @@ pub(crate) struct BufferTextWindowSource {
     accessible_end_emacs_byte: usize,
 }
 
-impl BufferTextWindowSource {
+impl BufferWindowSource {
     pub(crate) const fn window_start(self) -> i64 {
         self.window_start
     }
@@ -62,13 +62,13 @@ impl BufferTextWindowSource {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferTextWindowSourceReadRequest<'a> {
+pub(crate) struct BufferWindowSourceReadRequest<'a> {
     params: &'a WindowParams,
     max_rows: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowSourceRequest {
+pub(crate) struct BufferWindowSourceRequest {
     requested_window_start: i64,
     previous_window_end: Option<i64>,
     point_charpos: i64,
@@ -79,7 +79,7 @@ pub(crate) struct BufferTextWindowSourceRequest {
     kind: WindowKind,
 }
 
-impl<'a> BufferTextWindowSourceReadRequest<'a> {
+impl<'a> BufferWindowSourceReadRequest<'a> {
     pub(crate) fn new(params: &'a WindowParams, max_rows: usize) -> Self {
         Self { params, max_rows }
     }
@@ -88,13 +88,13 @@ impl<'a> BufferTextWindowSourceReadRequest<'a> {
         self,
         access: &RustBufferAccess<'_, B>,
         out: &mut Vec<u8>,
-    ) -> BufferTextWindowSource {
-        BufferTextWindowSourceRequest::from_window_params(self.params, self.max_rows)
+    ) -> BufferWindowSource {
+        BufferWindowSourceRequest::from_window_params(self.params, self.max_rows)
             .read_into(access, out)
     }
 }
 
-impl BufferTextWindowSourceRequest {
+impl BufferWindowSourceRequest {
     pub(crate) fn from_window_params(params: &WindowParams, max_rows: usize) -> Self {
         Self::new(
             params.window_start_charpos().get(),
@@ -134,7 +134,7 @@ impl BufferTextWindowSourceRequest {
         self,
         access: &RustBufferAccess<'_, B>,
         out: &mut Vec<u8>,
-    ) -> BufferTextWindowSource {
+    ) -> BufferWindowSource {
         let window_start =
             self.resolve_window_start(|charpos| access.byte_at(access.charpos_to_bytepos(charpos)));
         let text_start_byte = access.charpos_to_bytepos(window_start) as usize;
@@ -149,7 +149,7 @@ impl BufferTextWindowSourceRequest {
             out.len()
         };
 
-        BufferTextWindowSource {
+        BufferWindowSource {
             window_start,
             text_start_byte,
             bytes_read,

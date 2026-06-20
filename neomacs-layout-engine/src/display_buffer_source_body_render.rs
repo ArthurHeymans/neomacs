@@ -6,6 +6,7 @@ use crate::display_buffer_source_render_attempt::{
     BufferSourceOutputState, BufferSourceRedisplayPublishRequest,
 };
 use crate::display_buffer_source_render_plan::BufferSourceDefaultFacePlan;
+use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_buffer_source_tail_render::{
     BufferSourcePostLoopRenderOutcome, BufferSourceTailRequestContext,
     render_buffer_source_tail_and_decide_retry,
@@ -15,11 +16,8 @@ use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
-use crate::display_buffer_text_source::BufferTextWindowSource;
-use crate::display_buffer_text_walk::{
-    BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
-};
+use crate::display_buffer_text_source::BufferWindowSource;
+use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -202,10 +200,10 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
     }
 
     pub(crate) fn from_window_geometry(
-        source: BufferTextWindowSource,
+        source: BufferWindowSource,
         params: &'a WindowParams,
-        geometry: &BufferTextWindowGeometry,
-        local_display_policy: &BufferTextWindowLocalDisplayPolicy,
+        geometry: &BufferWindowGeometry,
+        local_display_policy: &BufferWindowLocalDisplayPolicy,
         default_face: &BufferSourceDefaultFacePlan,
         reserve_right_border_col: bool,
         reserve_right_special_col: bool,
@@ -293,7 +291,7 @@ impl BufferSourceWalkSetup {
     fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
         state: &mut BufferSourceWalkRenderState<'_>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
@@ -418,7 +416,7 @@ impl BufferSourceWalkSetup {
     fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         state: &mut BufferSourceBodyRenderState<'_>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         tail_context: &BufferSourceTailRequestContext<'_>,
@@ -469,7 +467,7 @@ impl BufferSourceWalkSetup {
         line_numbers: &mut LineNumberRenderState,
         face_scan: &mut FaceScanCheckpoint,
         active_face_state: &mut DisplayRowActiveFaceState,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         tail_context: &BufferSourceTailRequestContext<'_>,
