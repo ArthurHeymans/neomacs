@@ -1,7 +1,8 @@
 use super::*;
+use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
+    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionState,
 };
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
@@ -33,6 +34,12 @@ fn item_texts(items: &[DisplayItem]) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum BufferTextSourceConsumptionTestItem {
+    DisplayItem(BufferTextConsumedDisplayItem),
+    Replacement(BufferTextReplacementItem),
 }
 
 fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) {
@@ -873,8 +880,14 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextSourceConsumptionItem::DisplayItem(first)) =
-        source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextSourceConsumptionTestItem::DisplayItem(first)) = source_consumption
+        .next_source_consumption_result(
+            &mut source,
+            &mut context,
+            &mut position,
+            BufferTextSourceConsumptionTestItem::DisplayItem,
+            BufferTextSourceConsumptionTestItem::Replacement,
+        )
     else {
         panic!("expected leading text step");
     };
@@ -883,8 +896,14 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 
-    let Some(BufferTextSourceConsumptionItem::Replacement(replacement)) =
-        source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextSourceConsumptionTestItem::Replacement(replacement)) = source_consumption
+        .next_source_consumption_result(
+            &mut source,
+            &mut context,
+            &mut position,
+            BufferTextSourceConsumptionTestItem::DisplayItem,
+            BufferTextSourceConsumptionTestItem::Replacement,
+        )
     else {
         panic!("expected atomic replacement string item");
     };
@@ -936,8 +955,14 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextSourceConsumptionItem::DisplayItem(first)) =
-        source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextSourceConsumptionTestItem::DisplayItem(first)) = source_consumption
+        .next_source_consumption_result(
+            &mut source,
+            &mut context,
+            &mut position,
+            BufferTextSourceConsumptionTestItem::DisplayItem,
+            BufferTextSourceConsumptionTestItem::Replacement,
+        )
     else {
         panic!("expected leading text step");
     };
@@ -946,8 +971,14 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 
-    let Some(BufferTextSourceConsumptionItem::Replacement(replacement)) =
-        source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextSourceConsumptionTestItem::Replacement(replacement)) = source_consumption
+        .next_source_consumption_result(
+            &mut source,
+            &mut context,
+            &mut position,
+            BufferTextSourceConsumptionTestItem::DisplayItem,
+            BufferTextSourceConsumptionTestItem::Replacement,
+        )
     else {
         panic!("expected atomic display space item");
     };

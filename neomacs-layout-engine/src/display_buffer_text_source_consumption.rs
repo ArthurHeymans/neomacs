@@ -59,7 +59,7 @@ struct BufferTextSourceCursorReadRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceConsumptionItem {
+enum BufferTextSourceConsumptionItem {
     DisplayItem(BufferTextConsumedDisplayItem),
     Replacement(BufferTextReplacementItem),
 }
@@ -465,7 +465,24 @@ impl BufferTextSourceConsumptionState {
         }
     }
 
-    pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
+    pub(crate) fn next_source_consumption_result<B, R>(
+        &mut self,
+        source: &mut BufferTextSourceCursor<'_, B>,
+        context: &mut DisplaySourceContext<'_>,
+        position: &mut BufferTextSourcePosition,
+        display_item: impl FnOnce(BufferTextConsumedDisplayItem) -> R,
+        replacement: impl FnOnce(BufferTextReplacementItem) -> R,
+    ) -> Option<R>
+    where
+        B: LayoutBufferView + ?Sized,
+    {
+        match self.next_source_consumption_item(source, context, position)? {
+            BufferTextSourceConsumptionItem::DisplayItem(item) => Some(display_item(item)),
+            BufferTextSourceConsumptionItem::Replacement(item) => Some(replacement(item)),
+        }
+    }
+
+    fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
