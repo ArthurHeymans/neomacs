@@ -13,7 +13,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderRequest,
     BufferTextLineBreakRenderState,
 };
-use crate::display_buffer_text_source_consumption::{
+use crate::display_buffer_text_source_lowering::{
     BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;

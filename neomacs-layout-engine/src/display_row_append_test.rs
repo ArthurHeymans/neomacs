@@ -25,6 +25,7 @@ use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
+use crate::display_buffer_text_source_lowering::*;
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -2018,8 +2019,8 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
-    let step = typed_item
-        .try_into_direct_consumed_display_item(&mut position)
+    let step = BufferTextSourceLoweringState::new(0)
+        .consume_source_item(typed_item, &mut position)
         .expect("direct source step");
 
     assert_eq!(position.byte_idx(), 1);
@@ -2124,15 +2125,16 @@ fn buffer_text_source_item_without_source_char_keeps_source_mapped_for_lowering(
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, None);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let typed_item = typed_item
-        .try_into_direct_consumed_display_item(&mut position)
-        .expect_err("source-mapped item without source char needs fallback");
-
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert!(typed_item.direct_source_char().is_none());
     match &typed_item.item().kind {
         DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "\\ "),
         other => panic!("expected source-mapped text, got {other:?}"),
     }
+
+    let step = BufferTextSourceLoweringState::new(0).consume_source_item(typed_item, &mut position);
+
+    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert!(step.is_none());
 }
 
 #[test]
@@ -2162,10 +2164,26 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
-    let typed_item = typed_item
-        .try_into_direct_consumed_display_item(&mut position)
-        .expect_err("multi-char text runs are not direct consumed display items");
+    assert!(typed_item.direct_source_char().is_none());
+    match &typed_item.item().kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
+        other => panic!("expected full text run, got {other:?}"),
+    }
+    let first_step = BufferTextSourceLoweringState::new(0)
+        .consume_source_item(typed_item, &mut position)
+        .expect("multi-char text run lowers through compatibility lowerer");
+    assert_eq!(first_step.source_char().ch(), 'a');
+    let (_, first_item) = first_step.into_parts();
+    match &first_item.kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
+        other => panic!("expected lowered text run, got {other:?}"),
+    }
+    assert_eq!(position, BufferTextSourcePosition::new(1, 0));
 
+    let position = BufferTextSourcePosition::new(0, 0);
+    let typed_item = source_consumption
+        .next_item_from_source(&mut cursor, &mut source_context, &position)
+        .expect("typed source item after cursor reset");
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     match &typed_item.item().kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),

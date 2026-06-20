@@ -14,9 +14,9 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
-    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem,
-    BufferTextSourceConsumptionState, BufferTextSourceItem,
+    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState, BufferTextSourceItem,
 };
+use crate::display_buffer_text_source_lowering::BufferTextConsumedDisplayItem;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
