@@ -8,16 +8,16 @@ use crate::display_buffer_display_property_render::{
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
+use crate::display_buffer_source_row_lifecycle::{
+    BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
+    BufferSourceSelectiveDisplayTailRenderRequest,
+};
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_overflow::{
     BufferTextOverflowRenderContext, BufferTextOverflowRenderRequest,
     BufferTextSpecialOverflowRenderContext, BufferTextSpecialOverflowRenderRequest,
-};
-use crate::display_buffer_text_row_lifecycle::{
-    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
-    BufferTextLineBreakRenderRequest,
 };
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
@@ -598,7 +598,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         source_walk: &mut BufferSourceWalk<'request, B>,
         source_step_char: DisplaySourceStepChar,
         buffer: &B,
-    ) -> BufferSelectiveDisplayTailRenderOutcome
+    ) -> BufferSourceSelectiveDisplayTailRenderOutcome
     where
         'surface: 'request,
     {
@@ -671,16 +671,16 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     fn render_selective_display_tail<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
-        request: BufferSelectiveDisplayTailRenderRequest<'_>,
+        request: BufferSourceSelectiveDisplayTailRenderRequest<'_>,
         buffer: &B,
-    ) -> BufferSelectiveDisplayTailRenderOutcome {
+    ) -> BufferSourceSelectiveDisplayTailRenderOutcome {
         request.render_if_needed_and_apply(source_walk, buffer, self.state.reborrow())
     }
 
     fn render_line_break<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
-        request: BufferTextLineBreakRenderRequest<'_>,
+        request: BufferSourceLineBreakRenderRequest<'_>,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
         request.render_and_apply(source_walk, buffer, self.state.reborrow())

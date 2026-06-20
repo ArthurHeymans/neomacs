@@ -1,12 +1,12 @@
-//! Buffer text render-attempt state, retry, and publish lifecycle.
+//! Buffer source render-attempt state, retry, and publish lifecycle.
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_buffer_source_tail_render::{
+    BufferSourcePostLoopRenderOutcome, BufferSourceRetryBounds,
+};
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowCursorEffectsRequest,
     BufferTextWindowVisibilityRetryOutcome,
-};
-use crate::display_buffer_text_tail_render::{
-    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowRetryBounds,
 };
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
@@ -23,13 +23,13 @@ use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 
-pub(crate) struct BufferTextWindowOutputState<'emit> {
+pub(crate) struct BufferSourceOutputState<'emit> {
     pub(crate) output: TextWindowOutputTarget<'emit>,
     pub(crate) evaluator: &'emit mut Context,
 }
 
-pub(crate) struct BufferTextWindowRenderAttemptContext<'a, 'face> {
-    pub(crate) output: BufferTextWindowOutputState<'a>,
+pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
+    pub(crate) output: BufferSourceOutputState<'a>,
     pub(crate) font_metrics: &'a mut Option<FontMetricsService>,
     pub(crate) face_resolver: &'face FaceResolver,
     pub(crate) frame_face_id_counter: &'a mut u32,
@@ -38,7 +38,7 @@ pub(crate) struct BufferTextWindowRenderAttemptContext<'a, 'face> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRedisplayPublishRequest {
+pub(crate) struct BufferSourceRedisplayPublishRequest {
     frame_id: FrameId,
     window_id: WindowId,
     accessible_end_lisp_char: usize,
@@ -46,7 +46,7 @@ pub(crate) struct BufferTextWindowRedisplayPublishRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextWindowRenderAttemptOutcome {
+pub(crate) enum BufferSourceRenderAttemptOutcome {
     Skipped,
     Retry {
         window_start: i64,
@@ -57,17 +57,17 @@ pub(crate) enum BufferTextWindowRenderAttemptOutcome {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRetryPlan {
+pub(crate) struct BufferSourceRetryPlan {
     window_id: i64,
     window_start: i64,
     point_charpos: i64,
     charpos_end: i64,
     rendered_rows_len: usize,
-    retry_bounds: BufferTextWindowRetryBounds,
+    retry_bounds: BufferSourceRetryBounds,
     retry: BufferTextWindowVisibilityRetryOutcome,
 }
 
-impl<'emit> BufferTextWindowOutputState<'emit> {
+impl<'emit> BufferSourceOutputState<'emit> {
     pub(crate) fn from_parts(
         output: TextWindowOutputTarget<'emit>,
         evaluator: &'emit mut Context,
@@ -117,7 +117,7 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
     }
 }
 
-impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
+impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         output: TextWindowOutputTarget<'a>,
@@ -129,7 +129,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
-            output: BufferTextWindowOutputState::from_parts(output, evaluator),
+            output: BufferSourceOutputState::from_parts(output, evaluator),
             font_metrics,
             face_resolver,
             frame_face_id_counter,
@@ -160,7 +160,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
     }
 }
 
-impl BufferTextWindowRedisplayPublishRequest {
+impl BufferSourceRedisplayPublishRequest {
     pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
@@ -189,14 +189,14 @@ impl BufferTextWindowRedisplayPublishRequest {
     }
 }
 
-impl BufferTextWindowRetryPlan {
+impl BufferSourceRetryPlan {
     pub(crate) fn from_post_loop(
         window_id: i64,
         window_start: i64,
         point_charpos: i64,
         charpos_end: i64,
-        retry_bounds: BufferTextWindowRetryBounds,
-        post_loop: BufferTextWindowPostLoopRenderOutcome,
+        retry_bounds: BufferSourceRetryBounds,
+        post_loop: BufferSourcePostLoopRenderOutcome,
     ) -> Self {
         Self {
             window_id,

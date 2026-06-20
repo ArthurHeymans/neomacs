@@ -3,12 +3,12 @@
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::BufferSourceRenderRequest;
+use crate::display_buffer_source_row_lifecycle::{
+    BufferSourceHscrollSkipRenderRequest, BufferSourceInvisibleTextRenderOutcome,
+    BufferSourceInvisibleTextRenderRequest,
+};
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_row_lifecycle::{
-    BufferHscrollSkipRenderRequest, BufferInvisibleTextRenderOutcome,
-    BufferInvisibleTextRenderRequest,
-};
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
@@ -129,7 +129,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferInvisibleTextRenderOutcome
+    ) -> BufferSourceInvisibleTextRenderOutcome
     where
         'surface: 'request,
     {
@@ -146,9 +146,9 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'_, B>,
-        request: BufferInvisibleTextRenderRequest<'_>,
+        request: BufferSourceInvisibleTextRenderRequest<'_>,
         buffer: &B,
-    ) -> BufferInvisibleTextRenderOutcome {
+    ) -> BufferSourceInvisibleTextRenderOutcome {
         request.render_at_checkpoint_and_apply(source_walk, buffer, self.reborrow())
     }
 
@@ -170,7 +170,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     fn render_hscroll_skip<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'_, B>,
-        request: BufferHscrollSkipRenderRequest<'_>,
+        request: BufferSourceHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
         request.render_next_and_apply(source_walk, self.reborrow())
     }

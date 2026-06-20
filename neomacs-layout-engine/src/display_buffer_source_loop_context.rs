@@ -1,11 +1,11 @@
 //! Buffer text loop request builders.
 
-use crate::display_buffer_text_row_lifecycle::{
-    BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
-    BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest,
-    BufferInvisibleTextRenderContext, BufferInvisibleTextRenderRequest,
-    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderRequest,
-    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
+use crate::display_buffer_source_row_lifecycle::{
+    BufferSourceEndOfBufferTailRenderContext, BufferSourceEndOfBufferTailRenderRequest,
+    BufferSourceHscrollSkipRenderContext, BufferSourceHscrollSkipRenderRequest,
+    BufferSourceInvisibleTextRenderContext, BufferSourceInvisibleTextRenderRequest,
+    BufferSourceLineBreakRenderContext, BufferSourceLineBreakRenderRequest,
+    BufferSourceSelectiveDisplayTailRenderContext, BufferSourceSelectiveDisplayTailRenderRequest,
 };
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -85,8 +85,8 @@ impl BufferSourceLoopRequestContext {
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-    ) -> BufferInvisibleTextRenderRequest<'a> {
-        BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext::new(
+    ) -> BufferSourceInvisibleTextRenderRequest<'a> {
+        BufferSourceInvisibleTextRenderRequest::new(BufferSourceInvisibleTextRenderContext::new(
             text,
             self.accessible_end,
             self.point_charpos,
@@ -105,8 +105,8 @@ impl BufferSourceLoopRequestContext {
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
-    ) -> BufferHscrollSkipRenderRequest<'a> {
-        BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext::new(
+    ) -> BufferSourceHscrollSkipRenderRequest<'a> {
+        BufferSourceHscrollSkipRenderRequest::new(BufferSourceHscrollSkipRenderContext::new(
             text,
             self.tab_width,
             self.content_x,
@@ -131,10 +131,10 @@ impl BufferSourceLoopRequestContext {
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-    ) -> BufferSelectiveDisplayTailRenderRequest<'a> {
-        BufferSelectiveDisplayTailRenderRequest::new(
+    ) -> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
+        BufferSourceSelectiveDisplayTailRenderRequest::new(
             source_step_char,
-            BufferSelectiveDisplayTailRenderContext::new(
+            BufferSourceSelectiveDisplayTailRenderContext::new(
                 text,
                 self.text_start_byte,
                 self.selective_display,
@@ -161,10 +161,10 @@ impl BufferSourceLoopRequestContext {
         text: &'a [u8],
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
-    ) -> BufferTextLineBreakRenderRequest<'a> {
-        BufferTextLineBreakRenderRequest::new(
+    ) -> BufferSourceLineBreakRenderRequest<'a> {
+        BufferSourceLineBreakRenderRequest::new(
             source_char,
-            BufferTextLineBreakRenderContext::new(
+            BufferSourceLineBreakRenderContext::new(
                 text,
                 self.text_start_byte,
                 self.selective_display,
@@ -190,15 +190,17 @@ impl BufferSourceLoopRequestContext {
         charpos: i64,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
-    ) -> BufferEndOfBufferTailRenderRequest<'a> {
-        BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext::new(
-            byte_idx,
-            charpos,
-            self.accessible_end,
-            self.point_charpos,
-            overlay_context,
-            active_face_state,
-        ))
+    ) -> BufferSourceEndOfBufferTailRenderRequest<'a> {
+        BufferSourceEndOfBufferTailRenderRequest::new(
+            BufferSourceEndOfBufferTailRenderContext::new(
+                byte_idx,
+                charpos,
+                self.accessible_end,
+                self.point_charpos,
+                overlay_context,
+                active_face_state,
+            ),
+        )
     }
 
     pub(crate) fn buffer_id(self) -> BufferId {

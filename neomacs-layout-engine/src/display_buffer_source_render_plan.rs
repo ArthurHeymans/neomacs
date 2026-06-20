@@ -1,21 +1,19 @@
-//! Buffer text render plan construction and completion.
+//! Buffer source render plan construction and completion.
 
+use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
+use crate::display_buffer_source_render_attempt::{
+    BufferSourceOutputState, BufferSourceRedisplayPublishRequest, BufferSourceRenderAttemptContext,
+    BufferSourceRenderAttemptOutcome, BufferSourceRetryPlan,
+};
+use crate::display_buffer_source_tail_render::{
+    BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
+};
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowFinishState,
 };
-use crate::display_buffer_text_body_render::BufferTextWindowWalkSetup;
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_render_attempt::{
-    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
-    BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
-    BufferTextWindowRetryPlan,
-};
 use crate::display_buffer_text_source::BufferTextWindowSource;
-use crate::display_buffer_text_tail_render::{
-    BufferTextWindowBodyInstallContext, BufferTextWindowRetryBounds,
-    BufferTextWindowTailRequestContext,
-};
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
 };
@@ -36,22 +34,22 @@ use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
-pub(crate) struct BufferTextWindowOutputSetup {
+pub(crate) struct BufferSourceOutputSetup {
     pub(crate) begin_request: BufferTextWindowBeginRequest,
     pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
     pub(crate) row_limit: DisplayRowLimit,
-    pub(crate) body_install_context: BufferTextWindowBodyInstallContext,
-    pub(crate) retry_bounds: BufferTextWindowRetryBounds,
+    pub(crate) body_install_context: BufferSourceBodyInstallContext,
+    pub(crate) retry_bounds: BufferSourceRetryBounds,
 }
 
-pub(crate) struct BufferTextWindowDefaultFacePlan {
+pub(crate) struct BufferSourceDefaultFacePlan {
     face: ResolvedFace,
     char_width: f32,
     row_height: f32,
     ascent: f32,
     measurement_policy: DisplayRowMeasurementPolicy,
 }
-impl BufferTextWindowOutputSetup {
+impl BufferSourceOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         frame_id: FrameId,
@@ -68,7 +66,7 @@ impl BufferTextWindowOutputSetup {
         text_height: f32,
         visibility_bottom_y: f32,
         max_rows: usize,
-        walk_setup: &BufferTextWindowWalkSetup,
+        walk_setup: &BufferSourceWalkSetup,
     ) -> Self {
         Self::from_parts(
             frame_id,
@@ -95,7 +93,7 @@ impl BufferTextWindowOutputSetup {
         params: &WindowParams,
         geometry: &BufferTextWindowGeometry,
         max_rows: usize,
-        walk_setup: &BufferTextWindowWalkSetup,
+        walk_setup: &BufferSourceWalkSetup,
     ) -> Self {
         Self::new(
             frame_id,
@@ -132,10 +130,10 @@ impl BufferTextWindowOutputSetup {
         text_height: f32,
         visibility_bottom_y: f32,
         max_rows: usize,
-        walk_setup: &BufferTextWindowWalkSetup,
-    ) -> BufferTextWindowOutputSetup {
+        walk_setup: &BufferSourceWalkSetup,
+    ) -> BufferSourceOutputSetup {
         let output_cols = cols.max(1);
-        BufferTextWindowOutputSetup {
+        BufferSourceOutputSetup {
             begin_request: BufferTextWindowBeginRequest::new(
                 frame_id,
                 window_id,
@@ -163,12 +161,12 @@ impl BufferTextWindowOutputSetup {
                 bottom_y: visibility_bottom_y,
             },
             row_limit: DisplayRowLimit { max_rows },
-            body_install_context: BufferTextWindowBodyInstallContext::new(
+            body_install_context: BufferSourceBodyInstallContext::new(
                 output_window_id,
                 display_text_row_base,
                 output_cols,
             ),
-            retry_bounds: BufferTextWindowRetryBounds::new(
+            retry_bounds: BufferSourceRetryBounds::new(
                 (text_y - walk_setup.window_top).round() as i64,
                 (text_y + text_height - walk_setup.window_top).round() as i64,
             ),
@@ -176,7 +174,7 @@ impl BufferTextWindowOutputSetup {
     }
 }
 
-impl BufferTextWindowDefaultFacePlan {
+impl BufferSourceDefaultFacePlan {
     pub(crate) fn new(
         face_resolver: &FaceResolver,
         font_metrics: &mut Option<FontMetricsService>,
@@ -229,12 +227,12 @@ impl BufferTextWindowDefaultFacePlan {
     }
 }
 
-impl BufferTextWindowOutputSetup {
+impl BufferSourceOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_body_attempt<'a, 'surface, 'buf, B>(
         self,
-        walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderAttemptContext<'_, '_>,
+        walk_setup: &mut BufferSourceWalkSetup,
+        state: BufferSourceRenderAttemptContext<'_, '_>,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
         remaining_visibility_retries: usize,
         local_display_policy: BufferTextWindowLocalDisplayPolicy,
@@ -245,7 +243,7 @@ impl BufferTextWindowOutputSetup {
         buffer_id: BufferId,
         source: BufferTextWindowSource,
         params: &'a WindowParams,
-        default_face: &'a BufferTextWindowDefaultFacePlan,
+        default_face: &'a BufferSourceDefaultFacePlan,
         font_ascent: f32,
         window_system: bool,
         output_window_id: u64,
@@ -254,11 +252,11 @@ impl BufferTextWindowOutputSetup {
         reserve_right_border_col: bool,
         text: &'a [u8],
         buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowRenderAttemptOutcome
+    ) -> BufferSourceRenderAttemptOutcome
     where
         B: LayoutBufferView,
     {
-        let BufferTextWindowRenderAttemptContext {
+        let BufferSourceRenderAttemptContext {
             mut output,
             font_metrics,
             face_resolver,
@@ -320,7 +318,7 @@ impl BufferTextWindowOutputSetup {
             default_face.row_height(),
             default_face.ascent(),
         );
-        let tail_context = BufferTextWindowTailRequestContext::new(
+        let tail_context = BufferSourceTailRequestContext::new(
             params,
             source.window_start(),
             source.accessible_start(),
@@ -343,7 +341,7 @@ impl BufferTextWindowOutputSetup {
             chrome_heights.header_line,
             chrome_heights.tab_line,
         );
-        let publish_request = BufferTextWindowRedisplayPublishRequest::new(
+        let publish_request = BufferSourceRedisplayPublishRequest::new(
             self.begin_request.frame_id(),
             self.begin_request.window_id(),
             source.accessible_end_lisp_char(),
@@ -386,7 +384,7 @@ impl BufferTextWindowOutputSetup {
             buf_access,
         );
 
-        let retry_plan = BufferTextWindowRetryPlan::from_post_loop(
+        let retry_plan = BufferSourceRetryPlan::from_post_loop(
             tail_context.params.window_id,
             tail_context.window_start,
             tail_context.params.point_charpos().get(),
@@ -400,10 +398,10 @@ impl BufferTextWindowOutputSetup {
             retry_plan.log_retry(window_start, remaining_visibility_retries);
             output.restore_retry_checkpoint(retry_checkpoint);
             *frame_face_id_counter = face_ids.finish();
-            return BufferTextWindowRenderAttemptOutcome::Retry { window_start };
+            return BufferSourceRenderAttemptOutcome::Retry { window_start };
         }
 
-        let BufferTextWindowOutputState {
+        let BufferSourceOutputState {
             mut output,
             evaluator,
         } = output;
@@ -437,7 +435,7 @@ impl BufferTextWindowOutputSetup {
         );
         drop(render_services);
         *frame_face_id_counter = face_ids.finish();
-        BufferTextWindowRenderAttemptOutcome::Finished {
+        BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,
         }
     }

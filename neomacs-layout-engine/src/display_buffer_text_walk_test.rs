@@ -1,7 +1,7 @@
 use super::*;
+use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
-use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
-use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetup;
+use crate::display_buffer_source_render_plan::BufferSourceOutputSetup;
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};
@@ -66,8 +66,8 @@ fn window_params() -> WindowParams {
     }
 }
 
-fn setup_request() -> BufferTextWindowWalkSetupRequest<'static> {
-    BufferTextWindowWalkSetupRequest::new(
+fn setup_request() -> BufferSourceWalkSetupRequest<'static> {
+    BufferSourceWalkSetupRequest::new(
         17,
         24.0,
         16.0,
@@ -206,7 +206,7 @@ fn walk_setup_applies_hscroll_prefix_and_reserved_surface_policy() {
 #[test]
 fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     let walk_setup = setup_request().into_setup();
-    let output_setup = BufferTextWindowOutputSetup::new(
+    let output_setup = BufferSourceOutputSetup::new(
         FrameId(3),
         WindowId(9),
         99,
@@ -236,7 +236,7 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
 fn loop_request_context_carries_buffer_and_window_policy() {
     let params = window_params();
     let walk_setup = setup_request().into_setup();
-    let output_setup = BufferTextWindowOutputSetup::new(
+    let output_setup = BufferSourceOutputSetup::new(
         FrameId(3),
         WindowId(9),
         99,

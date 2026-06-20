@@ -1,6 +1,6 @@
-//! Buffer text special-row lifecycle rendering.
+//! Buffer source special-row lifecycle rendering.
 //!
-//! This module owns the buffer-specific row lifecycle actions that sit between
+//! This module owns the buffer source row lifecycle actions that sit between
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
@@ -43,12 +43,12 @@ use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 
-pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
-    context: BufferEndOfBufferTailRenderContext<'a>,
+pub(crate) struct BufferSourceEndOfBufferTailRenderRequest<'a> {
+    context: BufferSourceEndOfBufferTailRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
+pub(crate) struct BufferSourceEndOfBufferTailRenderContext<'a> {
     byte_idx: usize,
     charpos: i64,
     accessible_end: i64,
@@ -57,18 +57,18 @@ pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
     active_face_state: &'a DisplayRowActiveFaceState,
 }
 
-pub(crate) struct BufferEndOfBufferTailRenderOutcome {
+pub(crate) struct BufferSourceEndOfBufferTailRenderOutcome {
     point_is_visible_eob: bool,
 }
 
-impl BufferEndOfBufferTailRenderOutcome {
+impl BufferSourceEndOfBufferTailRenderOutcome {
     pub(crate) fn point_is_visible_eob(self) -> bool {
         self.point_is_visible_eob
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferHscrollSkipAction {
+pub(crate) enum BufferSourceHscrollSkipAction {
     LineBreak {
         ch_start_byte_idx: usize,
         charpos: i64,
@@ -80,7 +80,7 @@ pub(crate) enum BufferHscrollSkipAction {
     },
 }
 
-impl BufferHscrollSkipAction {
+impl BufferSourceHscrollSkipAction {
     pub(crate) fn is_line_break(self) -> bool {
         matches!(self, Self::LineBreak { .. })
     }
@@ -238,14 +238,14 @@ impl BufferHscrollSkipAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferEndOfBufferCursorAction {
+pub(crate) struct BufferSourceEndOfBufferCursorAction {
     byte_idx: usize,
     charpos: i64,
     accessible_end: i64,
     point_charpos: i64,
 }
 
-impl BufferEndOfBufferCursorAction {
+impl BufferSourceEndOfBufferCursorAction {
     pub(crate) fn new(
         byte_idx: usize,
         charpos: i64,
@@ -301,11 +301,11 @@ impl BufferEndOfBufferCursorAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferEndOfBufferTailAction {
-    cursor: BufferEndOfBufferCursorAction,
+pub(crate) struct BufferSourceEndOfBufferTailAction {
+    cursor: BufferSourceEndOfBufferCursorAction,
 }
 
-impl BufferEndOfBufferTailAction {
+impl BufferSourceEndOfBufferTailAction {
     pub(crate) fn new(
         byte_idx: usize,
         charpos: i64,
@@ -313,7 +313,7 @@ impl BufferEndOfBufferTailAction {
         point_charpos: i64,
     ) -> Self {
         Self {
-            cursor: BufferEndOfBufferCursorAction::new(
+            cursor: BufferSourceEndOfBufferCursorAction::new(
                 byte_idx,
                 charpos,
                 accessible_end,
@@ -349,8 +349,8 @@ impl BufferEndOfBufferTailAction {
     }
 }
 
-impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
-    pub(crate) fn new(context: BufferEndOfBufferTailRenderContext<'a>) -> Self {
+impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
+    pub(crate) fn new(context: BufferSourceEndOfBufferTailRenderContext<'a>) -> Self {
         Self { context }
     }
 
@@ -366,12 +366,12 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         hit_row_range: &mut HitRowRangeTracker,
         row_y_positions: &mut DisplayRowYPositions,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> BufferEndOfBufferTailRenderOutcome {
+    ) -> BufferSourceEndOfBufferTailRenderOutcome {
         let DisplaySourceRowProgressState { x, col } = row_progress;
         let mut source_render = source_render;
         let context = self.context;
 
-        let tail = BufferEndOfBufferTailAction::new(
+        let tail = BufferSourceEndOfBufferTailAction::new(
             context.byte_idx,
             context.charpos,
             context.accessible_end,
@@ -406,13 +406,13 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             );
         }
 
-        BufferEndOfBufferTailRenderOutcome {
+        BufferSourceEndOfBufferTailRenderOutcome {
             point_is_visible_eob,
         }
     }
 }
 
-impl<'a> BufferEndOfBufferTailRenderContext<'a> {
+impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
     pub(crate) fn new(
         byte_idx: usize,
         charpos: i64,
@@ -432,12 +432,12 @@ impl<'a> BufferEndOfBufferTailRenderContext<'a> {
     }
 }
 
-pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
-    context: BufferHscrollSkipRenderContext<'a>,
+pub(crate) struct BufferSourceHscrollSkipRenderRequest<'a> {
+    context: BufferSourceHscrollSkipRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferHscrollSkipRenderContext<'a> {
+pub(crate) struct BufferSourceHscrollSkipRenderContext<'a> {
     text: &'a [u8],
     tab_width: i32,
     content_x: f32,
@@ -459,7 +459,7 @@ pub(crate) fn consume_hscroll_skip_from_position(
     position: &mut DisplaySourceTextPosition,
     hscroll_skip: &mut HorizontalScrollSkipState,
     tab_width: i32,
-) -> Option<BufferHscrollSkipAction> {
+) -> Option<BufferSourceHscrollSkipAction> {
     let source_char = position.consume_step_char(text)?;
     Some(consume_source_char_for_hscroll(
         source_char,
@@ -472,10 +472,10 @@ fn consume_source_char_for_hscroll(
     source_char: DisplaySourceStepChar,
     hscroll_skip: &mut HorizontalScrollSkipState,
     tab_width: i32,
-) -> BufferHscrollSkipAction {
+) -> BufferSourceHscrollSkipAction {
     let end_charpos = source_char.start_charpos() + 1;
     if source_char.ch() == '\n' {
-        return BufferHscrollSkipAction::LineBreak {
+        return BufferSourceHscrollSkipAction::LineBreak {
             ch_start_byte_idx: source_char.start_byte_idx(),
             charpos: end_charpos,
         };
@@ -486,7 +486,7 @@ fn consume_source_char_for_hscroll(
         tab_width,
         hscroll_skip.consumed_columns(),
     ));
-    BufferHscrollSkipAction::Text {
+    BufferSourceHscrollSkipAction::Text {
         ch_start_byte_idx: source_char.start_byte_idx(),
         charpos: end_charpos,
         show_left_truncation: !hscroll_skip.should_skip()
@@ -507,8 +507,8 @@ fn hscroll_skip_column_width(
     if is_wide_char(source_char.ch()) { 2 } else { 1 }
 }
 
-impl<'a> BufferHscrollSkipRenderRequest<'a> {
-    pub(crate) fn new(context: BufferHscrollSkipRenderContext<'a>) -> Self {
+impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
+    pub(crate) fn new(context: BufferSourceHscrollSkipRenderContext<'a>) -> Self {
         Self { context }
     }
 
@@ -632,7 +632,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
     }
 }
 
-impl<'a> BufferHscrollSkipRenderContext<'a> {
+impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -669,13 +669,13 @@ impl<'a> BufferHscrollSkipRenderContext<'a> {
     }
 }
 
-pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
+pub(crate) struct BufferSourceSelectiveDisplayTailRenderRequest<'a> {
     source_char: DisplaySourceStepChar,
-    context: BufferSelectiveDisplayTailRenderContext<'a>,
+    context: BufferSourceSelectiveDisplayTailRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
+pub(crate) struct BufferSourceSelectiveDisplayTailRenderContext<'a> {
     text: &'a [u8],
     text_start_byte: usize,
     selective_display: i32,
@@ -694,12 +694,12 @@ pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
-    context: BufferInvisibleTextRenderContext<'a>,
+pub(crate) struct BufferSourceInvisibleTextRenderRequest<'a> {
+    context: BufferSourceInvisibleTextRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferInvisibleTextRenderContext<'a> {
+pub(crate) struct BufferSourceInvisibleTextRenderContext<'a> {
     text: &'a [u8],
     accessible_end: i64,
     point_charpos: i64,
@@ -713,19 +713,19 @@ pub(crate) struct BufferInvisibleTextRenderContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferSelectiveDisplayTailRenderOutcome {
+pub(crate) enum BufferSourceSelectiveDisplayTailRenderOutcome {
     NotHidden,
     ContinueBufferWalk,
     Stop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferInvisibleTextRenderOutcome {
+pub(crate) enum BufferSourceInvisibleTextRenderOutcome {
     Visible,
     ContinueBufferWalk,
 }
 
-impl BufferSelectiveDisplayTailRenderOutcome {
+impl BufferSourceSelectiveDisplayTailRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
     }
@@ -735,13 +735,13 @@ impl BufferSelectiveDisplayTailRenderOutcome {
     }
 }
 
-impl BufferInvisibleTextRenderOutcome {
+impl BufferSourceInvisibleTextRenderOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
     }
 }
 
-impl<'a> BufferSelectiveDisplayTailRenderContext<'a> {
+impl<'a> BufferSourceSelectiveDisplayTailRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -782,7 +782,7 @@ impl<'a> BufferSelectiveDisplayTailRenderContext<'a> {
     }
 }
 
-impl<'a> BufferInvisibleTextRenderContext<'a> {
+impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -811,10 +811,10 @@ impl<'a> BufferInvisibleTextRenderContext<'a> {
     }
 }
 
-impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
+impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
     pub(crate) fn new(
         source_char: DisplaySourceStepChar,
-        context: BufferSelectiveDisplayTailRenderContext<'a>,
+        context: BufferSourceSelectiveDisplayTailRenderContext<'a>,
     ) -> Self {
         Self {
             source_char,
@@ -827,16 +827,16 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
-    ) -> BufferSelectiveDisplayTailRenderOutcome {
+    ) -> BufferSourceSelectiveDisplayTailRenderOutcome {
         let context = self.context;
-        let selective_display = BufferSelectiveDisplayContext::new(
+        let selective_display = BufferSourceSelectiveDisplayContext::new(
             context.text,
             context.selective_display,
             context.tab_width,
         );
         let Some(marker) = selective_display.carriage_return_tail_marker(self.source_char.ch())
         else {
-            return BufferSelectiveDisplayTailRenderOutcome::NotHidden;
+            return BufferSourceSelectiveDisplayTailRenderOutcome::NotHidden;
         };
 
         let BufferSourceLoopMutableState {
@@ -876,7 +876,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             .consume_selective_display_tail(selective_display, progress.source_position())
             .apply_to_progress(&mut progress);
         if !tail_action.is_line_break() {
-            return BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
+            return BufferSourceSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
         }
 
         tail_action.apply_hidden_line_break_row_state(
@@ -932,22 +932,22 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             .source_position_update(synced_source_position)
             .apply_to_progress(&mut progress);
         if continuation.should_break() {
-            return BufferSelectiveDisplayTailRenderOutcome::Stop;
+            return BufferSourceSelectiveDisplayTailRenderOutcome::Stop;
         }
 
-        BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk
+        BufferSourceSelectiveDisplayTailRenderOutcome::ContinueBufferWalk
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferInvisibleTextScanAction {
+pub(crate) enum BufferSourceInvisibleTextScanAction {
     Unchecked,
     Visible { next_visible: i64 },
-    Hidden(BufferInvisibleTextSkip),
+    Hidden(BufferSourceInvisibleTextSkip),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferInvisibleTextSkip {
+pub(crate) struct BufferSourceInvisibleTextSkip {
     start_byte_idx: usize,
     start_charpos: i64,
     skip_to: i64,
@@ -956,7 +956,7 @@ pub(crate) struct BufferInvisibleTextSkip {
     ellipsis: bool,
 }
 
-impl BufferInvisibleTextSkip {
+impl BufferSourceInvisibleTextSkip {
     pub(crate) fn new(
         start_byte_idx: usize,
         start_charpos: i64,
@@ -1071,8 +1071,8 @@ impl BufferInvisibleTextSkip {
     }
 }
 
-impl<'a> BufferInvisibleTextRenderRequest<'a> {
-    pub(crate) fn new(context: BufferInvisibleTextRenderContext<'a>) -> Self {
+impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
+    pub(crate) fn new(context: BufferSourceInvisibleTextRenderContext<'a>) -> Self {
         Self { context }
     }
 
@@ -1081,7 +1081,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
-    ) -> BufferInvisibleTextRenderOutcome {
+    ) -> BufferSourceInvisibleTextRenderOutcome {
         let BufferSourceLoopMutableState {
             invisible_text_checkpoint,
             mut progress,
@@ -1100,7 +1100,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         let action = source_walk
             .consume_invisible_checkpoint(
                 buffer,
-                BufferInvisibleTextScanContext::new(
+                BufferSourceInvisibleTextScanContext::new(
                     context.text,
                     context.accessible_end,
                     context.point_charpos,
@@ -1110,8 +1110,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
                 progress.source_position(),
             )
             .apply_to_progress(&mut progress);
-        let BufferInvisibleTextScanAction::Hidden(hidden_text) = action else {
-            return BufferInvisibleTextRenderOutcome::Visible;
+        let BufferSourceInvisibleTextScanAction::Hidden(hidden_text) = action else {
+            return BufferSourceInvisibleTextRenderOutcome::Visible;
         };
 
         let mut row_progress = progress.row.reborrow();
@@ -1148,18 +1148,18 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             context.active_face_state,
             &mut overlay_state,
         );
-        BufferInvisibleTextRenderOutcome::ContinueBufferWalk
+        BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
     }
 }
 
-pub(crate) struct BufferInvisibleTextScanContext<'a> {
+pub(crate) struct BufferSourceInvisibleTextScanContext<'a> {
     text: &'a [u8],
     accessible_end: i64,
     point_charpos: i64,
     cursor_missing: bool,
 }
 
-impl<'a> BufferInvisibleTextScanContext<'a> {
+impl<'a> BufferSourceInvisibleTextScanContext<'a> {
     pub(crate) fn new(
         text: &'a [u8],
         accessible_end: i64,
@@ -1179,9 +1179,9 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         buffer: &B,
         checkpoints: &mut InvisibleTextScanCheckpoint,
         position: &mut DisplaySourceTextPosition,
-    ) -> BufferInvisibleTextScanAction {
+    ) -> BufferSourceInvisibleTextScanAction {
         if !checkpoints.should_check(position.charpos()) {
-            return BufferInvisibleTextScanAction::Unchecked;
+            return BufferSourceInvisibleTextScanAction::Unchecked;
         }
 
         let start_byte_idx = position.byte_idx();
@@ -1191,7 +1191,7 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         checkpoints.record_next_visible(next_visible);
 
         if !invisible.hidden {
-            return BufferInvisibleTextScanAction::Visible { next_visible };
+            return BufferSourceInvisibleTextScanAction::Visible { next_visible };
         }
 
         let skip_to = next_visible.min(self.accessible_end);
@@ -1200,7 +1200,7 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
             && self.point_charpos < skip_to;
         position.skip_chars_until(self.text, skip_to);
 
-        BufferInvisibleTextScanAction::Hidden(BufferInvisibleTextSkip::new(
+        BufferSourceInvisibleTextScanAction::Hidden(BufferSourceInvisibleTextSkip::new(
             start_byte_idx,
             start_charpos,
             skip_to,
@@ -1212,15 +1212,15 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferSelectiveDisplayLineTailAction {
+pub(crate) enum BufferSourceSelectiveDisplayLineTailAction {
     Exhausted,
     LineBreak { charpos: i64 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferSelectiveDisplayLineTailMarker;
+pub(crate) struct BufferSourceSelectiveDisplayLineTailMarker;
 
-impl BufferSelectiveDisplayLineTailMarker {
+impl BufferSourceSelectiveDisplayLineTailMarker {
     pub(crate) fn ellipsis_append_request(
         self,
         position: DisplayRowPosition,
@@ -1246,7 +1246,7 @@ impl BufferSelectiveDisplayLineTailMarker {
     }
 }
 
-impl BufferSelectiveDisplayLineTailAction {
+impl BufferSourceSelectiveDisplayLineTailAction {
     pub(crate) fn is_line_break(self) -> bool {
         matches!(self, Self::LineBreak { .. })
     }
@@ -1299,11 +1299,11 @@ impl BufferSelectiveDisplayLineTailAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferSelectiveDisplayHiddenLines {
+pub(crate) struct BufferSourceSelectiveDisplayHiddenLines {
     hidden_line_count: usize,
 }
 
-impl BufferSelectiveDisplayHiddenLines {
+impl BufferSourceSelectiveDisplayHiddenLines {
     fn new(hidden_line_count: usize) -> Self {
         Self { hidden_line_count }
     }
@@ -1321,13 +1321,13 @@ impl BufferSelectiveDisplayHiddenLines {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferSelectiveDisplayContext<'a> {
+pub(crate) struct BufferSourceSelectiveDisplayContext<'a> {
     text: &'a [u8],
     selective_display: i32,
     tab_width: i32,
 }
 
-impl<'a> BufferSelectiveDisplayContext<'a> {
+impl<'a> BufferSourceSelectiveDisplayContext<'a> {
     pub(crate) fn new(text: &'a [u8], selective_display: i32, tab_width: i32) -> Self {
         Self {
             text,
@@ -1343,9 +1343,9 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     pub(crate) fn carriage_return_tail_marker(
         self,
         ch: char,
-    ) -> Option<BufferSelectiveDisplayLineTailMarker> {
+    ) -> Option<BufferSourceSelectiveDisplayLineTailMarker> {
         self.hides_carriage_return_tail(ch)
-            .then_some(BufferSelectiveDisplayLineTailMarker)
+            .then_some(BufferSourceSelectiveDisplayLineTailMarker)
     }
 
     pub(crate) fn hides_indented_lines_after_line_break(self, byte_idx: usize) -> bool {
@@ -1357,21 +1357,21 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     pub(crate) fn skip_rest_of_line_after_carriage_return(
         self,
         position: &mut DisplaySourceTextPosition,
-    ) -> BufferSelectiveDisplayLineTailAction {
+    ) -> BufferSourceSelectiveDisplayLineTailAction {
         position.advance_charpos_by_one();
         if position.consume_until_line_break(self.text) {
-            return BufferSelectiveDisplayLineTailAction::LineBreak {
+            return BufferSourceSelectiveDisplayLineTailAction::LineBreak {
                 charpos: position.charpos(),
             };
         }
 
-        BufferSelectiveDisplayLineTailAction::Exhausted
+        BufferSourceSelectiveDisplayLineTailAction::Exhausted
     }
 
     pub(crate) fn skip_hidden_indented_lines_after_line_break(
         self,
         position: &mut DisplaySourceTextPosition,
-    ) -> BufferSelectiveDisplayHiddenLines {
+    ) -> BufferSourceSelectiveDisplayHiddenLines {
         let mut hidden_line_count = 0;
         while position.byte_idx() < self.text.len() {
             let Some(indent) = self.indentation_columns_at(position.byte_idx()) else {
@@ -1386,16 +1386,16 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
             }
         }
 
-        BufferSelectiveDisplayHiddenLines::new(hidden_line_count)
+        BufferSourceSelectiveDisplayHiddenLines::new(hidden_line_count)
     }
 
     pub(crate) fn apply_hidden_indented_lines_after_line_break(
         self,
         position: &mut DisplaySourceTextPosition,
         line_numbers: &mut LineNumberRenderState,
-    ) -> BufferSelectiveDisplayHiddenLines {
+    ) -> BufferSourceSelectiveDisplayHiddenLines {
         if !self.hides_indented_lines_after_line_break(position.byte_idx()) {
-            return BufferSelectiveDisplayHiddenLines::new(0);
+            return BufferSourceSelectiveDisplayHiddenLines::new(0);
         }
         let hidden_lines = self.skip_hidden_indented_lines_after_line_break(position);
         hidden_lines.apply_to_line_numbers(line_numbers);
@@ -1430,20 +1430,20 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextLineBreakSourceAction {
+pub(crate) struct BufferSourceLineBreakSourceAction {
     ch_start_byte_idx: usize,
     charpos: i64,
     next_charpos: i64,
     line_spacing: f32,
 }
 
-pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
+pub(crate) struct BufferSourceLineBreakRenderRequest<'a> {
     source_char: DisplaySourceStepChar,
-    context: BufferTextLineBreakRenderContext<'a>,
+    context: BufferSourceLineBreakRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextLineBreakRenderContext<'a> {
+pub(crate) struct BufferSourceLineBreakRenderContext<'a> {
     text: &'a [u8],
     text_start_byte: usize,
     selective_display: i32,
@@ -1461,7 +1461,7 @@ pub(crate) struct BufferTextLineBreakRenderContext<'a> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
 }
 
-impl<'a> BufferTextLineBreakRenderContext<'a> {
+impl<'a> BufferSourceLineBreakRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -1500,10 +1500,10 @@ impl<'a> BufferTextLineBreakRenderContext<'a> {
     }
 }
 
-impl<'a> BufferTextLineBreakRenderRequest<'a> {
+impl<'a> BufferSourceLineBreakRenderRequest<'a> {
     pub(crate) fn new(
         source_char: DisplaySourceStepChar,
-        context: BufferTextLineBreakRenderContext<'a>,
+        context: BufferSourceLineBreakRenderContext<'a>,
     ) -> Self {
         debug_assert_eq!(source_char.ch(), '\n');
         Self {
@@ -1540,7 +1540,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let line_break_action = BufferTextLineBreakSourceAction::for_source_step_newline(
+        let line_break_action = BufferSourceLineBreakSourceAction::for_source_step_newline(
             buffer,
             self.source_char,
             context.char_h,
@@ -1639,7 +1639,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
 
         source_walk
             .consume_hidden_indented_lines_after_line_break(
-                BufferSelectiveDisplayContext::new(
+                BufferSourceSelectiveDisplayContext::new(
                     context.text,
                     context.selective_display,
                     context.tab_width,
@@ -1652,7 +1652,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
     }
 }
 
-impl BufferTextLineBreakSourceAction {
+impl BufferSourceLineBreakSourceAction {
     pub(crate) fn for_newline<B: LayoutBufferView>(
         buffer: &B,
         charpos: i64,

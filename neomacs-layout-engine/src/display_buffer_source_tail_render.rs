@@ -1,4 +1,4 @@
-//! Buffer text post-loop tail rendering and install context.
+//! Buffer source post-loop tail rendering and install context.
 
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_text_append::{
@@ -24,19 +24,19 @@ use crate::types::WindowParams;
 use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowBodyInstallContext {
+pub(crate) struct BufferSourceBodyInstallContext {
     output_window_id: u64,
     display_text_row_base: usize,
     output_cols: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRetryBounds {
+pub(crate) struct BufferSourceRetryBounds {
     text_area_top: i64,
     text_area_bottom: i64,
 }
 
-pub(crate) struct BufferTextWindowTailRequestContext<'a> {
+pub(crate) struct BufferSourceTailRequestContext<'a> {
     pub(crate) params: &'a WindowParams,
     pub(crate) window_start: i64,
     accessible_start: i64,
@@ -51,8 +51,8 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     char_width: f32,
     char_height: f32,
     row_limit: DisplayRowLimit,
-    retry_bounds: BufferTextWindowRetryBounds,
-    body_install_context: BufferTextWindowBodyInstallContext,
+    retry_bounds: BufferSourceRetryBounds,
+    body_install_context: BufferSourceBodyInstallContext,
     reserve_right_special_col: bool,
     reserve_right_border_col: bool,
     mode_line_height: f32,
@@ -61,12 +61,12 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
+pub(crate) struct BufferSourcePostLoopRenderOutcome {
     pub(crate) retry: BufferTextWindowVisibilityRetryOutcome,
     pub(crate) rendered_rows_len: usize,
 }
 
-impl BufferTextWindowBodyInstallContext {
+impl BufferSourceBodyInstallContext {
     pub(crate) fn new(
         output_window_id: u64,
         display_text_row_base: usize,
@@ -114,7 +114,7 @@ impl BufferTextWindowBodyInstallContext {
     }
 }
 
-impl BufferTextWindowRetryBounds {
+impl BufferSourceRetryBounds {
     pub(crate) fn new(text_area_top: i64, text_area_bottom: i64) -> Self {
         Self {
             text_area_top,
@@ -131,7 +131,7 @@ impl BufferTextWindowRetryBounds {
     }
 }
 
-impl<'a> BufferTextWindowTailRequestContext<'a> {
+impl<'a> BufferSourceTailRequestContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         params: &'a WindowParams,
@@ -148,8 +148,8 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         char_width: f32,
         char_height: f32,
         row_limit: DisplayRowLimit,
-        retry_bounds: BufferTextWindowRetryBounds,
-        body_install_context: BufferTextWindowBodyInstallContext,
+        retry_bounds: BufferSourceRetryBounds,
+        body_install_context: BufferSourceBodyInstallContext,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
         mode_line_height: f32,
@@ -270,7 +270,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_buffer_text_window_tail_and_decide_retry<
+pub(crate) fn render_buffer_source_tail_and_decide_retry<
     'request,
     'rows,
     'emit,
@@ -288,14 +288,14 @@ pub(crate) fn render_buffer_text_window_tail_and_decide_retry<
     row_y_positions: &'rows mut DisplayRowYPositions,
     face_ids: &'emit mut FrameFaceIdAllocator,
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
-    tail_context: &BufferTextWindowTailRequestContext<'_>,
+    tail_context: &BufferSourceTailRequestContext<'_>,
     text: &'request [u8],
     byte_idx: usize,
     charpos: i64,
     active_face_state: &'request DisplayRowActiveFaceState,
     buffer: &B,
     buf_access: &'rows RustBufferAccess<'buf, B>,
-) -> BufferTextWindowPostLoopRenderOutcome
+) -> BufferSourcePostLoopRenderOutcome
 where
     'surface: 'request,
 {
@@ -337,7 +337,7 @@ where
             buf_access,
         )
         .decide();
-    BufferTextWindowPostLoopRenderOutcome {
+    BufferSourcePostLoopRenderOutcome {
         retry,
         rendered_rows_len: source_render.output_rows_len(),
     }

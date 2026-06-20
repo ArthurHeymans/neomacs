@@ -1,12 +1,12 @@
 //! Buffer-text source rendering requests and actions.
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
-use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
-pub(crate) use crate::display_buffer_text_render_attempt::{
-    BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
+use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
+pub(crate) use crate::display_buffer_source_render_attempt::{
+    BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome,
 };
-use crate::display_buffer_text_render_plan::{
-    BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSetup,
+use crate::display_buffer_source_render_plan::{
+    BufferSourceDefaultFacePlan, BufferSourceOutputSetup,
 };
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
@@ -63,10 +63,10 @@ where
 
     pub(crate) fn render_into(
         self,
-        context: BufferTextWindowRenderAttemptContext<'_, '_>,
+        context: BufferSourceRenderAttemptContext<'_, '_>,
         text_buf: &mut Vec<u8>,
         remaining_visibility_retries: usize,
-    ) -> BufferTextWindowRenderAttemptOutcome {
+    ) -> BufferSourceRenderAttemptOutcome {
         let Self {
             frame_id,
             window_id,
@@ -86,7 +86,7 @@ where
         let font_ascent = params.font_ascent;
         let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
 
-        let default_face = BufferTextWindowDefaultFacePlan::new(
+        let default_face = BufferSourceDefaultFacePlan::new(
             state.face_resolver,
             &mut *state.font_metrics,
             frame_params.window_system,
@@ -164,12 +164,12 @@ where
         );
 
         if geometry.text_height <= 0.0 || geometry.text_width <= 0.0 {
-            return BufferTextWindowRenderAttemptOutcome::Skipped;
+            return BufferSourceRenderAttemptOutcome::Skipped;
         }
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
-        let mut walk_setup = BufferTextWindowWalkSetupRequest::from_window_geometry(
+        let mut walk_setup = BufferSourceWalkSetupRequest::from_window_geometry(
             text_source,
             params,
             &geometry,
@@ -180,7 +180,7 @@ where
         )
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
-        let output_setup = BufferTextWindowOutputSetup::from_window_geometry(
+        let output_setup = BufferSourceOutputSetup::from_window_geometry(
             frame_id,
             window_id,
             params,

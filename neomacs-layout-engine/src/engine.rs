@@ -18,7 +18,7 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_render::{
-    BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
+    BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome,
     BufferTextWindowRenderRequest,
 };
 #[cfg(test)]
@@ -928,7 +928,7 @@ impl LayoutEngine {
             reserve_right_border_col,
         )
         .render_into(
-            BufferTextWindowRenderAttemptContext::from_frame_output_owner(
+            BufferSourceRenderAttemptContext::from_frame_output_owner(
                 &mut self.frame_output,
                 evaluator,
                 &mut self.font_metrics,
@@ -942,8 +942,8 @@ impl LayoutEngine {
         );
 
         let redisplay_positions = match render_outcome {
-            BufferTextWindowRenderAttemptOutcome::Skipped => return,
-            BufferTextWindowRenderAttemptOutcome::Retry { window_start } => {
+            BufferSourceRenderAttemptOutcome::Skipped => return,
+            BufferSourceRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
                 retry_params.window_end = 0;
@@ -958,7 +958,7 @@ impl LayoutEngine {
                 );
                 return;
             }
-            BufferTextWindowRenderAttemptOutcome::Finished {
+            BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
             } => redisplay_positions,
         };

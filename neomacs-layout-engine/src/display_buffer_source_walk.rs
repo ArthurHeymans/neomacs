@@ -4,13 +4,14 @@
 //! source cursor driving, pending face installation, and source-position
 //! updates used by row lifecycle renderers.
 
+use crate::display_buffer_source_row_lifecycle::{
+    BufferSourceHscrollSkipAction, BufferSourceInvisibleTextScanAction,
+    BufferSourceInvisibleTextScanContext, BufferSourceSelectiveDisplayContext,
+    BufferSourceSelectiveDisplayHiddenLines, BufferSourceSelectiveDisplayLineTailAction,
+    consume_hscroll_skip_from_position,
+};
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
-use crate::display_buffer_text_row_lifecycle::{
-    BufferHscrollSkipAction, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
-    BufferSelectiveDisplayContext, BufferSelectiveDisplayHiddenLines,
-    BufferSelectiveDisplayLineTailAction, consume_hscroll_skip_from_position,
-};
 use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_buffer_text_source_consumption::BufferTextSourceConsumptionState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -132,7 +133,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         source_position: DisplaySourceTextPosition,
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
-    ) -> DisplaySourcePositionConsumption<Option<BufferHscrollSkipAction>> {
+    ) -> DisplaySourcePositionConsumption<Option<BufferSourceHscrollSkipAction>> {
         let mut source_position = source_position;
         let action =
             consume_hscroll_skip_from_position(text, &mut source_position, hscroll_skip, tab_width);
@@ -142,10 +143,10 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     pub(crate) fn consume_invisible_checkpoint(
         &mut self,
         buffer: &B,
-        context: BufferInvisibleTextScanContext<'_>,
+        context: BufferSourceInvisibleTextScanContext<'_>,
         checkpoints: &mut InvisibleTextScanCheckpoint,
         source_position: DisplaySourceTextPosition,
-    ) -> DisplaySourcePositionConsumption<BufferInvisibleTextScanAction> {
+    ) -> DisplaySourcePositionConsumption<BufferSourceInvisibleTextScanAction> {
         let mut source_position = source_position;
         let action = context.consume_at_checkpoint(buffer, checkpoints, &mut source_position);
         DisplaySourcePositionConsumption::new(action, source_position)
@@ -153,9 +154,9 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
 
     pub(crate) fn consume_selective_display_tail(
         &mut self,
-        selective_display: BufferSelectiveDisplayContext<'_>,
+        selective_display: BufferSourceSelectiveDisplayContext<'_>,
         source_position: DisplaySourceTextPosition,
-    ) -> DisplaySourcePositionConsumption<BufferSelectiveDisplayLineTailAction> {
+    ) -> DisplaySourcePositionConsumption<BufferSourceSelectiveDisplayLineTailAction> {
         let mut source_position = source_position;
         let action =
             selective_display.skip_rest_of_line_after_carriage_return(&mut source_position);
@@ -164,10 +165,10 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
 
     pub(crate) fn consume_hidden_indented_lines_after_line_break(
         &mut self,
-        selective_display: BufferSelectiveDisplayContext<'_>,
+        selective_display: BufferSourceSelectiveDisplayContext<'_>,
         source_position: DisplaySourceTextPosition,
         line_numbers: &mut LineNumberRenderState,
-    ) -> DisplaySourcePositionConsumption<BufferSelectiveDisplayHiddenLines> {
+    ) -> DisplaySourcePositionConsumption<BufferSourceSelectiveDisplayHiddenLines> {
         let mut source_position = source_position;
         let hidden_lines = selective_display
             .apply_hidden_indented_lines_after_line_break(&mut source_position, line_numbers);
