@@ -469,14 +469,14 @@ pub(crate) fn finish_pending_text_window_row(
 }
 
 pub(crate) fn render_window_chrome_rows(
-    mut output: TextWindowOutputTarget<'_>,
+    output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
 ) {
     request.render(&mut WindowChromeRowsRenderState::new(
-        output.builder(),
+        output,
         output_emitter,
         evaluator,
         render_services,

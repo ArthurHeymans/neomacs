@@ -2,8 +2,8 @@ use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderReques
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_status_line::{
-    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
-    FrameTabBarDisplayRowRequest,
+    ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
+    FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
 };
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
@@ -105,7 +105,7 @@ impl FrameOutputOwner {
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<FrameTabBarDisplayRowRender> {
         request.render(&mut FrameTabBarDisplayRowRenderState::new(
-            &mut self.builder,
+            FrameChromeOutputTarget::from_builder(&mut self.builder),
             &mut self.pending_frame_chrome_rows,
             render_services,
             display_host,

@@ -13,7 +13,9 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
-use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
+use super::window_output::{
+    ChromeRowOutput, DisplayProgressSink, TextWindowOutputTarget, WindowOutputEmitter,
+};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -48,6 +50,20 @@ use strum::{EnumString, IntoStaticStr};
 pub(crate) enum FrameTabBarDisplayRowRender {
     Empty,
     Measured(MeasuredDisplayRow),
+}
+
+pub(crate) struct FrameChromeOutputTarget<'a> {
+    output_builder: &'a mut DisplayOutputBuilder,
+}
+
+impl<'a> FrameChromeOutputTarget<'a> {
+    pub(crate) fn from_builder(output_builder: &'a mut DisplayOutputBuilder) -> Self {
+        Self { output_builder }
+    }
+
+    fn builder(&mut self) -> &mut DisplayOutputBuilder {
+        self.output_builder
+    }
 }
 
 pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
@@ -175,7 +191,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             DisplayRowBoundsPolicy::MeasureContent,
         );
         install_measured_frame_chrome_display_row(
-            state.output_builder,
+            state.output.builder(),
             state.pending_frame_chrome_rows,
             &measured,
         );
@@ -184,7 +200,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 }
 
 pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
-    output_builder: &'emit mut DisplayOutputBuilder,
+    output: FrameChromeOutputTarget<'emit>,
     pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
     display_host: Option<&'emit dyn DisplayHost>,
@@ -193,13 +209,13 @@ pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
 
 impl<'emit, 'output, 'face> FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output_builder: &'emit mut DisplayOutputBuilder,
+        output: FrameChromeOutputTarget<'emit>,
         pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
         display_host: Option<&'emit dyn DisplayHost>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             pending_frame_chrome_rows,
             render_services,
             display_host,
@@ -670,7 +686,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeRowsRenderState<'state, 'services, 'face> {
-    output_builder: &'state mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'state>,
     output_emitter: &'state mut WindowOutputEmitter,
     evaluator: &'state mut Context,
     render_services: ChromeRowRenderServices<'services, 'face>,
@@ -678,13 +694,13 @@ pub(crate) struct WindowChromeRowsRenderState<'state, 'services, 'face> {
 
 impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'face> {
     pub(crate) fn new(
-        output_builder: &'state mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'state>,
         output_emitter: &'state mut WindowOutputEmitter,
         evaluator: &'state mut Context,
         render_services: ChromeRowRenderServices<'services, 'face>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             evaluator,
             render_services,
@@ -712,7 +728,7 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
             )
         });
         if let Some(ref measured_row) = measured_row {
-            install_measured_window_display_row(self.output_builder, measured_row);
+            install_measured_window_display_row(self.output.builder(), measured_row);
             self.output_emitter.emit_chrome_progress(
                 self.evaluator,
                 parts.output,
