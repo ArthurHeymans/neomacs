@@ -384,6 +384,62 @@ pub(crate) struct DisplaySourceItem {
     source_char: Option<char>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplaySourceStepItem {
+    item: DisplayItem,
+    source_step_char: DisplaySourceStepChar,
+    source_end_charpos: Option<i64>,
+    source_end_byte_idx: Option<usize>,
+    is_explicit_line_break: bool,
+}
+
+impl DisplaySourceStepItem {
+    pub(crate) fn new(source_item: DisplaySourceItem, text_start_byte: usize) -> Option<Self> {
+        let is_explicit_line_break = source_item.is_explicit_line_break();
+        let source_step_char = source_item.source_step_char()?;
+        let source_end_charpos = source_item.buffer_end_charpos();
+        let source_end_byte_idx = source_item.end_byte_idx(text_start_byte);
+        Some(Self {
+            item: source_item.into_item(),
+            source_step_char,
+            source_end_charpos,
+            source_end_byte_idx,
+            is_explicit_line_break,
+        })
+    }
+
+    pub(crate) fn source_step_char(&self) -> DisplaySourceStepChar {
+        self.source_step_char
+    }
+
+    pub(crate) fn source_end_charpos(&self) -> Option<i64> {
+        self.source_end_charpos
+    }
+
+    #[cfg(test)]
+    pub(crate) fn end_charpos(&self) -> i64 {
+        self.source_end_charpos
+            .unwrap_or_else(|| self.source_step_char.start_charpos().saturating_add(1))
+    }
+
+    pub(crate) fn source_end_byte_idx(&self) -> Option<usize> {
+        self.source_end_byte_idx
+    }
+
+    pub(crate) fn is_explicit_line_break(&self) -> bool {
+        self.is_explicit_line_break
+    }
+
+    pub(crate) fn into_item(self) -> DisplayItem {
+        self.item
+    }
+
+    #[cfg(test)]
+    pub(crate) fn into_render_parts(self) -> Option<(DisplaySourceStepChar, DisplayItem)> {
+        Some((self.source_step_char, self.item))
+    }
+}
+
 impl DisplaySourceItem {
     pub(crate) fn new(
         item: DisplayItem,

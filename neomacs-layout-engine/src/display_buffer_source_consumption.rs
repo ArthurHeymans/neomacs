@@ -8,19 +8,21 @@ use crate::display_buffer_text_source::{
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, DisplayItem, DisplaySourcePosition,
 };
-use crate::display_source::{DisplaySourceContext, DisplaySourceItem, DisplaySourceTextPosition};
+use crate::display_source::{
+    DisplaySourceContext, DisplaySourceItem, DisplaySourceStepItem, DisplaySourceTextPosition,
+};
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::CharPos0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferSourceConsumedItem {
-    Renderable(DisplaySourceItem),
+    Renderable(DisplaySourceStepItem),
     DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
 }
 
 impl BufferSourceConsumedItem {
     #[cfg(test)]
-    pub(crate) fn into_renderable(self) -> Option<DisplaySourceItem> {
+    pub(crate) fn into_renderable(self) -> Option<DisplaySourceStepItem> {
         match self {
             Self::Renderable(item) => Some(item),
             Self::DisplayPropertyReplacement(_) => None,
@@ -31,7 +33,7 @@ impl BufferSourceConsumedItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferSourceConsumptionState {
     text_start_byte: usize,
-    pending_render_items: VecDeque<DisplaySourceItem>,
+    pending_render_items: VecDeque<DisplaySourceStepItem>,
 }
 
 impl BufferSourceConsumptionState {
@@ -48,7 +50,7 @@ impl BufferSourceConsumptionState {
 
     fn prepend_pending_render_items<I>(&mut self, items: I)
     where
-        I: IntoIterator<Item = DisplaySourceItem>,
+        I: IntoIterator<Item = DisplaySourceStepItem>,
     {
         let items: Vec<_> = items.into_iter().collect();
         for item in items.into_iter().rev() {
@@ -59,13 +61,17 @@ impl BufferSourceConsumptionState {
     fn prepare_render_source_item(
         &mut self,
         source_item: DisplaySourceItem,
-    ) -> Option<DisplaySourceItem> {
+    ) -> Option<DisplaySourceStepItem> {
         if !source_item.is_multi_char_text_run() {
-            return Some(source_item);
+            return DisplaySourceStepItem::new(source_item, self.text_start_byte);
         }
         let (first, pending) = source_item.split_text_run_items(self.text_start_byte)?;
+        let text_start_byte = self.text_start_byte;
+        let pending = pending
+            .into_iter()
+            .filter_map(|item| DisplaySourceStepItem::new(item, text_start_byte));
         self.prepend_pending_render_items(pending);
-        Some(first)
+        DisplaySourceStepItem::new(first, self.text_start_byte)
     }
 
     fn expected_source_pos(position: DisplaySourceTextPosition) -> CharPos0 {

@@ -32,8 +32,8 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceStepChar;
+use crate::display_source::DisplaySourceStepItem;
 use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -128,18 +128,16 @@ impl<'a> BufferSourceItemRenderContext<'a> {
 }
 
 fn render_source_item_and_apply<B: LayoutBufferView>(
-    source_item: DisplaySourceItem,
+    source_item: DisplaySourceStepItem,
     context: BufferSourceItemRenderContext<'_>,
     source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
     state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
-    debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
-    let Some(source_step_char) = source_item.source_step_char() else {
-        return BufferSourceItemRenderOutcome::Stop;
-    };
-    let source_end_charpos = source_item.buffer_end_charpos();
-    let source_end_byte_idx = source_item.end_byte_idx(context.text_start_byte);
+    debug_assert_ne!(source_item.source_step_char().ch(), '\n');
+    let source_step_char = source_item.source_step_char();
+    let source_end_charpos = source_item.source_end_charpos();
+    let source_end_byte_idx = source_item.source_end_byte_idx();
     let source_item = source_item.into_item();
     render_prepared_source_item_and_apply(
         source_step_char,
@@ -525,6 +523,11 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 true
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
+                let Some(source_item) =
+                    DisplaySourceStepItem::new(source_item, self.loop_context.text_start_byte())
+                else {
+                    return false;
+                };
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Stop => false,
@@ -558,15 +561,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: DisplaySourceItem,
+        source_item: DisplaySourceStepItem,
         buffer: &B,
     ) -> bool
     where
         'surface: 'request,
     {
-        let Some(source_step_char) = source_item.source_step_char() else {
-            return false;
-        };
+        let source_step_char = source_item.source_step_char();
         let selective_display_outcome =
             self.render_selective_display_tail_for_context(source_walk, source_step_char, buffer);
         if selective_display_outcome.should_break() {
@@ -577,7 +578,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         }
 
         let is_explicit_line_break = source_item.is_explicit_line_break();
-        let end_byte_idx = source_item.end_byte_idx(self.loop_context.text_start_byte());
+        let end_byte_idx = source_item.source_end_byte_idx();
         if is_explicit_line_break {
             if let Some(end_byte_idx) = end_byte_idx {
                 *self.state.progress.byte_idx = end_byte_idx;
@@ -644,7 +645,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: DisplaySourceItem,
+        source_item: DisplaySourceStepItem,
         buffer: &B,
     ) -> BufferSourceItemRenderOutcome
     where
