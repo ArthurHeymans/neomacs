@@ -2056,9 +2056,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             }
         }
 
-        let Some(source_consumption) =
-            self.consume_source_item(source_walk, face_resolution_context)
-        else {
+        // One persistent typed source cursor feeds the row walk. The source
+        // side owns pending text-run splitting so direct single-character
+        // items can still stay typed through render.
+        let Some(source_consumption) = source_walk.consume_source_item_for_render(
+            &mut self.progress,
+            face_resolution_context,
+            self.face_ids,
+            &mut self.source_render.reborrow(),
+            self.row_geometry,
+        ) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2310,32 +2317,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 self.progress.row.x,
                 self.progress.row.col,
             );
-    }
-
-    fn consume_source_item<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
-    ) -> Option<BufferTextSourceConsumptionItem> {
-        // One persistent typed source cursor feeds the row walk. The source
-        // side owns pending text-run splitting so direct single-character
-        // items can still stay typed through render.
-        let (source_item, pending_faces) = source_walk
-            .consume_source_item(
-                self.progress.source_position(),
-                face_resolution_context,
-                self.face_ids,
-            )
-            .apply_to_progress(&mut self.progress);
-        {
-            let mut source_render = self.source_render.reborrow();
-            face_resolution_context.install_pending_source_faces(
-                &mut source_render,
-                self.row_geometry,
-                pending_faces,
-            );
-        }
-        source_item
     }
 
     fn render_invisible_text_for_context<'request, B: LayoutBufferView>(

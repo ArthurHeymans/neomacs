@@ -23,6 +23,8 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
     DisplayTextRunItemCursor, RenderFaceRef,
 };
+use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
 };
@@ -667,6 +669,22 @@ impl BufferTextWindowSourceConsumption {
         progress.apply_source_position(self.source_position);
         (self.source_item, self.pending_faces)
     }
+
+    pub(crate) fn apply_to_render_progress<B: LayoutBufferView>(
+        self,
+        progress: &mut BufferTextWindowProgressState<'_>,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+    ) -> Option<BufferTextSourceConsumptionItem> {
+        let (source_item, pending_faces) = self.apply_to_progress(progress);
+        face_resolution_context.install_pending_source_faces(
+            source_render,
+            row_geometry,
+            pending_faces,
+        );
+        source_item
+    }
 }
 
 impl BufferTextWindowFallbackSourceConsumption {
@@ -726,6 +744,27 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             source_position,
             pending_faces,
         }
+    }
+
+    pub(crate) fn consume_source_item_for_render(
+        &mut self,
+        progress: &mut BufferTextWindowProgressState<'_>,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+    ) -> Option<BufferTextSourceConsumptionItem> {
+        self.consume_source_item(
+            progress.source_position(),
+            face_resolution_context.clone(),
+            face_ids,
+        )
+        .apply_to_render_progress(
+            progress,
+            face_resolution_context,
+            source_render,
+            row_geometry,
+        )
     }
 
     pub(crate) fn consume_fallback_source_item(
