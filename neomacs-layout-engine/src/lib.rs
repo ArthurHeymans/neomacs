@@ -19,6 +19,7 @@ pub(crate) mod display_buffer_text_loop_context;
 pub(crate) mod display_buffer_text_loop_render;
 pub(crate) mod display_buffer_text_output_session;
 pub(crate) mod display_buffer_text_overflow;
+pub(crate) mod display_buffer_text_pre_source_render;
 pub(crate) mod display_buffer_text_progress;
 pub(crate) mod display_buffer_text_render;
 pub(crate) mod display_buffer_text_render_plan;
