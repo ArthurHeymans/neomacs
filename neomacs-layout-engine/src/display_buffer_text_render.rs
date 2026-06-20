@@ -1466,7 +1466,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self::new(
-            TextWindowOutputTarget::from_builder(frame_output.text_window_output_builder()),
+            frame_output.text_window_output_target(),
             evaluator,
             font_metrics,
             face_resolver,

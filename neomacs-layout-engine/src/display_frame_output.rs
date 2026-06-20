@@ -82,8 +82,8 @@ impl FrameOutputOwner {
         )
     }
 
-    pub(crate) fn text_window_output_builder(&mut self) -> &mut DisplayOutputBuilder {
-        &mut self.builder
+    pub(crate) fn text_window_output_target(&mut self) -> TextWindowOutputTarget<'_> {
+        TextWindowOutputTarget::from_builder(&mut self.builder)
     }
 
     pub(crate) fn reset(&mut self) {
