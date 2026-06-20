@@ -377,7 +377,7 @@ struct BufferTextWindowBodyPassState<'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
+pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_adapter: BufferTextConsumedItemAdapter,
@@ -1714,7 +1714,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
 }
 
 impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
-    fn new(
+    pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'request B,
         start_charpos: i64,
@@ -1774,6 +1774,97 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             source_item,
             source_position,
         }
+    }
+
+    fn consume_hscroll_skip(
+        &mut self,
+        text: &[u8],
+        source_position: BufferTextSourcePosition,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        tab_width: i32,
+    ) -> BufferTextWindowSourcePositionConsumption<Option<BufferHscrollSkipAction>> {
+        let mut source_position = source_position;
+        let action = BufferHscrollSkipSourceStep::consume_from_position(
+            text,
+            &mut source_position,
+            hscroll_skip,
+            tab_width,
+        );
+        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+    }
+
+    fn consume_invisible_checkpoint(
+        &mut self,
+        buffer: &B,
+        context: BufferInvisibleTextScanContext<'_>,
+        checkpoints: &mut InvisibleTextScanCheckpoint,
+        source_position: BufferTextSourcePosition,
+    ) -> BufferTextWindowSourcePositionConsumption<BufferInvisibleTextScanAction> {
+        let mut source_position = source_position;
+        let action = context.consume_at_checkpoint(buffer, checkpoints, &mut source_position);
+        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+    }
+
+    fn consume_selective_display_tail(
+        &mut self,
+        selective_display: BufferSelectiveDisplayContext<'_>,
+        source_position: BufferTextSourcePosition,
+    ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayLineTailAction> {
+        let mut source_position = source_position;
+        let action =
+            selective_display.skip_rest_of_line_after_carriage_return(&mut source_position);
+        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+    }
+
+    fn consume_hidden_indented_lines_after_line_break(
+        &mut self,
+        selective_display: BufferSelectiveDisplayContext<'_>,
+        source_position: BufferTextSourcePosition,
+        line_numbers: &mut LineNumberRenderState,
+    ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayHiddenLines> {
+        let mut source_position = source_position;
+        let hidden_lines = selective_display
+            .apply_hidden_indented_lines_after_line_break(&mut source_position, line_numbers);
+        BufferTextWindowSourcePositionConsumption::new(hidden_lines, source_position)
+    }
+
+    fn consume_truncation_skip(
+        &mut self,
+        text: &[u8],
+        source_position: BufferTextSourcePosition,
+    ) -> BufferTextWindowSourcePositionConsumption<BufferTextTruncationSkipAction> {
+        let mut source_position = source_position;
+        let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+            text,
+            &mut source_position,
+        );
+        BufferTextWindowSourcePositionConsumption::new(action, source_position)
+    }
+
+    fn source_position_update(
+        &mut self,
+        source_position: BufferTextSourcePosition,
+    ) -> BufferTextWindowSourcePositionConsumption<()> {
+        BufferTextWindowSourcePositionConsumption::new((), source_position)
+    }
+}
+
+pub(crate) struct BufferTextWindowSourcePositionConsumption<T> {
+    value: T,
+    source_position: BufferTextSourcePosition,
+}
+
+impl<T> BufferTextWindowSourcePositionConsumption<T> {
+    fn new(value: T, source_position: BufferTextSourcePosition) -> Self {
+        Self {
+            value,
+            source_position,
+        }
+    }
+
+    fn apply_to_progress(self, progress: &mut BufferTextWindowProgressState<'_>) -> T {
+        progress.apply_source_position(self.source_position);
+        self.value
     }
 }
 
@@ -2939,6 +3030,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         'surface: 'request,
     {
         match self.render_pre_source_checkpoints_for_context(
+            source_walk,
             row_prelude_context,
             face_resolution_context,
             text,
@@ -2963,6 +3055,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         match consumed_source {
             BufferTextConsumedSourceItem::DisplayItem(source_item) => {
                 return self.render_consumed_display_item_for_context(
+                    source_walk,
                     BufferTextWindowConsumedDisplayItemRenderRequest {
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
@@ -2991,6 +3084,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     #[allow(clippy::too_many_arguments)]
     fn render_pre_source_checkpoints_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
@@ -3004,7 +3098,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_row_prelude(row_prelude_context, active_face_state, buffer);
 
         if self
-            .render_invisible_text_for_context(text, active_face_state, buffer)
+            .render_invisible_text_for_context(source_walk, text, active_face_state, buffer)
             .should_continue_buffer_walk()
         {
             return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
@@ -3012,7 +3106,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
         if self.hscroll_should_skip() {
             if self
-                .render_hscroll_skip_for_context(text, active_face_state)
+                .render_hscroll_skip_for_context(source_walk, text, active_face_state)
                 .should_break()
             {
                 return BufferTextWindowPreSourceOutcome::StopBufferWalk;
@@ -3027,9 +3121,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_consumed_display_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferTextWindowConsumedDisplayItemRenderRequest<'request>,
         buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome {
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'surface: 'request,
+    {
         let BufferTextWindowConsumedDisplayItemRenderRequest {
             layout_resolution_context,
             source_item,
@@ -3038,6 +3136,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             params,
         } = request;
         let selective_display_outcome = self.render_selective_display_tail_for_context(
+            source_walk,
             source_item.source_char(),
             text,
             active_face_state,
@@ -3055,13 +3154,20 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         let source_char = source_item.source_char();
         if is_explicit_line_break {
             if self
-                .render_line_break_for_context(source_char, text, active_face_state, buffer)
+                .render_line_break_for_context(
+                    source_walk,
+                    source_char,
+                    text,
+                    active_face_state,
+                    buffer,
+                )
                 .should_break()
             {
                 return BufferTextWindowLoopStepOutcome::StopBufferWalk;
             }
         } else {
             let char_render_outcome = self.render_text_consumed_display_item_for_context(
+                source_walk,
                 layout_resolution_context,
                 source_item,
                 text,
@@ -3140,6 +3246,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 };
                 self.render_consumed_display_item_for_context(
+                    source_walk,
                     BufferTextWindowConsumedDisplayItemRenderRequest {
                         layout_resolution_context,
                         source_item: source_step,
@@ -3220,6 +3327,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
@@ -3234,11 +3342,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             active_face_state,
             0.0,
         );
-        self.render_invisible_text_at_checkpoint(request, buffer)
+        self.render_invisible_text_at_checkpoint(source_walk, request, buffer)
     }
 
-    fn render_hscroll_skip_for_context<'request>(
+    fn render_hscroll_skip_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
     ) -> DisplayRowTransitionContinuation
@@ -3248,7 +3357,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         let request =
             self.loop_context
                 .hscroll_skip_request(text, self.append_surface, active_face_state);
-        self.render_hscroll_skip(request)
+        self.render_hscroll_skip(source_walk, request)
     }
 
     fn render_face_checkpoint_for_context<B: LayoutBufferView>(
@@ -3271,6 +3380,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         source_step_char: BufferTextSourceStepChar,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -3286,11 +3396,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             active_face_state,
             0.0,
         );
-        self.render_selective_display_tail(request, buffer)
+        self.render_selective_display_tail(source_walk, request, buffer)
     }
 
     pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         source_char: BufferTextSourceStepChar,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -3305,11 +3416,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             self.overlay_context,
             active_face_state,
         );
-        self.render_line_break(request, buffer)
+        self.render_line_break(source_walk, request, buffer)
     }
 
     fn render_text_consumed_display_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: BufferTextConsumedDisplayItem,
         text: &'request [u8],
@@ -3330,15 +3442,17 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             params,
             0.0,
         );
-        self.render_text_consumed_display_item(request, buffer)
+        self.render_text_consumed_display_item(source_walk, request, buffer)
     }
 
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferInvisibleTextRenderRequest<'_>,
         buffer: &B,
     ) -> BufferInvisibleTextRenderOutcome {
         request.render_at_checkpoint_and_apply(
+            source_walk,
             buffer,
             BufferInvisibleTextRenderRequestState::new(
                 self.invisible_text_checkpoint,
@@ -3354,34 +3468,40 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         )
     }
 
-    fn render_hscroll_skip(
+    fn render_hscroll_skip<B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
-        request.render_next_and_apply(BufferHscrollSkipRenderState::new(
-            self.progress.reborrow(),
-            self.hscroll_skip,
-            self.row_extend,
-            self.source_render.reborrow(),
-            self.prefix_request,
-            self.line_numbers,
-            self.word_wrap,
-            self.trailing_whitespace,
-            self.row_geometry,
-            self.row_flags,
-            self.hit_rows,
-            self.hit_row_range,
-            self.cursor_info,
-            self.row_y_positions,
-        ))
+        request.render_next_and_apply(
+            source_walk,
+            BufferHscrollSkipRenderState::new(
+                self.progress.reborrow(),
+                self.hscroll_skip,
+                self.row_extend,
+                self.source_render.reborrow(),
+                self.prefix_request,
+                self.line_numbers,
+                self.word_wrap,
+                self.trailing_whitespace,
+                self.row_geometry,
+                self.row_flags,
+                self.hit_rows,
+                self.hit_row_range,
+                self.cursor_info,
+                self.row_y_positions,
+            ),
+        )
     }
 
     fn render_selective_display_tail<B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferSelectiveDisplayTailRenderRequest<'_>,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
         request.render_if_needed_and_apply(
+            source_walk,
             buffer,
             BufferSelectiveDisplayTailRenderState::new(
                 self.progress.reborrow(),
@@ -3404,10 +3524,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_line_break<B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferTextLineBreakRenderRequest<'_>,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
         request.render_and_apply(
+            source_walk,
             buffer,
             BufferTextLineBreakRenderState::new(
                 self.progress.reborrow(),
@@ -3432,10 +3554,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_text_consumed_display_item<B: LayoutBufferView>(
         &mut self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferTextConsumedDisplayItemRenderRequest<'_>,
         buffer: &B,
     ) -> BufferTextConsumedDisplayItemRenderOutcome {
         request.render_and_apply(
+            source_walk,
             buffer,
             BufferTextConsumedDisplayItemRenderRequestState::new(
                 self.append_state,
@@ -4373,8 +4497,9 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         Self { context }
     }
 
-    pub(crate) fn render_next_and_apply(
+    pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         state: BufferHscrollSkipRenderState<'_, '_>,
     ) -> DisplayRowTransitionContinuation {
         let BufferHscrollSkipRenderState {
@@ -4397,16 +4522,17 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let mut source_position = progress.source_position();
-        let Some(hscroll_action) = BufferHscrollSkipSourceStep::consume_from_position(
-            context.text,
-            &mut source_position,
-            hscroll_skip,
-            context.tab_width,
-        ) else {
+        let Some(hscroll_action) = source_walk
+            .consume_hscroll_skip(
+                context.text,
+                progress.source_position(),
+                hscroll_skip,
+                context.tab_width,
+            )
+            .apply_to_progress(&mut progress)
+        else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
-        progress.apply_source_position(source_position);
         let BufferTextWindowProgressState {
             row: BufferTextWindowRowProgressState { x, col },
             ..
@@ -4838,6 +4964,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
 
     pub(crate) fn render_if_needed_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSelectiveDisplayTailRenderState<'_, '_>,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
@@ -4885,10 +5012,9 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             &mut synthetic_text_state,
         );
 
-        let mut source_position = progress.source_position();
-        let tail_action =
-            selective_display.skip_rest_of_line_after_carriage_return(&mut source_position);
-        progress.apply_source_position(source_position);
+        let tail_action = source_walk
+            .consume_selective_display_tail(selective_display, progress.source_position())
+            .apply_to_progress(&mut progress);
         if !tail_action.is_line_break() {
             return BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
         }
@@ -5102,6 +5228,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
 
     pub(crate) fn render_at_checkpoint_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferInvisibleTextRenderRequestState<'_, '_>,
     ) -> BufferInvisibleTextRenderOutcome {
@@ -5119,15 +5246,19 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let mut source_position = progress.source_position();
-        let action = BufferInvisibleTextScanContext::new(
-            context.text,
-            context.accessible_end,
-            context.point_charpos,
-            cursor_info.is_missing(),
-        )
-        .consume_at_checkpoint(buffer, checkpoints, &mut source_position);
-        progress.apply_source_position(source_position);
+        let action = source_walk
+            .consume_invisible_checkpoint(
+                buffer,
+                BufferInvisibleTextScanContext::new(
+                    context.text,
+                    context.accessible_end,
+                    context.point_charpos,
+                    cursor_info.is_missing(),
+                ),
+                checkpoints,
+                progress.source_position(),
+            )
+            .apply_to_progress(&mut progress);
         let BufferInvisibleTextScanAction::Hidden(hidden_text) = action else {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
@@ -5548,6 +5679,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextLineBreakRenderState<'_, '_>,
     ) -> DisplayRowTransitionContinuation {
@@ -5667,14 +5799,17 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             return continuation;
         }
 
-        let mut source_position = progress.source_position();
-        BufferSelectiveDisplayContext::new(
-            context.text,
-            context.selective_display,
-            context.tab_width,
-        )
-        .apply_hidden_indented_lines_after_line_break(&mut source_position, line_numbers);
-        progress.apply_source_position(source_position);
+        source_walk
+            .consume_hidden_indented_lines_after_line_break(
+                BufferSelectiveDisplayContext::new(
+                    context.text,
+                    context.selective_display,
+                    context.tab_width,
+                ),
+                progress.source_position(),
+                line_numbers,
+            )
+            .apply_to_progress(&mut progress);
         DisplayRowTransitionContinuation::Continue
     }
 }
@@ -7124,6 +7259,7 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextConsumedDisplayItemRenderRequestState<'_, '_>,
     ) -> BufferTextConsumedDisplayItemRenderOutcome {
@@ -7219,6 +7355,7 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
                     ),
                 )
                 .render_if_needed_and_apply(
+                    source_walk,
                     buffer,
                     BufferTextSpecialOverflowRenderState::new(
                         progress.reborrow(),
@@ -7285,6 +7422,7 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
             ),
         )
         .render_if_needed_and_apply(
+            source_walk,
             context.text,
             BufferTextOverflowRenderState::new(
                 progress.reborrow(),
@@ -7397,13 +7535,14 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_if_needed_and_apply(
+    pub(crate) fn render_if_needed_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &[u8],
         state: BufferTextOverflowRenderState<'_, '_>,
     ) -> BufferTextOverflowRenderOutcome {
         let BufferTextOverflowRenderState {
-            progress,
+            mut progress,
             source_render,
             row_extend,
             line_numbers,
@@ -7418,11 +7557,6 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             face_scan,
             row_y_positions,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -7434,17 +7568,13 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         ) {
             BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
             BufferTextSourceCharOverflowAction::Truncate { transition } => {
-                let truncation_skip =
-                    BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
-                        text,
-                        &mut BufferTextSourcePosition::new(*byte_idx, *charpos),
-                    );
-                *byte_idx = truncation_skip.source_position().byte_idx();
-                *charpos = truncation_skip.source_position().charpos();
+                let truncation_skip = source_walk
+                    .consume_truncation_skip(text, progress.source_position())
+                    .apply_to_progress(&mut progress);
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
-                    x,
+                    progress.row.x,
                     context.content_x,
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
@@ -7460,10 +7590,10 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(*charpos),
+                    hit_row_range.range_to(progress.charpos()),
                     DisplayRowPosition {
-                        x_px: *x,
-                        col: *col,
+                        x_px: *progress.row.x,
+                        col: *progress.row.col,
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
@@ -7473,7 +7603,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    col,
+                    progress.row.col,
                 );
                 BufferTextOverflowRenderOutcome::Transition(
                     truncation_skip.transition_continuation(row_transition),
@@ -7484,17 +7614,18 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 transition,
             } => {
                 let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
-                let mut source_position = BufferTextSourcePosition::new(*byte_idx, *charpos);
+                let mut source_position = progress.source_position();
                 word_wrap_action.apply_before_row_transition(
                     source_render.output_emitter(),
                     &mut source_position,
-                    col,
+                    progress.row.col,
                     row_extend,
-                    x,
+                    progress.row.x,
                     context.content_x,
                 );
-                *byte_idx = source_position.byte_idx();
-                *charpos = source_position.charpos();
+                source_walk
+                    .source_position_update(source_position)
+                    .apply_to_progress(&mut progress);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -7508,10 +7639,10 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 )
                 .emit_overflow(
                     transition,
-                    hit_row_range.range_to(*charpos),
+                    hit_row_range.range_to(progress.charpos()),
                     DisplayRowPosition {
-                        x_px: *x,
-                        col: *col,
+                        x_px: *progress.row.x,
+                        col: *progress.row.col,
                     },
                 );
                 let continuation = word_wrap_action.apply_after_row_transition_and_prefix(
@@ -7531,8 +7662,9 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                         trailing_whitespace,
                     ),
                 );
-                *byte_idx = source_position.byte_idx();
-                *charpos = source_position.charpos();
+                source_walk
+                    .source_position_update(source_position)
+                    .apply_to_progress(&mut progress);
                 BufferTextOverflowRenderOutcome::Transition(continuation)
             }
             BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
@@ -7540,8 +7672,12 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     BufferTextCharacterWrapSourceAction::from_source_step_char(
                         self.source_step_char,
                     );
-                character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
-                let mut source_position = BufferTextSourcePosition::new(*byte_idx, *charpos);
+                character_wrap_action.apply_before_row_transition(
+                    row_extend,
+                    progress.row.x,
+                    context.content_x,
+                );
+                let mut source_position = progress.source_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -7555,10 +7691,10 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(*charpos),
+                    hit_row_range.range_to(progress.charpos()),
                     DisplayRowPosition {
-                        x_px: *x,
-                        col: *col,
+                        x_px: *progress.row.x,
+                        col: *progress.row.col,
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
@@ -7568,7 +7704,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    col,
+                    progress.row.col,
                 );
                 let continuation = character_wrap_action.apply_after_visible_row_transition(
                     row_transition,
@@ -7578,8 +7714,9 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     row_geometry,
                     context.row_visibility_limit,
                 );
-                *byte_idx = source_position.byte_idx();
-                *charpos = source_position.charpos();
+                source_walk
+                    .source_position_update(source_position)
+                    .apply_to_progress(&mut progress);
                 BufferTextOverflowRenderOutcome::Transition(continuation)
             }
         }
@@ -8014,11 +8151,12 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
 
     pub(crate) fn render_if_needed_and_apply<B: LayoutBufferView>(
         self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
         state: BufferTextSpecialOverflowRenderState<'_, '_>,
     ) -> BufferTextSpecialOverflowRenderOutcome {
         let BufferTextSpecialOverflowRenderState {
-            progress,
+            mut progress,
             source_render,
             row_extend,
             line_numbers,
@@ -8032,11 +8170,6 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -8049,18 +8182,14 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 BufferTextSpecialOverflowRenderOutcome::Fits
             }
             Some(BufferTextSpecialSourceCharOverflowAction::Truncate { transition }) => {
-                let truncation_skip =
-                    BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
-                        context.text,
-                        &mut BufferTextSourcePosition::new(*byte_idx, *charpos),
-                    );
+                let truncation_skip = source_walk
+                    .consume_truncation_skip(context.text, progress.source_position())
+                    .apply_to_progress(&mut progress);
                 let mut source_position = truncation_skip.source_position();
-                *byte_idx = source_position.byte_idx();
-                *charpos = source_position.charpos();
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
-                    x,
+                    progress.row.x,
                     context.content_x,
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
@@ -8076,10 +8205,10 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(*charpos),
+                    hit_row_range.range_to(progress.charpos()),
                     DisplayRowPosition {
-                        x_px: *x,
-                        col: *col,
+                        x_px: *progress.row.x,
+                        col: *progress.row.col,
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
@@ -8089,7 +8218,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    col,
+                    progress.row.col,
                 );
                 let synced_charpos = buffer
                     .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
@@ -8102,13 +8231,19 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     &mut source_position,
                     hit_row_range,
                 );
-                *byte_idx = source_position.byte_idx();
-                *charpos = source_position.charpos();
+                source_walk
+                    .source_position_update(source_position)
+                    .apply_to_progress(&mut progress);
                 BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(continuation)
             }
             Some(BufferTextSpecialSourceCharOverflowAction::Wrap { transition }) => {
-                let special_wrap_action = BufferTextSpecialWrapSourceAction::new(*charpos);
-                special_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
+                let special_wrap_action =
+                    BufferTextSpecialWrapSourceAction::new(progress.charpos());
+                special_wrap_action.apply_before_row_transition(
+                    row_extend,
+                    progress.row.x,
+                    context.content_x,
+                );
                 let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
@@ -8125,8 +8260,8 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     transition,
                     hit_range,
                     DisplayRowPosition {
-                        x_px: *x,
-                        col: *col,
+                        x_px: *progress.row.x,
+                        col: *progress.row.col,
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
@@ -8136,7 +8271,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    col,
+                    progress.row.col,
                 );
                 BufferTextSpecialOverflowRenderOutcome::AppendPrepared(
                     special_wrap_action.transition_continuation(

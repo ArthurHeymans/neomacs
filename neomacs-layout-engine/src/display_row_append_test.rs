@@ -1134,6 +1134,14 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut cursor_info = CursorCaptureState::new();
     let mut font_metrics = None;
     let row_limit = context.row_limit;
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, 0, 0);
 
     let continuation = BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext::new(
         b"\tabc",
@@ -1151,28 +1159,31 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         4,
         row_limit,
     ))
-    .render_next_and_apply(BufferHscrollSkipRenderState::new(
-        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-        &mut hscroll_skip,
-        &mut row_extend,
-        text_row_source_render_state(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-            &mut font_metrics,
-            &face_resolver,
+    .render_next_and_apply(
+        &mut source_walk,
+        BufferHscrollSkipRenderState::new(
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            &mut hscroll_skip,
+            &mut row_extend,
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            &mut prefix_request,
+            &mut line_numbers,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut cursor_info,
+            &mut context.row_y_positions,
         ),
-        &mut prefix_request,
-        &mut line_numbers,
-        &mut word_wrap,
-        &mut trailing_whitespace,
-        &mut context.geometry,
-        &mut context.row_flags,
-        &mut context.hit_rows,
-        &mut hit_row_range,
-        &mut cursor_info,
-        &mut context.row_y_positions,
-    ));
+    );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
     assert_eq!(byte_idx, 1);
@@ -1683,6 +1694,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, 0, 0);
 
     let outcome = BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext::new(
         b"folded rest",
@@ -1697,6 +1709,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
         8.0,
     ))
     .render_at_checkpoint_and_apply(
+        &mut source_walk,
         &snapshot,
         BufferInvisibleTextRenderRequestState::new(
             &mut checkpoints,
@@ -2620,6 +2633,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let continuation = BufferTextLineBreakRenderRequest::new(
         source_char,
@@ -2642,6 +2656,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         ),
     )
     .render_and_apply(
+        &mut source_walk,
         &snapshot,
         BufferTextLineBreakRenderState::new(
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -2782,6 +2797,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut font_metrics = None;
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferSelectiveDisplayTailRenderRequest::new(
         source_step_char,
@@ -2805,6 +2821,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
         ),
     )
     .render_if_needed_and_apply(
+        &mut source_walk,
         &snapshot,
         BufferSelectiveDisplayTailRenderState::new(
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -3213,6 +3230,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferTextSpecialOverflowRenderRequest::new(
         &prepared_append,
@@ -3235,6 +3253,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         ),
     )
     .render_if_needed_and_apply(
+        &mut source_walk,
         &snapshot,
         BufferTextSpecialOverflowRenderState::new(
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -3443,6 +3462,8 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferTextOverflowRenderRequest::new(
         &prepared_append,
@@ -3465,6 +3486,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         ),
     )
     .render_if_needed_and_apply(
+        &mut source_walk,
         text,
         BufferTextOverflowRenderState::new(
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -6160,6 +6182,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -6217,6 +6240,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         ),
     )
     .render_and_apply(
+        &mut source_walk,
         &snapshot,
         BufferTextConsumedDisplayItemRenderRequestState::new(
             &mut append_state,
