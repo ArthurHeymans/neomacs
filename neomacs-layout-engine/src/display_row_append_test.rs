@@ -1397,15 +1397,12 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut x = 0.0;
     let mut col = 0;
-    let mut render_state = BufferSyntheticTextRenderState::new(
-        text_row_source_render_state(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        BufferTextWindowRowProgressState::new(&mut x, &mut col),
+    let mut source_render = text_row_source_render_state(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
     );
     let action = BufferHscrollSkipAction::Text {
         ch_start_byte_idx: 5,
@@ -1416,7 +1413,8 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     action.append_left_truncation_marker_to_text_row_and_apply(
         BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0),
         &geometry,
-        &mut render_state,
+        &mut source_render,
+        BufferTextWindowRowProgressState::new(&mut x, &mut col),
         0.0,
     );
 

@@ -222,13 +222,20 @@ impl BufferHscrollSkipAction {
         self,
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
-        state: &mut BufferSyntheticTextRenderState<'_>,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        mut row_progress: BufferTextWindowRowProgressState<'_>,
         content_x: f32,
     ) {
         if !self.should_show_left_truncation() {
             return;
         }
-        state.append_hscroll_truncation_marker_to_text_row(render_context, row_geometry, content_x);
+        append_hscroll_truncation_marker_to_text_row(
+            render_context,
+            row_geometry,
+            source_render,
+            &mut row_progress,
+            content_x,
+        );
     }
 }
 
@@ -601,10 +608,6 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             );
         }
 
-        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            source_render.reborrow(),
-            BufferTextWindowRowProgressState::new(x, col),
-        );
         hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -615,7 +618,8 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 context.char_w,
             ),
             row_geometry,
-            &mut synthetic_text_state,
+            &mut source_render.reborrow(),
+            BufferTextWindowRowProgressState::new(x, col),
             context.content_x,
         );
         hscroll_action.capture_text_cursor_if_point(
@@ -856,8 +860,6 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
 
-        let mut synthetic_text_state =
-            BufferSyntheticTextRenderState::new(source_render.reborrow(), progress.row.reborrow());
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -868,7 +870,8 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
                 context.char_w,
             ),
             row_geometry,
-            &mut synthetic_text_state,
+            &mut source_render.reborrow(),
+            progress.row.reborrow(),
         );
 
         let tail_action = source_walk
@@ -1045,9 +1048,10 @@ impl BufferInvisibleTextSkip {
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
         cursor_info: &mut CursorCaptureState,
-        synthetic_text: &mut BufferSyntheticTextRenderState<'_>,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        row_progress: &mut BufferTextWindowRowProgressState<'_>,
     ) {
-        let position = synthetic_text.position();
+        let position = row_progress.row_position();
         self.capture_cursor_if_point(
             cursor_info,
             render_context.active_face(),
@@ -1059,7 +1063,13 @@ impl BufferInvisibleTextSkip {
         let Some(request) = self.ellipsis_append_request(position) else {
             return;
         };
-        synthetic_text.append_request_to_text_row(render_context, row_geometry, request);
+        append_synthetic_request_to_text_row(
+            render_context,
+            row_geometry,
+            source_render,
+            row_progress,
+            request,
+        );
     }
 }
 
@@ -1106,8 +1116,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
 
-        let mut synthetic_text_state =
-            BufferSyntheticTextRenderState::new(source_render.reborrow(), progress.row.reborrow());
+        let mut row_progress = progress.row.reborrow();
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -1119,7 +1128,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             ),
             row_geometry,
             cursor_info,
-            &mut synthetic_text_state,
+            &mut source_render.reborrow(),
+            &mut row_progress,
         );
 
         let overlay_charpos = progress.charpos();
@@ -1224,10 +1234,17 @@ impl BufferSelectiveDisplayLineTailMarker {
         self,
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
-        state: &mut BufferSyntheticTextRenderState<'_>,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        mut row_progress: BufferTextWindowRowProgressState<'_>,
     ) {
-        let request = self.ellipsis_append_request(state.position());
-        state.append_request_to_text_row(render_context, row_geometry, request);
+        let request = self.ellipsis_append_request(row_progress.row_position());
+        append_synthetic_request_to_text_row(
+            render_context,
+            row_geometry,
+            source_render,
+            &mut row_progress,
+            request,
+        );
     }
 }
 
@@ -1778,51 +1795,36 @@ impl BufferTextLineBreakSourceAction {
     }
 }
 
-pub(crate) struct BufferSyntheticTextRenderState<'a> {
-    source_render: TextRowSourceRenderState<'a>,
-    row_progress: BufferTextWindowRowProgressState<'a>,
+pub(crate) fn append_synthetic_request_to_text_row<'ctx>(
+    render_context: BufferSyntheticTextRenderContext<'ctx>,
+    row_geometry: &'ctx DisplayRowGeometryState,
+    source_render: &mut TextRowSourceRenderState<'_>,
+    row_progress: &mut BufferTextWindowRowProgressState<'_>,
+    request: SyntheticTextAppendRequest,
+) {
+    let Some(progress) =
+        render_context.render_request_to_text_row(source_render, row_geometry, request)
+    else {
+        return;
+    };
+    row_progress.apply_position(progress.end);
 }
 
-impl<'a> BufferSyntheticTextRenderState<'a> {
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'a>,
-        row_progress: BufferTextWindowRowProgressState<'a>,
-    ) -> Self {
-        Self {
-            source_render,
-            row_progress,
-        }
-    }
-
-    pub(crate) fn position(&self) -> DisplayRowPosition {
-        self.row_progress.row_position()
-    }
-
-    pub(crate) fn append_request_to_text_row<'ctx>(
-        &mut self,
-        render_context: BufferSyntheticTextRenderContext<'ctx>,
-        row_geometry: &'ctx DisplayRowGeometryState,
-        request: SyntheticTextAppendRequest,
-    ) {
-        let Some(progress) = render_context.render_request_to_text_row(
-            &mut self.source_render,
-            row_geometry,
-            request,
-        ) else {
-            return;
-        };
-        self.row_progress.apply_position(progress.end);
-    }
-
-    pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
-        &mut self,
-        render_context: BufferSyntheticTextRenderContext<'ctx>,
-        row_geometry: &'ctx DisplayRowGeometryState,
-        content_x: f32,
-    ) {
-        let request =
-            render_context.hscroll_truncation_request(self.source_render.default_face(), content_x);
-        self.append_request_to_text_row(render_context, row_geometry, request);
-        self.source_render.mark_current_text_row_truncated_left();
-    }
+pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
+    render_context: BufferSyntheticTextRenderContext<'ctx>,
+    row_geometry: &'ctx DisplayRowGeometryState,
+    source_render: &mut TextRowSourceRenderState<'_>,
+    row_progress: &mut BufferTextWindowRowProgressState<'_>,
+    content_x: f32,
+) {
+    let request =
+        render_context.hscroll_truncation_request(source_render.default_face(), content_x);
+    append_synthetic_request_to_text_row(
+        render_context,
+        row_geometry,
+        source_render,
+        row_progress,
+        request,
+    );
+    source_render.mark_current_text_row_truncated_left();
 }
