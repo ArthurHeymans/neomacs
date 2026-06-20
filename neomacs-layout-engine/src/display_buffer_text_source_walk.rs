@@ -13,9 +13,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayLineTailAction, consume_hscroll_skip_from_position,
 };
 use crate::display_buffer_text_source::BufferTextSourceCursor;
-use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionState, BufferTextSourceItem,
-};
+use crate::display_buffer_text_source_consumption::BufferTextSourceConsumptionState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -24,6 +22,7 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
 };
 use crate::display_source::DisplaySourceContext;
+use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_source_resolver::{
@@ -40,7 +39,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
 }
 
 struct BufferTextWindowSourceConsumption {
-    source_item: Option<BufferTextSourceItem>,
+    source_item: Option<DisplaySourceItem>,
     source_position: DisplaySourceTextPosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
 }
@@ -49,7 +48,7 @@ impl BufferTextWindowSourceConsumption {
     fn apply_to_progress(
         self,
         progress: &mut DisplaySourceProgressState<'_>,
-    ) -> (Option<BufferTextSourceItem>, Vec<PendingDisplaySourceFace>) {
+    ) -> (Option<DisplaySourceItem>, Vec<PendingDisplaySourceFace>) {
         if self.source_item.is_none() {
             progress.apply_source_position(self.source_position);
         }
@@ -62,7 +61,7 @@ impl BufferTextWindowSourceConsumption {
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-    ) -> Option<BufferTextSourceItem> {
+    ) -> Option<DisplaySourceItem> {
         let (source_item, pending_faces) = self.apply_to_progress(progress);
         face_resolution_context.install_pending_source_faces(
             source_render,
@@ -134,7 +133,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         face_ids: &mut FrameFaceIdAllocator,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-    ) -> Option<BufferTextSourceItem> {
+    ) -> Option<DisplaySourceItem> {
         self.consume_source_item(
             progress.source_position(),
             face_resolution_context.clone(),

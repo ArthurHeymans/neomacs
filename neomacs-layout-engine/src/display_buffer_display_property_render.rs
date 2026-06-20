@@ -1,4 +1,3 @@
-use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
@@ -10,6 +9,7 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -28,7 +28,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
 
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Rendered(BufferDisplayPropertyTextReplacementOutcome),
-    Fallback(BufferTextSourceItem),
+    Fallback(DisplaySourceItem),
     Stop,
 }
 
@@ -93,14 +93,14 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         }
     }
 
-    fn fallback_render_item(&self) -> Option<BufferTextSourceItem> {
+    fn fallback_render_item(&self) -> Option<DisplaySourceItem> {
         let fallback = self.replacement.fallback_display_item(
             self.text_start_byte,
             self.text,
             RenderFaceRef::FaceId(self.active_face_state.face_id()),
         )?;
         let (item, start_byte_idx, start_charpos, source_char) = fallback.into_parts();
-        Some(BufferTextSourceItem::new(
+        Some(DisplaySourceItem::new(
             item,
             start_byte_idx,
             start_charpos,

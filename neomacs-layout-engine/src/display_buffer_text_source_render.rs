@@ -20,7 +20,6 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferTextLineBreakRenderRequest,
 };
-use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
@@ -34,6 +33,7 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_transition::DisplayRowTransitionContinuation;
+use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceStepChar;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -128,7 +128,7 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
 }
 
 fn render_source_item_and_apply<B: LayoutBufferView>(
-    source_item: BufferTextSourceItem,
+    source_item: DisplaySourceItem,
     context: BufferTextSourceItemRenderContext<'_>,
     source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
     buffer: &B,
@@ -549,7 +549,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: BufferTextSourceItem,
+        source_item: DisplaySourceItem,
         buffer: &B,
     ) -> bool
     where
@@ -635,7 +635,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: BufferTextSourceItem,
+        source_item: DisplaySourceItem,
         buffer: &B,
     ) -> BufferTextSourceItemRenderOutcome
     where

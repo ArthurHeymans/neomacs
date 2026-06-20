@@ -2061,7 +2061,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
         RenderFaceRef::Inherit,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
-    let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
+    let typed_item = DisplaySourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
@@ -2099,7 +2099,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
         RenderFaceRef::Inherit,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("YZ")),
     );
-    let typed_item = BufferTextSourceItem::new_for_test(source_item, 1, 1, Some('b'));
+    let typed_item = DisplaySourceItem::new_for_test(source_item, 1, 1, Some('b'));
     let mut position = DisplaySourceTextPosition::new(1, 1);
 
     let step = BufferTextSourceConsumptionState::new(0)
@@ -2135,7 +2135,7 @@ fn buffer_text_source_item_without_source_char_rejects_source_mapped_without_sou
         RenderFaceRef::Inherit,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
-    let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, None);
+    let typed_item = DisplaySourceItem::new_for_test(source_item, 0, 0, None);
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
     assert!(typed_item.direct_source_char().is_none());
