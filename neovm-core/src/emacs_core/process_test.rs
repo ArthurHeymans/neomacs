@@ -2356,6 +2356,68 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
 }
 
 #[test]
+fn accept_process_output_propagates_throw_from_timer_callback_to_outer_catch() {
+    // A non-local `throw` raised from inside a timer callback must propagate
+    // out of the `accept-process-output` wait to the matching outer `catch`,
+    // matching GNU.  `lisp/emacs-lisp/timer.el` `timer-event-handler` wraps the
+    // callback in `condition-case-unless-debug err … (error …)`, which catches
+    // `error`-class *signals* only; a `throw` is not an error, so it propagates
+    // past the handler to the surrounding `catch`.  Process filters/sentinels in
+    // `src/process.c` (`read_process_output`/`exec_sentinel`) likewise never
+    // catch throws.  This is the core of `jsonrpc-request`'s continuation
+    // protocol (eglot/copilot/lsp): the throw that completes the synchronous
+    // request comes from a zero-delay `(run-at-time 0 nil …)`.
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // A lambda that throws to 'neo-throw-tag with value 'thrown-from-timer.
+    let callback = ev
+        .eval_str("(lambda () (throw 'neo-throw-tag 'thrown-from-timer))")
+        .expect("build throwing timer callback");
+
+    // Schedule it as a due (zero-delay) Rust timer so it fires from the wait
+    // loop's `service_pending_timers_with_wait_policy` pass.
+    ev.timers.add_timer(0.0, 0.0, callback, Vec::new(), false);
+
+    // The catch surrounds the wait.  The timer fires inside the wait and throws;
+    // the throw must reach this catch, yielding 'thrown-from-timer (NOT the
+    // post-wait 'no-throw-loop-finished value).
+    let result = ev.eval_str(
+        r#"(catch 'neo-throw-tag
+             (accept-process-output nil 0.2)
+             'no-throw-loop-finished)"#,
+    );
+
+    assert_eq!(
+        format_eval_result(&result),
+        "OK thrown-from-timer",
+        "a throw from a timer callback must propagate to the outer catch, not be swallowed by the timer wrapper"
+    );
+}
+
+#[test]
+fn accept_process_output_still_catches_error_signal_from_timer_callback() {
+    // Guard against over-correcting: an `error` (signal) raised from a timer
+    // callback must STILL be caught and logged by the timer wrapper (matching
+    // `timer-event-handler`'s `condition-case-unless-debug err … (error …)`),
+    // NOT propagated out of the wait.  Only non-local `throw`s propagate.
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let callback = ev
+        .eval_str(r#"(lambda () (error "boom from timer"))"#)
+        .expect("build erroring timer callback");
+    ev.timers.add_timer(0.0, 0.0, callback, Vec::new(), false);
+
+    // No surrounding catch/condition-case: if the wrapper wrongly propagated the
+    // error, this `accept-process-output` would return Err.  GNU's
+    // `condition-case (error …)` swallows it, so the wait completes normally.
+    let result = builtin_accept_process_output(&mut ev, vec![Value::NIL, Value::make_float(0.2)])
+        .expect("an error signaled from a timer callback must be caught, not propagated");
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
 fn accept_process_output_request_uses_gnu_wait_deadlines() {
     let mut processes = ProcessManager::new();
 
@@ -2412,8 +2474,12 @@ fn process_service_accepts_wait_request_boundary() {
     let mut ev = Context::new();
     let request = ProcessOutputServiceRequest::none();
 
-    let poll = ev.poll_process_output_for_service_request(&request);
-    let ready = ev.poll_ready_process_output_for_service_request(Vec::new(), &request);
+    let poll = ev
+        .poll_process_output_for_service_request(&request)
+        .expect("poll process output should not throw");
+    let ready = ev
+        .poll_ready_process_output_for_service_request(Vec::new(), &request)
+        .expect("poll ready process output should not throw");
     let _: ProcessOutputServiceOutcome = poll;
     let _: ProcessOutputServiceOutcome = ready;
 

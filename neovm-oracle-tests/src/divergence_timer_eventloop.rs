@@ -104,3 +104,63 @@ fn divergence_accept_process_output_exists() {
   (fboundp 'input-pending-p))"#,
     );
 }
+
+#[test]
+fn divergence_timer_throw_propagates_to_outer_catch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // A non-local `throw` raised from inside a timer callback must propagate
+    // out to the matching `(catch TAG …)` that surrounds the `accept-process-
+    // output` wait loop.  GNU's `timer-event-handler` wraps the call in
+    // `condition-case-unless-debug err … (error …)`, which catches `error`
+    // signals only; a `throw` is not an error, so it propagates past the
+    // handler to the outer `catch`.  This is the core of jsonrpc-request's
+    // continuation protocol (eglot/copilot/lsp): the throw that completes the
+    // synchronous request comes FROM a zero-delay `(run-at-time 0 nil …)`.
+    assert_oracle_parity(
+        r#"(condition-case e
+    (catch 'my-tag
+      (run-at-time 0 nil (lambda () (throw 'my-tag 'thrown-from-timer)))
+      (let ((n 0))
+        (while (< n 60)
+          (setq n (1+ n))
+          (accept-process-output nil 0.05)))
+      'NO-THROW-loop-finished)
+  (error (cons 'ERR e)))"#,
+    );
+}
+
+#[test]
+fn divergence_timer_jsonrpc_shape_throw_completes_wait() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // jsonrpc-request shape: a `(catch TAG …)` whose body launches a zero-delay
+    // timer that `(throw TAG …)` and then spins in `(while t (accept-process-
+    // output nil …))`.  The throw must unblock the otherwise-infinite wait by
+    // propagating to the catch, yielding the thrown value.
+    assert_oracle_parity(
+        r#"(catch 'tag
+  (run-at-time 0 nil (lambda () (throw 'tag 'done)))
+  (while t (accept-process-output nil 1)))"#,
+    );
+}
+
+#[test]
+fn divergence_timer_error_is_caught_not_propagated() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // An `error` (signal) raised from a timer callback must NOT propagate out of
+    // the wait — `timer-event-handler`'s `condition-case-unless-debug err …
+    // (error …)` swallows it (logging "Error running timer…").  The surrounding
+    // wait loop continues and returns normally.  This guards against
+    // over-correcting and propagating signals as well as throws.
+    assert_oracle_parity(
+        r#"(catch 'my-tag
+  (run-at-time 0 nil (lambda () (error "boom from timer")))
+  (let ((n 0))
+    (while (< n 20)
+      (setq n (1+ n))
+      (accept-process-output nil 0.05)))
+  'wait-finished-normally)"#,
+    );
+}

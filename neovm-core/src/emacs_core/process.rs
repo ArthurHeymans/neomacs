@@ -2924,12 +2924,20 @@ impl super::eval::Context {
             .is_truthy()
     }
 
-    pub(crate) fn service_pending_timers_with_wait_policy(&mut self, redisplay: bool) -> bool {
+    pub(crate) fn service_pending_timers_with_wait_policy(
+        &mut self,
+        redisplay: bool,
+    ) -> Result<bool, Flow> {
         self.flush_pending_safe_funcalls();
         let mut fired_any = false;
 
         // GNU runs Lisp timers from `timer_check` before servicing lower-level
-        // atimer/process-fd callbacks in `wait_reading_process_output`.
+        // atimer/process-fd callbacks in `wait_reading_process_output`.  A
+        // non-local `throw` raised by a timer callback propagates out to the
+        // matching outer `catch` (e.g. `jsonrpc-request`'s catch tag), so a
+        // throw from `run_timer_callback_preserving_state` is returned to the
+        // caller — and the remaining due timers are not run, exactly as in GNU
+        // where the throw unwinds out of `timer_check`.
         while let Some(timer) = self.next_due_gnu_timer_snapshot() {
             fired_any = true;
             if timer.is_vector() {
@@ -2939,7 +2947,7 @@ impl super::eval::Context {
                 Value::symbol("timer-event-handler"),
                 vec![timer],
                 "GNU Lisp timer",
-            );
+            )?;
         }
 
         let now = Instant::now();
@@ -2947,14 +2955,14 @@ impl super::eval::Context {
         let fired = self.timers.fire_pending_timers(now, idle_dur);
         for (callback, args) in fired {
             fired_any = true;
-            self.run_timer_callback_preserving_state(callback, args, "Rust timer");
+            self.run_timer_callback_preserving_state(callback, args, "Rust timer")?;
         }
 
         if fired_any && redisplay {
             self.redisplay();
         }
 
-        fired_any
+        Ok(fired_any)
     }
 
     fn run_async_process_callback_preserving_state(
@@ -2962,7 +2970,7 @@ impl super::eval::Context {
         callback: Value,
         args: Vec<Value>,
         label: &str,
-    ) {
+    ) -> Result<(), Flow> {
         let saved_match_data = self.match_data.clone();
         let saved_current_buffer = self.buffers.current_buffer_id();
         let saved_waiting_for_input = self.waiting_for_user_input();
@@ -2988,10 +2996,7 @@ impl super::eval::Context {
         self.assign("deactivate-mark", saved_deactivate_mark);
         self.restore_specpdl_roots(gc_roots);
 
-        if let Err(err) = result {
-            let rendered = super::error::format_flow_with_eval(self, &err);
-            tracing::warn!("{label} callback error: {}", rendered);
-        }
+        self.finish_callback_flow(result, label)
     }
 
     fn run_timer_callback_preserving_state(
@@ -2999,7 +3004,7 @@ impl super::eval::Context {
         callback: Value,
         args: Vec<Value>,
         label: &str,
-    ) {
+    ) -> Result<(), Flow> {
         let saved_current_buffer = self.buffers.current_buffer_id();
         let saved_deactivate_mark = self.eval_symbol("deactivate-mark").unwrap_or(Value::NIL);
         let specpdl_count = self.specpdl.len();
@@ -3020,13 +3025,44 @@ impl super::eval::Context {
         self.assign("deactivate-mark", saved_deactivate_mark);
         self.restore_specpdl_roots(gc_roots);
 
-        if let Err(err) = result {
-            let rendered = super::error::format_flow_with_eval(self, &err);
-            tracing::warn!("{label} callback error: {}", rendered);
+        self.finish_callback_flow(result, label)
+    }
+
+    /// Resolve the control flow that escaped a timer/process callback after the
+    /// callback's own state (buffer/deactivate-mark/specpdl/gc-roots) has been
+    /// restored.
+    ///
+    /// GNU runs timer callbacks through `lisp/emacs-lisp/timer.el`
+    /// `timer-event-handler`, which wraps the call in
+    /// `condition-case-unless-debug err … (error …)`; process filters/sentinels
+    /// in `src/process.c` (`read_process_output`/`exec_sentinel`) run with no
+    /// surrounding handler at all.  In both cases an `error`-class *signal* is
+    /// caught (and logged), but a non-local `throw` is NOT an error, so it
+    /// propagates past the callback boundary to the matching outer `catch`.
+    ///
+    /// Mirroring that, a `Flow::Signal` is caught and logged here, while a
+    /// `Flow::Throw` is propagated to the caller so it can reach the `catch`
+    /// that surrounds the wait (e.g. `jsonrpc-request`'s catch tag, completed by
+    /// a zero-delay `run-at-time` timer).  A throw to a tag with no live catch
+    /// still becomes a `no-catch` error at the eval/thread boundary, as in GNU.
+    fn finish_callback_flow(&mut self, result: EvalResult, label: &str) -> Result<(), Flow> {
+        match result {
+            Ok(_) => Ok(()),
+            Err(err @ Flow::Throw { .. }) => Err(err),
+            Err(err @ Flow::Signal(_)) => {
+                let rendered = super::error::format_flow_with_eval(self, &err);
+                tracing::warn!("{label} callback error: {}", rendered);
+                Ok(())
+            }
         }
     }
 
-    fn run_process_filter_callback(&mut self, pid: ProcessId, filter: Value, data: &LispString) {
+    fn run_process_filter_callback(
+        &mut self,
+        pid: ProcessId,
+        filter: Value,
+        data: &LispString,
+    ) -> Result<(), Flow> {
         let proc_val = Value::make_process(pid);
         let output_val = Value::heap_string(data.clone());
         if filter.is_nil() || filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL) {
@@ -3035,19 +3071,26 @@ impl super::eval::Context {
                 callback,
                 vec![proc_val, output_val],
                 "process filter",
-            );
+            )
         } else if filter.is_truthy() {
             self.run_async_process_callback_preserving_state(
                 filter,
                 vec![proc_val, output_val],
                 "process filter",
-            );
+            )
+        } else {
+            Ok(())
         }
     }
 
-    fn run_process_sentinel_callback(&mut self, pid: ProcessId, sentinel: Value, message: &str) {
+    fn run_process_sentinel_callback(
+        &mut self,
+        pid: ProcessId,
+        sentinel: Value,
+        message: &str,
+    ) -> Result<(), Flow> {
         if sentinel.is_nil() {
-            return;
+            return Ok(());
         }
 
         let callback = if sentinel.is_symbol_named(DEFAULT_PROCESS_SENTINEL_SYMBOL) {
@@ -3060,7 +3103,7 @@ impl super::eval::Context {
             callback,
             vec![Value::make_process(pid), Value::string(message)],
             "process sentinel",
-        );
+        )
     }
 
     fn run_process_log_callback(
@@ -3069,9 +3112,9 @@ impl super::eval::Context {
         server_id: ProcessId,
         client_id: ProcessId,
         message: &str,
-    ) {
+    ) -> Result<(), Flow> {
         if log.is_nil() {
-            return;
+            return Ok(());
         }
 
         self.run_async_process_callback_preserving_state(
@@ -3082,13 +3125,13 @@ impl super::eval::Context {
                 Value::string(message),
             ],
             "process log",
-        );
+        )
     }
 
     pub(crate) fn poll_process_output_for_service_request(
         &mut self,
         request: &ProcessOutputServiceRequest,
-    ) -> ProcessOutputServiceOutcome {
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target_process = request.target_process();
         let proc_ids = request.live_processes(self.processes.live_process_ids());
         self.poll_process_output_for_ids(proc_ids, target_process)
@@ -3098,7 +3141,7 @@ impl super::eval::Context {
         &mut self,
         ready_processes: Vec<ProcessId>,
         request: &ProcessOutputServiceRequest,
-    ) -> ProcessOutputServiceOutcome {
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target_process = request.target_process();
         let proc_ids = request.ready_processes(ready_processes);
 
@@ -3109,11 +3152,11 @@ impl super::eval::Context {
         &mut self,
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
-    ) -> ProcessOutputServiceOutcome {
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let proc_ids = dedupe_process_ids(proc_ids);
 
         if proc_ids.is_empty() {
-            return ProcessOutputServiceOutcome::default();
+            return Ok(ProcessOutputServiceOutcome::default());
         }
 
         let mut outcome = ProcessOutputServiceOutcome::default();
@@ -3136,12 +3179,12 @@ impl super::eval::Context {
                     event.server_id,
                     event.client_id,
                     &event.log_message,
-                );
+                )?;
                 self.run_process_sentinel_callback(
                     event.client_id,
                     event.sentinel,
                     &event.sentinel_message,
-                );
+                )?;
             }
 
             let read_result = self.processes.read_process_output_result(pid);
@@ -3173,7 +3216,7 @@ impl super::eval::Context {
                         .get(pid)
                         .map(|p| p.filter)
                         .unwrap_or(Value::NIL);
-                    self.run_process_filter_callback(pid, filter, data);
+                    self.run_process_filter_callback(pid, filter, data)?;
                 }
                 ProcessOutputRead::Eof if is_stderr_pipe => {
                     outcome.record_activity(is_target);
@@ -3195,7 +3238,7 @@ impl super::eval::Context {
                         .get(pid)
                         .map(|p| gnu_process_status_message(p.status))
                         .unwrap_or_else(|| "finished\n".to_string());
-                    self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
+                    self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
                     continue;
                 }
                 ProcessOutputRead::Eof if is_network => {
@@ -3214,7 +3257,7 @@ impl super::eval::Context {
                         pid,
                         sentinel,
                         "connection broken by remote peer\n",
-                    );
+                    )?;
                     continue;
                 }
                 _ => {}
@@ -3245,7 +3288,7 @@ impl super::eval::Context {
                                 .get(pid)
                                 .map(|p| p.filter)
                                 .unwrap_or(Value::NIL);
-                            self.run_process_filter_callback(pid, filter, data);
+                            self.run_process_filter_callback(pid, filter, data)?;
                         }
                         ProcessOutputRead::Data(_)
                         | ProcessOutputRead::WouldBlock
@@ -3264,7 +3307,7 @@ impl super::eval::Context {
                     .get(pid)
                     .map(|p| gnu_process_status_message(p.status))
                     .unwrap_or_else(|| "finished\n".to_string());
-                self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
+                self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
 
                 // GNU `status_notify`: a terminated process (status exit/signal/
                 // closed) is removed from `Vprocess_alist' when
@@ -3279,7 +3322,7 @@ impl super::eval::Context {
             }
         }
 
-        outcome
+        Ok(outcome)
     }
 }
 
@@ -6448,7 +6491,7 @@ pub(crate) fn builtin_make_network_process(
                     .get(id)
                     .map(|p| p.sentinel)
                     .unwrap_or(Value::NIL);
-                eval.run_process_sentinel_callback(id, sentinel, "open\n");
+                eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
                 return Ok(Value::make_process(id));
             }
             #[cfg(unix)]
@@ -6607,7 +6650,7 @@ pub(crate) fn builtin_make_network_process(
                     .get(id)
                     .map(|p| p.sentinel)
                     .unwrap_or(Value::NIL);
-                eval.run_process_sentinel_callback(id, sentinel, "open\n");
+                eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
 
                 return Ok(Value::make_process(id));
             }
@@ -6809,7 +6852,7 @@ pub(crate) fn builtin_make_network_process(
                 .get(id)
                 .map(|p| p.sentinel)
                 .unwrap_or(Value::NIL);
-            eval.run_process_sentinel_callback(id, sentinel, "open\n");
+            eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
 
             return Ok(Value::make_process(id));
         }
@@ -6989,7 +7032,7 @@ pub(crate) fn builtin_make_network_process(
         .get(id)
         .map(|p| p.sentinel)
         .unwrap_or(Value::NIL);
-    eval.run_process_sentinel_callback(id, sentinel, "open\n");
+    eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
 
     Ok(Value::make_process(id))
 }

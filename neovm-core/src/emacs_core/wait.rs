@@ -779,7 +779,12 @@ impl super::eval::Context {
         // process fds afterwards, so timer callbacks fire before process
         // filters in the same service pass.
         if request.runs_timers() {
-            outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
+            // A non-local `throw` from a timer callback propagates out of the
+            // wait to the matching outer `catch` (GNU `timer-event-handler`
+            // catches `error` signals only).  `?` returns the throw up through
+            // `accept-process-output` to the VM `catch`, e.g. the
+            // `jsonrpc-request` catch tag completed by a zero-delay timer.
+            outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false)?);
         }
 
         // Drain ready process output (a non-blocking poll of already-readable
@@ -794,12 +799,15 @@ impl super::eval::Context {
         // pipe: a re-entrant `accept-process-output` from a jsonrpc/Copilot
         // timer would hang forever even though the child had written its reply.
         let process_request = request.process_output_service_request();
+        // A non-local `throw` from a process filter/sentinel callback likewise
+        // propagates out of the wait to the matching outer `catch` (GNU's
+        // `read_process_output`/`exec_sentinel` never catch throws).
         let process_outcome = match process_service {
             WaitProcessService::Poll => {
-                self.poll_process_output_for_service_request(&process_request)
+                self.poll_process_output_for_service_request(&process_request)?
             }
             WaitProcessService::Ready(ready_processes) => self
-                .poll_ready_process_output_for_service_request(ready_processes, &process_request),
+                .poll_ready_process_output_for_service_request(ready_processes, &process_request)?,
         };
         outcome.absorb_process_activity(process_outcome);
 
