@@ -1,19 +1,11 @@
 //! Buffer text visible-loop rendering.
 
-use crate::display_buffer_text_consumed_render::BufferTextWindowConsumedRenderState;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::BufferTextRowAppendState;
-use crate::display_buffer_text_loop_context::{
-    BufferTextWindowConsumedDisplayItemRenderRequest, BufferTextWindowLoopRequestContext,
-};
-use crate::display_buffer_text_pre_source_render::{
-    BufferTextWindowPreSourceOutcome, BufferTextWindowPreSourceRenderState,
-};
+use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
+use crate::display_buffer_text_loop_step_render::BufferTextWindowLoopStepRenderState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
-use crate::display_buffer_text_source_render::{
-    BufferTextWindowSourceRenderOutcome, BufferTextWindowSourceRenderRequest,
-};
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -58,12 +50,6 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     face_ids: &'emit mut FrameFaceIdAllocator,
     append_surface: &'surface DisplayRowAppendSurface,
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextWindowLoopStepOutcome {
-    ContinueBufferWalk,
-    StopBufferWalk,
 }
 
 impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
@@ -135,139 +121,43 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 .row_geometry
                 .current_row_is_visible(self.loop_context.row_visibility_limit())
         {
-            if matches!(
-                self.render_next_step(
-                    source_walk,
-                    row_prelude_context,
-                    face_resolution_context.clone(),
-                    text,
-                    params,
-                    active_face_state,
-                    buffer,
-                ),
-                BufferTextWindowLoopStepOutcome::StopBufferWalk
-            ) {
+            if BufferTextWindowLoopStepRenderState::new(
+                self.loop_context,
+                self.append_state,
+                self.invisible_text_checkpoint,
+                self.progress.reborrow(),
+                self.source_render.reborrow(),
+                self.row_extend,
+                self.box_face,
+                self.line_numbers,
+                self.row_geometry,
+                self.row_flags,
+                self.hit_rows,
+                self.hit_row_range,
+                self.prefix_request,
+                self.hscroll_skip,
+                self.word_wrap,
+                self.trailing_whitespace,
+                self.face_scan,
+                self.row_y_positions,
+                self.cursor_info,
+                self.face_ids,
+                self.append_surface,
+                self.overlay_context,
+            )
+            .render_next(
+                source_walk,
+                row_prelude_context,
+                face_resolution_context.clone(),
+                text,
+                params,
+                active_face_state,
+                buffer,
+            )
+            .should_stop_buffer_walk()
+            {
                 break;
             }
-        }
-    }
-
-    fn render_next_step<'request, B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
-        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
-        text: &'request [u8],
-        params: &'request WindowParams,
-        active_face_state: &mut DisplayRowActiveFaceState,
-        buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome
-    where
-        'surface: 'request,
-    {
-        let pre_source_outcome = BufferTextWindowPreSourceRenderState::new(
-            self.loop_context,
-            self.invisible_text_checkpoint,
-            self.progress.reborrow(),
-            self.source_render.reborrow(),
-            self.row_extend,
-            self.box_face,
-            self.line_numbers,
-            self.row_geometry,
-            self.row_flags,
-            self.hit_rows,
-            self.hit_row_range,
-            self.prefix_request,
-            self.hscroll_skip,
-            self.word_wrap,
-            self.trailing_whitespace,
-            self.face_scan,
-            self.row_y_positions,
-            self.cursor_info,
-            self.face_ids,
-            self.append_surface,
-            self.overlay_context,
-        )
-        .render_for_context(
-            source_walk,
-            row_prelude_context,
-            face_resolution_context.clone(),
-            text,
-            active_face_state,
-            buffer,
-        );
-        match pre_source_outcome {
-            BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
-            BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
-                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
-            }
-            BufferTextWindowPreSourceOutcome::StopBufferWalk => {
-                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-            }
-        }
-
-        let source_outcome = BufferTextWindowSourceRenderRequest::new(
-            self.loop_context,
-            text,
-            params,
-            active_face_state,
-            self.source_render.reborrow(),
-            self.face_ids,
-            self.append_surface,
-            self.row_geometry,
-            self.cursor_info,
-            self.progress.reborrow(),
-        )
-        .consume_next(source_walk, face_resolution_context.clone(), buffer);
-
-        if source_outcome.should_continue_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
-        }
-        if source_outcome.should_stop_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        }
-        let BufferTextWindowSourceRenderOutcome::DisplayItem(source_item) = source_outcome else {
-            unreachable!("source render stop/continue outcomes handled above");
-        };
-        let consumed_outcome = BufferTextWindowConsumedRenderState::new(
-            self.loop_context,
-            self.append_state,
-            self.progress.reborrow(),
-            self.source_render.reborrow(),
-            self.row_extend,
-            self.box_face,
-            self.line_numbers,
-            self.row_geometry,
-            self.row_flags,
-            self.hit_rows,
-            self.hit_row_range,
-            self.prefix_request,
-            self.hscroll_skip,
-            self.word_wrap,
-            self.trailing_whitespace,
-            self.face_scan,
-            self.row_y_positions,
-            self.cursor_info,
-            self.face_ids,
-            self.append_surface,
-            self.overlay_context,
-        )
-        .render_for_context(
-            source_walk,
-            BufferTextWindowConsumedDisplayItemRenderRequest {
-                layout_resolution_context: face_resolution_context
-                    .source_item_layout_resolution_context(),
-                source_item,
-                text,
-                active_face_state,
-                params,
-            },
-            buffer,
-        );
-        if consumed_outcome.should_stop_buffer_walk() {
-            BufferTextWindowLoopStepOutcome::StopBufferWalk
-        } else {
-            BufferTextWindowLoopStepOutcome::ContinueBufferWalk
         }
     }
 }
