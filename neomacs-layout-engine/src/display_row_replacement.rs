@@ -242,13 +242,28 @@ pub(crate) struct DisplayReplacementItemAppendPlan {
     position: DisplayRowPosition,
 }
 
+#[derive(Clone, Debug)]
+struct DisplayReplacementItemAppendTemplate {
+    kind: DisplayItemKind,
+    frame: DisplayReplacementItemAppendFrame,
+    row_geometry_update: DisplayReplacementItemRowGeometryUpdate,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DisplayReplacementItemAppendFrame {
     ActiveFace,
     DisplayBox { height_px: f32, ascent_px: f32 },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DisplayReplacementItemRowGeometryUpdate {
+    None,
+    BeforeAppendGlyphMetrics { height_px: f32, ascent_px: f32 },
+    AfterCompleteRowExtents { height_px: f32, ascent_px: f32 },
+}
+
 impl DisplayReplacementItemAppendRequest {
+    #[cfg(test)]
     pub(crate) fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
         Self {
             kind,
@@ -257,6 +272,7 @@ impl DisplayReplacementItemAppendRequest {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn display_box(
         kind: DisplayItemKind,
         height_px: f32,
@@ -286,7 +302,113 @@ impl DisplayReplacementItemAppendRequest {
     }
 }
 
+impl DisplayReplacementItemAppendTemplate {
+    fn active_face(
+        kind: DisplayItemKind,
+        row_geometry_update: DisplayReplacementItemRowGeometryUpdate,
+    ) -> Self {
+        Self {
+            kind,
+            frame: DisplayReplacementItemAppendFrame::ActiveFace,
+            row_geometry_update,
+        }
+    }
+
+    fn display_box(
+        kind: DisplayItemKind,
+        height_px: f32,
+        ascent_px: f32,
+        row_geometry_update: DisplayReplacementItemRowGeometryUpdate,
+    ) -> Self {
+        Self {
+            kind,
+            frame: DisplayReplacementItemAppendFrame::DisplayBox {
+                height_px,
+                ascent_px,
+            },
+            row_geometry_update,
+        }
+    }
+
+    fn from_stretch(item: DisplayReplacementStretchSourceItem) -> Option<Self> {
+        (item.width_px() > 0.0).then(|| {
+            Self::active_face(
+                item.display_item_kind(),
+                DisplayReplacementItemRowGeometryUpdate::BeforeAppendGlyphMetrics {
+                    height_px: item.height_px(),
+                    ascent_px: item.ascent_px(),
+                },
+            )
+        })
+    }
+
+    fn from_media_resolution(item: DisplayReplacementMediaSourceResolution) -> Self {
+        match item {
+            DisplayReplacementMediaSourceResolution::Media(media_item) => Self::display_box(
+                DisplayItemKind::MediaReplacement(media_item.media()),
+                media_item.display_height_px(),
+                media_item.display_ascent_px(),
+                DisplayReplacementItemRowGeometryUpdate::AfterCompleteRowExtents {
+                    height_px: media_item.display_height_px(),
+                    ascent_px: media_item.display_ascent_px(),
+                },
+            ),
+            DisplayReplacementMediaSourceResolution::Placeholder(placeholder_item) => {
+                Self::active_face(
+                    DisplayItemKind::SourceMappedText(
+                        crate::display_item::DisplaySourceMappedText::new(
+                            placeholder_item.into_text(),
+                        ),
+                    ),
+                    DisplayReplacementItemRowGeometryUpdate::None,
+                )
+            }
+        }
+    }
+
+    fn into_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
+        DisplayReplacementItemAppendRequest {
+            kind: self.kind,
+            frame: self.frame,
+            position,
+        }
+    }
+
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        state: &mut TextRowSourceRenderState<'_>,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        let geometry_update = self.row_geometry_update;
+        if let DisplayReplacementItemRowGeometryUpdate::BeforeAppendGlyphMetrics {
+            height_px,
+            ascent_px,
+        } = geometry_update
+        {
+            row_geometry.include_glyph_vertical_metrics(height_px, ascent_px);
+        }
+        let Some(progress) = replacement_append_context
+            .append_item_request_to_text_row_and_emit(state, self.into_request(position))
+        else {
+            return position;
+        };
+        if let DisplayReplacementItemRowGeometryUpdate::AfterCompleteRowExtents {
+            height_px,
+            ascent_px,
+        } = geometry_update
+            && progress.status == DisplayRowAppendStatus::Complete
+            && progress.metrics.width_px > 0.0
+        {
+            row_geometry.include_row_extents(height_px, ascent_px);
+        }
+        progress.end
+    }
+}
+
 impl DisplayReplacementStretchSourceItem {
+    #[cfg(test)]
     pub(crate) fn append_request(
         self,
         position: DisplayRowPosition,
@@ -456,9 +578,9 @@ impl DisplayPropertyReplacementAppendPlan {
 
 #[derive(Clone)]
 enum DisplayPropertyReplacementAppendPlanItem {
+    Empty,
     String(DisplayReplacementStringAppendRequest),
-    Stretch(DisplayReplacementStretchSourceItem),
-    Media(DisplayReplacementMediaSourceResolution),
+    Item(DisplayReplacementItemAppendTemplate),
 }
 
 struct DisplayPropertyReplacementAppendPlanItemRequest {
@@ -496,10 +618,14 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
                 )
             }
             DisplayPropertyReplacementSourceItem::Stretch(item) => {
-                DisplayPropertyReplacementAppendPlanItem::Stretch(item)
+                DisplayReplacementItemAppendTemplate::from_stretch(item)
+                    .map(DisplayPropertyReplacementAppendPlanItem::Item)
+                    .unwrap_or(DisplayPropertyReplacementAppendPlanItem::Empty)
             }
             DisplayPropertyReplacementSourceItem::Media(item) => {
-                DisplayPropertyReplacementAppendPlanItem::Media(item)
+                DisplayPropertyReplacementAppendPlanItem::Item(
+                    DisplayReplacementItemAppendTemplate::from_media_resolution(item),
+                )
             }
         }
     }
@@ -515,101 +641,19 @@ impl DisplayPropertyReplacementAppendPlanItem {
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         match self {
+            Self::Empty => position,
             Self::String(request) => {
                 request.append_to_text_row(replacement_append_context, state, face_ids, position)
             }
-            Self::Stretch(stretch_item) => stretch_item.append_to_text_row(
-                replacement_append_context,
-                row_geometry,
-                state,
-                position,
-            ),
-            Self::Media(media_item) => media_item.append_to_text_row(
-                replacement_append_context,
-                row_geometry,
-                state,
-                position,
-            ),
-        }
-    }
-}
-
-impl DisplayReplacementStretchSourceItem {
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        row_geometry: &mut DisplayRowGeometryState,
-        state: &mut TextRowSourceRenderState<'_>,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        let Some(request) = self.append_request(position) else {
-            return position;
-        };
-        row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
-        replacement_append_context
-            .append_item_request_to_text_row_and_emit(state, request)
-            .map(|progress| progress.end)
-            .unwrap_or(position)
-    }
-}
-
-impl DisplayReplacementMediaSourceResolution {
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        row_geometry: &mut DisplayRowGeometryState,
-        state: &mut TextRowSourceRenderState<'_>,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        match self {
-            Self::Media(media_item) => media_item.append_to_text_row(
-                replacement_append_context,
-                row_geometry,
-                state,
-                position,
-            ),
-            Self::Placeholder(placeholder_item) => {
-                placeholder_item.append_to_text_row(replacement_append_context, state, position)
+            Self::Item(item) => {
+                item.append_to_text_row(replacement_append_context, row_geometry, state, position)
             }
         }
     }
 }
 
 impl DisplayReplacementMediaSourceItem {
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        row_geometry: &mut DisplayRowGeometryState,
-        state: &mut TextRowSourceRenderState<'_>,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        if let Some(progress) = replacement_append_context
-            .append_item_request_to_text_row_and_emit(state, self.append_request(position))
-            && let Some((height, ascent)) = self.row_extents_after_append(&progress)
-        {
-            row_geometry.include_row_extents(height, ascent);
-            progress.end
-        } else {
-            position
-        }
-    }
-}
-
-impl DisplayReplacementSourceMappedTextItem {
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        state: &mut TextRowSourceRenderState<'_>,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        replacement_append_context
-            .append_item_request_to_text_row_and_emit(state, self.append_request(position))
-            .map(|progress| progress.end)
-            .unwrap_or(position)
-    }
-}
-
-impl DisplayReplacementMediaSourceItem {
+    #[cfg(test)]
     pub(crate) fn row_extents_after_append(
         self,
         progress: &DisplayRowAppendProgress,
@@ -621,6 +665,7 @@ impl DisplayReplacementMediaSourceItem {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn append_request(
         self,
         position: DisplayRowPosition,
@@ -635,6 +680,7 @@ impl DisplayReplacementMediaSourceItem {
 }
 
 impl DisplayReplacementSourceMappedTextItem {
+    #[cfg(test)]
     pub(crate) fn append_request(
         self,
         position: DisplayRowPosition,
