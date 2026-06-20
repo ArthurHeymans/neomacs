@@ -17,13 +17,7 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
-#[cfg(test)]
-use crate::display_row_source_append::measure_single_display_item_width_naturally;
-use crate::display_row_source_append::{
-    SingleDisplayItemSourceRequest, measure_single_display_item_width_with_policy,
-    measure_single_display_item_width_with_source_fallback, render_single_display_item_naturally,
-    render_single_display_item_with_policy,
-};
+use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, FaceScanCheckpoint, SpecialTextRowOverflowDecision,
@@ -90,15 +84,13 @@ impl DisplaySourceNaturalMeasurementRequest {
         source_item: &DisplayItem,
     ) -> Option<f32> {
         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        let request = SingleDisplayItemSourceRequest::new(
-            base_face,
-            face_id,
-            &frame,
+        SingleDisplayItemAppendContext::new(base_face, face_id, frame).measure_width_with_policy(
+            state,
             source_item.clone(),
             position,
             self.source_item().append_kind(),
-        );
-        measure_single_display_item_width_with_policy(state, request, &mut render_policy)
+            &mut render_policy,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -418,15 +410,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
-        let request = SingleDisplayItemSourceRequest::new(
-            self.active_face.resolved_face(),
-            face_id,
-            &frame,
-            item,
-            position,
-            kind,
-        );
-        render_single_display_item_with_policy(state, request, &mut render_policy)
+        SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
+            .render_with_policy(state, item, position, kind, &mut render_policy)
     }
 
     pub(crate) fn append_source_display_item_to_text_row(
@@ -440,15 +425,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
-        let request = SingleDisplayItemSourceRequest::new(
-            self.active_face.resolved_face(),
-            face_id,
-            &frame,
-            item,
-            position,
-            fallback_kind,
-        );
-        render_single_display_item_with_policy(state, request, render_policy)
+        SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
+            .render_with_policy(state, item, position, fallback_kind, render_policy)
     }
 
     fn append_source_char_plan_to_text_row(
@@ -1110,9 +1088,7 @@ impl BufferTextSourceItemRequest {
 }
 
 pub(crate) struct BufferTextItemAppendContext<'a> {
-    face_id: u32,
-    base_face: &'a ResolvedFace,
-    frame: DisplayRowAppendFrame,
+    single_item: SingleDisplayItemAppendContext<'a>,
 }
 
 impl<'a> BufferTextItemAppendContext<'a> {
@@ -1122,10 +1098,18 @@ impl<'a> BufferTextItemAppendContext<'a> {
         frame: DisplayRowAppendFrame,
     ) -> Self {
         Self {
-            face_id,
-            base_face,
-            frame,
+            single_item: SingleDisplayItemAppendContext::new(base_face, face_id, frame),
         }
+    }
+
+    #[cfg(test)]
+    fn face_id(&self) -> u32 {
+        self.single_item.face_id()
+    }
+
+    #[cfg(test)]
+    fn frame(&self) -> &DisplayRowAppendFrame {
+        self.single_item.frame()
     }
 
     pub(crate) fn append_display_item_to_text_row_and_emit(
@@ -1135,15 +1119,8 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<DisplayRowAppendProgress> {
-        let request = SingleDisplayItemSourceRequest::new(
-            self.base_face,
-            self.face_id,
-            &self.frame,
-            item,
-            position,
-            fallback_kind,
-        );
-        render_single_display_item_naturally(state, request)
+        self.single_item
+            .render_naturally(state, item, position, fallback_kind)
     }
 
     pub(crate) fn measure_source_display_item_width_to_text_row(
@@ -1153,17 +1130,11 @@ impl<'a> BufferTextItemAppendContext<'a> {
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let request = SingleDisplayItemSourceRequest::new(
-            self.base_face,
-            self.face_id,
-            &self.frame,
+        self.single_item.measure_width_with_source_fallback(
+            state,
             item.clone(),
             position,
             source_item.append_kind(),
-        );
-        measure_single_display_item_width_with_source_fallback(
-            state,
-            request,
             source_item.fallback_width(),
         )
     }
@@ -1202,19 +1173,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
             source_item,
             self.buffer_id,
             self.buffer,
-            self.item_context.face_id,
+            self.item_context.face_id(),
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceRequest::new(
-            self.item_context.base_face,
-            self.item_context.face_id,
-            &self.item_context.frame,
-            item,
-            position,
-            kind,
-        );
-        render_single_display_item_naturally(state, request)
+        self.item_context
+            .single_item
+            .render_naturally(state, item, position, kind)
     }
 
     pub(crate) fn try_measure_source_request_width_to_text_row(
@@ -1227,19 +1192,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
             source_item,
             self.buffer_id,
             self.buffer,
-            self.item_context.face_id,
+            self.item_context.face_id(),
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceRequest::new(
-            self.item_context.base_face,
-            self.item_context.face_id,
-            &self.item_context.frame,
-            item,
-            position,
-            kind,
-        );
-        measure_single_display_item_width_naturally(state, request)
+        self.item_context
+            .single_item
+            .measure_width_naturally(state, item, position, kind)
     }
 
     pub(crate) fn measure_source_request_width_to_text_row(
@@ -1253,20 +1212,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
             source_item,
             self.buffer_id,
             self.buffer,
-            self.item_context.face_id,
+            self.item_context.face_id(),
         ) else {
-            return fallback_width.resolve_to_text_row(&self.item_context.frame);
+            return fallback_width.resolve_to_text_row(self.item_context.frame());
         };
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceRequest::new(
-            self.item_context.base_face,
-            self.item_context.face_id,
-            &self.item_context.frame,
-            item,
-            position,
-            kind,
-        );
-        measure_single_display_item_width_with_source_fallback(state, request, fallback_width)
+        self.item_context
+            .single_item
+            .measure_width_with_source_fallback(state, item, position, kind, fallback_width)
     }
 }

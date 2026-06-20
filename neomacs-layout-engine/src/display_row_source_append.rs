@@ -109,6 +109,12 @@ struct PreparedSingleDisplayItemSourceAppend {
     position: DisplayRowPosition,
 }
 
+pub(crate) struct SingleDisplayItemAppendContext<'face> {
+    base_face: &'face ResolvedFace,
+    face_id: u32,
+    frame: DisplayRowAppendFrame,
+}
+
 impl SyntheticTextSource {
     #[cfg(test)]
     pub(crate) fn new(source_id: u64, text: impl Into<Box<str>>) -> Self {
@@ -412,6 +418,112 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         let request = self.hscroll_truncation_request(state.default_face(), content_x);
         self.render_request_to_text_row(state, geometry, request)
             .map(|progress| progress.end)
+    }
+}
+
+impl<'face> SingleDisplayItemAppendContext<'face> {
+    pub(crate) fn new(
+        base_face: &'face ResolvedFace,
+        face_id: u32,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            base_face,
+            face_id,
+            frame,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn face_id(&self) -> u32 {
+        self.face_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn frame(&self) -> &DisplayRowAppendFrame {
+        &self.frame
+    }
+
+    fn request(
+        &self,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> SingleDisplayItemSourceRequest<'_, '_> {
+        SingleDisplayItemSourceRequest::new(
+            self.base_face,
+            self.face_id,
+            &self.frame,
+            item,
+            position,
+            kind,
+        )
+    }
+
+    pub(crate) fn render_with_policy<P: DisplayRowRenderPolicy>(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowAppendProgress> {
+        render_single_display_item_with_policy(
+            state,
+            self.request(item, position, kind),
+            render_policy,
+        )
+    }
+
+    pub(crate) fn render_naturally(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Option<DisplayRowAppendProgress> {
+        render_single_display_item_naturally(state, self.request(item, position, kind))
+    }
+
+    pub(crate) fn measure_width_with_policy<P: DisplayRowRenderPolicy>(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<f32> {
+        measure_single_display_item_width_with_policy(
+            state,
+            self.request(item, position, kind),
+            render_policy,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn measure_width_naturally(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Option<f32> {
+        measure_single_display_item_width_naturally(state, self.request(item, position, kind))
+    }
+
+    pub(crate) fn measure_width_with_source_fallback(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        fallback_width: DisplaySourceFallbackWidth,
+    ) -> f32 {
+        measure_single_display_item_width_with_source_fallback(
+            state,
+            self.request(item, position, kind),
+            fallback_width,
+        )
     }
 }
 
