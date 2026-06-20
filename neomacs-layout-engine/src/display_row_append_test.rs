@@ -6776,6 +6776,157 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailin
 }
 
 #[test]
+fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wrap_enabled() {
+    let mut context = RowTransitionTestContext::new("source-run-word-wrap-enabled");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("ab");
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
+    let params = test_display_space_window_params();
+    let text = b"ab";
+    let mut byte_idx = 0;
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
+    let mut charpos = 0;
+    let mut col = 0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut x = 0.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let face_resolution_context = BufferSourceFaceResolutionContext::new(
+        &snapshot,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        false,
+    );
+    let loop_context = BufferSourceLoopRequestContext::new(
+        buf_id,
+        0,
+        2,
+        99,
+        &params,
+        0.0,
+        false,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        context.defaults,
+        0,
+        4,
+        context.row_limit,
+    );
+
+    let continue_buffer_walk = BufferSourceRenderRequest::new(
+        loop_context,
+        text,
+        &params,
+        &active_face,
+        BufferSourceLoopMutableState::new(
+            &mut invisible_text_checkpoint,
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
+        ),
+    )
+    .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
+
+    assert!(continue_buffer_walk);
+    assert_eq!(byte_idx, 2);
+    assert_eq!(charpos, 2);
+    assert_eq!(x, 16.0);
+    assert_eq!(col, 2);
+    assert!(word_wrap.has_candidate());
+    assert_eq!(word_wrap.candidate().byte_idx(), 0);
+    assert_eq!(word_wrap.candidate().charpos(), 0);
+    context
+        .builder
+        .edit_current_row_for_test(|row| {
+            let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
+            assert_eq!(text_glyphs.len(), 2);
+            assert!(matches!(
+                text_glyphs[0].glyph_type,
+                GlyphType::Char { ch: 'a' }
+            ));
+            assert!(matches!(
+                text_glyphs[1].glyph_type,
+                GlyphType::Char { ch: 'b' }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
 fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let mut eval = Context::new();
     let buf_id = eval

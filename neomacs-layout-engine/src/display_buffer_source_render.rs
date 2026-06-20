@@ -154,7 +154,7 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
         return false;
     };
     if context.overlay_context.is_enabled()
-        || word_wrap.is_enabled()
+        || (word_wrap.is_enabled() && text.contains(' '))
         || (trailing_whitespace.is_enabled() && text.contains(' '))
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
@@ -226,6 +226,12 @@ fn apply_whole_text_run_trailing_whitespace_state(
     }
 }
 
+fn apply_whole_text_run_word_wrap_state(text: &str, word_wrap: &mut WordWrapRenderState) {
+    if word_wrap.is_enabled() && !text.contains(' ') {
+        word_wrap.disallow_after_current_char();
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     source_item: DisplayItem,
@@ -239,6 +245,7 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     point_charpos: i64,
     cursor_info: &mut CursorCaptureState,
     trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    word_wrap: &mut WordWrapRenderState,
     source_render: &mut TextRowSourceRenderState<'_>,
     progress: &mut DisplaySourceProgressState<'_>,
 ) -> BufferSourceItemRenderOutcome {
@@ -261,6 +268,7 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         &append_progress,
     );
     apply_whole_text_run_trailing_whitespace_state(source_text, trailing_whitespace);
+    apply_whole_text_run_word_wrap_state(source_text, word_wrap);
     progress.row.apply_position(append_progress.end);
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
@@ -352,8 +360,9 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &mut source_render,
     ) {
         let source_text = source_item.ascii_text_run().unwrap_or_default().to_owned();
-        let (_source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
+        let (source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
             source_item.into_render_parts();
+        source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
         return render_whole_text_run_and_apply(
             source_item,
             &source_text,
@@ -366,6 +375,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             context.point_charpos,
             cursor_info,
             trailing_whitespace,
+            word_wrap,
             &mut source_render,
             &mut progress,
         );
