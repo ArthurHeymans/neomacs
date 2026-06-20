@@ -66,14 +66,6 @@ struct BufferTextWindowRenderedBody<'a> {
     tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 
-struct BufferTextWindowRenderContexts<'a, 'surface, B>
-where
-    B: LayoutBufferView,
-{
-    pub(crate) face_resolution: BufferCurrentFaceResolutionContext<'a, B>,
-    pub(crate) overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
-}
-
 pub(crate) struct BufferTextWindowBodyPlan<'a, 'surface, B>
 where
     B: LayoutBufferView,
@@ -82,19 +74,15 @@ where
     retry_bounds: BufferTextWindowRetryBounds,
     publish_request: BufferTextWindowRedisplayPublishRequest,
     local_display_policy: BufferTextWindowLocalDisplayPolicy,
-    initial_face_state: BufferTextWindowInitialFaceStateRequest<'a>,
-    row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-    loop_context: BufferTextWindowLoopRequestContext,
-    render_contexts: BufferTextWindowRenderContexts<'a, 'surface, B>,
-    tail_context: BufferTextWindowTailRequestContext<'a>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
     measurement_policy: DisplayRowMeasurementPolicy,
     default_resolved: &'a ResolvedFace,
     default_face_char_width: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
+    row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+    loop_context: BufferTextWindowLoopRequestContext,
+    face_resolution: BufferCurrentFaceResolutionContext<'a, B>,
+    overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
+    tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
@@ -305,31 +293,29 @@ impl BufferTextWindowOutputSetup {
         B: LayoutBufferView,
     {
         let has_overlays = !buffer.layout_overlays().is_empty();
-        let render_contexts = BufferTextWindowRenderContexts {
-            face_resolution: BufferCurrentFaceResolutionContext::new(
-                buffer,
-                face_resolver,
-                default_face.measurement_policy(),
-                default_face.face(),
-                default_face.char_width(),
-                default_face.ascent(),
-                default_face.row_height(),
-                geometry.char_width,
-                geometry.char_height,
-                font_ascent,
-                window_system,
-            ),
-            overlay_text_row: BufferOverlayStringTextRowRenderContext::new(
-                has_overlays,
-                output_window_id,
-                append_surface,
-                geometry.char_height,
-                default_face.ascent(),
-                geometry.text_y,
-                self.body_install_context.display_text_row_base(),
-                geometry.max_rows,
-            ),
-        };
+        let face_resolution = BufferCurrentFaceResolutionContext::new(
+            buffer,
+            face_resolver,
+            default_face.measurement_policy(),
+            default_face.face(),
+            default_face.char_width(),
+            default_face.ascent(),
+            default_face.row_height(),
+            geometry.char_width,
+            geometry.char_height,
+            font_ascent,
+            window_system,
+        );
+        let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
+            has_overlays,
+            output_window_id,
+            append_surface,
+            geometry.char_height,
+            default_face.ascent(),
+            geometry.text_y,
+            self.body_install_context.display_text_row_base(),
+            geometry.max_rows,
+        );
         let loop_context = BufferTextWindowLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
@@ -352,15 +338,10 @@ impl BufferTextWindowOutputSetup {
             geometry.char_width,
             geometry.char_height,
         );
-        let initial_face_state = BufferTextWindowInitialFaceStateRequest::new(
-            default_face.measurement_policy(),
-            default_face.face(),
+        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
             default_face.char_width(),
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                default_face.char_width(),
-                default_face.row_height(),
-                default_face.ascent(),
-            ),
+            default_face.row_height(),
+            default_face.ascent(),
         );
         let tail_context = BufferTextWindowTailRequestContext::new(
             params,
@@ -401,10 +382,14 @@ impl BufferTextWindowOutputSetup {
             retry_bounds: self.retry_bounds,
             publish_request,
             local_display_policy,
-            initial_face_state,
+            measurement_policy: default_face.measurement_policy(),
+            default_resolved: default_face.face(),
+            default_face_char_width: default_face.char_width(),
+            fallback_metrics,
             row_prelude_context,
             loop_context,
-            render_contexts,
+            face_resolution,
+            overlay_text_row,
             tail_context,
         }
     }
@@ -474,17 +459,22 @@ where
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowRenderedBody<'a> {
-        let BufferTextWindowRenderContexts {
-            face_resolution,
-            overlay_text_row,
-        } = self.render_contexts;
         let mut line_numbers = self.local_display_policy.initial_line_numbers(
             buf_access,
             self.tail_context.window_start,
             self.loop_context.point_charpos(),
         );
         let mut face_scan = FaceScanCheckpoint::initial();
-        let mut active_face_state = self.initial_face_state.into_active_face_state(font_metrics);
+        let default_measured_face = self.measurement_policy.measured_face(
+            neomacs_display_protocol::face::BasicFaceId::Default.into(),
+            self.default_resolved,
+            None,
+            self.default_face_char_width,
+            self.fallback_metrics,
+            font_metrics,
+        );
+        let mut active_face_state =
+            DisplayRowActiveFaceState::new(self.default_resolved.clone(), default_measured_face);
         let (output_emitter, post_loop) = walk_setup.begin_render_body_and_tail(
             self.begin_request,
             output,
@@ -496,11 +486,11 @@ where
             &mut active_face_state,
             self.row_prelude_context,
             self.loop_context,
-            face_resolution,
+            self.face_resolution,
             &self.tail_context,
             text,
             params,
-            overlay_text_row,
+            self.overlay_text_row,
             buffer,
             buf_access,
         );
@@ -611,36 +601,5 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         BufferTextWindowRenderAttemptOutcome::Finished {
             redisplay_positions,
         }
-    }
-}
-
-impl<'a> BufferTextWindowInitialFaceStateRequest<'a> {
-    pub(crate) fn new(
-        measurement_policy: DisplayRowMeasurementPolicy,
-        default_resolved: &'a ResolvedFace,
-        default_face_char_width: f32,
-        fallback_metrics: DisplayRowFallbackMetrics,
-    ) -> Self {
-        Self {
-            measurement_policy,
-            default_resolved,
-            default_face_char_width,
-            fallback_metrics,
-        }
-    }
-
-    pub(crate) fn into_active_face_state(
-        self,
-        font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowActiveFaceState {
-        let default_measured_face = self.measurement_policy.measured_face(
-            neomacs_display_protocol::face::BasicFaceId::Default.into(),
-            self.default_resolved,
-            None,
-            self.default_face_char_width,
-            self.fallback_metrics,
-            font_metrics,
-        );
-        DisplayRowActiveFaceState::new(self.default_resolved.clone(), default_measured_face)
     }
 }
