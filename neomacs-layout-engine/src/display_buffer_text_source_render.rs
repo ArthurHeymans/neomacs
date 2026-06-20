@@ -5,9 +5,9 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
+use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_item_append::BufferTextRowAppendContext;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
@@ -199,7 +199,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 
     let buffer_source_char = source_step_char.source_char(context.params.nobreak_char_display);
-    let buffer_row_append_context = BufferTextRowAppendContext::new(
+    let buffer_row_append_context = BufferSourceRowAppendContext::new(
         buffer,
         context.buffer_id,
         context.append_surface,

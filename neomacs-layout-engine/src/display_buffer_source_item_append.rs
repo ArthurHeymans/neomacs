@@ -38,12 +38,12 @@ impl DisplaySourceTextRequest {
         buffer: &B,
         face_id: u32,
     ) -> Option<DisplaySourceRangeItemAppendRequest> {
-        buffer_text_source_text_item_append_request(self.source_item(), buffer_id, buffer, face_id)
+        buffer_source_text_item_append_request(self.source_item(), buffer_id, buffer, face_id)
     }
 }
 
 #[cfg(test)]
-pub(crate) fn buffer_text_source_text_item_append_request<B: LayoutBufferView + ?Sized>(
+pub(crate) fn buffer_source_text_item_append_request<B: LayoutBufferView + ?Sized>(
     source_item: DisplaySourceTextItemRequest,
     buffer_id: BufferId,
     buffer: &B,
@@ -55,7 +55,7 @@ pub(crate) fn buffer_text_source_text_item_append_request<B: LayoutBufferView + 
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextRowAppendContext<'source, 'surface, B: LayoutBufferView + ?Sized> {
+pub(crate) struct BufferSourceRowAppendContext<'source, 'surface, B: LayoutBufferView + ?Sized> {
     buffer: &'source B,
     buffer_id: BufferId,
     append_surface: &'surface DisplayRowAppendSurface,
@@ -65,7 +65,7 @@ pub(crate) struct BufferTextRowAppendContext<'source, 'surface, B: LayoutBufferV
 }
 
 impl<'source, 'surface, B: LayoutBufferView + ?Sized>
-    BufferTextRowAppendContext<'source, 'surface, B>
+    BufferSourceRowAppendContext<'source, 'surface, B>
 {
     pub(crate) fn new(
         buffer: &'source B,
@@ -122,7 +122,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             return source_item.clone();
         }
 
-        buffer_text_source_item_append_request(
+        buffer_source_item_append_request(
             request.source_item_request(),
             self.buffer_id,
             self.buffer,
@@ -350,7 +350,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
 }
 
 impl<'source, 'surface, B: LayoutBufferView + ?Sized> DisplaySourceCharAppendContext
-    for BufferTextRowAppendContext<'source, 'surface, B>
+    for BufferSourceRowAppendContext<'source, 'surface, B>
 {
     fn append_source_char_plan_to_text_row(
         &self,
@@ -358,7 +358,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized> DisplaySourceCharAppendCon
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplaySourceTextCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        BufferTextRowAppendContext::append_source_char_plan_to_text_row(self, geometry, state, plan)
+        BufferSourceRowAppendContext::append_source_char_plan_to_text_row(
+            self, geometry, state, plan,
+        )
     }
 
     fn append_special_source_char_plan_to_text_row_and_emit(
@@ -367,7 +369,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized> DisplaySourceCharAppendCon
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplaySourceSpecialCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        BufferTextRowAppendContext::append_special_source_char_plan_to_text_row_and_emit(
+        BufferSourceRowAppendContext::append_special_source_char_plan_to_text_row_and_emit(
             self, geometry, state, plan,
         )
     }
@@ -387,7 +389,7 @@ fn matching_special_display_item(
     }
 }
 
-pub(crate) fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
+pub(crate) fn buffer_source_item_append_request<B: LayoutBufferView + ?Sized>(
     source_item: DisplaySourceItemRequest,
     buffer_id: BufferId,
     buffer: &B,
@@ -399,14 +401,14 @@ pub(crate) fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Size
 }
 
 #[cfg(test)]
-pub(crate) struct BufferTextSourceRequestAppendContext<'a, B: LayoutBufferView + ?Sized> {
+pub(crate) struct BufferSourceRequestAppendContext<'a, B: LayoutBufferView + ?Sized> {
     buffer: &'a B,
     buffer_id: BufferId,
     item_context: DisplaySourceItemAppendContext<'a>,
 }
 
 #[cfg(test)]
-impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, B> {
+impl<'a, B: LayoutBufferView + ?Sized> BufferSourceRequestAppendContext<'a, B> {
     pub(crate) fn new(
         buffer: &'a B,
         buffer_id: BufferId,
@@ -427,7 +429,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         source_item: DisplaySourceItemRequest,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
-        let append_item = buffer_text_source_item_append_request(
+        let append_item = buffer_source_item_append_request(
             source_item,
             self.buffer_id,
             self.buffer,
@@ -446,7 +448,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         source_item: DisplaySourceItemRequest,
         position: DisplayRowPosition,
     ) -> Option<f32> {
-        let append_item = buffer_text_source_item_append_request(
+        let append_item = buffer_source_item_append_request(
             source_item,
             self.buffer_id,
             self.buffer,
@@ -466,7 +468,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = source_item.fallback_width();
-        let Some(append_item) = buffer_text_source_item_append_request(
+        let Some(append_item) = buffer_source_item_append_request(
             source_item,
             self.buffer_id,
             self.buffer,

@@ -4,6 +4,7 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
+use crate::display_buffer_source_item_append::*;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
@@ -14,7 +15,6 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_loop_context::*;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::*;
@@ -3993,7 +3993,7 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
 
-    let tab_request = buffer_text_source_text_item_append_request(
+    let tab_request = buffer_source_text_item_append_request(
         DisplaySourceTextItemRequest::new(
             DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
             '\t',
@@ -4015,7 +4015,7 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
         DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t"
     ));
 
-    let mapped_request = buffer_text_source_item_append_request(
+    let mapped_request = buffer_source_item_append_request(
         DisplaySourceItemRequest::new(
             DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2)),
             DisplaySourceAppendItem::SourceMappedText { text: "x".into() },
@@ -4093,7 +4093,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = DisplaySourceRowAppendState::default();
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
 
@@ -4140,7 +4140,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = DisplaySourceRowAppendState::default();
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
 
@@ -6192,7 +6192,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
@@ -6539,7 +6539,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
@@ -7410,7 +7410,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let mut append_state = DisplaySourceRowAppendState::default();
     let measured_width = append_context
         .resolve_source_render_plan_request_to_text_row(
@@ -7507,7 +7507,7 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
     builder.begin_row(0, GlyphRowRole::Text);
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
@@ -7580,7 +7580,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
@@ -7660,7 +7660,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     );
 
     let append_context =
-        BufferTextSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+        BufferSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
         .try_measure_source_request_width_to_text_row(
             &mut text_row_source_measure_state(
@@ -8032,12 +8032,12 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("nobreak source char should map to a display item");
-    let source_item = buffer_text_source_item_append_request(
+    let source_item = buffer_source_item_append_request(
         source_request.source_item_request(),
         buf_id,
         &snapshot,
@@ -8144,7 +8144,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = DisplaySourceTextChar::new('\u{0007}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
@@ -8230,12 +8230,12 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = DisplaySourceTextChar::new('\u{fff0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("glyphless source char should map to a display item");
-    let source_item = buffer_text_source_item_append_request(
+    let source_item = buffer_source_item_append_request(
         source_request.source_item_request(),
         buf_id,
         &snapshot,
