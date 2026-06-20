@@ -469,6 +469,12 @@ enum BufferTextSourceCursorItem {
     Replacement(BufferTextReplacementItem),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum BufferTextAlignedSourceCursorItem {
+    Item(BufferTextSourceItem),
+    Replacement(BufferTextReplacementItem),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BufferTextDisplayReplacementMode {
     InlineSourceItems,
@@ -482,6 +488,65 @@ impl BufferTextDisplayReplacementMode {
 
     fn inlines_replacement_strings(self) -> bool {
         matches!(self, Self::InlineSourceItems)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BufferTextSourceCursorReadRequest {
+    text_start_byte: usize,
+    position: BufferTextSourcePosition,
+}
+
+impl BufferTextSourceCursorReadRequest {
+    fn new(text_start_byte: usize, position: BufferTextSourcePosition) -> Self {
+        Self {
+            text_start_byte,
+            position,
+        }
+    }
+
+    fn expected_source_pos(self) -> CharPos0 {
+        CharPos0::new(self.position.charpos().max(0) as usize)
+    }
+
+    fn alignment(self, source_char: Option<char>) -> BufferTextSourceAlignmentRequest {
+        BufferTextSourceAlignmentRequest::new(self.text_start_byte, self.position, source_char)
+    }
+
+    fn replacement_alignment(self) -> BufferTextSourceAlignmentRequest {
+        BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, self.position)
+    }
+
+    fn read<B: LayoutBufferView + ?Sized>(
+        self,
+        source: &mut BufferTextSourceCursor<'_, B>,
+        context: &mut DisplaySourceContext<'_>,
+        replacement_mode: BufferTextDisplayReplacementMode,
+    ) -> Option<BufferTextAlignedSourceCursorItem> {
+        let expected_source_pos = self.expected_source_pos();
+        if source.current_char_pos() != expected_source_pos {
+            source.reset_to(expected_source_pos);
+        }
+
+        let source_char = source.char_at(expected_source_pos);
+        match source.next_cursor_item(context, replacement_mode)? {
+            BufferTextSourceCursorItem::Item(item) => self
+                .alignment(source_char)
+                .align_display_item(item)
+                .map(BufferTextAlignedSourceCursorItem::Item),
+            BufferTextSourceCursorItem::Replacement(item) => {
+                if !self.replacement_alignment().replacement_matches(&item)? {
+                    tracing::error!(
+                        "BufferTextConsumedItemAdapter: display replacement did not match \
+                         buffer walk byte {} charpos {}",
+                        self.position.byte_idx(),
+                        self.position.charpos()
+                    );
+                    return None;
+                }
+                Some(BufferTextAlignedSourceCursorItem::Replacement(item))
+            }
+        }
     }
 }
 
@@ -668,60 +733,15 @@ impl BufferTextConsumedItemAdapter {
             return None;
         }
 
-        let expected_source_pos = CharPos0::new(position.charpos().max(0) as usize);
-        if source.current_char_pos() != expected_source_pos {
-            source.reset_to(expected_source_pos);
-        }
-
-        let source_char = source.char_at(expected_source_pos);
-        let item = source.next_item(context)?;
-        BufferTextSourceAlignmentRequest::new(self.text_start_byte, *position, source_char)
-            .align_display_item(item)
-    }
-
-    fn next_buffer_walk_item_from_source<B: LayoutBufferView + ?Sized>(
-        &mut self,
-        source: &mut BufferTextSourceCursor<'_, B>,
-        context: &mut DisplaySourceContext<'_>,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedSourceItem> {
-        if self.pending_text_run.is_some() {
-            tracing::debug!(
-                "BufferTextConsumedItemAdapter: requested typed item while a text run is pending"
-            );
-            return None;
-        }
-
-        let expected_source_pos = CharPos0::new(position.charpos().max(0) as usize);
-        if source.current_char_pos() != expected_source_pos {
-            source.reset_to(expected_source_pos);
-        }
-
-        let source_char = source.char_at(expected_source_pos);
-        match source.next_buffer_walk_item(context)? {
-            BufferTextSourceCursorItem::Item(item) => {
-                let item = BufferTextSourceAlignmentRequest::new(
-                    self.text_start_byte,
-                    *position,
-                    source_char,
-                )
-                .align_display_item(item)?;
-                self.consumed_display_item_from_source_item(item, position)
-                    .map(BufferTextConsumedSourceItem::DisplayItem)
-            }
-            BufferTextSourceCursorItem::Replacement(item) => {
-                if !BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
-                    .replacement_matches(&item)?
-                {
-                    tracing::error!(
-                        "BufferTextConsumedItemAdapter: display replacement did not match \
-                         buffer walk byte {} charpos {}",
-                        position.byte_idx(),
-                        position.charpos()
-                    );
-                    return None;
-                }
-                Some(BufferTextConsumedSourceItem::Replacement(item))
+        match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
+            source,
+            context,
+            BufferTextDisplayReplacementMode::InlineSourceItems,
+        )? {
+            BufferTextAlignedSourceCursorItem::Item(item) => Some(item),
+            BufferTextAlignedSourceCursorItem::Replacement(_) => {
+                debug_assert!(false, "inline source cursor surfaced a buffer replacement");
+                None
             }
         }
     }
@@ -736,7 +756,25 @@ impl BufferTextConsumedItemAdapter {
             return Some(BufferTextConsumedSourceItem::DisplayItem(step));
         }
 
-        self.next_buffer_walk_item_from_source(source, context, position)
+        if self.pending_text_run.is_some() {
+            tracing::debug!(
+                "BufferTextConsumedItemAdapter: requested typed item while a text run is pending"
+            );
+            return None;
+        }
+
+        match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
+            source,
+            context,
+            BufferTextDisplayReplacementMode::ConsumedSourceItem,
+        )? {
+            BufferTextAlignedSourceCursorItem::Item(item) => self
+                .consumed_display_item_from_source_item(item, position)
+                .map(BufferTextConsumedSourceItem::DisplayItem),
+            BufferTextAlignedSourceCursorItem::Replacement(item) => {
+                Some(BufferTextConsumedSourceItem::Replacement(item))
+            }
+        }
     }
 
     #[cfg(test)]
@@ -1152,16 +1190,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 face,
             )?));
         }
-    }
-
-    fn next_buffer_walk_item(
-        &mut self,
-        context: &mut DisplaySourceContext<'_>,
-    ) -> Option<BufferTextSourceCursorItem> {
-        self.next_cursor_item(
-            context,
-            BufferTextDisplayReplacementMode::ConsumedSourceItem,
-        )
     }
 }
 
