@@ -4250,6 +4250,238 @@ pub(crate) fn analyze_cfg(
     })
 }
 
+/// Apply one non-terminator op's effect to the known-fixnum operand-stack model
+/// `k` (parallel to the real operand stack: `k[i]` is `true` iff position `i` is
+/// PROVABLY a fixnum). Returns `Err(())` for any op this analysis does not model
+/// precisely, so the caller bails the whole function (conservative — no guard is
+/// elided). Fixnum constants and fixnum arithmetic results are `true`;
+/// StackRef/Dup/StackSet/DiscardN move bits; everything else is `false`.
+fn apply_known_fixnum_op(op: &Op, constants: &[Value], k: &mut Vec<bool>) -> Result<(), ()> {
+    match op {
+        Op::Constant(idx) => {
+            let is_fix = constants
+                .get(*idx as usize)
+                .map(|v| (v.bits() & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE)
+                .unwrap_or(false);
+            k.push(is_fix);
+        }
+        Op::Nil | Op::True => k.push(false),
+        Op::StackRef(j) => {
+            let n = *j as usize;
+            let v = *k.get(k.len().checked_sub(1 + n).ok_or(())?).ok_or(())?;
+            k.push(v);
+        }
+        Op::Dup => {
+            let v = *k.last().ok_or(())?;
+            k.push(v);
+        }
+        Op::StackSet(j) => {
+            let n = *j as usize;
+            let v = k.pop().ok_or(())?;
+            if n >= 1 {
+                let idx = k.len().checked_sub(n).ok_or(())?;
+                k[idx] = v;
+            }
+        }
+        Op::Pop => {
+            k.pop().ok_or(())?;
+        }
+        Op::DiscardN(raw) => {
+            let n = (*raw & 0x7F) as usize;
+            let preserve = (*raw & 0x80) != 0 && n > 0;
+            if preserve {
+                let tos = k.pop().ok_or(())?;
+                let keep = k.len().checked_sub(n).ok_or(())?;
+                k.truncate(keep);
+                k.push(tos);
+            } else {
+                let keep = k.len().checked_sub(n).ok_or(())?;
+                k.truncate(keep);
+            }
+        }
+        // Fixnum arithmetic: the result is range-checked + retagged -> fixnum.
+        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Max | Op::Min => {
+            k.pop().ok_or(())?;
+            k.pop().ok_or(())?;
+            k.push(true);
+        }
+        Op::Add1 | Op::Sub1 | Op::Negate => {
+            k.pop().ok_or(())?;
+            k.push(true);
+        }
+        // Operand-consuming ops whose result is NOT a known fixnum: pop `needs`
+        // (== the operands consumed for these) and push the results as unknown.
+        // `simple_effect` is authoritative for the depth change.
+        Op::Eq
+        | Op::Eqlsign
+        | Op::Lss
+        | Op::Gtr
+        | Op::Leq
+        | Op::Geq
+        | Op::Null
+        | Op::Not
+        | Op::Consp
+        | Op::Stringp
+        | Op::Listp
+        | Op::Symbolp
+        | Op::Integerp
+        | Op::Numberp
+        | Op::Car
+        | Op::Cdr
+        | Op::CarSafe
+        | Op::CdrSafe
+        | Op::Cons
+        | Op::Aset
+        | Op::List(_)
+        | Op::Call(_)
+        | Op::Apply(_)
+        | Op::CallBuiltin(..)
+        | Op::CallBuiltinSym(..)
+        | Op::VarRef(_)
+        | Op::VarSet(_)
+        | Op::VarBind(_)
+        | Op::Unbind(_)
+        | Op::UnwindProtectPop
+        | Op::SaveCurrentBuffer
+        | Op::SaveExcursion
+        | Op::SaveRestriction => {
+            let (needs, delta) = simple_effect(op).map_err(|_| ())?;
+            // These ops (unlike StackRef/Dup/StackSet/DiscardN) consume exactly
+            // their top `needs` operands, so popping `needs` keeps `k` aligned.
+            for _ in 0..needs {
+                k.pop().ok_or(())?;
+            }
+            let pushes = needs as i64 + delta;
+            for _ in 0..pushes.max(0) {
+                k.push(false);
+            }
+        }
+        // Direct/slice builtin dispatch (e.g. `1+`-as-subr): pop nargs, push one
+        // unknown result. Detected the same way `simple_effect` does.
+        other if direct_builtin_spec(other).is_some() || slice_builtin_spec(other).is_some() => {
+            let (needs, delta) = simple_effect(other).map_err(|_| ())?;
+            for _ in 0..needs {
+                k.pop().ok_or(())?;
+            }
+            let pushes = needs as i64 + delta;
+            for _ in 0..pushes.max(0) {
+                k.push(false);
+            }
+        }
+        // Anything else (Switch/handler ops/unmodeled) -> bail.
+        _ => return Err(()),
+    }
+    Ok(())
+}
+
+/// **Cross-block redundant-guard elimination — the analysis (UNWIRED).**
+///
+/// Forward dataflow fixpoint over the CFG: for each block leader, the operand-
+/// stack SLOTS provably fixnum at block entry. A slot is known-fixnum at entry
+/// iff it is known-fixnum on EVERY predecessor edge (meet = AND); loops need the
+/// fixpoint (the back-edge induction value depends on the slot's own bit). It is
+/// a MUST analysis, so non-entry blocks start at TOP (all-`true`) and are
+/// narrowed by predecessors; the entry block starts all-`false` (args untyped).
+///
+/// Conservative: returns an EMPTY map (no elision anywhere) for any function
+/// containing an op this analysis does not model precisely (Switch, catch/
+/// condition-case handlers, ...). NOT yet wired into `lower_leaf_full`; the
+/// integration that consumes this is a follow-up. `cfg` must come from
+/// [`analyze_cfg`] on the same `ops`.
+fn compute_known_fixnum_slots(
+    ops: &[Op],
+    constants: &[Value],
+    cfg: &Cfg,
+) -> HashMap<usize, Vec<bool>> {
+    let n = ops.len();
+    let next_leader = |idx: usize| cfg.leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
+    let empty = HashMap::new();
+
+    // in[leader] = known-fixnum bits at block entry. Entry (0) is all-false;
+    // every other block starts at TOP for the AND fixpoint.
+    let mut in_sets: HashMap<usize, Vec<bool>> = HashMap::new();
+    for &l in &cfg.leaders {
+        let d = cfg.entry_depth.get(&l).copied().unwrap_or(0);
+        in_sets.insert(l, vec![l != 0; d]);
+    }
+
+    // AND a predecessor contribution into a successor's in-set; report narrowing.
+    fn meet(into: &mut [bool], contrib: &[bool]) -> bool {
+        let mut changed = false;
+        for (slot, &c) in into.iter_mut().zip(contrib.iter()) {
+            if *slot && !c {
+                *slot = false;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    let mut iterate = true;
+    while iterate {
+        iterate = false;
+        for &l in &cfg.leaders {
+            let mut k = in_sets[&l].clone();
+            let end = next_leader(l);
+            let mut edges: Vec<(usize, Vec<bool>)> = Vec::new();
+            let mut terminated = false;
+            for op in &ops[l..end] {
+                match op {
+                    Op::Return | Op::Throw => {
+                        terminated = true;
+                        break;
+                    }
+                    Op::Goto(t) => {
+                        edges.push((*t as usize, k.clone()));
+                        terminated = true;
+                        break;
+                    }
+                    Op::GotoIfNil(t) | Op::GotoIfNotNil(t) => {
+                        if k.pop().is_none() {
+                            return empty;
+                        }
+                        edges.push((*t as usize, k.clone()));
+                        edges.push((end, k.clone()));
+                        terminated = true;
+                        break;
+                    }
+                    Op::GotoIfNilElsePop(t) | Op::GotoIfNotNilElsePop(t) => {
+                        // The jump preserves TOS; the fall-through pops it.
+                        edges.push((*t as usize, k.clone()));
+                        let mut ft = k.clone();
+                        if ft.pop().is_none() {
+                            return empty;
+                        }
+                        edges.push((end, ft));
+                        terminated = true;
+                        break;
+                    }
+                    other => {
+                        if apply_known_fixnum_op(other, constants, &mut k).is_err() {
+                            // Unmodeled op (Switch / handler / ...): bail entirely.
+                            return empty;
+                        }
+                    }
+                }
+            }
+            if !terminated {
+                if end >= n {
+                    return empty;
+                }
+                edges.push((end, k.clone()));
+            }
+            for (t, contrib) in &edges {
+                if let Some(into) = in_sets.get_mut(t) {
+                    if meet(into, contrib) {
+                        iterate = true;
+                    }
+                }
+            }
+        }
+    }
+    in_sets
+}
+
 /// Write the live operand `stack` back into the slot variables so a successor
 /// block can read it (the variable/SSA machinery inserts the needed phis).
 fn write_stack_to_vars(fb: &mut FunctionBuilder, vars: &[Variable], stack: &[ClifValue]) {
@@ -5076,6 +5308,65 @@ mod tests {
         assert!(is_known_fixnum(&fb, fixnum), "a fixnum constant is a known fixnum");
         assert!(!is_known_fixnum(&fb, sum), "a bare iadd is not a known fixnum");
         assert!(!is_known_fixnum(&fb, nil), "nil is not a known fixnum");
+    }
+
+    fn known_fixnum_at(ops: &[Op], constants: &[Value], leader: usize) -> Option<Vec<bool>> {
+        let cfg = analyze_cfg(ops, constants, None, 0).unwrap();
+        compute_known_fixnum_slots(ops, constants, &cfg).get(&leader).cloned()
+    }
+
+    #[test]
+    fn cross_block_known_fixnum_propagates_meets_and_loops() {
+        // Forward: a fixnum constant flows across a Goto into its successor block.
+        let ops = [Op::Constant(0), Op::Goto(2), Op::Return];
+        assert_eq!(
+            known_fixnum_at(&ops, &[Value::make_int(7)], 2),
+            Some(vec![true]),
+            "fixnum constant is known-fixnum across a Goto"
+        );
+        // A non-fixnum constant is NOT known-fixnum across the edge.
+        assert_eq!(
+            known_fixnum_at(&ops, &[Value::NIL], 2),
+            Some(vec![false]),
+            "nil is not a known fixnum across a Goto"
+        );
+
+        // Merge narrows: fixnum on the then-path, non-fixnum on the else-path.
+        let diamond = [
+            Op::Constant(0),  // 0: condition
+            Op::GotoIfNil(4), // 1: pop, branch to else(4) or fall to then(2)
+            Op::Constant(1),  // 2: then -> fixnum
+            Op::Goto(5),      // 3
+            Op::Constant(2),  // 4: else -> nil (leader); falls through to 5
+            Op::Return,       // 5: merge (leader)
+        ];
+        let cs = [Value::make_int(0), Value::make_int(9), Value::NIL];
+        assert_eq!(
+            known_fixnum_at(&diamond, &cs, 5),
+            Some(vec![false]),
+            "merge of fixnum and non-fixnum is not known-fixnum"
+        );
+
+        // THE TARGET: a loop induction variable (i=0; while i<10: i=1+i) is
+        // proven fixnum at the loop head across the back-edge (the fixpoint).
+        let loop_ops = [
+            Op::Constant(0),   // 0: i = 0
+            Op::StackRef(0),   // 1: loop head (back-edge target): push i
+            Op::Constant(1),   // 2: push limit 10
+            Op::Lss,           // 3: i < 10
+            Op::GotoIfNil(9),  // 4: pop; exit -> 9
+            Op::StackRef(0),   // 5: body: push i
+            Op::Add1,          // 6: 1+ i
+            Op::StackSet(1),   // 7: i = 1+ i
+            Op::Goto(1),       // 8: back-edge
+            Op::Return,        // 9: exit
+        ];
+        let lc = [Value::make_int(0), Value::make_int(10)];
+        assert_eq!(
+            known_fixnum_at(&loop_ops, &lc, 1),
+            Some(vec![true]),
+            "loop induction variable is known-fixnum at the loop head"
+        );
     }
 
     #[test]
