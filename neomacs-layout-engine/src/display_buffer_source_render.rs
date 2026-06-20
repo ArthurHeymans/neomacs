@@ -140,9 +140,10 @@ impl<'a> BufferSourceItemRenderContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
+fn whole_text_run_can_render<B: LayoutBufferView>(
     source_item: &DisplaySourceStepItem,
     context: &BufferSourceItemRenderContext<'_>,
+    buffer: &B,
     right_edge_px: f32,
     position: DisplayRowPosition,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
@@ -152,10 +153,17 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     if source_item.ascii_text_run().is_none() {
         return false;
     }
-    if context.overlay_context.is_enabled()
-        || source_item.source_end_charpos().is_none()
-        || source_item.source_end_byte_idx().is_none()
-    {
+    let Some(source_end_charpos) = source_item.source_end_charpos() else {
+        return false;
+    };
+    if source_item.source_end_byte_idx().is_none() {
+        return false;
+    }
+    if context.overlay_context.has_overlay_strings_in_range(
+        buffer,
+        source_item.source_step_char().start_charpos(),
+        source_end_charpos,
+    ) {
         return false;
     }
 
@@ -402,6 +410,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     if whole_text_run_can_render(
         &source_item,
         &context,
+        buffer,
         context.append_surface.right_edge(),
         append_position,
         &buffer_row_append_context,

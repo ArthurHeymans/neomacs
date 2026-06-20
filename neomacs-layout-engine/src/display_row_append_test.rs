@@ -2737,7 +2737,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
-        false,
+        true,
         1,
         &surface,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),

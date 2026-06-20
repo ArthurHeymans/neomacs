@@ -225,8 +225,18 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         )
     }
 
-    pub(crate) fn is_enabled(self) -> bool {
-        self.enabled
+    pub(crate) fn has_overlay_strings_in_range<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        start_charpos: i64,
+        end_charpos: i64,
+    ) -> bool {
+        if !self.enabled || end_charpos <= start_charpos {
+            return false;
+        }
+        let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
+        (start_charpos..end_charpos)
+            .any(|charpos| !text_props.overlay_strings_at(charpos).is_empty())
     }
 
     pub(crate) fn render_at<B: LayoutBufferView>(
