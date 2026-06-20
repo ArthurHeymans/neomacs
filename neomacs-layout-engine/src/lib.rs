@@ -13,6 +13,7 @@ pub(crate) mod display_buffer_display_property_render;
 pub(crate) mod display_buffer_display_property_source;
 pub(crate) mod display_buffer_text_append;
 pub(crate) mod display_buffer_text_item_append;
+pub(crate) mod display_buffer_text_overflow;
 pub(crate) mod display_buffer_text_progress;
 pub(crate) mod display_buffer_text_render;
 pub(crate) mod display_buffer_text_row_lifecycle;

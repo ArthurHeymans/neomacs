@@ -1,9 +1,9 @@
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_render::{
+use crate::display_buffer_text_overflow::{
     BufferTextConsumedDisplayItemRenderState, BufferTextSourceAppendContinuation,
     BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
     BufferTextSpecialSourceCharRenderState,
 };
+use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
