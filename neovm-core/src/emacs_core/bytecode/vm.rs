@@ -461,6 +461,14 @@ impl<'a> Vm<'a> {
         condition_stack_base: usize,
     ) -> EvalResult {
         let frame_base = self.ctx.bc_buf.len();
+        // Native (JIT) catch/condition-case handlers transferred from the deopted
+        // frame recorded their `stack_len` frame-RELATIVE (a native frame keeps no
+        // operands on bc_buf). The operands are about to be seeded at
+        // bc_buf[frame_base..], so rebase those handlers to ABSOLUTE bc_buf
+        // positions — otherwise a throw/signal caught by one would truncate bc_buf
+        // to the relative length and collapse the caller's operand stack.
+        self.ctx
+            .rebase_resumed_vm_handler_stack_lens(handlers_active, frame_base);
         self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
             base: frame_base,
             fun: func_value,

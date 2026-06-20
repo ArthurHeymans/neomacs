@@ -2635,6 +2635,44 @@ impl Context {
         self.condition_stack.truncate(len);
     }
 
+    /// Rebase the `stack_len` of the topmost `count` bytecode catch/condition-case
+    /// handlers from FRAME-RELATIVE to ABSOLUTE `bc_buf` positions by adding
+    /// `frame_base`.
+    ///
+    /// The JIT `push-catch`/`push-condition-case` shims record `stack_len` as the
+    /// native model operand-stack DEPTH (frame-relative — a native frame keeps no
+    /// operands on `bc_buf`), whereas the interpreter records the ABSOLUTE
+    /// `bc_buf.len()`. When a native frame deopts and resumes via
+    /// [`Vm::run_resumed_frame`], its operands are seeded at `bc_buf[frame_base..]`,
+    /// so its transferred handlers must be rebased to absolute — otherwise a later
+    /// throw/signal caught by such a handler would `bc_buf.truncate(relative_len)`
+    /// and collapse the caller's live operand stack (the native frame's handlers
+    /// are exactly the topmost `count` Vm catch/condition-case frames).
+    pub(crate) fn rebase_resumed_vm_handler_stack_lens(&mut self, count: usize, frame_base: usize) {
+        if count == 0 || frame_base == 0 {
+            return;
+        }
+        let mut remaining = count;
+        for frame in self.condition_stack.iter_mut().rev() {
+            if remaining == 0 {
+                break;
+            }
+            let resume = match frame {
+                ConditionFrame::Catch { resume, .. }
+                | ConditionFrame::ConditionCase { resume, .. } => resume,
+                _ => continue,
+            };
+            match resume {
+                ResumeTarget::VmCatch { stack_len, .. }
+                | ResumeTarget::VmConditionCase { stack_len, .. } => {
+                    *stack_len += frame_base;
+                    remaining -= 1;
+                }
+                _ => continue,
+            }
+        }
+    }
+
     pub(crate) fn condition_stack_len(&self) -> usize {
         self.condition_stack.len()
     }
