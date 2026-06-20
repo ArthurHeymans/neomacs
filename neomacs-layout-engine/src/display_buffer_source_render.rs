@@ -5,6 +5,7 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
+use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
 use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
 use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
@@ -455,7 +456,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     {
         let layout_resolution_context =
             face_resolution_context.source_item_layout_resolution_context();
-        let Some(source_item) = source_walk.consume_source_item_for_render(
+        let Some(consumed_item) = source_walk.consume_source_item_for_render(
             &mut self.state.progress,
             face_resolution_context,
             self.state.face_ids,
@@ -465,13 +466,12 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             return false;
         };
 
-        if source_item.is_display_property_replacement() {
-            let replacement = source_item
-                .into_display_property_replacement()
-                .expect("replacement source item reported replacement kind");
-            self.consume_replacement(source_walk, layout_resolution_context, replacement, buffer)
-        } else {
-            self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
+        match consumed_item {
+            BufferSourceConsumedItem::DisplayPropertyReplacement(replacement) => self
+                .consume_replacement(source_walk, layout_resolution_context, replacement, buffer),
+            BufferSourceConsumedItem::Renderable(source_item) => {
+                self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
+            }
         }
     }
 

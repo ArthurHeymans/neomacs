@@ -1,5 +1,7 @@
 use super::*;
-use crate::display_buffer_source_consumption::BufferSourceConsumptionState;
+use crate::display_buffer_source_consumption::{
+    BufferSourceConsumedItem, BufferSourceConsumptionState,
+};
 use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
@@ -878,6 +880,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     else {
         panic!("expected leading text step");
     };
+    let first = first.into_renderable().expect("leading renderable item");
     let end_charpos = first.end_charpos();
     let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
@@ -888,9 +891,9 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     else {
         panic!("expected atomic replacement string item");
     };
-    let replacement = replacement_item
-        .into_display_property_replacement()
-        .expect("expected replacement item kind");
+    let BufferSourceConsumedItem::DisplayPropertyReplacement(replacement) = replacement_item else {
+        panic!("expected replacement item kind");
+    };
 
     assert_eq!(replacement.start_byte_idx(0), Some(1));
     assert_eq!(replacement.start_charpos(), 1);
@@ -944,6 +947,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     else {
         panic!("expected leading text step");
     };
+    let first = first.into_renderable().expect("leading renderable item");
     let end_charpos = first.end_charpos();
     let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
@@ -954,9 +958,9 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     else {
         panic!("expected atomic display space item");
     };
-    let replacement = replacement_item
-        .into_display_property_replacement()
-        .expect("expected replacement item kind");
+    let BufferSourceConsumedItem::DisplayPropertyReplacement(replacement) = replacement_item else {
+        panic!("expected replacement item kind");
+    };
 
     assert_eq!(replacement.start_byte_idx(0), Some(1));
     assert_eq!(replacement.start_charpos(), 1);

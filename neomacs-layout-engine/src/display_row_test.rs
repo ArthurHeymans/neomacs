@@ -2936,7 +2936,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
 }
 
 #[test]
-fn mock_display_row_output_install_preserves_row_metadata() {
+fn mock_current_row_output_install_preserves_row_metadata() {
     let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
     row.enabled = true;
     row.pixel_y = 40.0;

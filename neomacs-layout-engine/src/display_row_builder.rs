@@ -860,6 +860,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 &mut metrics,
                 &mut slots,
             ),
+            DisplayItemKind::BufferDisplayPropertyReplacement(_) => {
+                unreachable!(
+                    "buffer display-property replacement must be resolved before row append"
+                );
+            }
             kind => {
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
@@ -1059,8 +1064,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::Glyphless(glyphless) => {
                 self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
             }
+            DisplayItemKind::BufferDisplayPropertyReplacement(_) => {
+                unreachable!(
+                    "buffer display-property replacement must be resolved before row writing"
+                );
+            }
             DisplayItemKind::RowBreak(_)
-            | DisplayItemKind::BufferDisplayPropertyReplacement(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }

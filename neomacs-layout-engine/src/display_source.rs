@@ -1,9 +1,9 @@
 use crate::display_item::{
-    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayGlyphless,
-    DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayMediaReplacement,
-    DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod,
-    RenderFaceRef, SourceSpan, glyphless_method_for_char,
+    BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
+    DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayRowBreak,
+    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -477,22 +477,6 @@ impl DisplaySourceItem {
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline
         )
-    }
-
-    pub(crate) fn is_display_property_replacement(&self) -> bool {
-        matches!(
-            self.item.kind,
-            DisplayItemKind::BufferDisplayPropertyReplacement(_)
-        )
-    }
-
-    pub(crate) fn into_display_property_replacement(
-        self,
-    ) -> Result<BufferDisplayPropertyReplacementItem, Self> {
-        match self.item.kind {
-            DisplayItemKind::BufferDisplayPropertyReplacement(replacement) => Ok(replacement),
-            _ => Err(self),
-        }
     }
 
     #[cfg(test)]

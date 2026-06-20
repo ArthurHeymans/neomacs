@@ -11,6 +11,22 @@ use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::CharPos0;
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferSourceConsumedItem {
+    Renderable(DisplaySourceItem),
+    DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
+}
+
+impl BufferSourceConsumedItem {
+    #[cfg(test)]
+    pub(crate) fn into_renderable(self) -> Option<DisplaySourceItem> {
+        match self {
+            Self::Renderable(item) => Some(item),
+            Self::DisplayPropertyReplacement(_) => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferSourceConsumptionState {
     text_start_byte: usize,
     pending_render_items: VecDeque<DisplaySourceItem>,
@@ -113,7 +129,7 @@ impl BufferSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: DisplaySourceTextPosition,
         replacement_mode: BufferTextDisplayReplacementMode,
-    ) -> Option<DisplaySourceItem> {
+    ) -> Option<(DisplayItem, Option<char>)> {
         let expected_source_pos = Self::expected_source_pos(position);
         if source.current_char_pos() != expected_source_pos {
             source.reset_to(expected_source_pos);
@@ -132,7 +148,7 @@ impl BufferSourceConsumptionState {
                 return None;
             }
         }
-        self.align_display_item(position, source_char, item)
+        Some((item, source_char))
     }
 
     #[cfg(test)]
@@ -159,11 +175,14 @@ impl BufferSourceConsumptionState {
             *position,
             BufferTextDisplayReplacementMode::InlineSourceItems,
         )?;
-        if item.is_display_property_replacement() {
+        if matches!(
+            item.0.kind,
+            DisplayItemKind::BufferDisplayPropertyReplacement(_)
+        ) {
             debug_assert!(false, "inline source cursor surfaced a buffer replacement");
             return None;
         }
-        Some(item)
+        self.align_display_item(*position, item.1, item.0)
     }
 
     pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
@@ -171,9 +190,9 @@ impl BufferSourceConsumptionState {
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut DisplaySourceTextPosition,
-    ) -> Option<DisplaySourceItem> {
+    ) -> Option<BufferSourceConsumedItem> {
         if let Some(source_item) = self.pending_render_items.pop_front() {
-            return Some(source_item);
+            return Some(BufferSourceConsumedItem::Renderable(source_item));
         }
 
         let item = self.read_source_cursor(
@@ -182,11 +201,15 @@ impl BufferSourceConsumptionState {
             *position,
             BufferTextDisplayReplacementMode::TypedReplacementItem,
         )?;
-        if item.is_display_property_replacement() {
-            return Some(item);
+        if let DisplayItemKind::BufferDisplayPropertyReplacement(replacement) = item.0.kind {
+            return Some(BufferSourceConsumedItem::DisplayPropertyReplacement(
+                replacement,
+            ));
         }
+        let item = self.align_display_item(*position, item.1, item.0)?;
         let item = self.consume_aligned_display_item(item, position)?;
         self.prepare_render_source_item(item)
+            .map(BufferSourceConsumedItem::Renderable)
     }
 
     #[cfg(test)]
