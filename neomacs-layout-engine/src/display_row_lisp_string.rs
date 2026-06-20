@@ -7,6 +7,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowSourceState,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -14,7 +15,6 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::LispStringSourceCursor;
@@ -115,14 +115,21 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    DisplayRowSourceAppendOperation::new(
-        base_face,
-        base_face_id,
-        frame,
+    let (request, output) = frame.source_render_parts(
         position,
+        base_face_id,
+        base_face,
         DisplayRowAppendKind::SourceText,
+    );
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    state.render_display_item_source_into_current_text_row_and_emit(
+        face_ids,
+        source,
+        source_state,
+        request,
+        output,
+        &mut render_policy,
     )
-    .render_source_cursor_to_text_row_and_emit(state, source, source_state, face_ids)
 }
 
 pub(crate) struct LispStringSourceAppendContext<'a> {

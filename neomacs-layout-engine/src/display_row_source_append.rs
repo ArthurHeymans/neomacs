@@ -101,25 +101,6 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         )
     }
 
-    pub(crate) fn render_natural_display_source_into_current_text_row_and_emit<
-        S: DisplayItemSource,
-    >(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        self.render_display_source_into_current_text_row_and_emit(
-            state,
-            face_ids,
-            source,
-            source_state,
-            &mut render_policy,
-        )
-    }
-
     pub(crate) fn render_owned_display_source_into_current_text_row_and_emit<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
@@ -407,41 +388,6 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         )?;
         Some(outcome.into_append_progress(start))
     }
-
-    pub(crate) fn render_source_to_text_row_and_emit<
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    >(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        source: S,
-        face_ids: &mut FrameFaceIdAllocator,
-        render_policy: &mut P,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        self.request()
-            .render_owned_display_source_into_current_text_row_and_emit(
-                state,
-                face_ids,
-                source,
-                render_policy,
-            )
-    }
-
-    pub(crate) fn render_source_cursor_to_text_row_and_emit<S: DisplayItemSource>(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        self.request()
-            .render_natural_display_source_into_current_text_row_and_emit(
-                state,
-                face_ids,
-                source,
-                source_state,
-            )
-    }
 }
 
 pub(crate) fn append_synthetic_text_to_display_row(
@@ -452,18 +398,25 @@ pub(crate) fn append_synthetic_text_to_display_row(
     source: SyntheticTextSource,
     face_id: u32,
 ) -> Option<DisplayRowAppendProgress> {
-    let source = source.into_item_source(face_id);
+    let mut source = source.into_item_source(face_id);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let outcome = DisplayRowSourceAppendOperation::new(
-        base_face,
-        face_id,
-        frame,
+    let (request, output) = frame.source_render_parts(
         position,
+        face_id,
+        base_face,
         DisplayRowAppendKind::SourceText,
-    )
-    .render_source_to_text_row_and_emit(state, source, &mut face_ids, &mut render_policy)?;
+    );
+    let mut source_state = DisplayRowSourceState::default();
+    let outcome = state.render_display_item_source_into_current_text_row_and_emit(
+        &mut face_ids,
+        &mut source,
+        &mut source_state,
+        request,
+        output,
+        &mut render_policy,
+    )?;
     Some(outcome.into_append_progress(start))
 }
 

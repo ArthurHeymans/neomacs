@@ -4720,12 +4720,14 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         &mut font_metrics,
         &face_resolver,
     );
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let outcome = request
-        .render_natural_display_source_into_current_text_row_and_emit(
+        .render_display_source_into_current_text_row_and_emit(
             &mut source_render,
             &mut face_ids,
             &mut source,
             &mut source_state,
+            &mut render_policy,
         )
         .expect("current-row fragment outcome");
 
@@ -4802,12 +4804,14 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         &mut font_metrics,
         &face_resolver,
     );
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let outcome = request
-        .render_natural_display_source_into_current_text_row_and_emit(
+        .render_display_source_into_current_text_row_and_emit(
             &mut source_render,
             &mut face_ids,
             &mut source,
             &mut source_state,
+            &mut render_policy,
         )
         .expect("current-row fragment outcome");
 

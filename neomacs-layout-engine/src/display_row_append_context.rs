@@ -551,6 +551,19 @@ impl DisplayRowAppendFrame {
         )
     }
 
+    pub(crate) fn source_render_parts<'face>(
+        &self,
+        position: DisplayRowPosition,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        kind: DisplayRowAppendKind,
+    ) -> (DisplayRowSourceRenderRequest<'face>, TextRowOutput) {
+        (
+            self.source_render_request(position, face_id, base_face, kind),
+            self.text_row_output(kind),
+        )
+    }
+
     pub(crate) fn source_render_request<'face>(
         &self,
         position: DisplayRowPosition,
