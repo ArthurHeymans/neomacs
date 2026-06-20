@@ -21,9 +21,6 @@ use crate::display_row_output_install::{
     DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
     install_rendered_display_row_fragment_assets,
 };
-use crate::display_row_replacement::{
-    DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
-};
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
@@ -716,16 +713,6 @@ impl<'a> TextRowSourceRenderState<'a> {
             active_face_state,
             face_ids,
         )
-    }
-
-    pub(crate) fn display_property_replacement_append_plan<B: LayoutBufferView>(
-        &mut self,
-        request: DisplayPropertyReplacementAppendRequest,
-        buffer: &B,
-        active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayPropertyReplacementAppendPlan {
-        request.into_plan(buffer, self, active_face_state, face_ids)
     }
 
     pub(crate) fn render_natural_fragment_into_current_row<S: DisplayItemSource>(

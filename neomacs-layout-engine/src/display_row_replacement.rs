@@ -369,12 +369,7 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let plan = state.display_property_replacement_append_plan(
-            self,
-            buffer,
-            active_face_state,
-            face_ids,
-        );
+        let plan = self.into_plan(buffer, state, active_face_state, face_ids);
         let end_position = plan.append_to_text_row(
             state,
             face_ids,
