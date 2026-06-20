@@ -377,6 +377,14 @@ struct OutputRowBeginRequest {
     mode_line: bool,
 }
 
+#[derive(Clone, Debug)]
+struct OutputCompleteRowInstallRequest {
+    row: usize,
+    role: GlyphRowRole,
+    mode_line: bool,
+    glyph_row: GlyphRow,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct OutputRowMetricsRequest {
     /// Stored row Y, relative to the window matrix origin.
@@ -393,9 +401,7 @@ enum OutputCurrentRowDecorationRequest {
 #[derive(Clone, Debug)]
 enum OutputRowLifecycleRequest {
     Begin(OutputRowBeginRequest),
-    ReplaceCurrent {
-        row: GlyphRow,
-    },
+    Complete(OutputCompleteRowInstallRequest),
     Metrics {
         row: usize,
         metrics: OutputRowMetricsRequest,
@@ -415,7 +421,7 @@ impl OutputRowLifecycleRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => builder.begin_current_row(begin),
-            Self::ReplaceCurrent { row } => builder.replace_current_row(row),
+            Self::Complete(complete) => builder.install_complete_row(complete),
             Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
             Self::Finalize { row } => builder.finalize_output_row(row),
             Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
@@ -713,13 +719,14 @@ impl DisplayOutputBuilder {
         mode_line: bool,
         glyph_row: GlyphRow,
     ) {
-        self.begin_output_row(matrix_row, role, mode_line);
-        self.replace_current_output_row(glyph_row);
-        self.finalize_output_row_index(self.current_row);
-    }
-
-    pub(crate) fn replace_current_output_row(&mut self, row: GlyphRow) {
-        self.install_row_lifecycle(OutputRowLifecycleRequest::ReplaceCurrent { row });
+        self.install_row_lifecycle(OutputRowLifecycleRequest::Complete(
+            OutputCompleteRowInstallRequest {
+                row: matrix_row,
+                role,
+                mode_line,
+                glyph_row,
+            },
+        ));
     }
 
     pub(crate) fn edit_current_output_row<R>(
@@ -872,6 +879,16 @@ impl DisplayOutputBuilder {
             matrix.rows[begin.row].enabled = true;
             matrix.rows[begin.row].mode_line = begin.mode_line;
         }
+    }
+
+    fn install_complete_row(&mut self, request: OutputCompleteRowInstallRequest) {
+        self.begin_current_row(OutputRowBeginRequest {
+            row: request.row,
+            role: request.role,
+            mode_line: request.mode_line,
+        });
+        self.replace_current_row(request.glyph_row);
+        self.finalize_output_row(request.row);
     }
 
     fn finalize_output_row(&mut self, row: usize) {
