@@ -4,9 +4,6 @@
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
-use crate::display_buffer_text_item_append::{
-    DisplaySourceSpecialCharPreparedAppend, DisplaySourceTextCharPreparedAppend,
-};
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row_builder::DisplayRowPosition;
@@ -23,6 +20,9 @@ use crate::display_row_walk_state::{
     WordWrapRenderState,
 };
 use crate::display_source::{DisplaySourceStepChar, DisplaySourceTextPosition};
+use crate::display_source_item_append::{
+    DisplaySourceSpecialCharPreparedAppend, DisplaySourceTextCharPreparedAppend,
+};
 use crate::display_source_overflow::{
     DisplaySourceSpecialCharOverflowAction, DisplaySourceTextCharOverflowAction,
 };

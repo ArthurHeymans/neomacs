@@ -62,6 +62,7 @@ pub(crate) mod display_row_walk_state;
 pub(crate) mod display_row_width;
 pub(crate) mod display_source;
 pub(crate) mod display_source_append_plan;
+pub(crate) mod display_source_item_append;
 pub(crate) mod display_source_overflow;
 pub(crate) mod display_source_progress;
 pub(crate) mod display_source_resolver;

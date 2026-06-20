@@ -5,7 +5,6 @@
 //! updates used by row lifecycle renderers.
 
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
-use crate::display_buffer_text_item_append::DisplaySourceRowAppendState;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipAction, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
@@ -24,6 +23,7 @@ use crate::display_row_walk_state::{
 use crate::display_source::DisplaySourceContext;
 use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source_item_append::DisplaySourceRowAppendState;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_source_resolver::{
     DisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,

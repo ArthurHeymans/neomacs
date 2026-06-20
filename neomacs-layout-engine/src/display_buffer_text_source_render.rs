@@ -7,9 +7,7 @@ use crate::display_buffer_display_property_render::{
 };
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_item_append::{
-    BufferTextRowAppendContext, DisplaySourcePreparedCharAppend,
-};
+use crate::display_buffer_text_item_append::BufferTextRowAppendContext;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
@@ -35,6 +33,7 @@ use crate::display_row_overlay_string::{
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceStepChar;
+use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;

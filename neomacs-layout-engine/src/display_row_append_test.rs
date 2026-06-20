@@ -93,6 +93,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     NaturalDisplayRowAppendRenderPolicy,
 };
+use crate::display_source_item_append::*;
 use crate::display_source_overflow::DisplaySourceTextCharOverflowAction;
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_source_resolver::DisplayPropertyReplacementSourceResolveRequest;
