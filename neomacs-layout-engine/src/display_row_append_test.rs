@@ -1937,8 +1937,8 @@ fn buffer_text_source_consumption_state_preserves_single_char_source_item() {
         .render_item_from_item(item, &mut position)
         .expect("source step");
 
-    let source_char = step.source_char();
-    let (_, source_item) = step.into_parts();
+    let source_char = step.source_step_char().expect("source step char");
+    let (_, source_item) = step.into_render_parts().expect("render parts");
     assert_eq!(source_char.ch(), 'a');
     assert_eq!(position.byte_idx(), 1);
     assert_eq!(position.charpos(), 0);
@@ -2020,14 +2020,15 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
-    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position)
+    let step = typed_item
+        .consume_for_render(&mut position)
         .ok()
         .expect("direct source step");
 
     assert_eq!(position.byte_idx(), 1);
     assert_eq!(position.charpos(), 0);
-    assert_eq!(step.source_char().ch(), 'a');
-    let (_, source_item) = step.into_parts();
+    assert_eq!(step.source_step_char().expect("source step char").ch(), 'a');
+    let (_, source_item) = step.into_render_parts().expect("render parts");
     match &source_item.kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
         other => panic!("expected single-char text run, got {other:?}"),
@@ -2061,8 +2062,11 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
 
     assert_eq!(position.byte_idx(), 2);
     assert_eq!(position.charpos(), 0);
-    assert_eq!(step.source_char().ch(), '\u{00a0}');
-    let (_, source_item) = step.into_parts();
+    assert_eq!(
+        step.source_step_char().expect("source step char").ch(),
+        '\u{00a0}'
+    );
+    let (_, source_item) = step.into_render_parts().expect("render parts");
     match &source_item.kind {
         DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "\\ "),
         other => panic!("expected source-mapped text, got {other:?}"),
@@ -2096,9 +2100,9 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
 
     assert_eq!(position.byte_idx(), 4);
     assert_eq!(position.charpos(), 1);
-    assert_eq!(step.source_char().ch(), 'b');
+    assert_eq!(step.source_step_char().expect("source step char").ch(), 'b');
     assert_eq!(step.end_charpos(), 3);
-    let (_, source_item) = step.into_parts();
+    let (_, source_item) = step.into_render_parts().expect("render parts");
     match &source_item.kind {
         DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "YZ"),
         other => panic!("expected source-mapped text, got {other:?}"),
@@ -2132,7 +2136,7 @@ fn buffer_text_source_item_without_source_char_rejects_source_mapped_without_sou
         other => panic!("expected source-mapped text, got {other:?}"),
     }
 
-    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position);
+    let step = typed_item.consume_for_render(&mut position);
 
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     assert!(step.is_err());
@@ -2170,20 +2174,30 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
         other => panic!("expected full text run, got {other:?}"),
     }
-    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position)
+    let step = typed_item
+        .consume_for_render(&mut position)
         .ok()
-        .expect("multi-char text run remains a direct source item");
-    assert_eq!(step.source_char().ch(), 'a');
+        .expect("multi-char text run remains a typed source item");
+    assert_eq!(step.source_step_char().expect("source step char").ch(), 'a');
     assert_eq!(position, BufferTextSourcePosition::new(2, 0));
 
     let direct = step;
     let (first, pending) = direct
         .split_text_run_items(0)
         .expect("direct multi-char text run splits for rendering");
-    assert_eq!(first.into_parts().0.ch(), 'a');
+    assert_eq!(first.into_render_parts().expect("render parts").0.ch(), 'a');
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].source_char().ch(), 'b');
-    let (_, pending_item) = pending[0].clone().into_parts();
+    assert_eq!(
+        pending[0]
+            .source_step_char()
+            .expect("source step char")
+            .ch(),
+        'b'
+    );
+    let (_, pending_item) = pending[0]
+        .clone()
+        .into_render_parts()
+        .expect("render parts");
     match &pending_item.kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "b"),
         other => panic!("expected direct split text run, got {other:?}"),
@@ -2228,7 +2242,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
         .render_item_from_item(source_item, &mut position)
         .expect("source step");
 
-    let (_, source_item) = step.into_parts();
+    let (_, source_item) = step.into_render_parts().expect("render parts");
     assert_eq!(source_item.layout.raise, Some(0.25));
     assert_eq!(source_item.layout.height, Some(1.5));
 }
@@ -2260,8 +2274,13 @@ fn buffer_text_source_consumption_state_splits_persistent_text_run() {
     let item = source_consumption
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("source item");
-    assert_eq!(item.source_char().ch(), 'a');
-    assert_eq!(item.source_char().start_byte_idx(), 0);
+    assert_eq!(item.source_step_char().expect("source step char").ch(), 'a');
+    assert_eq!(
+        item.source_step_char()
+            .expect("source step char")
+            .start_byte_idx(),
+        0
+    );
     assert_eq!(position.byte_idx(), 3);
     assert_eq!(position.charpos(), 0);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
@@ -2269,10 +2288,22 @@ fn buffer_text_source_consumption_state_splits_persistent_text_run() {
     let (first, pending) = direct
         .split_text_run_items(0)
         .expect("direct text run splits at render boundary");
-    assert_eq!(first.into_parts().0.ch(), 'a');
+    assert_eq!(first.into_render_parts().expect("render parts").0.ch(), 'a');
     assert_eq!(pending.len(), 2);
-    assert_eq!(pending[0].source_char().ch(), 'b');
-    assert_eq!(pending[1].source_char().ch(), 'c');
+    assert_eq!(
+        pending[0]
+            .source_step_char()
+            .expect("source step char")
+            .ch(),
+        'b'
+    );
+    assert_eq!(
+        pending[1]
+            .source_step_char()
+            .expect("source step char")
+            .ch(),
+        'c'
+    );
 }
 
 #[test]
@@ -6368,7 +6399,12 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     );
 
     let outcome = BufferTextSourceItemRenderRequest::new(
-        BufferTextDirectDisplayItem::new(source_step_char, source_item),
+        BufferTextSourceItem::new_for_test(
+            source_item,
+            source_step_char.start_byte_idx(),
+            source_step_char.start_charpos(),
+            Some(source_step_char.ch()),
+        ),
         BufferTextSourceItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,

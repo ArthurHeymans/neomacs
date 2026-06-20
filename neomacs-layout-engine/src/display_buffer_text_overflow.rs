@@ -12,9 +12,8 @@ use crate::display_buffer_text_item_append::{
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
-};
+use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
+use crate::display_buffer_text_source_render_item::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::{DisplayItem, DisplaySourcePosition};
@@ -52,7 +51,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
 }
 
 pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
-    source_item: BufferTextDirectDisplayItem,
+    source_item: BufferTextSourceItem,
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
@@ -293,10 +292,10 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
 
 impl<'a> BufferTextSourceItemRenderRequest<'a> {
     pub(crate) fn new(
-        source_item: BufferTextDirectDisplayItem,
+        source_item: BufferTextSourceItem,
         context: BufferTextSourceItemRenderContext<'a>,
     ) -> Self {
-        debug_assert_ne!(source_item.source_char().ch(), '\n');
+        debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
         Self {
             source_item,
             context,
@@ -321,7 +320,9 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         } else {
             self.source_item
         };
-        let (source_step_char, source_item) = source_item.into_parts();
+        let Some((source_step_char, source_item)) = source_item.into_render_parts() else {
+            return BufferTextSourceItemRenderOutcome::Stop;
+        };
         render_prepared_source_item_and_apply(
             source_step_char,
             source_item,

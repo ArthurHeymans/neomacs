@@ -13,9 +13,8 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderRequest,
     BufferTextLineBreakRenderState,
 };
-use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextSourceStepChar,
-};
+use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
+use crate::display_buffer_text_source_render_item::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
@@ -66,9 +65,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
             active_face_state,
             params,
         } = request;
+        let Some(source_step_char) = source_item.source_step_char() else {
+            return BufferTextWindowSourceItemRenderOutcome::StopBufferWalk;
+        };
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             source_walk,
-            source_item.source_char(),
+            source_step_char,
             text,
             active_face_state,
             buffer,
@@ -82,7 +84,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
 
         let is_explicit_line_break = source_item.is_explicit_line_break();
         let end_byte_idx = source_item.end_byte_idx(self.loop_context.text_start_byte());
-        let source_char = source_item.source_char();
         if is_explicit_line_break {
             if let Some(end_byte_idx) = end_byte_idx {
                 *self.state.progress.byte_idx = end_byte_idx;
@@ -90,7 +91,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
             if self
                 .render_line_break_for_context(
                     source_walk,
-                    source_char,
+                    source_step_char,
                     text,
                     active_face_state,
                     buffer,
@@ -165,7 +166,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: BufferTextDirectDisplayItem,
+        source_item: BufferTextSourceItem,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,

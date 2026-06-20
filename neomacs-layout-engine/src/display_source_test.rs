@@ -879,7 +879,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         panic!("expected leading text step");
     };
     let end_charpos = first.end_charpos();
-    let (_, first_item) = first.into_parts();
+    let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 
@@ -942,7 +942,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         panic!("expected leading text step");
     };
     let end_charpos = first.end_charpos();
-    let (_, first_item) = first.into_parts();
+    let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 

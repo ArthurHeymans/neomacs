@@ -5,7 +5,9 @@ use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
     BufferTextSourcePosition,
 };
-use crate::display_buffer_text_source_render_item::BufferTextDirectDisplayItem;
+use crate::display_buffer_text_source_render_item::{
+    BufferTextSourceStepChar, direct_text_run_char_item,
+};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
 };
@@ -29,7 +31,7 @@ enum BufferTextAlignedSourceCursorItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceConsumptionItem {
-    DisplayItem(BufferTextDirectDisplayItem),
+    DisplayItem(BufferTextSourceItem),
     Replacement(BufferTextReplacementItem),
 }
 
@@ -91,12 +93,119 @@ impl BufferTextSourceItem {
         &self.item
     }
 
-    pub(crate) fn into_item(self) -> DisplayItem {
-        self.item
-    }
-
     pub(crate) fn buffer_byte_len(&self) -> Option<usize> {
         self.item.span.buffer_byte_len()
+    }
+
+    pub(crate) fn consume_for_render(
+        self,
+        position: &mut BufferTextSourcePosition,
+    ) -> Result<Self, Self> {
+        if !position.matches(self.start_byte_idx(), self.start_charpos()) {
+            tracing::error!(
+                "BufferTextSourceItem: validated source item at byte {} charpos {} \
+                 did not match buffer walk byte {} charpos {}",
+                self.start_byte_idx(),
+                self.start_charpos(),
+                position.byte_idx(),
+                position.charpos()
+            );
+            return Err(self);
+        }
+        let Some(ch) = self.direct_source_char() else {
+            return Err(self);
+        };
+        let byte_len = self.buffer_byte_len().unwrap_or_else(|| ch.len_utf8());
+        position.advance_byte_idx_to(self.start_byte_idx().saturating_add(byte_len));
+        Ok(self)
+    }
+
+    pub(crate) fn source_step_char(&self) -> Option<BufferTextSourceStepChar> {
+        Some(BufferTextSourceStepChar::new(
+            self.direct_source_char()?,
+            self.start_byte_idx,
+            self.start_charpos,
+        ))
+    }
+
+    pub(crate) fn is_explicit_line_break(&self) -> bool {
+        matches!(
+            self.item.kind,
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn end_charpos(&self) -> i64 {
+        self.item
+            .span
+            .buffer_end_charpos()
+            .map(|char_pos| char_pos.get() as i64)
+            .unwrap_or_else(|| self.start_charpos.saturating_add(1))
+    }
+
+    pub(crate) fn end_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
+        display_item_buffer_end_byte_idx(&self.item, text_start_byte)
+    }
+
+    pub(crate) fn is_multi_char_text_run(&self) -> bool {
+        let DisplayItemKind::TextRun(run) = &self.item.kind else {
+            return false;
+        };
+        let mut chars = run.text.chars();
+        chars.next().is_some() && chars.next().is_some()
+    }
+
+    pub(crate) fn split_text_run_items(
+        self,
+        text_start_byte: usize,
+    ) -> Option<(Self, Vec<BufferTextSourceItem>)> {
+        if !self.is_multi_char_text_run() {
+            return None;
+        }
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+        } = self.item;
+        let DisplayItemKind::TextRun(run) = kind else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer { buffer_id, .. } = span.start else {
+            return None;
+        };
+        let mut byte_idx = self.start_byte_idx;
+        let mut charpos = self.start_charpos;
+        let mut items = Vec::new();
+        for ch in run.text.chars() {
+            let ch_len = ch.len_utf8();
+            let item = direct_text_run_char_item(
+                buffer_id,
+                face,
+                layout,
+                text_start_byte,
+                byte_idx,
+                charpos,
+                ch,
+            );
+            items.push(BufferTextSourceItem::new(item, byte_idx, charpos, Some(ch)));
+            byte_idx = byte_idx.saturating_add(ch_len);
+            charpos = charpos.saturating_add(1);
+        }
+        if items.len() <= 1 {
+            return None;
+        }
+        let mut iter = items.into_iter();
+        let first = iter.next()?;
+        let pending = iter.collect();
+        Some((first, pending))
+    }
+
+    pub(crate) fn into_render_parts(self) -> Option<(BufferTextSourceStepChar, DisplayItem)> {
+        let source_step_char = self.source_step_char()?;
+        Some((source_step_char, self.item))
     }
 }
 
@@ -200,7 +309,7 @@ impl BufferTextSourceConsumptionState {
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextDirectDisplayItem> {
+    ) -> Option<BufferTextSourceItem> {
         let item = self.next_item_from_source(source, context, position)?;
         self.consume_aligned_display_item(item, position)
     }
@@ -252,7 +361,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextDirectDisplayItem> {
+    ) -> Option<BufferTextSourceItem> {
         let item = self.align_display_item(*position, None, item)?;
         self.consume_aligned_display_item(item, position)
     }
@@ -262,7 +371,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextDirectDisplayItem> {
+    ) -> Option<BufferTextSourceItem> {
         self.consume_aligned_display_item(item, position)
     }
 
@@ -270,7 +379,18 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextDirectDisplayItem> {
-        BufferTextDirectDisplayItem::consume_source_item(item, position).ok()
+    ) -> Option<BufferTextSourceItem> {
+        item.consume_for_render(position).ok()
     }
+}
+
+fn display_item_buffer_end_byte_idx(item: &DisplayItem, text_start_byte: usize) -> Option<usize> {
+    let DisplaySourcePosition::Buffer {
+        byte_pos: end_byte_pos,
+        ..
+    } = item.span.end
+    else {
+        return None;
+    };
+    end_byte_pos.get().checked_sub(text_start_byte)
 }
