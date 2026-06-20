@@ -22,10 +22,10 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringSourceRenderRequest, DisplayRowOwner,
-    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind,
+    DisplayRowBoundsPolicy, DisplayRowFallbackMetrics, DisplayRowLispStringSourceRenderRequest,
+    DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest,
+    DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind,
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
@@ -148,9 +148,7 @@ pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
     pub(crate) y: f32,
     pub(crate) width: f32,
     pub(crate) height: f32,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
-    pub(crate) row_height: f32,
+    pub(crate) metrics: DisplayRowFallbackMetrics,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) text: Value,
 }
@@ -160,9 +158,9 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         ChromeLispStringRowRequest::new(
             self.y,
             self.width,
-            self.row_height,
-            self.char_width,
-            self.ascent,
+            self.metrics.row_height(),
+            self.metrics.char_width(),
+            self.metrics.ascent(),
             DisplayTabPolicy::every(8),
             DisplayOrigin::TabBar,
             self.base_face,
@@ -346,8 +344,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) display_row_index: usize,
     pub(crate) output: ChromeRowOutput,
     pub(crate) bounds: Rect,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
+    pub(crate) metrics: DisplayRowFallbackMetrics,
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
@@ -364,8 +361,7 @@ pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) mode_line_height: f32,
     pub(crate) mode_line_display_row: usize,
     pub(crate) reserve_right_border_col: bool,
-    pub(crate) char_width: f32,
-    pub(crate) font_ascent: f32,
+    pub(crate) metrics: DisplayRowFallbackMetrics,
     pub(crate) buffer_name: &'params str,
 }
 
@@ -479,8 +475,7 @@ impl WindowChromeRowsPlan {
         params: &'params WindowParams,
         mode_line_display_row: usize,
         reserve_right_border_col: bool,
-        char_width: f32,
-        font_ascent: f32,
+        metrics: DisplayRowFallbackMetrics,
         buffer_name: &'params str,
     ) -> WindowChromeRowsRenderRequest<'face, 'params> {
         WindowChromeRowsRenderRequest {
@@ -493,8 +488,7 @@ impl WindowChromeRowsPlan {
             mode_line_height: self.mode_line_height,
             mode_line_display_row,
             reserve_right_border_col,
-            char_width,
-            font_ascent,
+            metrics,
             buffer_name,
         }
     }
@@ -504,7 +498,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     fn target_columns(&self) -> WindowChromeTargetColumns {
         WindowChromeTargetColumns::new(
             self.params.bounds.width,
-            self.char_width,
+            self.metrics.char_width(),
             self.reserve_right_border_col,
         )
     }
@@ -556,8 +550,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     params.bounds.width,
                     self.tab_line_height,
                 ),
-                char_width: self.char_width,
-                ascent: self.font_ascent,
+                metrics: self.metrics,
                 tab_policy: chrome_tab_policy.clone(),
                 base_face: self
                     .tab_line_face
@@ -592,8 +585,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     params.bounds.width,
                     self.header_line_height,
                 ),
-                char_width: self.char_width,
-                ascent: self.font_ascent,
+                metrics: self.metrics,
                 tab_policy: chrome_tab_policy.clone(),
                 base_face: self
                     .header_line_face
@@ -639,8 +631,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     params.bounds.width,
                     self.mode_line_height,
                 ),
-                char_width: self.char_width,
-                ascent: self.font_ascent,
+                metrics: self.metrics,
                 tab_policy: chrome_tab_policy,
                 base_face: self
                     .mode_line_face
@@ -754,8 +745,8 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.bounds.y,
             self.bounds.width,
             self.bounds.height,
-            self.char_width,
-            self.ascent,
+            self.metrics.char_width(),
+            self.metrics.ascent(),
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,

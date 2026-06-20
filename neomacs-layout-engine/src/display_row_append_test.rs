@@ -526,12 +526,8 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         &face_resolver,
         measurement_policy,
         &default_face,
-        8.0,
-        12.0,
-        16.0,
-        8.0,
-        16.0,
-        12.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
     )
     .resolve_at_checkpoint(
@@ -605,12 +601,8 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         &face_resolver,
         measurement_policy,
         &default_face,
-        8.0,
-        12.0,
-        16.0,
-        8.0,
-        16.0,
-        12.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
     )
     .resolve_at_checkpoint(
@@ -6424,12 +6416,8 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         &face_resolver,
         measurement_policy,
         &default_face,
-        8.0,
-        12.0,
-        16.0,
-        8.0,
-        16.0,
-        12.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
     );
     let loop_context = BufferSourceLoopRequestContext::new(

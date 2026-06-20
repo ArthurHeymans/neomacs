@@ -42,9 +42,7 @@ pub(crate) struct BufferSourceOutputSetup {
 
 pub(crate) struct BufferSourceDefaultFacePlan {
     face: ResolvedFace,
-    char_width: f32,
-    row_height: f32,
-    ascent: f32,
+    metrics: DisplayRowFallbackMetrics,
     measurement_policy: DisplayRowMeasurementPolicy,
 }
 impl BufferSourceOutputSetup {
@@ -197,9 +195,9 @@ impl BufferSourceDefaultFacePlan {
 
         Self {
             face,
-            char_width,
-            row_height,
-            ascent,
+            metrics: DisplayRowFallbackMetrics::from_default_face_extents(
+                char_width, row_height, ascent,
+            ),
             measurement_policy: DisplayRowMeasurementPolicy::for_frame(window_system),
         }
     }
@@ -209,15 +207,19 @@ impl BufferSourceDefaultFacePlan {
     }
 
     pub(crate) fn char_width(&self) -> f32 {
-        self.char_width
+        self.metrics.char_width()
     }
 
     pub(crate) fn row_height(&self) -> f32 {
-        self.row_height
+        self.metrics.row_height()
     }
 
     pub(crate) fn ascent(&self) -> f32 {
-        self.ascent
+        self.metrics.ascent()
+    }
+
+    pub(crate) fn metrics(&self) -> DisplayRowFallbackMetrics {
+        self.metrics
     }
 
     pub(crate) fn measurement_policy(&self) -> DisplayRowMeasurementPolicy {
@@ -242,7 +244,7 @@ impl BufferSourceOutputSetup {
         source: BufferWindowSource,
         params: &'a WindowParams,
         default_face: &'a BufferSourceDefaultFacePlan,
-        font_ascent: f32,
+        window_metrics: DisplayRowFallbackMetrics,
         window_system: bool,
         output_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
@@ -271,12 +273,8 @@ impl BufferSourceOutputSetup {
             face_resolver,
             default_face.measurement_policy(),
             default_face.face(),
-            default_face.char_width(),
-            default_face.ascent(),
-            default_face.row_height(),
-            geometry.char_width,
-            geometry.char_height,
-            font_ascent,
+            default_face.metrics(),
+            window_metrics,
             window_system,
         );
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
@@ -311,11 +309,7 @@ impl BufferSourceOutputSetup {
             geometry.char_width,
             geometry.char_height,
         );
-        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            default_face.char_width(),
-            default_face.row_height(),
-            default_face.ascent(),
-        );
+        let fallback_metrics = default_face.metrics();
         let tail_context = BufferSourceTailRequestContext::new(
             params,
             source.window_start(),

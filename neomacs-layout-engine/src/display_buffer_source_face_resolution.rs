@@ -27,12 +27,8 @@ pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     face_resolver: &'a FaceResolver,
     measurement_policy: DisplayRowMeasurementPolicy,
     default_resolved: &'a ResolvedFace,
-    default_face_char_w: f32,
-    default_face_ascent: f32,
-    default_face_h: f32,
-    char_w: f32,
-    char_h: f32,
-    font_ascent: f32,
+    default_face_metrics: DisplayRowFallbackMetrics,
+    window_metrics: DisplayRowFallbackMetrics,
     window_system: bool,
 }
 
@@ -40,37 +36,24 @@ pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
 pub(crate) struct BufferSourceItemLayoutResolutionContext<'a> {
     measurement_policy: DisplayRowMeasurementPolicy,
     default_resolved: &'a ResolvedFace,
-    default_face_char_w: f32,
-    default_face_ascent: f32,
-    default_face_h: f32,
-    char_w: f32,
-    char_h: f32,
-    font_ascent: f32,
+    default_face_metrics: DisplayRowFallbackMetrics,
+    window_metrics: DisplayRowFallbackMetrics,
     window_system: bool,
 }
 
 impl<'a> BufferSourceItemLayoutResolutionContext<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         measurement_policy: DisplayRowMeasurementPolicy,
         default_resolved: &'a ResolvedFace,
-        default_face_char_w: f32,
-        default_face_ascent: f32,
-        default_face_h: f32,
-        char_w: f32,
-        char_h: f32,
-        font_ascent: f32,
+        default_face_metrics: DisplayRowFallbackMetrics,
+        window_metrics: DisplayRowFallbackMetrics,
         window_system: bool,
     ) -> Self {
         Self {
             measurement_policy,
             default_resolved,
-            default_face_char_w,
-            default_face_ascent,
-            default_face_h,
-            char_w,
-            char_h,
-            font_ascent,
+            default_face_metrics,
+            window_metrics,
             window_system,
         }
     }
@@ -85,18 +68,13 @@ impl<'a, B: LayoutBufferView> Clone for BufferSourceFaceResolutionContext<'a, B>
 impl<'a, B: LayoutBufferView> Copy for BufferSourceFaceResolutionContext<'a, B> {}
 
 impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         buffer: &'a B,
         face_resolver: &'a FaceResolver,
         measurement_policy: DisplayRowMeasurementPolicy,
         default_resolved: &'a ResolvedFace,
-        default_face_char_w: f32,
-        default_face_ascent: f32,
-        default_face_h: f32,
-        char_w: f32,
-        char_h: f32,
-        font_ascent: f32,
+        default_face_metrics: DisplayRowFallbackMetrics,
+        window_metrics: DisplayRowFallbackMetrics,
         window_system: bool,
     ) -> Self {
         Self {
@@ -104,12 +82,8 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             face_resolver,
             measurement_policy,
             default_resolved,
-            default_face_char_w,
-            default_face_ascent,
-            default_face_h,
-            char_w,
-            char_h,
-            font_ascent,
+            default_face_metrics,
+            window_metrics,
             window_system,
         }
     }
@@ -140,12 +114,8 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             face_id,
             resolved,
             self.window_system,
-            self.char_w,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                self.char_w,
-                self.char_h,
-                self.font_ascent,
-            ),
+            self.window_metrics.char_width(),
+            self.window_metrics,
         );
         let face_metrics = state.active_face_state.metrics();
         state
@@ -176,12 +146,8 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         BufferSourceItemLayoutResolutionContext::new(
             self.measurement_policy,
             self.default_resolved,
-            self.default_face_char_w,
-            self.default_face_ascent,
-            self.default_face_h,
-            self.char_w,
-            self.char_h,
-            self.font_ascent,
+            self.default_face_metrics,
+            self.window_metrics,
             self.window_system,
         )
     }
@@ -195,11 +161,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
                 self.face_resolver,
                 u32::from(BasicFaceId::Default),
                 self.default_resolved,
-                DisplayRowFallbackMetrics::from_default_face_extents(
-                    self.default_face_char_w,
-                    self.default_face_h,
-                    self.default_face_ascent,
-                ),
+                self.default_face_metrics,
             ),
             display_host,
         )
@@ -211,19 +173,14 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         row_geometry: &mut DisplayRowGeometryState,
         pending_faces: Vec<PendingDisplaySourceFace>,
     ) {
-        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            self.char_w,
-            self.char_h,
-            self.font_ascent,
-        );
         for pending in pending_faces {
             let active_face = source_render.resolve_and_install_measured_face(
                 self.measurement_policy,
                 pending.face_id,
                 pending.resolved,
                 self.window_system,
-                self.char_w,
-                fallback_metrics,
+                self.window_metrics.char_width(),
+                self.window_metrics,
             );
             let metrics = active_face.metrics();
             row_geometry.include_row_extents(metrics.row_height, metrics.ascent);
@@ -284,9 +241,9 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             DisplayHeightFaceBasis {
                 canonical_face: self.default_resolved,
                 base_face: self.default_resolved,
-                fallback_char_width: self.default_face_char_w,
-                fallback_ascent: self.default_face_ascent,
-                fallback_row_height: self.default_face_h,
+                fallback_char_width: self.default_face_metrics.char_width(),
+                fallback_ascent: self.default_face_metrics.ascent(),
+                fallback_row_height: self.default_face_metrics.row_height(),
             },
             factor,
         ) else {
@@ -300,12 +257,8 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             face_id,
             resolved,
             self.window_system,
-            self.char_w,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                self.char_w,
-                self.char_h,
-                self.font_ascent,
-            ),
+            self.window_metrics.char_width(),
+            self.window_metrics,
         );
         let metrics = resolved_active_face.metrics();
         row_geometry.include_row_extents(metrics.row_height, metrics.ascent);

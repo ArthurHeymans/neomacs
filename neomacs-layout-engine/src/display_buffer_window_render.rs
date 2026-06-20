@@ -13,6 +13,7 @@ use crate::display_buffer_window_geometry::{
     BufferWindowLocalDisplayPolicy,
 };
 use crate::display_buffer_window_source::BufferWindowSourceReadRequest;
+use crate::display_row::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
 };
@@ -84,6 +85,8 @@ where
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
+        let window_metrics =
+            DisplayRowFallbackMetrics::from_default_face_extents(char_w, char_h, font_ascent);
         let local_display_policy = BufferWindowLocalDisplayPolicy::from_buffer(buffer);
 
         let default_face = BufferSourceDefaultFacePlan::new(
@@ -196,8 +199,7 @@ where
                 params,
                 geometry.mode_line_display_row,
                 reserve_right_border_col,
-                char_w,
-                font_ascent,
+                window_metrics,
                 &buffer_name,
             ),
             remaining_visibility_retries,
@@ -210,7 +212,7 @@ where
             text_source,
             params,
             &default_face,
-            font_ascent,
+            window_metrics,
             frame_params.window_system,
             params.window_id as u64,
             &text_append_surface,

@@ -42,6 +42,7 @@ use crate::display_frame_output::{
 };
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
+use crate::display_row::DisplayRowFallbackMetrics;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -1036,9 +1037,11 @@ impl LayoutEngine {
                 y: tab_bar_y,
                 width,
                 height: tab_bar_height,
-                char_width: frame_params.char_width,
-                ascent: tab_bar_ascent,
-                row_height: frame_params.char_height,
+                metrics: DisplayRowFallbackMetrics::from_default_face_extents(
+                    frame_params.char_width,
+                    frame_params.char_height,
+                    tab_bar_ascent,
+                ),
                 base_face: &tab_bar_face,
                 text: tab_bar.text,
             },
