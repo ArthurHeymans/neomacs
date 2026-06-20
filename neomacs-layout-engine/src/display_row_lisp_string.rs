@@ -16,9 +16,7 @@ use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
 #[cfg(test)]
 use crate::display_row_output_install::install_output_resolved_face;
-use crate::display_row_source_append::{
-    DisplayItemSourceAppendRequest, render_display_item_source_with_policy,
-};
+use crate::display_row_source_append::DisplayItemSourceAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::LispStringSourceCursor;
@@ -118,20 +116,15 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let request = DisplayItemSourceAppendRequest::new(
-        base_face,
-        base_face_id,
-        &frame,
-        position,
-        DisplayRowAppendKind::SourceText,
-    );
+    let append_context = DisplayItemSourceAppendContext::new(base_face, base_face_id, frame);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    render_display_item_source_with_policy(
+    append_context.render_with_policy(
         state,
         face_ids,
         source,
         source_state,
-        request,
+        position,
+        DisplayRowAppendKind::SourceText,
         &mut render_policy,
     )
 }

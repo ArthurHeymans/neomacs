@@ -77,7 +77,7 @@ pub(crate) struct BufferSyntheticTextRenderContext<'a> {
     default_char_width: f32,
 }
 
-pub(crate) struct DisplayItemSourceAppendRequest<'frame, 'face> {
+struct DisplayItemSourceAppendRequest<'frame, 'face> {
     base_face: &'face ResolvedFace,
     base_face_id: u32,
     frame: &'frame DisplayRowAppendFrame,
@@ -107,6 +107,13 @@ struct PreparedSingleDisplayItemSourceAppend {
     face_id: u32,
     kind: DisplayRowAppendKind,
     position: DisplayRowPosition,
+}
+
+#[derive(Clone)]
+pub(crate) struct DisplayItemSourceAppendContext<'face> {
+    base_face: &'face ResolvedFace,
+    face_id: u32,
+    frame: DisplayRowAppendFrame,
 }
 
 #[derive(Clone)]
@@ -422,6 +429,51 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     }
 }
 
+impl<'face> DisplayItemSourceAppendContext<'face> {
+    pub(crate) fn new(
+        base_face: &'face ResolvedFace,
+        face_id: u32,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            base_face,
+            face_id,
+            frame,
+        }
+    }
+
+    pub(crate) fn render_with_policy<S, P>(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        let request = DisplayItemSourceAppendRequest::new(
+            self.base_face,
+            self.face_id,
+            &self.frame,
+            position,
+            kind,
+        );
+        render_display_item_source_with_policy(
+            state,
+            face_ids,
+            source,
+            source_state,
+            request,
+            render_policy,
+        )
+    }
+}
+
 impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn new(
         base_face: &'face ResolvedFace,
@@ -439,12 +491,38 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         self.face_id
     }
 
-    pub(crate) fn base_face(&self) -> &'face ResolvedFace {
-        self.base_face
-    }
-
+    #[cfg(test)]
     pub(crate) fn frame(&self) -> &DisplayRowAppendFrame {
         &self.frame
+    }
+
+    fn source_context(&self) -> DisplayItemSourceAppendContext<'face> {
+        DisplayItemSourceAppendContext::new(self.base_face, self.face_id, self.frame.clone())
+    }
+
+    pub(crate) fn render_source_with_policy<S, P>(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        self.source_context().render_with_policy(
+            state,
+            face_ids,
+            source,
+            source_state,
+            position,
+            kind,
+            render_policy,
+        )
     }
 
     fn request(
@@ -595,7 +673,7 @@ impl<'frame, 'face> SingleDisplayItemSourceRequest<'frame, 'face> {
     }
 }
 
-pub(crate) fn render_display_item_source_with_policy<S, P>(
+fn render_display_item_source_with_policy<S, P>(
     state: &mut TextRowSourceRenderState<'_>,
     face_ids: &mut FrameFaceIdAllocator,
     source: &mut S,
