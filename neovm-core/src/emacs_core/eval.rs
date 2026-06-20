@@ -5944,13 +5944,20 @@ impl Context {
                 }
             }
 
-            // GNU runs deactivate-mark handling BEFORE
-            // post-command-hook (`keyboard.c:1471-1484`), so the
-            // hook sees the post-deactivate state. Finding 14.
-            let _ = self.update_active_region_selection_after_command();
-
             // Run post-command-hook via safe-run-hooks (Finding 7).
+            // GNU `command_loop_1` calls `safe_run_hooks (Qpost_command_hook)`
+            // at keyboard.c:1563.
             self.safe_run_hook_if_bound("post-command-hook")?;
+
+            // GNU runs the deactivate-mark / select-active-regions block
+            // strictly AFTER post-command-hook: keyboard.c:1597-1648, with
+            // `call0 (Qdeactivate_mark)` at 1611. (The earlier
+            // `Vdeactivate_mark = Qnil` at keyboard.c:1471/1490 is only the
+            // pre-command RESET of the flag, not the deactivation.) So a
+            // command that sets `deactivate-mark` must still observe an
+            // active region from inside `post-command-hook`. Finding —
+            // keyboard/command-loop audit.
+            let _ = self.update_active_region_selection_after_command();
 
             // GNU `keyboard.c:1650-1671` finalize block: adjust point out of
             // invisible/intangible text after the command.  Gated like GNU on

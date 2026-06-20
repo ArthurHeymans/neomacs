@@ -15197,3 +15197,98 @@ fn unbound_key_runs_undefined_command_and_per_command_hooks() {
         "unbound key should echo \"... is undefined\" (GNU subr.el `undefined'), got: {message:?}"
     );
 }
+
+/// Finding 2 — `deactivate-mark` handling must run AFTER
+/// `post-command-hook`, not before. GNU `command_loop_1` runs
+/// `safe_run_hooks (Qpost_command_hook)` at keyboard.c:1563 and only
+/// then evaluates the deactivate-mark / select-active-regions block at
+/// keyboard.c:1597-1648 (`call0 (Qdeactivate_mark)` at 1611).
+///
+/// So a command that sets `deactivate-mark` must still observe an active
+/// region from inside `post-command-hook`. Before the fix neomacs
+/// deactivated the mark first, so the hook saw `(region-active-p) => nil`.
+#[test]
+fn deactivate_mark_runs_after_post_command_hook() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    fn stop_command_loop_for_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-command-loop-for-test",
+        stop_command_loop_for_test,
+        0,
+        Some(0),
+    );
+
+    // Put some text in the buffer and activate the mark, then bind a key
+    // to a command that requests deactivation. The post-command-hook
+    // records whether the region is still active when it runs.
+    ev.eval_str(
+        r#"(progn
+             (insert "hello world")
+             (set-mark (point-min))
+             (goto-char (point-max))
+             (setq transient-mark-mode t)
+             (activate-mark)
+             (setq neo-region-active-in-post-hook 'unset)
+             (setq neo-command-ran nil)
+             (fset 'neo-deactivating-command
+                   (lambda () (interactive)
+                     (setq neo-command-ran t)
+                     (setq deactivate-mark t)))
+             (add-hook 'post-command-hook
+                       (lambda ()
+                         ;; The command loop runs post-command-hook once in
+                         ;; its entry prologue before the first command; only
+                         ;; record/stop after our command has actually run.
+                         (when (and neo-command-ran
+                                    (eq neo-region-active-in-post-hook 'unset))
+                           (setq neo-region-active-in-post-hook
+                                 (and (region-active-p) t))
+                           (neo-stop-command-loop-for-test))))
+             (keymap-set global-map "<f9>" 'neo-deactivating-command))"#,
+    )
+    .expect("set up deactivate-mark command and probe hook");
+
+    assert!(
+        ev.eval_str("(region-active-p)")
+            .expect("region check")
+            .is_truthy(),
+        "region must be active before the command runs"
+    );
+
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::symbol("f9"));
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should exit through the stop hook");
+
+    assert_eq!(
+        ev.eval_symbol("neo-command-ran").expect("command-ran flag"),
+        Value::T,
+        "the bound <f9> command must actually have run"
+    );
+
+    assert_eq!(
+        ev.eval_symbol("neo-region-active-in-post-hook")
+            .expect("probe variable"),
+        Value::T,
+        "post-command-hook must observe an active region; GNU deactivates \
+         the mark only AFTER the hook (keyboard.c:1563 then 1597-1611)"
+    );
+    // And the mark is actually deactivated by the end of the iteration.
+    assert!(
+        ev.eval_str("(region-active-p)")
+            .expect("region check after")
+            .is_nil(),
+        "deactivate-mark should still have run by the end of the iteration"
+    );
+}
