@@ -20,7 +20,8 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
 use crate::display_row_source_append::{
-    SingleDisplayItemSourceAppendRequest, render_single_display_item_naturally,
+    DisplayItemSourceAppendRequest, SingleDisplayItemSourceAppendRequest,
+    render_display_item_source_with_policy, render_single_display_item_naturally,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
@@ -127,15 +128,17 @@ impl DisplayReplacementStringSourceAppendRequest {
             return position;
         };
         let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-        let request = append_context.frame.source_append_render_request(
-            position,
-            append_context.face_id,
+        let request = DisplayItemSourceAppendRequest::new(
             append_context.base_face,
+            append_context.face_id,
+            &append_context.frame,
+            position,
             DisplayRowAppendKind::DisplayReplacementString,
         );
         let mut source = source;
         let mut source_state = DisplayRowSourceState::default();
-        let Some(outcome) = state.render_display_item_source_into_current_text_row_and_emit(
+        let Some(outcome) = render_display_item_source_with_policy(
+            state,
             face_ids,
             &mut source,
             &mut source_state,

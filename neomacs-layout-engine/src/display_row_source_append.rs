@@ -2,14 +2,22 @@ use crate::display_buffer_text_render::SyntheticTextSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
-    DisplayRowRenderPolicy, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,
-    NaturalDisplayRowAppendRenderPolicy,
+    CurrentTextRowRenderOutcome, DisplayRowRenderPolicy, DisplayRowSourceState,
+    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
-use crate::display_source::DisplayItemOnceSource;
+use crate::display_source::{DisplayItemOnceSource, DisplayItemSource};
 use crate::neovm_bridge::ResolvedFace;
+
+pub(crate) struct DisplayItemSourceAppendRequest<'frame, 'face> {
+    base_face: &'face ResolvedFace,
+    base_face_id: u32,
+    frame: &'frame DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    kind: DisplayRowAppendKind,
+}
 
 pub(crate) struct SingleDisplayItemSourceAppendRequest<'frame, 'face> {
     base_face: &'face ResolvedFace,
@@ -34,6 +42,24 @@ struct PreparedSingleDisplayItemSourceAppend {
     face_id: u32,
     kind: DisplayRowAppendKind,
     position: DisplayRowPosition,
+}
+
+impl<'frame, 'face> DisplayItemSourceAppendRequest<'frame, 'face> {
+    pub(crate) fn new(
+        base_face: &'face ResolvedFace,
+        base_face_id: u32,
+        frame: &'frame DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Self {
+        Self {
+            base_face,
+            base_face_id,
+            frame,
+            position,
+            kind,
+        }
+    }
 }
 
 impl<'frame, 'face> SingleDisplayItemSourceAppendRequest<'frame, 'face> {
@@ -94,6 +120,33 @@ impl<'frame, 'face> SingleDisplayItemSourceMeasureRequest<'frame, 'face> {
     }
 }
 
+pub(crate) fn render_display_item_source_with_policy<S, P>(
+    state: &mut TextRowSourceRenderState<'_>,
+    face_ids: &mut FrameFaceIdAllocator,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    request: DisplayItemSourceAppendRequest<'_, '_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome>
+where
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+{
+    let row_request = request.frame.source_append_render_request(
+        request.position,
+        request.base_face_id,
+        request.base_face,
+        request.kind,
+    );
+    state.render_display_item_source_into_current_text_row_and_emit(
+        face_ids,
+        source,
+        source_state,
+        row_request,
+        render_policy,
+    )
+}
+
 pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     state: &mut TextRowSourceRenderState<'_>,
     request: SingleDisplayItemSourceAppendRequest<'_, '_>,
@@ -102,20 +155,22 @@ pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     let base_face = request.base_face;
     let frame = request.frame;
     let prepared = request.prepare();
-    let row_request = frame.source_append_render_request(
-        prepared.position,
-        prepared.face_id,
-        base_face,
-        prepared.kind,
-    );
     let mut face_ids = FrameFaceIdAllocator::new(prepared.face_id.saturating_add(1));
     let mut source = DisplayItemOnceSource::new(prepared.item);
     let mut source_state = DisplayRowSourceState::default();
-    let outcome = state.render_display_item_source_into_current_text_row_and_emit(
+    let request = DisplayItemSourceAppendRequest::new(
+        base_face,
+        prepared.face_id,
+        frame,
+        prepared.position,
+        prepared.kind,
+    );
+    let outcome = render_display_item_source_with_policy(
+        state,
         &mut face_ids,
         &mut source,
         &mut source_state,
-        row_request,
+        request,
         render_policy,
     )?;
     Some(outcome.into_append_progress(prepared.position))
@@ -189,14 +244,16 @@ pub(crate) fn append_synthetic_text_to_display_row(
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let request = frame.source_append_render_request(
-        position,
-        face_id,
+    let request = DisplayItemSourceAppendRequest::new(
         base_face,
+        face_id,
+        &frame,
+        position,
         DisplayRowAppendKind::SourceText,
     );
     let mut source_state = DisplayRowSourceState::default();
-    let outcome = state.render_display_item_source_into_current_text_row_and_emit(
+    let outcome = render_display_item_source_with_policy(
+        state,
         &mut face_ids,
         &mut source,
         &mut source_state,
