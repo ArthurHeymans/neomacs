@@ -4,9 +4,12 @@ use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_loop_step_render::BufferTextWindowLoopStepRenderState;
+use crate::display_buffer_text_pre_source_render::{
+    BufferTextWindowPreSourceOutcome, BufferTextWindowPreSourceRenderState,
+};
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
+use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -105,17 +108,38 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 .row_geometry
                 .current_row_is_visible(self.loop_context.row_visibility_limit())
         {
-            if !BufferTextWindowLoopStepRenderState::new(self.loop_context, self.state.reborrow())
-                .render_next(
-                    source_walk,
-                    row_prelude_context,
-                    face_resolution_context.clone(),
-                    text,
-                    params,
-                    active_face_state,
-                    buffer,
-                )
-            {
+            let pre_source_outcome =
+                BufferTextWindowPreSourceRenderState::new(self.loop_context, self.state.reborrow())
+                    .render_for_context(
+                        source_walk,
+                        row_prelude_context,
+                        face_resolution_context.clone(),
+                        text,
+                        active_face_state,
+                        buffer,
+                    );
+            match pre_source_outcome {
+                BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
+                BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
+                    continue;
+                }
+                BufferTextWindowPreSourceOutcome::StopBufferWalk => {
+                    break;
+                }
+            }
+
+            if !BufferTextWindowSourceRenderRequest::new(
+                self.loop_context,
+                text,
+                params,
+                active_face_state,
+                self.state.reborrow(),
+            )
+            .render_next_and_apply(
+                source_walk,
+                face_resolution_context.clone(),
+                buffer,
+            ) {
                 break;
             }
         }
