@@ -3286,7 +3286,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let prepared_append = DisplaySourceSpecialCharPreparedAppend {
         kind: DisplaySourceSpecialDisplayKind::Control,
-        append_plan: BufferTextSpecialSourceCharAppendPlan {
+        append_plan: DisplaySourceSpecialCharAppendPlan {
             source_item: DisplaySourceItemRequest::new(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 DisplaySourceAppendItem::ControlChar { ch: '\n' },
@@ -3536,7 +3536,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut byte_idx = 0;
     let source_step_char = DisplaySourceStepChar::new('a', 0, 21);
     let prepared_append = DisplaySourceTextCharPreparedAppend {
-        plan: BufferTextSourceCharAppendPlan {
+        plan: DisplaySourceTextCharAppendPlan {
             source_text: DisplaySourceTextRequest::new(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 'a',
@@ -4090,7 +4090,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    let mut append_state = BufferTextRowAppendState::default();
+    let mut append_state = DisplaySourceRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_item =
@@ -4137,7 +4137,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    let mut append_state = BufferTextRowAppendState::default();
+    let mut append_state = DisplaySourceRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_item =
@@ -6195,7 +6195,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
-    let mut append_state = BufferTextRowAppendState::default();
+    let mut append_state = DisplaySourceRowAppendState::default();
     let prepared_append = append_context
         .prepare_source_item_char_at(
             &geometry,
@@ -6542,7 +6542,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
-    let mut append_state = BufferTextRowAppendState::default();
+    let mut append_state = DisplaySourceRowAppendState::default();
     let mut source_render = text_row_source_render_state(
         &mut builder,
         &mut output_emitter,
@@ -7410,7 +7410,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let mut append_state = BufferTextRowAppendState::default();
+    let mut append_state = DisplaySourceRowAppendState::default();
     let measured_width = append_context
         .resolve_source_render_plan_request_to_text_row(
             &geometry,

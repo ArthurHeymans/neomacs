@@ -61,11 +61,11 @@ struct DisplaySourceAppendRenderPlanResolver {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct BufferTextRowAppendState {
+pub(crate) struct DisplaySourceRowAppendState {
     render_plan_resolver: DisplaySourceAppendRenderPlanResolver,
 }
 
-impl BufferTextRowAppendState {
+impl DisplaySourceRowAppendState {
     fn render_plan_resolver(&mut self) -> &mut DisplaySourceAppendRenderPlanResolver {
         &mut self.render_plan_resolver
     }
@@ -184,9 +184,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn item_active_face(
         &self,
         geometry: &DisplayRowGeometryState,
-    ) -> BufferTextItemAppendContext<'source> {
+    ) -> DisplaySourceItemAppendContext<'source> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        BufferTextItemAppendContext::new(
+        DisplaySourceItemAppendContext::new(
             self.active_face.face_id(),
             self.active_face.resolved_face(),
             frame,
@@ -237,7 +237,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
-        plan: BufferTextSpecialSourceCharAppendPlan,
+        plan: DisplaySourceSpecialCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
         let position = plan.position();
         let fallback_kind = plan.source_item().append_kind();
@@ -254,7 +254,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn resolve_source_render_plan_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        append_state: &mut BufferTextRowAppendState,
+        append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
     ) -> DisplaySourceAppendRenderPlan {
@@ -272,10 +272,10 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn prepare_source_char_append_plan(
         &self,
         geometry: &DisplayRowGeometryState,
-        append_state: &mut BufferTextRowAppendState,
+        append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
-    ) -> BufferTextSourceCharAppendPlan {
+    ) -> DisplaySourceTextCharAppendPlan {
         let render_plan = self.resolve_source_render_plan_request_to_text_row(
             geometry,
             append_state,
@@ -289,7 +289,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn prepare_text_source_item_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        append_state: &mut BufferTextRowAppendState,
+        append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         source_char: &DisplaySourceTextChar,
         text: &[u8],
@@ -319,7 +319,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn prepare_source_item_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        append_state: &mut BufferTextRowAppendState,
+        append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         source_char: &DisplaySourceTextChar,
         text: &[u8],
@@ -354,7 +354,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn prepare_source_item_for_current_text_row(
         &self,
         geometry: DisplayRowGeometryState,
-        append_state: &mut BufferTextRowAppendState,
+        append_state: &mut DisplaySourceRowAppendState,
         source_render: &mut TextRowSourceRenderState<'_>,
         source_char: &DisplaySourceTextChar,
         text: &[u8],
@@ -414,7 +414,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
-        plan: BufferTextSourceCharAppendPlan,
+        plan: DisplaySourceTextCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
         let position = plan.position();
         let source_text = plan.source_text();
@@ -463,7 +463,7 @@ impl DisplaySourcePreparedCharAppend {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceTextCharPreparedAppend {
-    pub(crate) plan: BufferTextSourceCharAppendPlan,
+    pub(crate) plan: DisplaySourceTextCharAppendPlan,
 }
 
 impl DisplaySourceTextCharPreparedAppend {
@@ -723,8 +723,8 @@ impl DisplaySpecialSourceCharRequest {
         &self,
         position: DisplayRowPosition,
         display_item: DisplayItem,
-    ) -> BufferTextSpecialSourceCharAppendPlan {
-        BufferTextSpecialSourceCharAppendPlan {
+    ) -> DisplaySourceSpecialCharAppendPlan {
+        DisplaySourceSpecialCharAppendPlan {
             source_item: self.source_item_request(),
             position,
             display_item,
@@ -758,7 +758,7 @@ impl DisplaySourceSpecialDisplayKind {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceSpecialCharPreparedAppend {
     pub(crate) kind: DisplaySourceSpecialDisplayKind,
-    pub(crate) append_plan: BufferTextSpecialSourceCharAppendPlan,
+    pub(crate) append_plan: DisplaySourceSpecialCharAppendPlan,
     pub(crate) measured_width_px: Option<f32>,
 }
 
@@ -772,11 +772,11 @@ impl DisplaySourceSpecialCharPreparedAppend {
         &self,
         params: &WindowParams,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> BufferTextSpecialSourceCharAppendPolicy {
+    ) -> DisplaySourceSpecialCharAppendPolicy {
         if self.kind.should_allocate_policy_face(params) {
             let _ = face_ids.allocate();
         }
-        BufferTextSpecialSourceCharAppendPolicy {
+        DisplaySourceSpecialCharAppendPolicy {
             invalidate_face_after_append: self.kind.invalidates_face_after_append(),
         }
     }
@@ -817,14 +817,14 @@ impl DisplaySourceSpecialCharPreparedAppend {
         params: &WindowParams,
         face_ids: &mut FrameFaceIdAllocator,
         state: &mut TextRowSourceRenderState<'_>,
-    ) -> Option<BufferTextSpecialSourceCharAppendOutcome> {
+    ) -> Option<DisplaySourceSpecialCharAppendOutcome> {
         let append_policy = self.prepare_append_policy(params, face_ids);
         let progress = context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             state,
             self.append_plan,
         )?;
-        Some(BufferTextSpecialSourceCharAppendOutcome {
+        Some(DisplaySourceSpecialCharAppendOutcome {
             progress,
             append_policy,
         })
@@ -852,23 +852,23 @@ impl DisplaySourceSpecialCharPreparedAppend {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct BufferTextSpecialSourceCharAppendPolicy {
+struct DisplaySourceSpecialCharAppendPolicy {
     invalidate_face_after_append: bool,
 }
 
-impl BufferTextSpecialSourceCharAppendPolicy {
+impl DisplaySourceSpecialCharAppendPolicy {
     fn invalidates_face_after_append(self) -> bool {
         self.invalidate_face_after_append
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharAppendOutcome {
+pub(crate) struct DisplaySourceSpecialCharAppendOutcome {
     progress: DisplayRowAppendProgress,
-    append_policy: BufferTextSpecialSourceCharAppendPolicy,
+    append_policy: DisplaySourceSpecialCharAppendPolicy,
 }
 
-impl BufferTextSpecialSourceCharAppendOutcome {
+impl DisplaySourceSpecialCharAppendOutcome {
     pub(crate) fn apply_to_text_row_state(
         &self,
         face_scan: &mut FaceScanCheckpoint,
@@ -895,13 +895,13 @@ impl BufferTextSpecialSourceCharAppendOutcome {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
+pub(crate) struct DisplaySourceSpecialCharAppendPlan {
     pub(crate) source_item: DisplaySourceItemRequest,
     pub(crate) position: DisplayRowPosition,
     pub(crate) display_item: DisplayItem,
 }
 
-impl BufferTextSpecialSourceCharAppendPlan {
+impl DisplaySourceSpecialCharAppendPlan {
     fn position(&self) -> DisplayRowPosition {
         self.position
     }
@@ -912,13 +912,13 @@ impl BufferTextSpecialSourceCharAppendPlan {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharAppendPlan {
+pub(crate) struct DisplaySourceTextCharAppendPlan {
     pub(crate) source_text: DisplaySourceTextRequest,
     pub(crate) position: DisplayRowPosition,
     pub(crate) source_item: DisplayItem,
 }
 
-impl BufferTextSourceCharAppendPlan {
+impl DisplaySourceTextCharAppendPlan {
     fn source_text(&self) -> DisplaySourceTextRequest {
         self.source_text
     }
@@ -983,8 +983,8 @@ impl<'text, 'item> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
     fn append_plan(
         self,
         render_plan: DisplaySourceAppendRenderPlan,
-    ) -> BufferTextSourceCharAppendPlan {
-        BufferTextSourceCharAppendPlan {
+    ) -> DisplaySourceTextCharAppendPlan {
+        DisplaySourceTextCharAppendPlan {
             source_text: self.source.into_text_request(render_plan),
             position: self.position,
             source_item: self.source_item.clone(),
@@ -1018,11 +1018,11 @@ impl DisplaySourceItemRequest {
     }
 }
 
-pub(crate) struct BufferTextItemAppendContext<'a> {
+pub(crate) struct DisplaySourceItemAppendContext<'a> {
     single_item: SingleDisplayItemAppendContext<'a>,
 }
 
-impl<'a> BufferTextItemAppendContext<'a> {
+impl<'a> DisplaySourceItemAppendContext<'a> {
     pub(crate) fn new(
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -1075,7 +1075,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
 pub(crate) struct BufferTextSourceRequestAppendContext<'a, B: LayoutBufferView + ?Sized> {
     buffer: &'a B,
     buffer_id: BufferId,
-    item_context: BufferTextItemAppendContext<'a>,
+    item_context: DisplaySourceItemAppendContext<'a>,
 }
 
 #[cfg(test)]
@@ -1090,7 +1090,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         Self {
             buffer,
             buffer_id,
-            item_context: BufferTextItemAppendContext::new(face_id, base_face, frame),
+            item_context: DisplaySourceItemAppendContext::new(face_id, base_face, frame),
         }
     }
 

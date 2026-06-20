@@ -5,7 +5,7 @@
 //! updates used by row lifecycle renderers.
 
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
+use crate::display_buffer_text_item_append::DisplaySourceRowAppendState;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipAction, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
@@ -35,7 +35,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_consumption: BufferTextSourceConsumptionState,
-    append_state: BufferTextRowAppendState,
+    append_state: DisplaySourceRowAppendState,
 }
 
 struct BufferTextWindowSourceConsumption {
@@ -89,11 +89,11 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
             source_consumption: BufferTextSourceConsumptionState::new(text_start_byte),
-            append_state: BufferTextRowAppendState::default(),
+            append_state: DisplaySourceRowAppendState::default(),
         }
     }
 
-    pub(crate) fn append_state(&mut self) -> &mut BufferTextRowAppendState {
+    pub(crate) fn append_state(&mut self) -> &mut DisplaySourceRowAppendState {
         &mut self.append_state
     }
 
