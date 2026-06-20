@@ -853,6 +853,74 @@ fn display_row_progress_writer_accepts_direct_text_run_measurement_plan() {
     );
 }
 
+/// A composed Arabic cluster already on the row must report its full
+/// `string-width` worth of columns when a *new* writer (e.g. the TAB item in
+/// the multi-item buffer walk) resumes the row. GNU advances the column by the
+/// composition's `cmp->width` (= string-width); counting the whole cluster as
+/// a single cell made the resumed TAB over-fill (the etc/HELLO Arabic/Indic
+/// regression, where the name renders identically but the greeting is pushed
+/// ~6 cells right).
+///
+/// This reconstructs the exact glyph shape the buffer-text walk produces for a
+/// contextual-shaping run: one `Composite` holding the whole cluster plus
+/// zero-width per-letter padding cells (the GUI shapes the run; the TTY lays
+/// it one grapheme per cell). `current_text_cols` must therefore count the
+/// Composite as `string-width("العربيّة")` = 7, not 1.
+#[test]
+fn resumed_writer_counts_composed_cluster_by_string_width() {
+    use neomacs_display_protocol::glyph_matrix::Glyph;
+
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::every(42);
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+
+    // `Arabic (` — eight plain Char glyphs (cols 0..8).
+    for (i, ch) in "Arabic (".chars().enumerate() {
+        crate::glyph_row_writer::push_char_to_row(&mut row, ch, 2, i, 8.0);
+    }
+    // The Arabic word as one Composite cluster (string-width 7: six letters
+    // plus the teh-marbuta; the shadda U+0651 is zero-width) followed by
+    // zero-width grapheme padding cells, matching the buffer walk's output.
+    {
+        let text = &mut row.glyphs[GlyphArea::Text.index()];
+        text.push(Glyph {
+            glyph_type: GlyphType::Composite {
+                text: "العربيّة".into(),
+            },
+            ..Glyph::char('ا', 2, 8)
+        });
+        for charpos in 9..15 {
+            text.push(Glyph::padding_for(2, charpos));
+        }
+    }
+    // The closing paren — one more Char glyph.
+    crate::glyph_row_writer::push_char_to_row(&mut row, ')', 2, 15, 8.0);
+
+    // A fresh writer (the TAB item) must recover col 16 from the row glyphs:
+    // 8 ("Arabic (") + 7 (composed cluster) + 1 (")").
+    let tab = {
+        let mut writer = DisplayRowProgressWriter::new(
+            &row_layout,
+            &mut row,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            1280.0,
+        );
+        writer.push_item(text_item("\t"))
+    };
+
+    assert_eq!(
+        tab.start.col, 16,
+        "resume must recover the buffer column (16) from the composed cluster; got {}",
+        tab.start.col
+    );
+    assert_eq!(
+        tab.end.col, 42,
+        "resumed TAB must fill to the buffer tab stop (col 42); got {}",
+        tab.end.col
+    );
+}
+
 #[test]
 fn display_row_progress_writer_uses_position_for_tabs() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);

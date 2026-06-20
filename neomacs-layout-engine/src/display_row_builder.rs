@@ -297,11 +297,15 @@ pub(crate) struct DisplayRowWriteMetrics {
 impl DisplayRowWriteMetrics {
     fn from_glyphs(glyphs: &[Glyph], char_width_px: f32) -> Self {
         glyphs.iter().fold(Self::default(), |mut metrics, glyph| {
-            let width_cols = match glyph.glyph_type {
-                GlyphType::Stretch { width_cols } => usize::from(width_cols.max(1)),
+            let width_cols = match &glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => usize::from((*width_cols).max(1)),
                 GlyphType::Glyphless { .. } if glyph.pixel_width > 0.0 => {
                     (glyph.pixel_width / char_width_px.max(1.0)).ceil().max(1.0) as usize
                 }
+                // A composed grapheme cluster advances the column by GNU's
+                // `cmp->width` (= `string-width` of the cluster), not a single
+                // cell — combining marks within it contribute 0.
+                GlyphType::Composite { text } => crate::composition::composed_cluster_cols(text),
                 _ if glyph.padding && glyph.pixel_width <= 0.0 => 0,
                 _ if glyph.wide => 2,
                 _ => 1,
@@ -1284,8 +1288,15 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         self.row.glyphs[self.area_index]
             .iter()
             .filter(|glyph| !glyph.padding)
-            .map(|glyph| match glyph.glyph_type {
-                GlyphType::Stretch { width_cols } => width_cols.max(1),
+            .map(|glyph| match &glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => (*width_cols).max(1),
+                // A composed cluster occupies its `string-width` worth of
+                // cells (GNU `cmp->width`), matching the per-char advance in
+                // `from_glyphs` so the running column never disagrees with the
+                // buffer-side `current-column` when a TAB resumes the row.
+                GlyphType::Composite { text } => crate::composition::composed_cluster_cols(text)
+                    .min(usize::from(u16::MAX))
+                    as u16,
                 _ if glyph.wide => 2,
                 _ => 1,
             })

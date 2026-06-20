@@ -543,6 +543,58 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     assert_eq!(rendered.progress.end_col, 3);
 }
 
+/// The HELLO file separates a script name from its greeting with a literal
+/// TAB (tab-width 42). On a TTY the rendered column where the TAB stops must
+/// match the buffer-level `current-column` model: GNU advances `current_x` by
+/// the composed cluster's `char-width` sum, so combining marks contribute 0
+/// columns and the TAB after `Arabic (العربيّة)` (string-width 16; the shadda
+/// U+0651 is a zero-width combining mark) fills to the tab stop at column 42.
+///
+/// Regression for the composed/complex-run cell over-count: the TTY render
+/// walk gave every complex-run member its own column (including the zero-width
+/// shadda absorbed into the Arabic shaping run), so the running column ran
+/// past the buffer model and the TAB over-filled, pushing the greeting right.
+#[test]
+fn tty_complex_run_then_tab_lands_on_buffer_tab_stop() {
+    let _eval = Context::new();
+    // font_metrics = None mirrors the TTY frame's fallback measurement path.
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut test_base_face = resolver.default_face().clone();
+    test_base_face.font_char_width = 8.0;
+    test_base_face.font_ascent = 12.0;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let request = display_row_request_from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            // 160 cols * 8px so nothing clips.
+            width: 1280.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(42),
+        },
+        &mut face_ids,
+        &test_base_face,
+        GlyphRowRole::Text,
+        std::collections::HashMap::new(),
+    );
+
+    let rendered =
+        DisplayRowLispStringRenderRequest::new(request, Value::string("Arabic (العربيّة)\tx"))
+            .render(&mut renderer, &resolver, &mut face_ids)
+            .expect("display source row");
+
+    // The greeting (here `x`) must land at the tab stop, just past column 42.
+    assert_eq!(
+        rendered.progress.end_col, 43,
+        "complex name + TAB must reach the buffer tab stop (col 42 + 1 for `x`); got {}",
+        rendered.progress.end_col
+    );
+}
+
 #[test]
 fn display_row_source_state_reuses_face_cache_across_items() {
     let _eval = Context::new();

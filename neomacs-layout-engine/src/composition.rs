@@ -29,6 +29,23 @@ pub(crate) fn base_width_cols(ch: char) -> u8 {
     }
 }
 
+/// Number of terminal cells a *composed grapheme cluster* (a `Composite`
+/// glyph holding several characters) occupies on a TTY.
+///
+/// GNU advances the redisplay column by a composition's `cmp->width`
+/// (src/composite.h), which for an automatic composition is the sum of the
+/// component characters' `CHARACTER_WIDTH` (src/composite.c
+/// `composition_update_it`/`composition_gstring_width`): combining marks,
+/// shaping controls and joiners contribute 0, base letters contribute their
+/// char-width. That is exactly what `string-width` computes, so the rendered
+/// cell count of a composed cluster must equal `string-width` of its text —
+/// the same value `current-column`/`Fcurrent_column` use buffer-side. Without
+/// this, the render walk counted the whole cluster as a single cell and any
+/// following TAB filled to the wrong stop (Arabic/Indic names in etc/HELLO).
+pub(crate) fn composed_cluster_cols(text: &str) -> usize {
+    neovm_core::encoding::string_width(text).max(1)
+}
+
 /// Whether `ch` continues the grapheme cluster of the previously emitted
 /// text glyph, given that glyph's `tail` — `(last_char,
 /// is_lone_regional_indicator)` from the current display row, or `None`
