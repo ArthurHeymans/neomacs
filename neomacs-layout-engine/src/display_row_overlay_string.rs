@@ -225,6 +225,10 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         )
     }
 
+    pub(crate) fn is_enabled(self) -> bool {
+        self.enabled
+    }
+
     pub(crate) fn render_at<B: LayoutBufferView>(
         self,
         buffer: &B,

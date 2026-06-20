@@ -733,6 +733,17 @@ impl<'a> DisplaySourceItemAppendContext<'a> {
             .render_naturally(state, item, position, fallback_kind)
     }
 
+    pub(crate) fn measure_display_item_width_naturally(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<f32> {
+        self.single_item
+            .measure_width_naturally(state, item.clone(), position, fallback_kind)
+    }
+
     pub(crate) fn measure_source_display_item_width_to_text_row(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,

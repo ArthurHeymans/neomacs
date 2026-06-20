@@ -48,7 +48,7 @@ impl BufferSourceConsumptionState {
         self.pending_render_items.clear();
     }
 
-    fn prepend_pending_render_items<I>(&mut self, items: I)
+    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = DisplaySourceStepItem>,
     {
@@ -62,16 +62,7 @@ impl BufferSourceConsumptionState {
         &mut self,
         source_item: DisplaySourceItem,
     ) -> Option<DisplaySourceStepItem> {
-        if !source_item.is_multi_char_text_run() {
-            return DisplaySourceStepItem::new(source_item, self.text_start_byte);
-        }
-        let (first, pending) = source_item.split_text_run_items(self.text_start_byte)?;
-        let text_start_byte = self.text_start_byte;
-        let pending = pending
-            .into_iter()
-            .filter_map(|item| DisplaySourceStepItem::new(item, text_start_byte));
-        self.prepend_pending_render_items(pending);
-        DisplaySourceStepItem::new(first, self.text_start_byte)
+        DisplaySourceStepItem::new(source_item, self.text_start_byte)
     }
 
     fn expected_source_pos(position: DisplaySourceTextPosition) -> CharPos0 {

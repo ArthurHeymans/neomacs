@@ -430,12 +430,79 @@ impl DisplaySourceStepItem {
         self.is_explicit_line_break
     }
 
-    pub(crate) fn into_item(self) -> DisplayItem {
-        self.item
+    pub(crate) fn item(&self) -> &DisplayItem {
+        &self.item
+    }
+
+    pub(crate) fn item_mut(&mut self) -> &mut DisplayItem {
+        &mut self.item
+    }
+
+    pub(crate) fn is_multi_char_text_run(&self) -> bool {
+        let DisplayItemKind::TextRun(run) = &self.item.kind else {
+            return false;
+        };
+        let mut chars = run.text.chars();
+        chars.next().is_some() && chars.next().is_some()
+    }
+
+    pub(crate) fn plain_ascii_text_run(&self) -> Option<&str> {
+        let DisplayItemKind::TextRun(run) = &self.item.kind else {
+            return None;
+        };
+        let text = &*run.text;
+        let mut chars = text.chars();
+        chars.next()?;
+        chars.next()?;
+        text.chars()
+            .all(|ch| ch.is_ascii() && !ch.is_ascii_whitespace())
+            .then_some(text)
+    }
+
+    pub(crate) fn has_point_inside(&self, point_charpos: i64) -> bool {
+        self.source_end_charpos.is_some_and(|end| {
+            point_charpos >= self.source_step_char.start_charpos() && point_charpos < end
+        })
+    }
+
+    pub(crate) fn split_text_run_items(
+        self,
+        text_start_byte: usize,
+    ) -> Option<(Self, Vec<DisplaySourceStepItem>)> {
+        let source_step_char = self.source_step_char;
+        let source_item = DisplaySourceItem::new(
+            self.item,
+            source_step_char.start_byte_idx(),
+            source_step_char.start_charpos(),
+            Some(source_step_char.ch()),
+        );
+        let (first, pending) = source_item.split_text_run_items(text_start_byte)?;
+        let first = DisplaySourceStepItem::new(first, text_start_byte)?;
+        let pending = pending
+            .into_iter()
+            .filter_map(|item| DisplaySourceStepItem::new(item, text_start_byte))
+            .collect();
+        Some((first, pending))
+    }
+
+    pub(crate) fn into_render_parts(
+        self,
+    ) -> (
+        DisplaySourceStepChar,
+        Option<i64>,
+        Option<usize>,
+        DisplayItem,
+    ) {
+        (
+            self.source_step_char,
+            self.source_end_charpos,
+            self.source_end_byte_idx,
+            self.item,
+        )
     }
 
     #[cfg(test)]
-    pub(crate) fn into_render_parts(self) -> Option<(DisplaySourceStepChar, DisplayItem)> {
+    pub(crate) fn into_test_render_parts(self) -> Option<(DisplaySourceStepChar, DisplayItem)> {
         Some((self.source_step_char, self.item))
     }
 }

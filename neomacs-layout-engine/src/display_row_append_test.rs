@@ -6476,7 +6476,7 @@ fn buffer_text_source_append_context_appends_source_char() {
 }
 
 #[test]
-fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk_state() {
+fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_state() {
     let mut context = RowTransitionTestContext::new("source-char-render-request");
     let buf_id = context
         .eval
@@ -6601,18 +6601,22 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
 
     assert!(continue_buffer_walk);
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 1);
-    assert_eq!(x, 8.0);
-    assert_eq!(col, 1);
+    assert_eq!(byte_idx, 2);
+    assert_eq!(charpos, 2);
+    assert_eq!(x, 16.0);
+    assert_eq!(col, 2);
     context
         .builder
         .edit_current_row_for_test(|row| {
             let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
-            assert_eq!(text_glyphs.len(), 1);
+            assert_eq!(text_glyphs.len(), 2);
             assert!(matches!(
                 text_glyphs[0].glyph_type,
                 GlyphType::Char { ch: 'a' }
+            ));
+            assert!(matches!(
+                text_glyphs[1].glyph_type,
+                GlyphType::Char { ch: 'b' }
             ));
         })
         .expect("current row");

@@ -355,6 +355,10 @@ impl WordWrapRenderState {
         }
     }
 
+    pub(crate) fn is_enabled(self) -> bool {
+        self.enabled
+    }
+
     pub(crate) fn can_record_candidate(self, ch: char) -> bool {
         self.enabled && self.may_wrap && char_can_wrap_before_basic(ch)
     }

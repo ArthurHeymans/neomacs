@@ -328,6 +328,18 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             .render_with_policy(state, item, position, fallback_kind, render_policy)
     }
 
+    pub(crate) fn measure_source_display_item_width_naturally(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<f32> {
+        self.item_active_face(geometry)
+            .measure_display_item_width_naturally(state, item, position, fallback_kind)
+    }
+
     fn append_source_char_plan_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,

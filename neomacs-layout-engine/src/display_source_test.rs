@@ -882,7 +882,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     };
     let first = first.into_renderable().expect("leading renderable item");
     let end_charpos = first.end_charpos();
-    let (_, first_item) = first.into_render_parts().expect("render parts");
+    let (_, first_item) = first.into_test_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = DisplaySourceTextPosition::new(position.byte_idx(), end_charpos);
 
@@ -949,7 +949,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     };
     let first = first.into_renderable().expect("leading renderable item");
     let end_charpos = first.end_charpos();
-    let (_, first_item) = first.into_render_parts().expect("render parts");
+    let (_, first_item) = first.into_test_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
     position = DisplaySourceTextPosition::new(position.byte_idx(), end_charpos);
 
@@ -969,6 +969,44 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         replacement.descriptor().classification().replacement(),
         Some(DisplayReplacementProperty::Stretch(_))
     ));
+}
+
+#[test]
+fn buffer_text_source_consumption_keeps_plain_text_run_renderable() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("abc");
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        buffer.total_char_end_pos(),
+        RenderFaceRef::FaceId(3),
+    );
+    let mut context = DisplaySourceContext::empty();
+    let mut source_consumption = BufferSourceConsumptionState::new(0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
+
+    let consumed = source_consumption
+        .next_source_consumption_item(&mut source, &mut context, &mut position)
+        .expect("renderable text run");
+    let renderable = consumed.into_renderable().expect("renderable item");
+    let (_, item) = renderable.into_test_render_parts().expect("render parts");
+
+    assert_eq!(item_texts(&[item]), ["abc"]);
+    assert_eq!(position, DisplaySourceTextPosition::new(3, 0));
 }
 
 #[test]

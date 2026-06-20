@@ -23,8 +23,8 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
 };
-use crate::display_source::DisplaySourceContext;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source::{DisplaySourceContext, DisplaySourceStepItem};
 use crate::display_source_item_append::DisplaySourceRowAppendState;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
@@ -111,6 +111,13 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
 
     pub(crate) fn append_state(&mut self) -> &mut DisplaySourceRowAppendState {
         &mut self.append_state
+    }
+
+    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = DisplaySourceStepItem>,
+    {
+        self.source_consumption.prepend_pending_render_items(items);
     }
 
     fn consume_source_item(
