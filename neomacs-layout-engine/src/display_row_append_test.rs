@@ -10,20 +10,11 @@ use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::*;
 use crate::display_buffer_source_row_lifecycle::*;
 use crate::display_buffer_source_walk::*;
-use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
-    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
-    BufferTextWindowCursorEffectsRequest, BufferTextWindowCursorPublishStatus,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
-    BufferTextWindowVisibilityRetryRequest,
-};
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_overflow::*;
-use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
+use crate::display_buffer_window_render::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -98,6 +89,13 @@ use crate::display_source_overflow::DisplaySourceTextCharOverflowAction;
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_source_resolver::DisplayPropertyReplacementSourceResolveRequest;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
+use crate::display_text_window_row_lifecycle::{
+    TextWindowBeginRequest, TextWindowBodyInstallRenderContext, TextWindowBodyInstallRequest,
+    TextWindowBodyInstallState, TextWindowCursorEffectsRequest, TextWindowCursorPublishStatus,
+    TextWindowFinishRequest, TextWindowFinishState, TextWindowTailFinalizeContext,
+    TextWindowTailFinalizeRequest, TextWindowTailFinalizeState,
+    TextWindowTerminalRightBorderRequest, TextWindowVisibilityRetryRequest,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
@@ -6790,40 +6788,39 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
-    let outcome =
-        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
-            &params,
-            b"abc",
-            0,
-            0.0,
-            0.0,
-            0.0,
-            48.0,
-            8.0,
-            16.0,
-            0,
-            0,
-            3,
-            false,
-            context.row_limit,
-        ))
-        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
-            &mut cursor_info,
-            &context.geometry,
-            &context.row_y_positions,
-            &mut hit_row_range,
-            &mut context.hit_rows,
-            text_row_output_render_state(
-                &mut context.builder,
-                &mut context.output_emitter,
-                &mut context.eval,
-            ),
-        ));
+    let outcome = TextWindowTailFinalizeRequest::new(TextWindowTailFinalizeContext::new(
+        &params,
+        b"abc",
+        0,
+        0.0,
+        0.0,
+        0.0,
+        48.0,
+        8.0,
+        16.0,
+        0,
+        0,
+        3,
+        false,
+        context.row_limit,
+    ))
+    .finalize_and_apply(TextWindowTailFinalizeState::new(
+        &mut cursor_info,
+        &context.geometry,
+        &context.row_y_positions,
+        &mut hit_row_range,
+        &mut context.hit_rows,
+        text_row_output_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+        ),
+    ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
         outcome.cursor_publish_status(),
-        BufferTextWindowCursorPublishStatus::Published
+        TextWindowCursorPublishStatus::Published
     );
     assert!(outcome.cursor_published());
     assert!(outcome.pending_row_finished());
@@ -6855,40 +6852,39 @@ fn buffer_text_window_tail_finalize_reports_missing_cursor_capture() {
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
-    let outcome =
-        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
-            &params,
-            b"abc",
-            0,
-            0.0,
-            0.0,
-            0.0,
-            48.0,
-            8.0,
-            16.0,
-            0,
-            0,
-            3,
-            false,
-            context.row_limit,
-        ))
-        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
-            &mut cursor_info,
-            &context.geometry,
-            &context.row_y_positions,
-            &mut hit_row_range,
-            &mut context.hit_rows,
-            text_row_output_render_state(
-                &mut context.builder,
-                &mut context.output_emitter,
-                &mut context.eval,
-            ),
-        ));
+    let outcome = TextWindowTailFinalizeRequest::new(TextWindowTailFinalizeContext::new(
+        &params,
+        b"abc",
+        0,
+        0.0,
+        0.0,
+        0.0,
+        48.0,
+        8.0,
+        16.0,
+        0,
+        0,
+        3,
+        false,
+        context.row_limit,
+    ))
+    .finalize_and_apply(TextWindowTailFinalizeState::new(
+        &mut cursor_info,
+        &context.geometry,
+        &context.row_y_positions,
+        &mut hit_row_range,
+        &mut context.hit_rows,
+        text_row_output_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+        ),
+    ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
         outcome.cursor_publish_status(),
-        BufferTextWindowCursorPublishStatus::MissingCapture
+        TextWindowCursorPublishStatus::MissingCapture
     );
     assert!(!outcome.cursor_published());
     assert!(context.builder.phys_cursor().is_none());
@@ -6946,19 +6942,18 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
-    let positions =
-        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext::new(
-            41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
-        ))
-        .install_and_apply(BufferTextWindowBodyInstallState::new(
-            TextWindowOutputTarget::from_builder(&mut builder),
-            &mut output_emitter,
-            crate::display_status_line::ChromeRowRenderServices::new(
-                &mut font_metrics,
-                &face_resolver,
-                &mut face_ids,
-            ),
-        ));
+    let positions = TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
+        41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
+    ))
+    .install_and_apply(TextWindowBodyInstallState::new(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut output_emitter,
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+    ));
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
     assert_eq!(positions.window_end, LispCharPos1::new(8));
@@ -6993,7 +6988,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         .selected_window;
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    let mut output_emitter = BufferTextWindowBeginRequest::new(
+    let mut output_emitter = TextWindowBeginRequest::new(
         frame_id,
         window_id,
         2,
@@ -7050,7 +7045,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
-    let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
+    let installed = TextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
         .install_and_apply(TextWindowOutputTarget::from_builder(&mut builder));
 
     assert!(installed);
@@ -7062,7 +7057,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
 fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
-    let installed = BufferTextWindowCursorEffectsRequest::new(42, None)
+    let installed = TextWindowCursorEffectsRequest::new(42, None)
         .install_and_apply(TextWindowOutputTarget::from_builder(&mut builder));
 
     assert!(!installed);
@@ -7085,7 +7080,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
 
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
-    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+    let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
@@ -7130,7 +7125,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     // allocator, exactly as a propertized buffer-text run would.
     let content_face_id = face_ids.allocate();
     let mut font_metrics = None;
-    let border_face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+    let border_face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
@@ -7168,7 +7163,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
 
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
-    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+    let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
@@ -7231,13 +7226,14 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
-    let finished = BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5)
-        .finish_and_snapshot(BufferTextWindowFinishState::new(
+    let finished = TextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
+        TextWindowFinishState::new(
             TextWindowOutputTarget::from_builder(&mut builder),
             output_emitter,
             &mut eval,
             hit_rows,
-        ));
+        ),
+    );
 
     assert_eq!(finished.hit_data.window_id, 41);
     assert_eq!(finished.hit_data.content_x, 12.0);
@@ -7275,7 +7271,7 @@ fn buffer_text_window_visibility_retry_request_scrolls_down_from_visible_rows() 
         emitted_row(2, 32, 16, 17, 24),
     ];
 
-    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+    let outcome = TextWindowVisibilityRetryRequest::new(
         &rows,
         1,
         0,
@@ -7316,7 +7312,7 @@ fn buffer_text_window_visibility_retry_request_detects_partially_visible_point_r
         emitted_row(2, 40, 30, 21, 30),
     ];
 
-    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+    let outcome = TextWindowVisibilityRetryRequest::new(
         &rows,
         1,
         0,
@@ -7356,7 +7352,7 @@ fn buffer_text_window_visibility_retry_request_detects_point_line_continuation()
         emitted_row(2, 32, 16, 21, 25),
     ];
 
-    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+    let outcome = TextWindowVisibilityRetryRequest::new(
         &rows,
         1,
         0,

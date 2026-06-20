@@ -1,4 +1,4 @@
-//! Buffer-text source rendering requests and actions.
+//! Buffer window source rendering requests and actions.
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
@@ -21,7 +21,7 @@ use crate::types::{FrameParams, WindowParams};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
-pub(crate) struct BufferTextWindowRenderRequest<'a, B>
+pub(crate) struct BufferWindowRenderRequest<'a, B>
 where
     B: LayoutBufferView,
 {
@@ -35,7 +35,7 @@ where
     reserve_right_border_col: bool,
 }
 
-impl<'a, B> BufferTextWindowRenderRequest<'a, B>
+impl<'a, B> BufferWindowRenderRequest<'a, B>
 where
     B: LayoutBufferView,
 {

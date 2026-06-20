@@ -12,9 +12,6 @@ use crate::display_buffer_source_tail_render::{
     render_buffer_source_tail_and_decide_retry,
 };
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
-};
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
@@ -36,6 +33,9 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_status_line::ChromeRowRenderServices;
+use crate::display_text_window_row_lifecycle::{
+    TextWindowAppendSurfaceRequest, TextWindowBeginRequest, TextWindowBodyInstallState,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, RustBufferAccess};
@@ -388,7 +388,7 @@ impl BufferSourceWalkSetup {
     ) -> TextWindowRedisplayPositions {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
-            .install_and_apply(BufferTextWindowBodyInstallState::new(
+            .install_and_apply(TextWindowBodyInstallState::new(
                 output,
                 output_emitter,
                 render_services,
@@ -459,7 +459,7 @@ impl BufferSourceWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        begin_request: BufferTextWindowBeginRequest,
+        begin_request: TextWindowBeginRequest,
         output: &mut BufferSourceOutputState<'_>,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,

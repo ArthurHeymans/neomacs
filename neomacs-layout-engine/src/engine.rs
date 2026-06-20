@@ -17,9 +17,8 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use crate::display_buffer_text_render::{
-    BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome,
-    BufferTextWindowRenderRequest,
+use crate::display_buffer_window_render::{
+    BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome, BufferWindowRenderRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -917,7 +916,7 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
-        let render_outcome = BufferTextWindowRenderRequest::new(
+        let render_outcome = BufferWindowRenderRequest::new(
             frame_id,
             window_id,
             params,

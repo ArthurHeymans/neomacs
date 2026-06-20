@@ -4,12 +4,11 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_source_tail_render::{
     BufferSourcePostLoopRenderOutcome, BufferSourceRetryBounds,
 };
-use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowVisibilityRetryOutcome,
-};
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
+use crate::display_text_window_row_lifecycle::{
+    TextWindowBeginRequest, TextWindowCursorEffectsRequest, TextWindowVisibilityRetryOutcome,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::WindowHitData;
 use crate::neovm_bridge::FaceResolver;
@@ -64,7 +63,7 @@ pub(crate) struct BufferSourceRetryPlan {
     charpos_end: i64,
     rendered_rows_len: usize,
     retry_bounds: BufferSourceRetryBounds,
-    retry: BufferTextWindowVisibilityRetryOutcome,
+    retry: TextWindowVisibilityRetryOutcome,
 }
 
 impl<'emit> BufferSourceOutputState<'emit> {
@@ -88,13 +87,13 @@ impl<'emit> BufferSourceOutputState<'emit> {
     }
 
     pub(crate) fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
-        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
+        TextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
             .install_and_apply(self.output.reborrow())
     }
 
     pub(crate) fn begin_text_window_output(
         &mut self,
-        begin_request: BufferTextWindowBeginRequest,
+        begin_request: TextWindowBeginRequest,
     ) -> WindowOutputEmitter {
         begin_request.begin_and_apply(self.output.reborrow(), self.evaluator)
     }

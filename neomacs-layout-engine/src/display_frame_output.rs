@@ -1,10 +1,10 @@
-use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
 };
+use crate::display_text_window_row_lifecycle::TextWindowTerminalRightBorderRequest;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
@@ -798,7 +798,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
                 Color::from_pixel(self.frame_params.vertical_border_fg),
             );
         } else {
-            BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
+            TextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
                 .install_and_apply(state.text_window_output_target(), render_services);
         }
     }

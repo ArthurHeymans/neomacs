@@ -1,13 +1,6 @@
 //! Buffer source post-loop tail rendering and install context.
 
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
-use crate::display_buffer_text_append::{
-    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
-    BufferTextWindowVisibilityRetryRequest,
-};
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -18,6 +11,12 @@ use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source_progress::DisplaySourceRowProgressState;
+use crate::display_text_window_row_lifecycle::{
+    TextWindowBodyInstallRenderContext, TextWindowBodyInstallRequest, TextWindowFinishRequest,
+    TextWindowFinishState, TextWindowTailFinalizeContext, TextWindowTailFinalizeRequest,
+    TextWindowTailFinalizeState, TextWindowVisibilityRetryOutcome,
+    TextWindowVisibilityRetryRequest,
+};
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
@@ -62,7 +61,7 @@ pub(crate) struct BufferSourceTailRequestContext<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferSourcePostLoopRenderOutcome {
-    pub(crate) retry: BufferTextWindowVisibilityRetryOutcome,
+    pub(crate) retry: TextWindowVisibilityRetryOutcome,
     pub(crate) rendered_rows_len: usize,
 }
 
@@ -92,8 +91,8 @@ impl BufferSourceBodyInstallContext {
         reserve_right_border_col: bool,
         row_flags: &DisplayRowFlags,
         char_width: f32,
-    ) -> BufferTextWindowBodyInstallRequest<'_> {
-        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext::new(
+    ) -> TextWindowBodyInstallRequest<'_> {
+        TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
             self.output_window_id,
             window_start,
             text_start_byte,
@@ -186,8 +185,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         text: &'request [u8],
         charpos: i64,
         point_is_visible_eob: bool,
-    ) -> BufferTextWindowTailFinalizeRequest<'request> {
-        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
+    ) -> TextWindowTailFinalizeRequest<'request> {
+        TextWindowTailFinalizeRequest::new(TextWindowTailFinalizeContext::new(
             self.params,
             text,
             self.display_text_row_base,
@@ -211,11 +210,11 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         charpos: i64,
         point_is_visible_eob: bool,
         buf_access: &'rows RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowVisibilityRetryRequest<'rows, 'buf, B>
+    ) -> TextWindowVisibilityRetryRequest<'rows, 'buf, B>
     where
         B: LayoutBufferView,
     {
-        BufferTextWindowVisibilityRetryRequest::new(
+        TextWindowVisibilityRetryRequest::new(
             rows,
             self.window_start,
             self.accessible_start,
@@ -233,7 +232,7 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         &self,
         byte_idx: usize,
         row_flags: &'flags DisplayRowFlags,
-    ) -> BufferTextWindowBodyInstallRequest<'flags> {
+    ) -> TextWindowBodyInstallRequest<'flags> {
         self.body_install_context.request(
             self.window_start,
             self.text_start_byte,
@@ -245,8 +244,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         )
     }
 
-    pub(crate) fn finish_request(&self) -> BufferTextWindowFinishRequest {
-        BufferTextWindowFinishRequest::new(
+    pub(crate) fn finish_request(&self) -> TextWindowFinishRequest {
+        TextWindowFinishRequest::new(
             self.params.window_id,
             self.content_x,
             self.char_width,
@@ -259,7 +258,7 @@ impl<'a> BufferSourceTailRequestContext<'a> {
 
     pub(crate) fn finish_and_install(
         &self,
-        finish_state: BufferTextWindowFinishState<'_>,
+        finish_state: TextWindowFinishState<'_>,
         hit_data: &mut Vec<WindowHitData>,
         display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
@@ -316,7 +315,7 @@ where
 
     tail_context
         .tail_finalize_request(text, charpos, point_is_visible_eob)
-        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+        .finalize_and_apply(TextWindowTailFinalizeState::new(
             cursor_info,
             row_geometry,
             row_y_positions,

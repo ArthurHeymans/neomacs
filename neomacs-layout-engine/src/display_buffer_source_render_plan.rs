@@ -9,9 +9,6 @@ use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_tail_render::{
     BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
 };
-use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowFinishState,
-};
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{
@@ -26,6 +23,7 @@ use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
+use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindowFinishState};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
@@ -35,7 +33,7 @@ use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
 pub(crate) struct BufferSourceOutputSetup {
-    pub(crate) begin_request: BufferTextWindowBeginRequest,
+    pub(crate) begin_request: TextWindowBeginRequest,
     pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
     pub(crate) row_limit: DisplayRowLimit,
     pub(crate) body_install_context: BufferSourceBodyInstallContext,
@@ -134,7 +132,7 @@ impl BufferSourceOutputSetup {
     ) -> BufferSourceOutputSetup {
         let output_cols = cols.max(1);
         BufferSourceOutputSetup {
-            begin_request: BufferTextWindowBeginRequest::new(
+            begin_request: TextWindowBeginRequest::new(
                 frame_id,
                 window_id,
                 display_text_row_base,
@@ -424,7 +422,7 @@ impl BufferSourceOutputSetup {
             render_services.reborrow(),
         );
         tail_context.finish_and_install(
-            BufferTextWindowFinishState::new(
+            TextWindowFinishState::new(
                 output,
                 output_emitter,
                 evaluator,

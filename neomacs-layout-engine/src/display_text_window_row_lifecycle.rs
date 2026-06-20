@@ -1,9 +1,8 @@
-//! Buffer-text-window-specific append surface construction.
+//! Text window row lifecycle and append surface construction.
 //!
-//! This module holds helpers that translate a buffer text window's geometry
-//! and chrome reservation policy into a generic `DisplayRowAppendSurface`.
-//! Keeping it separate from `display_row_append.rs` lets the append layer stay
-//! source-agnostic while the buffer text walker owns its own setup logic.
+//! This module holds helpers that translate text-window geometry and chrome
+//! reservation policy into a generic `DisplayRowAppendSurface`, then install
+//! rendered rows, cursor effects, retry metadata, and final window snapshots.
 
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
@@ -112,12 +111,12 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
     }
 }
 
-pub(crate) struct BufferTextWindowCursorEffectsRequest {
+pub(crate) struct TextWindowCursorEffectsRequest {
     window_id: i64,
     effects: Option<EffectsConfig>,
 }
 
-impl BufferTextWindowCursorEffectsRequest {
+impl TextWindowCursorEffectsRequest {
     pub(crate) fn new(window_id: i64, effects: Option<EffectsConfig>) -> Self {
         Self { window_id, effects }
     }
@@ -137,13 +136,13 @@ impl BufferTextWindowCursorEffectsRequest {
     }
 }
 
-pub(crate) struct BufferTextWindowTerminalRightBorderRequest {
+pub(crate) struct TextWindowTerminalRightBorderRequest {
     ch: char,
     face_name: &'static str,
     char_width: f32,
 }
 
-impl BufferTextWindowTerminalRightBorderRequest {
+impl TextWindowTerminalRightBorderRequest {
     pub(crate) fn new(char_width: f32) -> Self {
         Self {
             ch: '|',
@@ -169,7 +168,7 @@ impl BufferTextWindowTerminalRightBorderRequest {
     }
 }
 
-pub(crate) struct BufferTextWindowBeginRequest {
+pub(crate) struct TextWindowBeginRequest {
     frame_id: FrameId,
     window_id: WindowId,
     display_text_row_base: usize,
@@ -184,12 +183,12 @@ pub(crate) struct BufferTextWindowBeginRequest {
     first_row: DisplayTextRowBegin,
 }
 
-pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
-    context: BufferTextWindowTailFinalizeContext<'a>,
+pub(crate) struct TextWindowTailFinalizeRequest<'a> {
+    context: TextWindowTailFinalizeContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
+pub(crate) struct TextWindowTailFinalizeContext<'a> {
     params: &'a WindowParams,
     text: &'a [u8],
     display_text_row_base: usize,
@@ -206,7 +205,7 @@ pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
+pub(crate) struct TextWindowTailFinalizeState<'a, 'emit> {
     cursor_info: &'emit mut CursorCaptureState,
     row_geometry: &'a DisplayRowGeometryState,
     row_y_positions: &'a DisplayRowYPositions,
@@ -215,12 +214,12 @@ pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
     output_render: TextRowOutputRenderState<'emit>,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
-    context: BufferTextWindowBodyInstallRenderContext<'a>,
+pub(crate) struct TextWindowBodyInstallRequest<'a> {
+    context: TextWindowBodyInstallRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
+pub(crate) struct TextWindowBodyInstallRenderContext<'a> {
     window_id: u64,
     window_start: i64,
     text_start_byte: usize,
@@ -234,13 +233,13 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
     char_w: f32,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
+pub(crate) struct TextWindowBodyInstallState<'emit, 'output, 'face> {
     output: TextWindowOutputTarget<'output>,
     output_emitter: &'output mut WindowOutputEmitter,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView> {
+pub(crate) struct TextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView> {
     rows: &'a [DisplayRowSnapshot],
     window_start: i64,
     accessible_start: i64,
@@ -253,7 +252,7 @@ pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBuff
     buf_access: &'a RustBufferAccess<'buf, B>,
 }
 
-pub(crate) struct BufferTextWindowFinishRequest {
+pub(crate) struct TextWindowFinishRequest {
     window_id: i64,
     content_x: f32,
     char_w: f32,
@@ -263,20 +262,20 @@ pub(crate) struct BufferTextWindowFinishRequest {
     tab_line_height: i64,
 }
 
-pub(crate) struct BufferTextWindowFinishState<'a> {
+pub(crate) struct TextWindowFinishState<'a> {
     output: TextWindowOutputTarget<'a>,
     output_emitter: WindowOutputEmitter,
     evaluator: &'a mut Context,
     hit_rows: Vec<HitRow>,
 }
 
-pub(crate) struct BufferTextWindowFinishOutput {
+pub(crate) struct TextWindowFinishOutput {
     pub(crate) hit_data: WindowHitData,
     pub(crate) snapshot: WindowDisplaySnapshot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowVisibilityRetryOutcome {
+pub(crate) struct TextWindowVisibilityRetryOutcome {
     visible_end_lisp: Option<LispCharPos1>,
     visible_progress: i64,
     point_beyond_visible_span: bool,
@@ -286,15 +285,15 @@ pub(crate) struct BufferTextWindowVisibilityRetryOutcome {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowTailFinalizeOutcome {
+pub(crate) struct TextWindowTailFinalizeOutcome {
     cursor_requested: bool,
-    cursor_publish_status: BufferTextWindowCursorPublishStatus,
+    cursor_publish_status: TextWindowCursorPublishStatus,
     visual_cursor_summary: VisualTextWindowCursorPublishSummary,
     pending_row_finished: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextWindowCursorPublishStatus {
+pub(crate) enum TextWindowCursorPublishStatus {
     NotRequested,
     MissingCapture,
     NoWindowCursor,
@@ -302,7 +301,7 @@ pub(crate) enum BufferTextWindowCursorPublishStatus {
     Published,
 }
 
-impl From<CapturedTextWindowCursorPublishOutcome> for BufferTextWindowCursorPublishStatus {
+impl From<CapturedTextWindowCursorPublishOutcome> for TextWindowCursorPublishStatus {
     fn from(outcome: CapturedTextWindowCursorPublishOutcome) -> Self {
         match outcome {
             CapturedTextWindowCursorPublishOutcome::NoWindowCursor => Self::NoWindowCursor,
@@ -312,7 +311,7 @@ impl From<CapturedTextWindowCursorPublishOutcome> for BufferTextWindowCursorPubl
     }
 }
 
-impl BufferTextWindowTailFinalizeOutcome {
+impl TextWindowTailFinalizeOutcome {
     #[cfg(test)]
     pub(crate) fn cursor_requested(self) -> bool {
         self.cursor_requested
@@ -322,12 +321,12 @@ impl BufferTextWindowTailFinalizeOutcome {
     pub(crate) fn cursor_published(self) -> bool {
         matches!(
             self.cursor_publish_status,
-            BufferTextWindowCursorPublishStatus::Published
+            TextWindowCursorPublishStatus::Published
         )
     }
 
     #[cfg(test)]
-    pub(crate) fn cursor_publish_status(self) -> BufferTextWindowCursorPublishStatus {
+    pub(crate) fn cursor_publish_status(self) -> TextWindowCursorPublishStatus {
         self.cursor_publish_status
     }
 
@@ -342,7 +341,7 @@ impl BufferTextWindowTailFinalizeOutcome {
     }
 }
 
-impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
+impl<'a, 'emit> TextWindowTailFinalizeState<'a, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         cursor_info: &'emit mut CursorCaptureState,
@@ -363,7 +362,7 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
     }
 }
 
-impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
+impl<'emit, 'output, 'face> TextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
         output: TextWindowOutputTarget<'output>,
         output_emitter: &'output mut WindowOutputEmitter,
@@ -377,7 +376,7 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'fa
     }
 }
 
-impl<'a> BufferTextWindowFinishState<'a> {
+impl<'a> TextWindowFinishState<'a> {
     pub(crate) fn new(
         output: TextWindowOutputTarget<'a>,
         output_emitter: WindowOutputEmitter,
@@ -411,7 +410,7 @@ impl<'a> BufferTextWindowFinishState<'a> {
     }
 }
 
-impl BufferTextWindowBeginRequest {
+impl TextWindowBeginRequest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         frame_id: FrameId,
@@ -482,7 +481,7 @@ impl BufferTextWindowBeginRequest {
     }
 }
 
-impl<'a> BufferTextWindowTailFinalizeContext<'a> {
+impl<'a> TextWindowTailFinalizeContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         params: &'a WindowParams,
@@ -519,16 +518,16 @@ impl<'a> BufferTextWindowTailFinalizeContext<'a> {
     }
 }
 
-impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
-    pub(crate) fn new(context: BufferTextWindowTailFinalizeContext<'a>) -> Self {
+impl<'a> TextWindowTailFinalizeRequest<'a> {
+    pub(crate) fn new(context: TextWindowTailFinalizeContext<'a>) -> Self {
         Self { context }
     }
 
     pub(crate) fn finalize_and_apply(
         self,
-        state: BufferTextWindowTailFinalizeState<'_, '_>,
-    ) -> BufferTextWindowTailFinalizeOutcome {
-        let BufferTextWindowTailFinalizeState {
+        state: TextWindowTailFinalizeState<'_, '_>,
+    ) -> TextWindowTailFinalizeOutcome {
+        let TextWindowTailFinalizeState {
             cursor_info,
             row_geometry,
             row_y_positions,
@@ -541,9 +540,9 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
         let cursor_requested = context.point_charpos >= context.window_start
             && (context.point_charpos <= context.charpos || context.point_is_visible_eob);
         let initial_cursor_publish_status = if cursor_requested {
-            BufferTextWindowCursorPublishStatus::MissingCapture
+            TextWindowCursorPublishStatus::MissingCapture
         } else {
-            BufferTextWindowCursorPublishStatus::NotRequested
+            TextWindowCursorPublishStatus::NotRequested
         };
 
         let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
@@ -614,7 +613,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                 )
             });
 
-        BufferTextWindowTailFinalizeOutcome {
+        TextWindowTailFinalizeOutcome {
             cursor_requested,
             cursor_publish_status,
             visual_cursor_summary,
@@ -623,7 +622,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
     }
 }
 
-impl<'a> BufferTextWindowBodyInstallRenderContext<'a> {
+impl<'a> TextWindowBodyInstallRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         window_id: u64,
@@ -654,14 +653,14 @@ impl<'a> BufferTextWindowBodyInstallRenderContext<'a> {
     }
 }
 
-impl<'a> BufferTextWindowBodyInstallRequest<'a> {
-    pub(crate) fn new(context: BufferTextWindowBodyInstallRenderContext<'a>) -> Self {
+impl<'a> TextWindowBodyInstallRequest<'a> {
+    pub(crate) fn new(context: TextWindowBodyInstallRenderContext<'a>) -> Self {
         Self { context }
     }
 
     pub(crate) fn install_and_apply(
         self,
-        state: BufferTextWindowBodyInstallState<'_, '_, '_>,
+        state: TextWindowBodyInstallState<'_, '_, '_>,
     ) -> TextWindowRedisplayPositions {
         let context = self.context;
         let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
@@ -689,7 +688,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
     }
 }
 
-impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, 'buf, B> {
+impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         rows: &'a [DisplayRowSnapshot],
@@ -717,7 +716,7 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
         }
     }
 
-    pub(crate) fn decide(self) -> BufferTextWindowVisibilityRetryOutcome {
+    pub(crate) fn decide(self) -> TextWindowVisibilityRetryOutcome {
         let point_lisp = layout_i64_char_pos_to_lisp_char_pos(self.point_charpos);
         let visible_end_lisp = self.rows.iter().rev().find_map(|row| row.end_buffer_pos);
         let visible_end_lisp = if self.point_is_visible_eob {
@@ -761,7 +760,7 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
             self.accessible_end,
         );
 
-        BufferTextWindowVisibilityRetryOutcome {
+        TextWindowVisibilityRetryOutcome {
             visible_end_lisp,
             visible_progress,
             point_beyond_visible_span,
@@ -772,7 +771,7 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
     }
 }
 
-impl BufferTextWindowFinishRequest {
+impl TextWindowFinishRequest {
     pub(crate) fn new(
         window_id: i64,
         content_x: f32,
@@ -795,8 +794,8 @@ impl BufferTextWindowFinishRequest {
 
     pub(crate) fn finish_and_snapshot(
         self,
-        state: BufferTextWindowFinishState<'_>,
-    ) -> BufferTextWindowFinishOutput {
+        state: TextWindowFinishState<'_>,
+    ) -> TextWindowFinishOutput {
         let (hit_rows, snapshot) = state.finish_snapshot(
             self.text_area_left_offset,
             self.mode_line_height,
@@ -810,11 +809,11 @@ impl BufferTextWindowFinishRequest {
             rows: hit_rows,
         };
 
-        BufferTextWindowFinishOutput { hit_data, snapshot }
+        TextWindowFinishOutput { hit_data, snapshot }
     }
 }
 
-impl BufferTextWindowVisibilityRetryOutcome {
+impl TextWindowVisibilityRetryOutcome {
     pub(crate) fn visible_end_lisp(self) -> Option<LispCharPos1> {
         self.visible_end_lisp
     }
