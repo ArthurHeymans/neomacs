@@ -11,7 +11,7 @@ use crate::display_cursor::{
     capture_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -443,9 +443,7 @@ pub(crate) struct BufferSourceHscrollSkipRenderContext<'a> {
     content_x: f32,
     append_surface: &'a DisplayRowAppendSurface,
     active_face_state: &'a DisplayRowActiveFaceState,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
+    metrics: DisplayRowFallbackMetrics,
     point_charpos: i64,
     has_prefix: bool,
     row_geometry_defaults: DisplayRowGeometryDefaults,
@@ -602,7 +600,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
                 context.point_charpos,
                 *x,
                 *col,
-                context.char_h,
+                context.metrics.row_height(),
             );
         }
 
@@ -611,9 +609,9 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
                 context.append_surface,
                 context.active_face_state,
                 0.0,
-                context.char_h,
-                context.default_face_ascent,
-                context.char_w,
+                context.metrics.row_height(),
+                context.metrics.ascent(),
+                context.metrics.char_width(),
             ),
             row_geometry,
             &mut source_render.reborrow(),
@@ -640,9 +638,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         content_x: f32,
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
+        metrics: DisplayRowFallbackMetrics,
         point_charpos: i64,
         has_prefix: bool,
         row_geometry_defaults: DisplayRowGeometryDefaults,
@@ -656,9 +652,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
             content_x,
             append_surface,
             active_face_state,
-            default_face_ascent,
-            char_h,
-            char_w,
+            metrics,
             point_charpos,
             has_prefix,
             row_geometry_defaults,
@@ -683,9 +677,7 @@ pub(crate) struct BufferSourceSelectiveDisplayTailRenderContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     active_face_state: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
+    metrics: DisplayRowFallbackMetrics,
     content_x: f32,
     has_prefix: bool,
     row_geometry_defaults: DisplayRowGeometryDefaults,
@@ -707,9 +699,7 @@ pub(crate) struct BufferSourceInvisibleTextRenderContext<'a> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
+    metrics: DisplayRowFallbackMetrics,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -751,9 +741,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderContext<'a> {
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
+        metrics: DisplayRowFallbackMetrics,
         content_x: f32,
         has_prefix: bool,
         row_geometry_defaults: DisplayRowGeometryDefaults,
@@ -769,9 +757,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderContext<'a> {
             append_surface,
             active_face_state,
             glyph_y_offset,
-            default_face_ascent,
-            char_h,
-            char_w,
+            metrics,
             content_x,
             has_prefix,
             row_geometry_defaults,
@@ -792,9 +778,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
+        metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             text,
@@ -804,9 +788,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             overlay_context,
             active_face_state,
             glyph_y_offset,
-            default_face_ascent,
-            char_h,
-            char_w,
+            metrics,
         }
     }
 }
@@ -863,9 +845,9 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
                 context.append_surface,
                 context.active_face_state,
                 context.glyph_y_offset,
-                context.char_h,
-                context.default_face_ascent,
-                context.char_w,
+                context.metrics.row_height(),
+                context.metrics.ascent(),
+                context.metrics.char_width(),
             ),
             row_geometry,
             &mut source_render.reborrow(),
@@ -1120,9 +1102,9 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
                 context.append_surface,
                 context.active_face_state,
                 context.glyph_y_offset,
-                context.char_h,
-                context.default_face_ascent,
-                context.char_w,
+                context.metrics.row_height(),
+                context.metrics.ascent(),
+                context.metrics.char_width(),
             ),
             row_geometry,
             cursor_info,

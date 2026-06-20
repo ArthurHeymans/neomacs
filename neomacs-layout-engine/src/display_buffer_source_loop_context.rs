@@ -7,7 +7,7 @@ use crate::display_buffer_source_row_lifecycle::{
     BufferSourceLineBreakRenderContext, BufferSourceLineBreakRenderRequest,
     BufferSourceSelectiveDisplayTailRenderContext, BufferSourceSelectiveDisplayTailRenderRequest,
 };
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
@@ -28,9 +28,7 @@ pub(crate) struct BufferSourceLoopRequestContext {
     extra_line_spacing: f32,
     content_x: f32,
     has_prefix: bool,
-    default_face_ascent: f32,
-    char_height: f32,
-    char_width: f32,
+    metrics: DisplayRowFallbackMetrics,
     row_visibility_limit: DisplayRowVisibilityLimit,
     row_geometry_defaults: DisplayRowGeometryDefaults,
     display_text_row_base: usize,
@@ -48,9 +46,7 @@ impl BufferSourceLoopRequestContext {
         params: &WindowParams,
         content_x: f32,
         has_prefix: bool,
-        default_face_ascent: f32,
-        char_height: f32,
-        char_width: f32,
+        metrics: DisplayRowFallbackMetrics,
         row_visibility_limit: DisplayRowVisibilityLimit,
         row_geometry_defaults: DisplayRowGeometryDefaults,
         display_text_row_base: usize,
@@ -67,9 +63,7 @@ impl BufferSourceLoopRequestContext {
             extra_line_spacing: params.extra_line_spacing,
             content_x,
             has_prefix,
-            default_face_ascent,
-            char_height,
-            char_width,
+            metrics,
             row_visibility_limit,
             row_geometry_defaults,
             display_text_row_base,
@@ -94,9 +88,7 @@ impl BufferSourceLoopRequestContext {
             overlay_context,
             active_face_state,
             glyph_y_offset,
-            self.default_face_ascent,
-            self.char_height,
-            self.char_width,
+            self.metrics,
         ))
     }
 
@@ -112,9 +104,7 @@ impl BufferSourceLoopRequestContext {
             self.content_x,
             append_surface,
             active_face_state,
-            self.default_face_ascent,
-            self.char_height,
-            self.char_width,
+            self.metrics,
             self.point_charpos,
             self.has_prefix,
             self.row_geometry_defaults,
@@ -142,9 +132,7 @@ impl BufferSourceLoopRequestContext {
                 append_surface,
                 active_face_state,
                 glyph_y_offset,
-                self.default_face_ascent,
-                self.char_height,
-                self.char_width,
+                self.metrics,
                 self.content_x,
                 self.has_prefix,
                 self.row_geometry_defaults,
@@ -171,7 +159,7 @@ impl BufferSourceLoopRequestContext {
                 self.tab_width,
                 active_face_state,
                 self.point_charpos,
-                self.char_height,
+                self.metrics.row_height(),
                 self.extra_line_spacing,
                 self.content_x,
                 self.has_prefix,
@@ -216,7 +204,7 @@ impl BufferSourceLoopRequestContext {
     }
 
     pub(crate) fn char_height(self) -> f32 {
-        self.char_height
+        self.metrics.row_height()
     }
 
     pub(crate) fn point_charpos(self) -> i64 {

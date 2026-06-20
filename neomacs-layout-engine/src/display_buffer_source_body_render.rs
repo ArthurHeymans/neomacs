@@ -17,7 +17,7 @@ use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowScopedValue,
@@ -55,9 +55,7 @@ pub(crate) struct BufferSourceWalkSetupRequest<'a> {
     window_top: f32,
     line_number_pixel_width: f32,
     max_rows: usize,
-    char_width: f32,
-    char_height: f32,
-    default_face_ascent: f32,
+    metrics: DisplayRowFallbackMetrics,
     wrap_mode: LineWrapMode,
     hscroll: i32,
     word_wrap: bool,
@@ -158,9 +156,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
         window_top: f32,
         line_number_pixel_width: f32,
         max_rows: usize,
-        char_width: f32,
-        char_height: f32,
-        default_face_ascent: f32,
+        metrics: DisplayRowFallbackMetrics,
         wrap_mode: LineWrapMode,
         hscroll: i32,
         word_wrap: bool,
@@ -182,9 +178,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             window_top,
             line_number_pixel_width,
             max_rows,
-            char_width,
-            char_height,
-            default_face_ascent,
+            metrics,
             wrap_mode,
             hscroll,
             word_wrap,
@@ -217,9 +211,11 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             params.bounds.y,
             geometry.line_number_pixel_width,
             geometry.max_rows,
-            geometry.char_width,
-            geometry.char_height,
-            default_face.ascent(),
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                geometry.char_width,
+                geometry.char_height,
+                default_face.ascent(),
+            ),
             params.wrap_mode,
             params.hscroll,
             params.word_wrap,
@@ -237,8 +233,8 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
     pub(crate) fn into_setup(self) -> BufferSourceWalkSetup {
         let row_geometry_defaults = DisplayRowGeometryDefaults::new(
             self.text_y,
-            self.char_height,
-            self.default_face_ascent,
+            self.metrics.row_height(),
+            self.metrics.ascent(),
         );
 
         BufferSourceWalkSetup {
@@ -262,7 +258,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
                 self.line_number_pixel_width,
                 self.reserve_right_border_col,
                 self.reserve_right_special_col,
-                self.char_width,
+                self.metrics.char_width(),
                 self.tab_width,
                 self.tab_stop_list,
             )

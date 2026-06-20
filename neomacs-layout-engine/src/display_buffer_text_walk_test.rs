@@ -2,6 +2,7 @@ use super::*;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_plan::BufferSourceOutputSetup;
+use crate::display_row::DisplayRowFallbackMetrics;
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};
@@ -76,9 +77,7 @@ fn setup_request() -> BufferSourceWalkSetupRequest<'static> {
         8.0,
         12.0,
         5,
-        8.0,
-        16.0,
-        11.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 11.0),
         LineWrapMode::Truncate,
         3,
         true,
@@ -261,9 +260,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         &params,
         24.0,
         true,
-        11.0,
-        16.0,
-        8.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 11.0),
         output_setup.row_visibility_limit,
         walk_setup.row_geometry_defaults,
         2,
