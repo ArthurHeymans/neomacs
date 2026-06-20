@@ -2171,9 +2171,9 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
         other => panic!("expected full text run, got {other:?}"),
     }
-    let first_step = BufferTextSourceLoweringState::new(0)
+    let first_step = BufferTextSplitTextRunState::new(0)
         .consume_text_run_item(typed_item, &mut position)
-        .expect("multi-char text run lowers through compatibility lowerer");
+        .expect("multi-char text run lowers through compatibility split-run renderer");
     assert_eq!(first_step.kind(), BufferTextSourceRenderItemKind::Lowered);
     assert_eq!(first_step.source_char().ch(), 'a');
     let (_, first_item) = first_step.into_parts();

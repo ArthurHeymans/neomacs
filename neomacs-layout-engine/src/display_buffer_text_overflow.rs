@@ -13,7 +13,8 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_lowering::{
-    BufferTextSourceRenderItem, BufferTextSourceRenderItemKind, BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextLoweredDisplayItem, BufferTextSourceRenderItem,
+    BufferTextSourceRenderItemKind, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -52,6 +53,22 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
 
 pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
     source_item: BufferTextSourceRenderItem,
+    context: BufferTextSourceItemRenderContext<'a>,
+}
+
+struct BufferTextDirectSourceItemRenderRequest<'a> {
+    source_item: BufferTextDirectDisplayItem,
+    context: BufferTextSourceItemRenderContext<'a>,
+}
+
+struct BufferTextLoweredSourceItemRenderRequest<'a> {
+    source_item: BufferTextLoweredDisplayItem,
+    context: BufferTextSourceItemRenderContext<'a>,
+}
+
+struct BufferTextPreparedSourceItemRenderRequest<'a> {
+    source_step_char: BufferTextSourceStepChar,
+    source_item: crate::display_item::DisplayItem,
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
@@ -324,7 +341,18 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        self.render_source_item_and_apply(source_walk, buffer, state)
+        let Ok(source_item) = self.source_item.into_direct() else {
+            debug_assert!(
+                false,
+                "lowered buffer source item entered direct render branch"
+            );
+            return BufferTextSourceItemRenderOutcome::Stop;
+        };
+        BufferTextDirectSourceItemRenderRequest {
+            source_item,
+            context: self.context,
+        }
+        .render_and_apply(source_walk, buffer, state)
     }
 
     fn render_lowered_and_apply<B: LayoutBufferView>(
@@ -333,10 +361,57 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        self.render_source_item_and_apply(source_walk, buffer, state)
+        let Ok(source_item) = self.source_item.into_lowered() else {
+            debug_assert!(
+                false,
+                "direct buffer source item entered lowered render branch"
+            );
+            return BufferTextSourceItemRenderOutcome::Stop;
+        };
+        BufferTextLoweredSourceItemRenderRequest {
+            source_item,
+            context: self.context,
+        }
+        .render_and_apply(source_walk, buffer, state)
     }
+}
 
-    fn render_source_item_and_apply<B: LayoutBufferView>(
+impl<'a> BufferTextDirectSourceItemRenderRequest<'a> {
+    fn render_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextSourceItemRenderOutcome {
+        let (source_step_char, source_item) = self.source_item.into_parts();
+        BufferTextPreparedSourceItemRenderRequest {
+            source_step_char,
+            source_item,
+            context: self.context,
+        }
+        .render_and_apply(source_walk, buffer, state)
+    }
+}
+
+impl<'a> BufferTextLoweredSourceItemRenderRequest<'a> {
+    fn render_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextSourceItemRenderOutcome {
+        let (source_step_char, source_item) = self.source_item.into_parts();
+        BufferTextPreparedSourceItemRenderRequest {
+            source_step_char,
+            source_item,
+            context: self.context,
+        }
+        .render_and_apply(source_walk, buffer, state)
+    }
+}
+
+impl<'a> BufferTextPreparedSourceItemRenderRequest<'a> {
+    fn render_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
@@ -368,7 +443,8 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
         let context = self.context;
-        let (source_step_char, mut source_item) = self.source_item.into_parts();
+        let source_step_char = self.source_step_char;
+        let mut source_item = self.source_item;
         let active_face_state = context
             .layout_resolution_context
             .resolve_source_item_layout_for_active_face(

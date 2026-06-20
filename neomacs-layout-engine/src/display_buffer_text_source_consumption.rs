@@ -6,7 +6,7 @@ use crate::display_buffer_text_source::{
     BufferTextSourcePosition,
 };
 use crate::display_buffer_text_source_lowering::{
-    BufferTextDirectDisplayItemRequest, BufferTextSourceLoweringState, BufferTextSourceRenderItem,
+    BufferTextDirectDisplayItemRequest, BufferTextSourceRenderItem, BufferTextSplitTextRunState,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
@@ -51,7 +51,7 @@ pub(crate) enum BufferTextSourceConsumptionItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceConsumptionState {
     text_start_byte: usize,
-    lowering: BufferTextSourceLoweringState,
+    split_text_run: BufferTextSplitTextRunState,
 }
 
 impl BufferTextSourceAlignmentRequest {
@@ -239,7 +239,7 @@ impl BufferTextSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self {
             text_start_byte,
-            lowering: BufferTextSourceLoweringState::new(text_start_byte),
+            split_text_run: BufferTextSplitTextRunState::new(text_start_byte),
         }
     }
 
@@ -250,7 +250,7 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceRenderItem> {
-        if let Some(step) = self.lowering.next_pending_display_item(position) {
+        if let Some(step) = self.split_text_run.next_pending_display_item(position) {
             return Some(step);
         }
 
@@ -265,7 +265,7 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &BufferTextSourcePosition,
     ) -> Option<BufferTextSourceItem> {
-        if self.lowering.has_pending_text_run() {
+        if self.split_text_run.has_pending_text_run() {
             tracing::debug!(
                 "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
             );
@@ -291,11 +291,11 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceConsumptionItem> {
-        if let Some(step) = self.lowering.next_pending_display_item(position) {
+        if let Some(step) = self.split_text_run.next_pending_display_item(position) {
             return Some(BufferTextSourceConsumptionItem::DisplayItem(step));
         }
 
-        if self.lowering.has_pending_text_run() {
+        if self.split_text_run.has_pending_text_run() {
             tracing::debug!(
                 "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
             );
@@ -351,7 +351,7 @@ impl BufferTextSourceConsumptionState {
     ) -> Option<BufferTextSourceRenderItem> {
         match BufferTextDirectDisplayItemRequest::new(item).consume(position) {
             Ok(item) => Some(item),
-            Err(item) => self.lowering.consume_text_run_item(item, position),
+            Err(item) => self.split_text_run.consume_text_run_item(item, position),
         }
     }
 }

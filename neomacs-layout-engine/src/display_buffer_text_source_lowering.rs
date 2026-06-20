@@ -1,4 +1,4 @@
-//! Buffer text compatibility lowering from typed source items to row-walk items.
+//! Buffer text compatibility split-run rendering from typed source items to row-walk items.
 
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
@@ -45,7 +45,7 @@ pub(crate) enum BufferTextSourceRenderItemKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceLoweringState {
+pub(crate) struct BufferTextSplitTextRunState {
     text_start_byte: usize,
     pending_text_run: Option<DisplayTextRunItemCursor>,
 }
@@ -121,11 +121,29 @@ impl BufferTextLoweredDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
     }
+
+    pub(crate) fn end_charpos(&self) -> i64 {
+        display_item_buffer_end_charpos(&self.item)
+            .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
+    }
+
+    pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
+        (self.source_char, self.item)
+    }
 }
 
 impl BufferTextDirectDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
+    }
+
+    pub(crate) fn end_charpos(&self) -> i64 {
+        display_item_buffer_end_charpos(&self.item)
+            .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
+    }
+
+    pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
+        (self.source_char, self.item)
     }
 }
 
@@ -157,23 +175,36 @@ impl BufferTextSourceRenderItem {
     }
 
     pub(crate) fn end_charpos(&self) -> i64 {
-        let (source_char, item) = match self {
-            Self::Direct(item) => (item.source_char, &item.item),
-            Self::Lowered(item) => (item.source_char, &item.item),
-        };
-        display_item_buffer_end_charpos(item)
-            .unwrap_or_else(|| source_char.start_charpos().saturating_add(1))
+        match self {
+            Self::Direct(item) => item.end_charpos(),
+            Self::Lowered(item) => item.end_charpos(),
+        }
     }
 
+    pub(crate) fn into_direct(self) -> Result<BufferTextDirectDisplayItem, Self> {
+        match self {
+            Self::Direct(item) => Ok(item),
+            Self::Lowered(item) => Err(Self::Lowered(item)),
+        }
+    }
+
+    pub(crate) fn into_lowered(self) -> Result<BufferTextLoweredDisplayItem, Self> {
+        match self {
+            Self::Lowered(item) => Ok(item),
+            Self::Direct(item) => Err(Self::Direct(item)),
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         match self {
-            Self::Direct(item) => (item.source_char, item.item),
-            Self::Lowered(item) => (item.source_char, item.item),
+            Self::Direct(item) => item.into_parts(),
+            Self::Lowered(item) => item.into_parts(),
         }
     }
 }
 
-impl BufferTextSourceLoweringState {
+impl BufferTextSplitTextRunState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self {
             text_start_byte,
@@ -209,7 +240,7 @@ impl BufferTextSourceLoweringState {
     ) -> Option<BufferTextSourceRenderItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
-                "BufferTextSourceLoweringState: validated source item at byte {} charpos {} \
+                "BufferTextSplitTextRunState: validated source item at byte {} charpos {} \
                  did not match buffer walk byte {} charpos {}",
                 item.start_byte_idx(),
                 item.start_charpos(),
@@ -264,7 +295,7 @@ impl BufferTextDirectDisplayItemRequest {
     }
 }
 
-impl BufferTextSourceLoweringState {
+impl BufferTextSplitTextRunState {
     fn split_text_run_item(
         &mut self,
         item: BufferTextSourceItem,
@@ -277,8 +308,8 @@ impl BufferTextSourceLoweringState {
             }
             Err(_) => {
                 tracing::error!(
-                    "BufferTextSourceLoweringState: source cursor yielded a non-text item kind; \
-                     a direct item escaped source-item lowering"
+                    "BufferTextSplitTextRunState: source cursor yielded a non-text item kind; \
+                     a direct item escaped source-item split-run fallback"
                 );
                 None
             }
@@ -298,7 +329,7 @@ impl BufferTextSourceLoweringState {
                 let ch = chars.next()?;
                 if chars.next().is_some() {
                     tracing::error!(
-                        "BufferTextSourceLoweringState: split text run yielded multiple chars"
+                        "BufferTextSplitTextRunState: split text run yielded multiple chars"
                     );
                     return None;
                 }
@@ -306,7 +337,7 @@ impl BufferTextSourceLoweringState {
             }
             _ => {
                 tracing::error!(
-                    "BufferTextSourceLoweringState: split text run yielded non-text item"
+                    "BufferTextSplitTextRunState: split text run yielded non-text item"
                 );
                 return None;
             }
@@ -334,7 +365,7 @@ impl BufferTextSplitItemAlignment {
         } = &item.span.start
         else {
             tracing::error!(
-                "BufferTextSourceLoweringState: split text run yielded a non-buffer-span item"
+                "BufferTextSplitTextRunState: split text run yielded a non-buffer-span item"
             );
             return None;
         };
@@ -342,7 +373,7 @@ impl BufferTextSplitItemAlignment {
         let start_charpos = char_pos.get() as i64;
         if !self.position.matches(start_byte_idx, start_charpos) {
             tracing::debug!(
-                "BufferTextSourceLoweringState: split text run at byte {} charpos {} did not \
+                "BufferTextSplitTextRunState: split text run at byte {} charpos {} did not \
                  match buffer walk byte {} charpos {}",
                 start_byte_idx,
                 start_charpos,
@@ -361,7 +392,7 @@ impl BufferTextSplitItemAlignment {
         } = &item.span.end
         else {
             tracing::error!(
-                "BufferTextSourceLoweringState: split text run yielded a non-buffer end span"
+                "BufferTextSplitTextRunState: split text run yielded a non-buffer end span"
             );
             return None;
         };
