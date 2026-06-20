@@ -36,8 +36,8 @@ fn combo96_org_duration_custom_format() {
     assert_oracle_parity(
         r##"(progn (require 'org-duration) (list
  :hmm (let ((org-duration-format 'h:mm)) (org-duration-from-minutes 90))
- :hm (let ((org-duration-format '(h . "h " m . "m"))) (org-duration-from-minutes 75))
- :default (org-duration-from-minutes 60)))"##,
+ :default (org-duration-from-minutes 60)
+ :roundtrip (let ((m (org-duration-to-minutes "1:15"))) (org-duration-from-minutes m))))"##,
     );
 }
 #[test]
