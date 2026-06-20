@@ -1128,12 +1128,6 @@ impl<'a> BufferTextItemAppendContext<'a> {
         }
     }
 
-    fn source_item_fallback_width(&self, source_item: &BufferTextSourceItemRequest) -> f32 {
-        source_item
-            .fallback_width()
-            .resolve_to_text_row(&self.frame)
-    }
-
     pub(crate) fn append_display_item_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -1159,7 +1153,6 @@ impl<'a> BufferTextItemAppendContext<'a> {
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = self.source_item_fallback_width(&source_item);
         let request = SingleDisplayItemSourceRequest::new(
             self.base_face,
             self.face_id,
@@ -1168,7 +1161,11 @@ impl<'a> BufferTextItemAppendContext<'a> {
             position,
             source_item.append_kind(),
         );
-        measure_single_display_item_width_naturally_or_fallback(state, request, fallback_width)
+        measure_single_display_item_width_naturally_or_fallback(
+            state,
+            request,
+            source_item.fallback_width(),
+        )
     }
 }
 
@@ -1251,14 +1248,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = self.item_context.source_item_fallback_width(&source_item);
+        let fallback_width = source_item.fallback_width();
         let Some(append_item) = buffer_text_source_item_append_request(
             source_item,
             self.buffer_id,
             self.buffer,
             self.item_context.face_id,
         ) else {
-            return fallback_width;
+            return fallback_width.resolve_to_text_row(&self.item_context.frame);
         };
         let kind = append_item.append_kind();
         let item = append_item.into_item();

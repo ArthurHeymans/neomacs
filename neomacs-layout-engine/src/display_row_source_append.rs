@@ -13,7 +13,8 @@ use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_source::{DisplayItemOnceSource, DisplayItemSource, SyntheticTextItemSource};
 use crate::display_source_append_plan::{
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplaySourceAppendRenderPolicy, DisplaySourceFallbackWidth,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -615,8 +616,9 @@ pub(crate) fn measure_single_display_item_width_naturally(
 pub(crate) fn measure_single_display_item_width_naturally_or_fallback(
     state: &mut TextRowSourceMeasureState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
-    fallback_width_px: f32,
+    fallback_width: DisplaySourceFallbackWidth,
 ) -> f32 {
+    let fallback_width_px = fallback_width.resolve_to_text_row(request.frame);
     measure_single_display_item_width_naturally(state, request).unwrap_or(fallback_width_px)
 }
 
