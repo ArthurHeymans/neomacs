@@ -109,6 +109,7 @@ struct PreparedSingleDisplayItemSourceAppend {
     position: DisplayRowPosition,
 }
 
+#[derive(Clone)]
 pub(crate) struct SingleDisplayItemAppendContext<'face> {
     base_face: &'face ResolvedFace,
     face_id: u32,
@@ -434,12 +435,14 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn face_id(&self) -> u32 {
         self.face_id
     }
 
-    #[cfg(test)]
+    pub(crate) fn base_face(&self) -> &'face ResolvedFace {
+        self.base_face
+    }
+
     pub(crate) fn frame(&self) -> &DisplayRowAppendFrame {
         &self.frame
     }

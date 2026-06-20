@@ -20,8 +20,8 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
 use crate::display_row_source_append::{
-    DisplayItemSourceAppendRequest, SingleDisplayItemSourceRequest,
-    render_display_item_source_with_policy, render_single_display_item_naturally,
+    DisplayItemSourceAppendRequest, SingleDisplayItemAppendContext,
+    render_display_item_source_with_policy,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
@@ -124,14 +124,17 @@ impl DisplayReplacementStringSourceAppendRequest {
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayRowPosition {
         let position = self.position();
-        let Some(source) = self.source.into_source(append_context.face_id) else {
+        let Some(source) = self
+            .source
+            .into_source(append_context.single_item.face_id())
+        else {
             return position;
         };
         let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
         let request = DisplayItemSourceAppendRequest::new(
-            append_context.base_face,
-            append_context.face_id,
-            &append_context.frame,
+            append_context.single_item.base_face(),
+            append_context.single_item.face_id(),
+            append_context.single_item.frame(),
             position,
             DisplayRowAppendKind::DisplayReplacementString,
         );
@@ -817,9 +820,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
 
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementAppendContext<'a> {
-    face_id: u32,
-    base_face: &'a ResolvedFace,
-    frame: DisplayRowAppendFrame,
+    single_item: SingleDisplayItemAppendContext<'a>,
 }
 
 impl<'a> DisplayReplacementAppendContext<'a> {
@@ -829,9 +830,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         frame: DisplayRowAppendFrame,
     ) -> Self {
         Self {
-            face_id,
-            base_face,
-            frame,
+            single_item: SingleDisplayItemAppendContext::new(base_face, face_id, frame),
         }
     }
 
@@ -840,14 +839,11 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        let request = SingleDisplayItemSourceRequest::new(
-            self.base_face,
-            self.face_id,
-            &self.frame,
+        self.single_item.render_naturally(
+            state,
             plan.item,
             plan.position,
             DisplayRowAppendKind::DisplayReplacement,
-        );
-        render_single_display_item_naturally(state, request)
+        )
     }
 }
