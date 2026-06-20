@@ -32,7 +32,7 @@ use crate::display_row_output_install::{
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
-use crate::display_row_text_output::{TextOutputSpan, TextOutputSpanContext};
+use crate::display_row_text_output::{TextOutputSpan, TextRowOutput};
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
@@ -67,20 +67,6 @@ struct CurrentRowProgress {
     x: i64,
     start_col: i64,
     start_x: i64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextRowOutput {
-    pub(crate) row: usize,
-    pub(crate) row_y: f32,
-    pub(crate) glyph_y: f32,
-    pub(crate) height: f32,
-}
-
-impl TextRowOutput {
-    fn span_context(self) -> TextOutputSpanContext {
-        TextOutputSpanContext::new(self.row, self.row_y, self.glyph_y, self.height)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -907,7 +893,12 @@ impl DisplayProgressSink for WindowOutputEmitter {
         output: TextRowOutput,
         progress: &DisplayRowAppendProgress,
     ) {
-        self.emit_text_source_slots(evaluator, output, &progress.slots, progress.end);
+        self.emit_text_output_spans(
+            evaluator,
+            output,
+            output.spans_for_source_slots(&progress.slots),
+            progress.end,
+        );
     }
 
     fn emit_chrome_progress(&mut self, evaluator: &mut Context, progress: ChromeRowProgress) {
@@ -918,14 +909,13 @@ impl DisplayProgressSink for WindowOutputEmitter {
 }
 
 impl WindowOutputEmitter {
-    pub(crate) fn emit_text_source_slots(
+    pub(crate) fn emit_text_output_spans(
         &mut self,
         evaluator: &mut Context,
         output: TextRowOutput,
-        slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
+        spans: Vec<TextOutputSpan>,
         end: DisplayRowPosition,
     ) {
-        let spans = output.span_context().spans_for_source_slots(slots);
         if spans.is_empty() {
             self.move_text_output_to(evaluator, output.row, end.col, output.row_y, end.x_px);
             return;

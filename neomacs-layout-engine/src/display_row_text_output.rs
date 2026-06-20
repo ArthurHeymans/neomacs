@@ -12,6 +12,14 @@ pub(crate) struct TextOutputSpanContext {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextRowOutput {
+    pub(crate) row: usize,
+    pub(crate) row_y: f32,
+    pub(crate) glyph_y: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextOutputSpan {
     pub(crate) buffer_pos: LispCharPos1,
     pub(crate) row: usize,
@@ -20,6 +28,19 @@ pub(crate) struct TextOutputSpan {
     pub(crate) height: f32,
     pub(crate) start: DisplayRowPosition,
     pub(crate) end: DisplayRowPosition,
+}
+
+impl TextRowOutput {
+    pub(crate) fn span_context(self) -> TextOutputSpanContext {
+        TextOutputSpanContext::new(self.row, self.row_y, self.glyph_y, self.height)
+    }
+
+    pub(crate) fn spans_for_source_slots(
+        self,
+        slots: &[DisplayRowGlyphSlot],
+    ) -> Vec<TextOutputSpan> {
+        self.span_context().spans_for_source_slots(slots)
+    }
 }
 
 impl TextOutputSpanContext {

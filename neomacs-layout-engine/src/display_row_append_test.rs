@@ -5053,7 +5053,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         &mut output_emitter,
         &mut eval,
         &rendered,
-        crate::window_output::TextRowOutput {
+        crate::display_row_text_output::TextRowOutput {
             row: 0,
             row_y: 0.0,
             glyph_y: 0.0,

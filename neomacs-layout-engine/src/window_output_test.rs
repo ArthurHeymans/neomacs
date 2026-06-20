@@ -6,7 +6,6 @@ use super::DisplayTextRowGeometryTransition;
 use super::DisplayTextRowMetrics;
 use super::DisplayTextRowStoredMetrics;
 use super::DisplayTextRowTransition;
-use super::TextRowOutput;
 use super::TextWindowBodyOutputInstall;
 use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
@@ -37,6 +36,7 @@ use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
 };
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
+use crate::display_row_text_output::TextRowOutput;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -255,21 +255,23 @@ fn text_source_slot_emission_accepts_rendered_row_slots() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     emitter.begin_text_row(&mut eval, 0, 1, 0.0, 4.0);
-    emitter.emit_text_source_slots(
+    let output = TextRowOutput {
+        row: 0,
+        row_y: 0.0,
+        glyph_y: 0.0,
+        height: 16.0,
+    };
+    let slots = [DisplayRowGlyphSlot {
+        source: DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
+        x_px: 4.0,
+        col: 1,
+        width_px: 16.0,
+        width_cols: 2,
+    }];
+    emitter.emit_text_output_spans(
         &mut eval,
-        TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
-        &[DisplayRowGlyphSlot {
-            source: DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
-            x_px: 4.0,
-            col: 1,
-            width_px: 16.0,
-            width_cols: 2,
-        }],
+        output,
+        output.spans_for_source_slots(&slots),
         DisplayRowPosition { x_px: 20.0, col: 3 },
     );
 

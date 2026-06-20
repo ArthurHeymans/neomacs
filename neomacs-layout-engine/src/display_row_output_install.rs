@@ -18,10 +18,12 @@ use crate::display_row_builder::apply_display_row_source_slot_bounds;
 use crate::display_row_builder::{
     DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
 };
+#[cfg(test)]
+use crate::display_row_text_output::TextRowOutput;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
-use crate::window_output::{TextRowOutput, WindowOutputEmitter};
+use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -835,6 +837,11 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     output: TextRowOutput,
 ) -> DisplayRowPosition {
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
-    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
+    output_emitter.emit_text_output_spans(
+        evaluator,
+        output,
+        output.spans_for_source_slots(&rendered.source_slots),
+        end,
+    );
     end
 }

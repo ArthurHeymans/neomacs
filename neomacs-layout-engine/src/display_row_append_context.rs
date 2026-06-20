@@ -7,9 +7,9 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
+use crate::display_row_text_output::TextRowOutput;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::ResolvedFace;
-use crate::window_output::TextRowOutput;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::Glyph;
 

@@ -23,6 +23,7 @@ use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_output_install::{
     DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
 };
+use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
@@ -32,7 +33,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextRowOutput, TextWindowOutputTarget, WindowOutputEmitter, finish_and_end_text_window_row,
+    TextWindowOutputTarget, WindowOutputEmitter, finish_and_end_text_window_row,
     install_text_window_row_decoration_request, transition_text_window_row,
     transition_text_window_row_with_limit,
 };
@@ -443,8 +444,9 @@ impl<'a> TextRowOutputRenderState<'a> {
             &result.media,
         );
         let source_slots = result.source_slots;
+        let output_spans = output.spans_for_source_slots(&source_slots);
         self.output_emitter
-            .emit_text_source_slots(self.evaluator, output, &source_slots, end);
+            .emit_text_output_spans(self.evaluator, output, output_spans, end);
         CurrentTextRowRenderOutcome {
             stop: result.stop,
             source_slots,
