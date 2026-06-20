@@ -50,6 +50,7 @@ mod combo_strict_33;
 mod combo_strict_34;
 mod combo_strict_35;
 mod combo_strict_36;
+mod combo_strict_37;
 mod combo_strict_4;
 mod combo_strict_5;
 mod combo_strict_6;
