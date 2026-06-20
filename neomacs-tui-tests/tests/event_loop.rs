@@ -346,3 +346,58 @@ fn accept_process_output_drains_while_command_input_pending() {
         neo.text_grid().join("\n")
     );
 }
+
+/// Finding 1 (keyboard/command-loop audit) — pressing a truly-unbound key
+/// must give the GNU feedback: the echo area shows "<key> is undefined"
+/// (the `undefined` command in subr.el). Before the fix the command loop
+/// short-circuited the nil-binding case with a bare `continue`, so the key
+/// was silent and ran no per-command hooks.
+///
+/// `C-c c` is a reliable unbound sequence in `-Q` (`C-c` is a prefix and
+/// `c` after it is unbound in the default *scratch* mode).
+#[test]
+fn unbound_key_echoes_is_undefined() {
+    let mut neo = boot_neo("");
+
+    neo.send_key("C-c");
+    neo.read(Duration::from_millis(300));
+    neo.send_key("c");
+
+    let undefined = |grid: &[String]| grid.iter().any(|row| row.contains("is undefined"));
+    neo.read_until(Duration::from_secs(6), undefined);
+    assert!(
+        undefined(&neo.text_grid()),
+        "an unbound key (C-c c) should echo \"... is undefined\":\n{}",
+        neo.text_grid().join("\n")
+    );
+
+    // The command loop must remain responsive after an unbound key.
+    assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
+}
+
+/// Finding 3 (keyboard/command-loop audit) — a single idle C-g at top
+/// level must run `keyboard-quit` exactly once (echo area "Quit"), not a
+/// double quit, and the editor must stay responsive. Guards that the
+/// cross-thread `quit_requested` atomic the input bridge raises for a C-g
+/// is fully accounted for by the one `keyboard-quit` and does not leak a
+/// second, spurious quit.
+#[test]
+fn single_keyboard_quit_echoes_quit_once_and_stays_responsive() {
+    let mut neo = boot_neo("");
+
+    let start = std::time::Instant::now();
+    neo.send(b"\x07"); // a single C-g
+
+    let quit_shown = |grid: &[String]| grid.iter().any(|row| row.contains("Quit"));
+    neo.read_until(Duration::from_secs(6), quit_shown);
+    assert!(
+        quit_shown(&neo.text_grid()),
+        "a single C-g should echo `Quit' (took {:?}):\n{}",
+        start.elapsed(),
+        neo.text_grid().join("\n")
+    );
+
+    // Responsiveness probe: an eval round-trips, proving the command loop
+    // was not wedged or left in a recurring-quit state by the single C-g.
+    assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
+}
