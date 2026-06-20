@@ -2357,9 +2357,9 @@ fn buffer_text_source_consumption_state_rejects_replacement_items() {
 fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
     let mut position = BufferTextSourcePosition::new("a".len(), 4);
 
-    let source_char =
-        BufferTextSourceStepChar::consume_from_position("a界b".as_bytes(), &mut position)
-            .expect("source char");
+    let source_char = position
+        .consume_step_char("a界b".as_bytes())
+        .expect("source char");
 
     assert_eq!(source_char.ch(), '界');
     assert_eq!(source_char.start_byte_idx(), "a".len());

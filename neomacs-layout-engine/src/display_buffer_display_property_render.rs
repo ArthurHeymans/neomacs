@@ -1,6 +1,5 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -238,11 +237,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         text: &[u8],
         position: &mut BufferTextSourcePosition,
     ) {
-        while position.charpos() < self.skip_to && position.byte_idx() < text.len() {
-            if BufferTextSourceStepChar::consume_from_position(text, position).is_none() {
-                break;
-            }
-        }
+        position.skip_chars_until(text, self.skip_to);
     }
 
     pub(crate) fn capture_cursor_info_if_point(

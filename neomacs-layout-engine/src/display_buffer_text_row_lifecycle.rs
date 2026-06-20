@@ -557,7 +557,7 @@ impl BufferHscrollSkipSourceStep {
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
     ) -> Option<BufferHscrollSkipAction> {
-        let source_char = BufferTextSourceStepChar::consume_from_position(text, position)?;
+        let source_char = position.consume_step_char(text)?;
         Some(Self::new(source_char).consume_for_hscroll(hscroll_skip, tab_width))
     }
 
@@ -1457,11 +1457,7 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         let point_in_hidden_region = self.cursor_missing
             && self.point_charpos >= start_charpos
             && self.point_charpos < skip_to;
-        while position.charpos() < skip_to && position.byte_idx() < self.text.len() {
-            if BufferTextSourceStepChar::consume_from_position(self.text, position).is_none() {
-                break;
-            }
-        }
+        position.skip_chars_until(self.text, skip_to);
 
         BufferInvisibleTextScanAction::Hidden(BufferInvisibleTextSkip::new(
             start_byte_idx,
@@ -1616,9 +1612,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     ) -> BufferSelectiveDisplayLineTailAction {
         position.advance_charpos_by_one();
         while position.byte_idx() < self.text.len() {
-            let Some(source_char) =
-                BufferTextSourceStepChar::consume_from_position(self.text, position)
-            else {
+            let Some(source_char) = position.consume_step_char(self.text) else {
                 break;
             };
             if source_char.ch() == '\n' {
@@ -1689,9 +1683,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     fn skip_line(self, position: &mut BufferTextSourcePosition) -> bool {
         while position.byte_idx() < self.text.len() {
-            let Some(source_char) =
-                BufferTextSourceStepChar::consume_from_position(self.text, position)
-            else {
+            let Some(source_char) = position.consume_step_char(self.text) else {
                 break;
             };
             if source_char.ch() == '\n' {

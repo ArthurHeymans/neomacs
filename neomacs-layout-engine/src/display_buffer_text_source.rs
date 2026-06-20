@@ -289,6 +289,32 @@ impl BufferTextSourcePosition {
     pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
         self.byte_idx == byte_idx && self.charpos == charpos
     }
+
+    pub(crate) fn consume_step_char(&mut self, text: &[u8]) -> Option<BufferTextSourceStepChar> {
+        if self.byte_idx >= text.len() {
+            return None;
+        }
+        let start_byte_idx = self.byte_idx;
+        let start_charpos = self.charpos;
+        let (ch, ch_len) = decode_utf8(&text[start_byte_idx..]);
+        if ch_len == 0 {
+            return None;
+        }
+        self.advance_one_char(ch_len);
+        Some(BufferTextSourceStepChar::new(
+            ch,
+            start_byte_idx,
+            start_charpos,
+        ))
+    }
+
+    pub(crate) fn skip_chars_until(&mut self, text: &[u8], charpos: i64) {
+        while self.charpos < charpos && self.byte_idx < text.len() {
+            if self.consume_step_char(text).is_none() {
+                break;
+            }
+        }
+    }
 }
 
 impl BufferTextSourceStepChar {
@@ -298,23 +324,6 @@ impl BufferTextSourceStepChar {
             start_byte_idx,
             start_charpos,
         }
-    }
-
-    pub(crate) fn consume_from_position(
-        text: &[u8],
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<Self> {
-        if position.byte_idx() >= text.len() {
-            return None;
-        }
-        let start_byte_idx = position.byte_idx();
-        let start_charpos = position.charpos();
-        let (ch, ch_len) = decode_utf8(&text[start_byte_idx..]);
-        if ch_len == 0 {
-            return None;
-        }
-        position.advance_one_char(ch_len);
-        Some(Self::new(ch, start_byte_idx, start_charpos))
     }
 
     pub(crate) fn ch(self) -> char {
