@@ -1,4 +1,4 @@
-use crate::display_buffer_text_render::BufferTextWindowRowPreludeRequestContext;
+use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_row_lisp_string::DisplayRowPrefixValues;
 use crate::display_row_walk_state::LineNumberRenderState;
 use crate::neovm_bridge::{
