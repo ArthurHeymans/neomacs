@@ -1879,7 +1879,7 @@ fn buffer_selective_display_context_keeps_visible_indented_line() {
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_preserves_single_char_source_item() {
+fn buffer_text_consumed_source_cursor_preserves_single_char_source_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1907,7 +1907,7 @@ fn buffer_text_consumed_item_adapter_preserves_single_char_source_item() {
     };
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let step = BufferTextConsumedItemAdapter::new(text_start_byte)
+    let step = BufferTextConsumedSourceCursor::new(text_start_byte)
         .consumed_display_item_from_item(item, &mut position)
         .expect("source step");
 
@@ -1931,7 +1931,7 @@ fn buffer_text_consumed_item_adapter_preserves_single_char_source_item() {
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_can_return_full_text_run_item() {
+fn buffer_text_consumed_source_cursor_can_return_full_text_run_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1951,10 +1951,10 @@ fn buffer_text_consumed_item_adapter_can_return_full_text_run_item() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_adapter = BufferTextConsumedItemAdapter::new(0);
+    let mut consumed_source = BufferTextConsumedSourceCursor::new(0);
     let position = BufferTextSourcePosition::new(0, 0);
 
-    let typed_item = source_adapter
+    let typed_item = consumed_source
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
@@ -1988,9 +1988,9 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_adapter = BufferTextConsumedItemAdapter::new(0);
+    let mut consumed_source = BufferTextConsumedSourceCursor::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
-    let typed_item = source_adapter
+    let typed_item = consumed_source
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
@@ -2029,7 +2029,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let step = BufferTextConsumedItemAdapter::new(0)
+    let step = BufferTextConsumedSourceCursor::new(0)
         .consumed_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should retain direct source char");
 
@@ -2064,7 +2064,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 1, 1, Some('b'));
     let mut position = BufferTextSourcePosition::new(1, 1);
 
-    let step = BufferTextConsumedItemAdapter::new(0)
+    let step = BufferTextConsumedSourceCursor::new(0)
         .consumed_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should advance over covered source span");
 
@@ -2132,9 +2132,9 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_adapter = BufferTextConsumedItemAdapter::new(0);
+    let mut consumed_source = BufferTextConsumedSourceCursor::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
-    let typed_item = source_adapter
+    let typed_item = consumed_source
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
@@ -2150,7 +2150,7 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_keeps_display_item_layout() {
+fn buffer_text_consumed_source_cursor_keeps_display_item_layout() {
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -2173,7 +2173,7 @@ fn buffer_text_consumed_item_adapter_keeps_display_item_layout() {
     });
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let step = BufferTextConsumedItemAdapter::new(0)
+    let step = BufferTextConsumedSourceCursor::new(0)
         .consumed_display_item_from_item(source_item, &mut position)
         .expect("source step");
 
@@ -2183,7 +2183,7 @@ fn buffer_text_consumed_item_adapter_keeps_display_item_layout() {
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_splits_persistent_text_run() {
+fn buffer_text_consumed_source_cursor_splits_persistent_text_run() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2203,10 +2203,10 @@ fn buffer_text_consumed_item_adapter_splits_persistent_text_run() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_adapter = BufferTextConsumedItemAdapter::new(0);
+    let mut consumed_source = BufferTextConsumedSourceCursor::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let first = source_adapter
+    let first = consumed_source
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("first step");
     assert_eq!(first.source_char().ch(), 'a');
@@ -2216,7 +2216,7 @@ fn buffer_text_consumed_item_adapter_splits_persistent_text_run() {
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
     position = BufferTextSourcePosition::new(position.byte_idx(), first.end_charpos());
 
-    let second = source_adapter
+    let second = consumed_source
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("second step");
     assert_eq!(second.source_char().ch(), 'b');
@@ -2226,7 +2226,7 @@ fn buffer_text_consumed_item_adapter_splits_persistent_text_run() {
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
     position = BufferTextSourcePosition::new(position.byte_idx(), second.end_charpos());
 
-    let third = source_adapter
+    let third = consumed_source
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("third step");
     assert_eq!(third.source_char().ch(), 'c');
@@ -2237,7 +2237,7 @@ fn buffer_text_consumed_item_adapter_splits_persistent_text_run() {
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_rejects_non_buffer_items() {
+fn buffer_text_consumed_source_cursor_rejects_non_buffer_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::Inherit,
@@ -2246,14 +2246,14 @@ fn buffer_text_consumed_item_adapter_rejects_non_buffer_items() {
     let mut position = BufferTextSourcePosition::new(3, 7);
 
     let step =
-        BufferTextConsumedItemAdapter::new(0).consumed_display_item_from_item(item, &mut position);
+        BufferTextConsumedSourceCursor::new(0).consumed_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(3, 7));
 }
 
 #[test]
-fn buffer_text_consumed_item_adapter_rejects_replacement_items() {
+fn buffer_text_consumed_source_cursor_rejects_replacement_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -2279,7 +2279,7 @@ fn buffer_text_consumed_item_adapter_rejects_replacement_items() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step =
-        BufferTextConsumedItemAdapter::new(0).consumed_display_item_from_item(item, &mut position);
+        BufferTextConsumedSourceCursor::new(0).consumed_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));

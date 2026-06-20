@@ -28,7 +28,7 @@ pub(crate) use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::{
-    BufferTextConsumedDisplayItem, BufferTextConsumedItemAdapter, BufferTextConsumedSourceItem,
+    BufferTextConsumedDisplayItem, BufferTextConsumedSourceCursor, BufferTextConsumedSourceItem,
     BufferTextSourceCursor, BufferTextSourceItem, BufferTextSourcePosition,
     BufferTextSourceStepChar, BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
@@ -381,7 +381,7 @@ struct BufferTextWindowBodyPassState<'emit> {
 pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
-    source_adapter: BufferTextConsumedItemAdapter,
+    consumed_source: BufferTextConsumedSourceCursor,
 }
 
 struct BufferTextWindowSourceConsumption {
@@ -1730,7 +1730,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 RenderFaceRef::Inherit,
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
-            source_adapter: BufferTextConsumedItemAdapter::new(text_start_byte),
+            consumed_source: BufferTextConsumedSourceCursor::new(text_start_byte),
         }
     }
 
@@ -1750,7 +1750,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            self.source_adapter.next_consumed_source_item(
+            self.consumed_source.next_consumed_source_item(
                 &mut self.source_cursor,
                 &mut source_context,
                 &mut source_position,
@@ -1769,7 +1769,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         mut source_position: BufferTextSourcePosition,
     ) -> BufferTextWindowFallbackSourceConsumption {
         let source_item = self
-            .source_adapter
+            .consumed_source
             .consume_fallback_source_item(source_item, &mut source_position);
         BufferTextWindowFallbackSourceConsumption {
             source_item,
