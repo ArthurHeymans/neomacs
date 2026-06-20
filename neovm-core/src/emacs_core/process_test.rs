@@ -2266,6 +2266,96 @@ fn accept_process_output_yields_to_pending_command_input() {
 }
 
 #[test]
+fn accept_process_output_drains_ready_output_before_yielding_to_command_input() {
+    // Regression: `accept-process-output` must not starve a process that
+    // already has readable, undrained output just because command input is
+    // queued.  GNU's `wait_reading_process_output` reads readable process fds
+    // from the select result and runs their filters before it yields on
+    // keyboard input, so the bytes are always drained.  Our split wait
+    // abstraction used to early-return on pending command input *before*
+    // polling ready process fds, which hung re-entrant `accept-process-output`
+    // callers (e.g. Copilot/jsonrpc startup) forever even though the child had
+    // written a full response.
+    //
+    // This can only be reproduced in Rust, not from elisp/batch: an elisp
+    // `sleep-for`/`sit-for` pumps the wait loop and drains the bytes early.  A
+    // plain Rust `sleep` lets the child's output land in the pipe *without*
+    // running the wait loop, so the bytes stay undrained until the
+    // `accept-process-output` under test — exactly the starvation window.
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(progn
+             (setq neo-apo-drain-output "")
+             (fset 'neo-apo-drain-filter
+                   (lambda (_proc string)
+                     (setq neo-apo-drain-output
+                           (concat neo-apo-drain-output string)))))"#,
+    )
+    .expect("install drain filter");
+
+    // Spawn a real child that writes "READY" immediately.
+    let pid = ev.processes.create_process(
+        "neo-apo-drain-probe".into(),
+        Value::NIL,
+        printf,
+        vec!["READY".into()],
+    );
+    ev.processes
+        .spawn_child(pid, false)
+        .expect("spawn probe child");
+    builtin_set_process_filter(
+        &mut ev,
+        vec![
+            Value::make_process(pid),
+            Value::symbol("neo-apo-drain-filter"),
+        ],
+    )
+    .expect("install ready-output filter");
+
+    // Let the child write its bytes into the pipe WITHOUT running the wait
+    // loop.  A Rust sleep does not pump neomacs's wait loop, so the bytes are
+    // not drained early (an elisp sleep-for WOULD drain them, which is why this
+    // can't be reproduced from elisp/batch).
+    std::thread::sleep(Duration::from_millis(200));
+
+    // Inject pending command input.  Without the fix, this makes
+    // `service_wait_request_processes` early-return before draining the ready
+    // process fd.
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::char('j'),
+        emacs_frame_id: 0,
+    })
+    .expect("queue key event");
+
+    let result = builtin_accept_process_output(
+        &mut ev,
+        vec![Value::make_process(pid), Value::make_float(0.5)],
+    )
+    .expect("accept-process-output should drain ready output then yield to command input");
+    drop(tx);
+
+    // The ready output must have been drained (filter ran) despite the pending
+    // command input.
+    let drained = ev
+        .eval_symbol("neo-apo-drain-output")
+        .expect("drain output var should be readable");
+    assert_eq!(
+        format!("{}", drained),
+        r#""READY""#,
+        "ready process output must be drained before yielding to command input"
+    );
+
+    // The yield-to-command-input semantics are preserved: the pending command
+    // input is still reported (return nil / left queued).
+    assert_eq!(result, Value::NIL);
+    assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
+}
+
+#[test]
 fn accept_process_output_request_uses_gnu_wait_deadlines() {
     let mut processes = ProcessManager::new();
 

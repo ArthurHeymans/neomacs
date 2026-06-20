@@ -772,18 +772,27 @@ impl super::eval::Context {
             SpecialInputServiceOutcome::default()
         };
         outcome.absorb_special_input_activity(special_input);
-        if request.completes_on_command_input()
-            && self.stage_pending_command_input_for_wait_request()?
-        {
-            outcome.record_command_input_pending();
-            if request.needs_redisplay_after_command_input(special_input) {
-                self.redisplay();
-            }
-            return Ok(outcome);
-        }
+
+        // Run timers before draining process output, matching GNU's
+        // `wait_reading_process_output` (src/process.c): it runs `timer_check`
+        // near the top of the loop (before `pselect`) and only reads readable
+        // process fds afterwards, so timer callbacks fire before process
+        // filters in the same service pass.
         if request.runs_timers() {
             outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
         }
+
+        // Drain ready process output (a non-blocking poll of already-readable
+        // fds plus filter dispatch) BEFORE yielding to pending command input.
+        // GNU's `wait_reading_process_output` reads readable process fds from
+        // the `pselect` result and runs their filters before it notices
+        // keyboard input (the keyboard `break` at the "Check for keyboard
+        // input" comment happens, but the process fds available from the prior
+        // select are read first), so the bytes are always drained.  The old
+        // order early-returned on pending command input before this poll, which
+        // starved a process that already had a full response waiting in its
+        // pipe: a re-entrant `accept-process-output` from a jsonrpc/Copilot
+        // timer would hang forever even though the child had written its reply.
         let process_request = request.process_output_service_request();
         let process_outcome = match process_service {
             WaitProcessService::Poll => {
@@ -793,6 +802,16 @@ impl super::eval::Context {
                 .poll_ready_process_output_for_service_request(ready_processes, &process_request),
         };
         outcome.absorb_process_activity(process_outcome);
+
+        if request.completes_on_command_input()
+            && self.stage_pending_command_input_for_wait_request()?
+        {
+            outcome.record_command_input_pending();
+            if request.needs_redisplay_after_command_input(special_input) {
+                self.redisplay();
+            }
+            return Ok(outcome);
+        }
         if request.needs_redisplay_after_service(special_input, outcome) {
             self.redisplay();
         }
