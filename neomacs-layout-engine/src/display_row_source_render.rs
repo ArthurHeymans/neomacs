@@ -45,15 +45,7 @@ pub(crate) struct TextRowOutputRenderState<'a> {
     evaluator: &'a mut Context,
 }
 
-struct DisplayRowCurrentTextRenderState<'face, 'emit> {
-    row_output: DisplayRowCurrentRowOutput<'emit>,
-    evaluator: &'emit mut Context,
-    font_metrics: &'emit mut Option<FontMetricsService>,
-    face_resolver: &'face FaceResolver,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-struct DisplayRowCurrentTextMeasureState<'face, 'emit> {
+struct DisplayRowCurrentTextSourceState<'face, 'emit> {
     row_output: DisplayRowCurrentRowOutput<'emit>,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
@@ -78,10 +70,10 @@ struct DisplayRowCurrentTextSourceStepResult {
 
 struct DisplayRowCurrentSourceStepMutation<'a, 'request, 'renderer, 'face, 'host, S, P> {
     row_request: DisplayRowSourceRenderRequest<'request>,
-    renderer: &'a mut DisplayRowRenderer<'renderer>,
+    renderer: DisplayRowRenderer<'renderer>,
     source: &'a mut S,
     source_state: &'a mut DisplayRowSourceState,
-    context: &'a mut DisplayRowRenderContext<'face, 'host>,
+    context: DisplayRowRenderContext<'face, 'host>,
     render_policy: &'a mut P,
 }
 
@@ -101,12 +93,14 @@ where
     type Output = Option<(DisplayRowRenderIntoRowResult, f32, f32)>;
 
     fn apply(self, row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> Self::Output {
+        let mut renderer = self.renderer;
+        let mut context = self.context;
         let result = self.row_request.render_fragment_step_into_row_with_policy(
-            self.renderer,
+            &mut renderer,
             row,
             self.source,
             self.source_state,
-            self.context,
+            &mut context,
             self.render_policy,
         )?;
         merge_display_row_source_slot_bounds(row, &result.source_slots);
@@ -132,7 +126,7 @@ where
     }
 }
 
-impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
+impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
     fn new(
         row_output: DisplayRowCurrentRowOutput<'emit>,
         evaluator: &'emit mut Context,
@@ -161,22 +155,20 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
         P: DisplayRowRenderPolicy,
     {
         let role = row_request.role();
-        let mut renderer = DisplayRowRenderer::new(self.font_metrics);
-        let mut context = DisplayRowRenderContext::new(
-            self.face_resolver,
-            self.evaluator.display_host.as_deref(),
-            self.face_ids,
-        );
+        let mutation = DisplayRowCurrentSourceStepMutation {
+            row_request,
+            renderer: DisplayRowRenderer::new(self.font_metrics),
+            source,
+            source_state,
+            context: DisplayRowRenderContext::new(
+                self.face_resolver,
+                self.evaluator.display_host.as_deref(),
+                self.face_ids,
+            ),
+            render_policy,
+        };
         let (result, row_height_px, row_ascent_px) =
-            self.row_output
-                .apply_current_row_mutation(DisplayRowCurrentSourceStepMutation {
-                    row_request,
-                    renderer: &mut renderer,
-                    source,
-                    source_state,
-                    context: &mut context,
-                    render_policy,
-                })??;
+            self.row_output.apply_current_row_mutation(mutation)??;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -184,25 +176,6 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
             row_ascent_px,
         })
     }
-}
-
-impl<'face, 'emit> DisplayRowCurrentTextMeasureState<'face, 'emit> {
-    fn new(
-        row_output: DisplayRowCurrentRowOutput<'emit>,
-        evaluator: &'emit mut Context,
-        font_metrics: &'emit mut Option<FontMetricsService>,
-        face_resolver: &'face FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            row_output,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-        }
-    }
-
     fn measure_source_with_policy<S, P>(
         &mut self,
         row_request: DisplayRowSourceRenderRequest<'_>,
@@ -215,22 +188,21 @@ impl<'face, 'emit> DisplayRowCurrentTextMeasureState<'face, 'emit> {
         P: DisplayRowRenderPolicy,
     {
         let role = row_request.role();
-        let mut renderer = DisplayRowRenderer::new(self.font_metrics);
-        let mut context = DisplayRowRenderContext::new(
-            self.face_resolver,
-            self.evaluator.display_host.as_deref(),
-            self.face_ids,
-        );
+        let mutation = DisplayRowCurrentSourceStepMutation {
+            row_request,
+            renderer: DisplayRowRenderer::new(self.font_metrics),
+            source,
+            source_state,
+            context: DisplayRowRenderContext::new(
+                self.face_resolver,
+                self.evaluator.display_host.as_deref(),
+                self.face_ids,
+            ),
+            render_policy,
+        };
         let (result, row_height_px, row_ascent_px) = self
             .row_output
-            .apply_current_row_scratch_mutation(DisplayRowCurrentSourceStepMutation {
-                row_request,
-                renderer: &mut renderer,
-                source,
-                source_state,
-                context: &mut context,
-                render_policy,
-            })??;
+            .apply_current_row_scratch_mutation(mutation)??;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -296,7 +268,7 @@ impl DisplayRowCurrentTextSourceStepResult {
 }
 
 fn render_display_item_source_into_current_text_row<S, P>(
-    state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+    state: &mut DisplayRowCurrentTextSourceState<'_, '_>,
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
     request: DisplayRowSourceRenderRequest<'_>,
@@ -310,7 +282,7 @@ where
 }
 
 fn measure_display_item_source_against_current_text_row<S, P>(
-    state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+    state: &mut DisplayRowCurrentTextSourceState<'_, '_>,
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
     request: DisplayRowSourceRenderRequest<'_>,
@@ -425,8 +397,8 @@ impl<'a> TextRowOutputRenderState<'a> {
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
-        DisplayRowCurrentTextRenderState::new(
+    ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
+        DisplayRowCurrentTextSourceState::new(
             self.output.current_row_output(),
             self.evaluator,
             font_metrics,
@@ -722,7 +694,7 @@ impl<'a> TextRowSourceRenderState<'a> {
 fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
-) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
+) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
     state
         .output_render
         .current_text_render_state(state.font_metrics, state.face_resolver, face_ids)
@@ -783,8 +755,8 @@ impl<'a> TextRowSourceMeasureState<'a> {
 fn current_text_measure_state<'emit>(
     state: &'emit mut TextRowSourceMeasureState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
-) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {
-    DisplayRowCurrentTextMeasureState::new(
+) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
+    DisplayRowCurrentTextSourceState::new(
         state.row_output.reborrow(),
         state.evaluator,
         state.font_metrics,
