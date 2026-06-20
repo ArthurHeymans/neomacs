@@ -1,11 +1,5 @@
 //! Buffer text visible-loop rendering.
 
-use crate::display_buffer_display_property_render::{
-    BufferDisplayPropertyTextReplacementApplyOutcome,
-    BufferDisplayPropertyTextReplacementRenderState,
-    BufferDisplayPropertyTextReplacementResolveRequest,
-};
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::{
@@ -16,7 +10,10 @@ use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source_consumption::{
-    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem, BufferTextSourceStepChar,
+    BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
+};
+use crate::display_buffer_text_source_render::{
+    BufferTextWindowSourceRenderOutcome, BufferTextWindowSourceRenderRequest,
 };
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
@@ -199,46 +196,41 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             }
         }
 
-        // One persistent typed source cursor feeds the row walk. The source
-        // side owns pending text-run splitting so direct single-character
-        // items can still stay typed through render.
-        let Some(source_consumption) = source_walk.consume_source_item_for_render(
-            &mut self.progress,
-            face_resolution_context,
+        let source_outcome = BufferTextWindowSourceRenderRequest::new(
+            self.loop_context,
+            text,
+            params,
+            active_face_state,
+            self.source_render.reborrow(),
             self.face_ids,
-            &mut self.source_render.reborrow(),
+            self.append_surface,
             self.row_geometry,
-        ) else {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        };
+            self.cursor_info,
+            self.progress.reborrow(),
+        )
+        .consume_next(source_walk, face_resolution_context.clone(), buffer);
 
-        match source_consumption {
-            BufferTextSourceConsumptionItem::DisplayItem(source_item) => {
-                return self.render_consumed_display_item_for_context(
-                    source_walk,
-                    BufferTextWindowConsumedDisplayItemRenderRequest {
-                        layout_resolution_context: face_resolution_context
-                            .source_item_layout_resolution_context(),
-                        source_item,
-                        text,
-                        active_face_state,
-                        params,
-                    },
-                    buffer,
-                );
-            }
-            BufferTextSourceConsumptionItem::Replacement(replacement) => {
-                return self.render_replacement_source_item_for_context(
-                    replacement,
-                    source_walk,
-                    face_resolution_context.source_item_layout_resolution_context(),
-                    text,
-                    active_face_state,
-                    params,
-                    buffer,
-                );
-            }
+        if source_outcome.should_continue_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
+        if source_outcome.should_stop_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        }
+        let BufferTextWindowSourceRenderOutcome::DisplayItem(source_item) = source_outcome else {
+            unreachable!("source render stop/continue outcomes handled above");
+        };
+        self.render_consumed_display_item_for_context(
+            source_walk,
+            BufferTextWindowConsumedDisplayItemRenderRequest {
+                layout_resolution_context: face_resolution_context
+                    .source_item_layout_resolution_context(),
+                source_item,
+                text,
+                active_face_state,
+                params,
+            },
+            buffer,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -345,70 +337,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         }
 
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
-    }
-
-    fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
-        &mut self,
-        replacement: BufferTextReplacementItem,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        text: &'request [u8],
-        active_face_state: &'request DisplayRowActiveFaceState,
-        params: &'request WindowParams,
-        buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome
-    where
-        'surface: 'request,
-    {
-        let request = BufferDisplayPropertyTextReplacementResolveRequest::new(
-            replacement,
-            self.loop_context.text_start_byte(),
-            text,
-            self.loop_context.content_x(),
-            params,
-            0.0,
-            self.loop_context.char_height(),
-            active_face_state,
-            self.loop_context.point_charpos(),
-        );
-        match request.resolve_and_apply(
-            buffer,
-            BufferDisplayPropertyTextReplacementRenderState::new(
-                text,
-                self.source_render.reborrow(),
-                self.face_ids,
-                self.append_surface,
-                self.row_geometry,
-                self.cursor_info,
-                active_face_state,
-                self.progress.reborrow(),
-            ),
-        ) {
-            BufferDisplayPropertyTextReplacementApplyOutcome::Rendered => {
-                BufferTextWindowLoopStepOutcome::ContinueBufferWalk
-            }
-            BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
-                let Some(source_step) = source_walk
-                    .consume_fallback_source_item_for_render(source_item, &mut self.progress)
-                else {
-                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-                };
-                self.render_consumed_display_item_for_context(
-                    source_walk,
-                    BufferTextWindowConsumedDisplayItemRenderRequest {
-                        layout_resolution_context,
-                        source_item: source_step,
-                        text,
-                        active_face_state,
-                        params,
-                    },
-                    buffer,
-                )
-            }
-            BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
-                BufferTextWindowLoopStepOutcome::StopBufferWalk
-            }
-        }
     }
 
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(

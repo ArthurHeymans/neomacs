@@ -45,7 +45,7 @@ pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
     Stop,
 }
 
-pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a> {
+pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
     replacement: BufferTextReplacementItem,
     text_start_byte: usize,
     text: &'a [u8],
@@ -53,7 +53,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a> {
     params: &'a WindowParams,
     glyph_y_offset: f32,
     default_row_height: f32,
-    active_face_state: &'a DisplayRowActiveFaceState,
+    active_face_state: &'face DisplayRowActiveFaceState,
     point_charpos: i64,
 }
 
@@ -100,7 +100,7 @@ impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
     }
 }
 
-impl<'a> BufferDisplayPropertyTextReplacementResolveRequest<'a> {
+impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         replacement: BufferTextReplacementItem,
@@ -110,7 +110,7 @@ impl<'a> BufferDisplayPropertyTextReplacementResolveRequest<'a> {
         params: &'a WindowParams,
         glyph_y_offset: f32,
         default_row_height: f32,
-        active_face_state: &'a DisplayRowActiveFaceState,
+        active_face_state: &'face DisplayRowActiveFaceState,
         point_charpos: i64,
     ) -> Self {
         Self {
