@@ -3,20 +3,16 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowFinishState, BufferTextWindowVisibilityRetryOutcome,
+    BufferTextWindowVisibilityRetryOutcome,
 };
-use crate::display_buffer_text_render_plan::BufferTextWindowInitialFaceStateRequest;
 use crate::display_buffer_text_tail_render::{
-    BufferTextWindowFinishInstallState, BufferTextWindowPostLoopRenderOutcome,
-    BufferTextWindowRetryBounds,
+    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowRetryBounds,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameOutputOwner;
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetricsService;
-use crate::hit_test::{HitRow, WindowHitData};
+use crate::hit_test::WindowHitData;
 use crate::neovm_bridge::FaceResolver;
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -31,25 +27,6 @@ use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 pub(crate) struct BufferTextWindowOutputState<'emit> {
     pub(crate) output: TextWindowOutputTarget<'emit>,
     pub(crate) evaluator: &'emit mut Context,
-}
-
-pub(crate) struct BufferTextWindowBodyOutputRenderState<'emit> {
-    output: BufferTextWindowOutputState<'emit>,
-    font_metrics: &'emit mut Option<FontMetricsService>,
-    face_resolver: &'emit FaceResolver,
-}
-
-pub(crate) struct BufferTextWindowBodyPassState<'emit> {
-    pub(crate) output: BufferTextWindowBodyOutputRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-pub(crate) struct BufferTextWindowOutputSession<'emit> {
-    output: BufferTextWindowOutputState<'emit>,
-    font_metrics: &'emit mut Option<FontMetricsService>,
-    face_resolver: &'emit FaceResolver,
-    face_ids: FrameFaceIdAllocator,
-    retry_checkpoint: TextWindowOutputRetryCheckpoint,
 }
 
 pub(crate) struct BufferTextWindowRenderAttemptContext<'a, 'face> {
@@ -82,11 +59,6 @@ pub(crate) struct BufferTextWindowRedisplayPublishRequest {
     accessible_end_emacs_byte: usize,
 }
 
-pub(crate) struct BufferTextWindowBodyPassOutcome {
-    pub(crate) output_emitter: WindowOutputEmitter,
-    pub(crate) post_loop: BufferTextWindowPostLoopRenderOutcome,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextWindowRenderAttemptOutcome {
     Skipped,
@@ -96,19 +68,6 @@ pub(crate) enum BufferTextWindowRenderAttemptOutcome {
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
     },
-}
-
-pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
-    output: BufferTextWindowOutputState<'a>,
-    hit_data: &'a mut Vec<WindowHitData>,
-    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-}
-
-pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    pub(crate) output: BufferTextWindowOutputState<'emit>,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
-    hit_data: &'emit mut Vec<WindowHitData>,
-    display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,15 +89,11 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
         Self { output, evaluator }
     }
 
-    pub(crate) fn reborrow(&mut self) -> BufferTextWindowOutputState<'_> {
-        BufferTextWindowOutputState::from_parts(self.output.reborrow(), self.evaluator)
-    }
-
-    fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
+    pub(crate) fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
         capture_text_window_retry_checkpoint(self.output.reborrow())
     }
 
-    fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
+    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
         restore_text_window_retry_checkpoint(self.output.reborrow(), checkpoint);
     }
 
@@ -151,14 +106,14 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
             .install_and_apply(self.output.reborrow())
     }
 
-    fn begin_text_window_output(
+    pub(crate) fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
         begin_request.begin_and_apply(self.output.reborrow(), self.evaluator)
     }
 
-    fn source_render_state<'output>(
+    pub(crate) fn source_render_state<'output>(
         &'output mut self,
         output_emitter: &'output mut WindowOutputEmitter,
         font_metrics: &'output mut Option<FontMetricsService>,
@@ -173,52 +128,6 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
             font_metrics,
             face_resolver,
         )
-    }
-
-    fn into_finish_state(
-        self,
-        output_emitter: WindowOutputEmitter,
-        hit_rows: Vec<HitRow>,
-    ) -> BufferTextWindowFinishState<'emit> {
-        BufferTextWindowFinishState::new(self.output, output_emitter, self.evaluator, hit_rows)
-    }
-}
-
-impl<'emit> BufferTextWindowBodyOutputRenderState<'emit> {
-    fn new(
-        output: BufferTextWindowOutputState<'emit>,
-        font_metrics: &'emit mut Option<FontMetricsService>,
-        face_resolver: &'emit FaceResolver,
-    ) -> Self {
-        Self {
-            output,
-            font_metrics,
-            face_resolver,
-        }
-    }
-
-    pub(crate) fn begin_text_window_output(
-        &mut self,
-        begin_request: BufferTextWindowBeginRequest,
-    ) -> WindowOutputEmitter {
-        self.output.begin_text_window_output(begin_request)
-    }
-
-    pub(crate) fn source_render_state<'output>(
-        &'output mut self,
-        output_emitter: &'output mut WindowOutputEmitter,
-    ) -> TextRowSourceRenderState<'output> {
-        self.output
-            .source_render_state(output_emitter, self.font_metrics, self.face_resolver)
-    }
-}
-
-impl<'emit> BufferTextWindowBodyPassState<'emit> {
-    fn new(
-        output: BufferTextWindowBodyOutputRenderState<'emit>,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self { output, face_ids }
     }
 }
 
@@ -248,44 +157,6 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallPublishState<'emit, 'outp
             output_emitter,
             evaluator,
             render_services,
-        }
-    }
-}
-
-impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    fn new(
-        output: BufferTextWindowOutputState<'emit>,
-        render_services: ChromeRowRenderServices<'emit, 'face>,
-        hit_data: &'emit mut Vec<WindowHitData>,
-        display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
-    ) -> Self {
-        Self {
-            output,
-            render_services,
-            hit_data,
-            display_snapshots,
-        }
-    }
-
-    pub(crate) fn finish_state(self) -> BufferTextWindowRenderedBodyFinishState<'emit> {
-        BufferTextWindowRenderedBodyFinishState {
-            output: self.output,
-            hit_data: self.hit_data,
-            display_snapshots: self.display_snapshots,
-        }
-    }
-}
-
-impl<'a> BufferTextWindowRenderedBodyFinishState<'a> {
-    pub(crate) fn finish_install_state(
-        self,
-        output_emitter: WindowOutputEmitter,
-        hit_rows: Vec<HitRow>,
-    ) -> BufferTextWindowFinishInstallState<'a> {
-        BufferTextWindowFinishInstallState {
-            finish_state: self.output.into_finish_state(output_emitter, hit_rows),
-            hit_data: self.hit_data,
-            display_snapshots: self.display_snapshots,
         }
     }
 }
@@ -330,64 +201,6 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
             hit_data,
             display_snapshots,
         )
-    }
-}
-
-impl<'emit> BufferTextWindowOutputSession<'emit> {
-    pub(crate) fn from_output_state(
-        mut output: BufferTextWindowOutputState<'emit>,
-        font_metrics: &'emit mut Option<FontMetricsService>,
-        face_resolver: &'emit FaceResolver,
-        frame_face_id_counter: u32,
-    ) -> Self {
-        let retry_checkpoint = output.capture_retry_checkpoint();
-        Self {
-            output,
-            font_metrics,
-            face_resolver,
-            face_ids: FrameFaceIdAllocator::new(frame_face_id_counter),
-            retry_checkpoint,
-        }
-    }
-
-    pub(crate) fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
-        BufferTextWindowBodyPassState::new(
-            BufferTextWindowBodyOutputRenderState::new(
-                self.output.reborrow(),
-                self.font_metrics,
-                self.face_resolver,
-            ),
-            &mut self.face_ids,
-        )
-    }
-
-    pub(crate) fn rendered_body_complete_state<'hit>(
-        &'hit mut self,
-        hit_data: &'hit mut Vec<WindowHitData>,
-        display_snapshots: &'hit mut Vec<WindowDisplaySnapshot>,
-    ) -> BufferTextWindowRenderedBodyCompleteState<'hit, 'hit> {
-        BufferTextWindowRenderedBodyCompleteState::new(
-            self.output.reborrow(),
-            ChromeRowRenderServices::new(self.font_metrics, self.face_resolver, &mut self.face_ids),
-            hit_data,
-            display_snapshots,
-        )
-    }
-
-    pub(crate) fn initial_active_face_state(
-        &mut self,
-        request: BufferTextWindowInitialFaceStateRequest<'_>,
-    ) -> DisplayRowActiveFaceState {
-        request.into_active_face_state(self.font_metrics)
-    }
-
-    pub(crate) fn prepare_retry(&mut self, frame_counter: &mut u32) {
-        self.output.restore_retry_checkpoint(self.retry_checkpoint);
-        self.publish_face_ids(frame_counter);
-    }
-
-    pub(crate) fn publish_face_ids(&self, frame_counter: &mut u32) {
-        *frame_counter = self.face_ids.finish();
     }
 }
 

@@ -9,8 +9,7 @@ use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_render::BufferTextWindowLoopRenderState;
 use crate::display_buffer_text_output_session::{
     BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyInstallRenderState,
-    BufferTextWindowBodyPassOutcome, BufferTextWindowBodyPassState,
-    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyFinishState,
+    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
 };
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
@@ -42,8 +41,9 @@ use crate::display_row_walk_state::{
     InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
-use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, RustBufferAccess};
 use crate::types::{LineWrapMode, WindowParams};
 use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
@@ -475,7 +475,10 @@ impl BufferTextWindowWalkSetup {
     pub(crate) fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
-        state: &mut BufferTextWindowBodyPassState<'_>,
+        output: &mut BufferTextWindowOutputState<'_>,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
         line_numbers: &mut LineNumberRenderState,
         face_scan: &mut FaceScanCheckpoint,
         active_face_state: &mut DisplayRowActiveFaceState,
@@ -488,15 +491,17 @@ impl BufferTextWindowWalkSetup {
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowBodyPassOutcome {
-        let mut output_emitter = state.output.begin_text_window_output(begin_request);
+    ) -> (WindowOutputEmitter, BufferTextWindowPostLoopRenderOutcome) {
+        let mut output_emitter = output.begin_text_window_output(begin_request);
+        let source_render =
+            output.source_render_state(&mut output_emitter, font_metrics, face_resolver);
         let post_loop = self.render_body_and_tail(
             &mut BufferTextWindowBodyRenderState::new(
-                state.output.source_render_state(&mut output_emitter),
+                source_render,
                 line_numbers,
                 face_scan,
                 active_face_state,
-                state.face_ids,
+                face_ids,
             ),
             row_prelude_context,
             loop_context,
@@ -508,20 +513,6 @@ impl BufferTextWindowWalkSetup {
             buffer,
             buf_access,
         );
-        BufferTextWindowBodyPassOutcome {
-            output_emitter,
-            post_loop,
-        }
-    }
-
-    pub(crate) fn finish_window_and_install(
-        &mut self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        state: BufferTextWindowRenderedBodyFinishState<'_>,
-        output_emitter: WindowOutputEmitter,
-    ) {
-        tail_context.finish_and_install(
-            state.finish_install_state(output_emitter, std::mem::take(&mut self.hit_rows)),
-        );
+        (output_emitter, post_loop)
     }
 }
