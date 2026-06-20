@@ -609,7 +609,7 @@ impl DisplayRowAppendFrame {
         )
     }
 
-    pub(crate) fn source_render_request<'face>(
+    fn source_render_request<'face>(
         &self,
         position: DisplayRowPosition,
         face_id: u32,

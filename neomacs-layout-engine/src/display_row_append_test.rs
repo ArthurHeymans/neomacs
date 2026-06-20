@@ -5300,7 +5300,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
 }
 
 #[test]
-fn display_row_append_frame_builds_source_request_directly() {
+fn display_row_append_frame_exposes_source_row_request_through_append_request() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
         3,
@@ -5325,12 +5325,14 @@ fn display_row_append_frame_builds_source_request_directly() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = frame.source_render_request(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
+    let request = frame
+        .source_append_render_request(
+            DisplayRowPosition { x_px: 18.0, col: 2 },
+            42,
+            base_face,
+            DisplayRowAppendKind::SourceText,
+        )
+        .row_request();
 
     assert_eq!(
         request.render_bounds().max_x,
