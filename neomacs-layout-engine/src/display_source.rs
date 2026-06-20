@@ -8,6 +8,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
+use crate::display_row::DisplaySourceAppendRenderPlan;
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
@@ -410,31 +411,9 @@ pub(crate) struct BufferTextSourceTextItemRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum ResolvedBufferTextSourceAdvance {
-    Natural { advance_px: f32 },
-    Resolved { advance_px: f32 },
-}
-
-impl ResolvedBufferTextSourceAdvance {
-    pub(crate) fn natural(advance_px: f32) -> Self {
-        Self::Natural { advance_px }
-    }
-
-    pub(crate) fn resolved(advance_px: f32) -> Self {
-        Self::Resolved { advance_px }
-    }
-
-    pub(crate) fn advance_px(self) -> f32 {
-        match self {
-            Self::Natural { advance_px } | Self::Resolved { advance_px } => advance_px,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceTextRequest {
     source_item: BufferTextSourceTextItemRequest,
-    resolved_advance: ResolvedBufferTextSourceAdvance,
+    render_plan: DisplaySourceAppendRenderPlan,
 }
 
 impl BufferTextSourceTextRequest {
@@ -442,21 +421,21 @@ impl BufferTextSourceTextRequest {
     pub(crate) fn new(
         range: BufferTextSourceRange,
         source_char: char,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        render_plan: DisplaySourceAppendRenderPlan,
     ) -> Self {
         Self {
             source_item: BufferTextSourceTextItemRequest::new(range, source_char),
-            resolved_advance,
+            render_plan,
         }
     }
 
     pub(crate) fn from_source_item(
         source_item: BufferTextSourceTextItemRequest,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        render_plan: DisplaySourceAppendRenderPlan,
     ) -> Self {
         Self {
             source_item,
-            resolved_advance,
+            render_plan,
         }
     }
 
@@ -464,12 +443,12 @@ impl BufferTextSourceTextRequest {
         self.source_item
     }
 
-    pub(crate) fn resolved_advance(self) -> ResolvedBufferTextSourceAdvance {
-        self.resolved_advance
+    pub(crate) fn render_plan(self) -> DisplaySourceAppendRenderPlan {
+        self.render_plan
     }
 
     pub(crate) fn advance_px(self) -> f32 {
-        self.resolved_advance.advance_px()
+        self.render_plan.advance_px()
     }
 }
 
@@ -648,11 +627,11 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
 
     pub(crate) fn into_text_request(
         self,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        render_plan: DisplaySourceAppendRenderPlan,
     ) -> BufferTextSourceTextRequest {
         BufferTextSourceTextRequest::from_source_item(
             BufferTextSourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
-            resolved_advance,
+            render_plan,
         )
     }
 }

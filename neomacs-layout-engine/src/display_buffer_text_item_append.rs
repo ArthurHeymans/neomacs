@@ -13,7 +13,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendRenderPolicy,
+    DisplaySourceAppendRenderPlan, DisplaySourceAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -39,7 +39,6 @@ use crate::display_source::{
     BufferTextSourceNaturalAdvanceRequest, BufferTextSourceRange,
     BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
     BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest,
-    ResolvedBufferTextSourceAdvance,
 };
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
@@ -47,20 +46,9 @@ use crate::types::{LineWrapMode, WindowParams};
 use crate::window_output::WindowOutputEmitter;
 use neovm_core::buffer::BufferId;
 
-impl ResolvedBufferTextSourceAdvance {
-    fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
-        match self {
-            Self::Natural { .. } => DisplaySourceAppendRenderPolicy::natural(),
-            Self::Resolved { advance_px } => {
-                DisplaySourceAppendRenderPolicy::resolved_advance(advance_px)
-            }
-        }
-    }
-}
-
 impl BufferTextSourceTextRequest {
     fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
-        self.resolved_advance().append_render_policy()
+        self.render_plan().render_policy()
     }
 
     #[cfg(test)]
@@ -303,7 +291,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
-    ) -> ResolvedBufferTextSourceAdvance {
+    ) -> DisplaySourceAppendRenderPlan {
         let frame = self.active_face_context(geometry).active_face_frame();
         append_state
             .advance_resolver()
@@ -738,7 +726,7 @@ impl BufferTextSourceAdvanceResolver {
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
         request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
-    ) -> ResolvedBufferTextSourceAdvance {
+    ) -> DisplaySourceAppendRenderPlan {
         let ch = request.cluster().ch();
         match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
             BufferTextSourceAdvancePath::ResolvedComplexRun => {
@@ -753,7 +741,7 @@ impl BufferTextSourceAdvanceResolver {
                     request.cluster().is_cluster_continuation(),
                     &mut policy,
                 );
-                ResolvedBufferTextSourceAdvance::resolved(advance_px)
+                DisplaySourceAppendRenderPlan::resolved_advance(advance_px)
             }
             BufferTextSourceAdvancePath::NaturalRenderedSource => {
                 let advance_px = BufferTextSourceNaturalAdvanceRequest::for_range_and_cluster(
@@ -767,7 +755,7 @@ impl BufferTextSourceAdvanceResolver {
                     request.position(),
                     request.source_item(),
                 );
-                ResolvedBufferTextSourceAdvance::natural(advance_px)
+                DisplaySourceAppendRenderPlan::natural(advance_px)
             }
         }
     }
@@ -1086,10 +1074,10 @@ impl<'text, 'item> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
 
     fn append_plan(
         self,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        render_plan: DisplaySourceAppendRenderPlan,
     ) -> BufferTextSourceCharAppendPlan {
         BufferTextSourceCharAppendPlan {
-            source_text: self.source.into_text_request(resolved_advance),
+            source_text: self.source.into_text_request(render_plan),
             position: self.position,
             source_item: self.source_item.clone(),
         }

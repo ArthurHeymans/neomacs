@@ -28,7 +28,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState, DisplaySourceAppendRenderPlan,
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
@@ -3407,7 +3407,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
             source_text: BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::single_char(CharPos0::new(21)),
                 'a',
-                ResolvedBufferTextSourceAdvance::resolved(8.0),
+                DisplaySourceAppendRenderPlan::resolved_advance(8.0),
             ),
             position: DisplayRowPosition {
                 x_px: 80.0,
@@ -3918,7 +3918,7 @@ fn buffer_text_source_text_request_uses_source_step_char_payload() {
     let request = BufferTextSourceTextRequest::new(
         BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
         'z',
-        ResolvedBufferTextSourceAdvance::natural(8.0),
+        DisplaySourceAppendRenderPlan::natural(8.0),
     )
     .append_request(buf_id, &snapshot, 7)
     .expect("append request");
@@ -3979,7 +3979,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::natural(8.0));
+    assert_eq!(resolved, DisplaySourceAppendRenderPlan::natural(8.0));
 }
 
 #[test]
@@ -4026,7 +4026,10 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::resolved(8.0));
+    assert_eq!(
+        resolved,
+        DisplaySourceAppendRenderPlan::resolved_advance(8.0)
+    );
 }
 
 #[test]
@@ -7220,7 +7223,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             BufferTextSourceTextRequest::new(
                 source_range,
                 'b',
-                ResolvedBufferTextSourceAdvance::natural(measured_width),
+                DisplaySourceAppendRenderPlan::natural(measured_width),
             ),
             position,
         )
@@ -7232,7 +7235,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
 }
 
 #[test]
-fn buffer_text_source_append_context_uses_resolved_advance() {
+fn buffer_text_source_append_context_uses_resolved_render_plan() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -7285,7 +7288,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
                 'a',
-                ResolvedBufferTextSourceAdvance::resolved(13.0),
+                DisplaySourceAppendRenderPlan::resolved_advance(13.0),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
@@ -7358,7 +7361,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
                 '\u{301}',
-                ResolvedBufferTextSourceAdvance::natural(0.0),
+                DisplaySourceAppendRenderPlan::natural(0.0),
             ),
             DisplayRowPosition { x_px: 8.0, col: 1 },
         )

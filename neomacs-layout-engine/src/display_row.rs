@@ -1153,10 +1153,12 @@ struct NaturalDisplayRowRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ResolvedSourceAdvanceRenderPolicy {
     advance_px: f32,
 }
@@ -1188,6 +1190,7 @@ impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplaySourceAppendRenderPolicy {
     Natural(NaturalDisplayRowAppendRenderPolicy),
     Resolved(ResolvedSourceAdvanceRenderPolicy),
@@ -1214,6 +1217,36 @@ impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
             Self::Natural(policy) => policy.measurement_for(item, face_id, font_metrics),
             Self::Resolved(policy) => policy.measurement_for(item, face_id, font_metrics),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplaySourceAppendRenderPlan {
+    advance_px: f32,
+    policy: DisplaySourceAppendRenderPolicy,
+}
+
+impl DisplaySourceAppendRenderPlan {
+    pub(crate) fn natural(advance_px: f32) -> Self {
+        Self {
+            advance_px,
+            policy: DisplaySourceAppendRenderPolicy::natural(),
+        }
+    }
+
+    pub(crate) fn resolved_advance(advance_px: f32) -> Self {
+        Self {
+            advance_px,
+            policy: DisplaySourceAppendRenderPolicy::resolved_advance(advance_px),
+        }
+    }
+
+    pub(crate) fn advance_px(self) -> f32 {
+        self.advance_px
+    }
+
+    pub(crate) fn render_policy(self) -> DisplaySourceAppendRenderPolicy {
+        self.policy
     }
 }
 
