@@ -1657,6 +1657,19 @@ fn jit_profile_path() -> Option<&'static str> {
         .as_deref()
 }
 
+/// Verification harness (J0): when `NEOVM_JIT_FORCE_DEOPT=1`, EVERY speculation
+/// guard (`emit_guard`) is forced to fail, so every guarded native fast path
+/// takes its deopt path instead. Running the full suite with this on (ideally
+/// with `NEOVM_JIT_THRESHOLD=1` so every function compiles) exercises every deopt
+/// site and must produce results identical to the interpreter — the JIT analogue
+/// of `NEOVM_GC_STRESS`/`gc_stress`. Catches deopt-frame-reconstruction bugs (the
+/// riskiest part of speculation) before the optimizing Tier-2 adds more guards.
+fn jit_force_deopt() -> bool {
+    use std::sync::OnceLock;
+    static FORCE: OnceLock<bool> = OnceLock::new();
+    *FORCE.get_or_init(|| std::env::var("NEOVM_JIT_FORCE_DEOPT").as_deref() == Ok("1"))
+}
+
 fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: bool) {
     let Some(path) = jit_profile_path() else {
         return;
@@ -1865,6 +1878,15 @@ fn compile_bytecode_function_inner(
 /// sealed continuation block. On return, the builder is positioned in the
 /// continuation so lowering continues on the success path.
 fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
+    // J0 verification harness: force every guard to fail so the deopt path is
+    // always taken (see `jit_force_deopt`). A constant-false condition makes
+    // `brif` unconditionally branch to `deopt`.
+    let cond = if jit_force_deopt() {
+        let ty = fb.func.dfg.value_type(cond);
+        fb.ins().iconst(ty, 0)
+    } else {
+        cond
+    };
     let cont = fb.create_block();
     fb.ins().brif(cond, cont, &[], deopt, &[]);
     fb.switch_to_block(cont);
