@@ -354,7 +354,7 @@ pub(crate) fn render_overlay_string<B: LayoutBufferView>(
         row_context.metrics.row_height(),
         row_context.metrics.ascent(),
         row_context.metrics.char_width(),
-        row_context.metrics.row_height(),
+        row_context.metrics,
     ) else {
         return;
     };

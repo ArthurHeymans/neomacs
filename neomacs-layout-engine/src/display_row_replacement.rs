@@ -775,7 +775,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.placement,
             DisplayRowAppendMetrics::from_active_face_state(
                 self.active_face,
-                self.fallback_metrics.row_height(),
+                self.fallback_metrics,
             ),
         )
     }
@@ -785,7 +785,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.placement,
             DisplayRowAppendMetrics::from_active_face_state(
                 self.active_face,
-                self.fallback_metrics.row_height(),
+                self.fallback_metrics,
             ),
         )
     }
@@ -797,7 +797,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 self.active_face,
                 height_px,
                 ascent_px,
-                self.fallback_metrics.row_height(),
+                self.fallback_metrics,
             ),
         )
     }

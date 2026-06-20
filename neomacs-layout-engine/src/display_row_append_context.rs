@@ -129,12 +129,12 @@ impl DisplayRowAppendSurface {
         height: f32,
         ascent: f32,
         char_width: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> DisplayRowAppendFrame {
         self.frame_from_geometry_state(
             geometry,
             glyph_y_offset,
-            DisplayRowAppendMetrics::text_row(height, ascent, char_width, default_row_height),
+            DisplayRowAppendMetrics::text_row(height, ascent, char_width, fallback_metrics),
         )
     }
 
@@ -143,12 +143,12 @@ impl DisplayRowAppendSurface {
         geometry: &DisplayRowGeometryState,
         glyph_y_offset: f32,
         active_face: &DisplayRowActiveFaceState,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> DisplayRowAppendFrame {
         self.frame_from_geometry_state(
             geometry,
             glyph_y_offset,
-            DisplayRowAppendMetrics::from_active_face_state(active_face, default_row_height),
+            DisplayRowAppendMetrics::from_active_face_state(active_face, fallback_metrics),
         )
     }
 }
@@ -340,7 +340,7 @@ impl<'a> DisplayRowTextAppendContext<'a> {
             height,
             ascent,
             char_width,
-            self.fallback_metrics.row_height(),
+            self.fallback_metrics,
         )
     }
 }
@@ -377,7 +377,7 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
                 self.text_context.geometry,
                 self.text_context.glyph_y_offset,
                 self.active_face,
-                self.text_context.fallback_metrics.row_height(),
+                self.text_context.fallback_metrics,
             )
     }
 
@@ -394,7 +394,7 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
                 self.text_context.geometry,
                 self.text_context.glyph_y_offset,
                 self.active_face,
-                self.text_context.fallback_metrics.row_height(),
+                self.text_context.fallback_metrics,
             )
     }
 
@@ -414,7 +414,7 @@ pub(crate) struct DisplayRowAppendMetrics {
     pub(crate) ascent: f32,
     pub(crate) char_width: f32,
     pub(crate) space_width: f32,
-    pub(crate) default_row_height: f32,
+    pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl DisplayRowAppendMetrics {
@@ -423,14 +423,14 @@ impl DisplayRowAppendMetrics {
         ascent: f32,
         char_width: f32,
         space_width: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             height,
             ascent,
             char_width,
             space_width,
-            default_row_height,
+            fallback_metrics,
         }
     }
 
@@ -438,23 +438,23 @@ impl DisplayRowAppendMetrics {
         height: f32,
         ascent: f32,
         char_width: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
-        Self::new(height, ascent, char_width, char_width, default_row_height)
+        Self::new(height, ascent, char_width, char_width, fallback_metrics)
     }
 
     pub(crate) fn from_active_face_state(
         active_face: &DisplayRowActiveFaceState,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
-        Self::from_measured_face_metrics(active_face.metrics(), default_row_height)
+        Self::from_measured_face_metrics(active_face.metrics(), fallback_metrics)
     }
 
     pub(crate) fn display_box_from_active_face_state(
         active_face: &DisplayRowActiveFaceState,
         height: f32,
         ascent: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         let metrics = active_face.metrics();
         Self::new(
@@ -462,20 +462,20 @@ impl DisplayRowAppendMetrics {
             ascent,
             metrics.char_width,
             metrics.space_width,
-            default_row_height,
+            fallback_metrics,
         )
     }
 
     pub(crate) fn from_measured_face_metrics(
         metrics: DisplayRowMeasuredFaceMetrics,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self::new(
             metrics.row_height,
             metrics.ascent,
             metrics.char_width,
             metrics.space_width,
-            default_row_height,
+            fallback_metrics,
         )
     }
 }
@@ -576,7 +576,7 @@ impl DisplayRowAppendFrame {
                 ascent: metrics.ascent,
                 tab_policy,
             },
-            default_row_height: metrics.default_row_height,
+            default_row_height: metrics.fallback_metrics.row_height(),
             content_x: area.content_x,
             text_width: area.text_width,
             line_number_width: area.line_number_width,

@@ -389,7 +389,7 @@ fn display_row_append_metrics_builds_from_measured_face_metrics() {
             ascent: 13.0,
             space_width: 8.0,
         },
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
 
     assert_eq!(
@@ -399,7 +399,7 @@ fn display_row_append_metrics_builds_from_measured_face_metrics() {
             ascent: 13.0,
             char_width: 7.5,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         }
     );
 }
@@ -424,7 +424,10 @@ fn display_row_append_metrics_builds_from_active_face_state() {
     );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
 
-    let metrics = DisplayRowAppendMetrics::from_active_face_state(&active_face, 16.0);
+    let metrics = DisplayRowAppendMetrics::from_active_face_state(
+        &active_face,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
 
     assert_eq!(
         metrics,
@@ -433,7 +436,7 @@ fn display_row_append_metrics_builds_from_active_face_state() {
             ascent: 13.0,
             char_width: 7.5,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         }
     );
 }
@@ -458,8 +461,12 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
     );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
 
-    let metrics =
-        DisplayRowAppendMetrics::display_box_from_active_face_state(&active_face, 42.0, 31.0, 16.0);
+    let metrics = DisplayRowAppendMetrics::display_box_from_active_face_state(
+        &active_face,
+        42.0,
+        31.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
 
     assert_eq!(
         metrics,
@@ -468,7 +475,7 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
             ascent: 31.0,
             char_width: 7.5,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         }
     );
 }
@@ -3855,7 +3862,7 @@ fn test_append_frame(
             ascent: 12.0,
             char_width,
             space_width,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         },
         tab_policy,
     )
@@ -4267,7 +4274,7 @@ fn display_row_append_frame_builds_from_geometry_state() {
             ascent: 13.0,
             char_width: 7.0,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         },
     );
 
@@ -5237,7 +5244,7 @@ fn display_row_append_surface_builds_positioned_source_requests() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
     );
     let table = FaceTable::new();
@@ -5295,7 +5302,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         tab_policy,
     );
@@ -5422,7 +5429,7 @@ fn display_row_append_kind_names_width_clip_and_output_policy() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         DisplayTabPolicy::every(4),
     );
@@ -5473,7 +5480,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         tab_policy,
     );
@@ -5522,7 +5529,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         tab_policy,
     );
@@ -5566,7 +5573,7 @@ fn display_row_append_frame_builds_source_measure_request() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         DisplayTabPolicy::every(4),
     );
@@ -5604,7 +5611,7 @@ fn display_row_source_append_render_request_uses_frame_policy() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         tab_policy,
     );
@@ -5649,7 +5656,7 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         DisplayTabPolicy::every(4),
     );
@@ -5708,7 +5715,7 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
     );
 
@@ -5839,7 +5846,7 @@ fn display_row_append_frame_preserves_geometry_and_area() {
             ascent: 11.0,
             char_width: 9.0,
             space_width: 7.0,
-            default_row_height: 14.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
         },
         tab_policy.clone(),
     );
@@ -8591,7 +8598,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         16.0,
         12.0,
         8.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
     .expect("lisp string source session");
 
@@ -8725,7 +8732,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
             ascent: 12.0,
             char_width: 8.0,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         },
         DisplayTabPolicy::every(8),
     );
@@ -10454,7 +10461,7 @@ fn display_replacement_append_context_installs_image_replacements() {
             ascent: 12.0,
             char_width: 8.0,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         },
         DisplayTabPolicy::every(8),
     );
@@ -10593,7 +10600,7 @@ fn display_replacement_append_context_installs_video_replacements() {
             ascent: 12.0,
             char_width: 8.0,
             space_width: 8.0,
-            default_row_height: 16.0,
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         },
         DisplayTabPolicy::every(8),
     );

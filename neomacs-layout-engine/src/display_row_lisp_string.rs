@@ -620,11 +620,7 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             self.append_surface,
             geometry,
             self.glyph_y_offset,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                self.metrics.char_width,
-                self.metrics.default_row_height,
-                self.metrics.ascent,
-            ),
+            self.metrics.fallback_metrics,
         )
         .text_row_frame(
             self.metrics.height,
@@ -652,7 +648,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         height: f32,
         ascent: f32,
         char_width: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Option<Self> {
         let source_session = LispStringSourceAppendSession::new(request)?;
         Some(Self {
@@ -663,7 +659,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
                 height,
                 ascent,
                 char_width,
-                default_row_height,
+                fallback_metrics,
             ),
         })
     }
