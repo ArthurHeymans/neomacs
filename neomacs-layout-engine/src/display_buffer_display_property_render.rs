@@ -1,7 +1,7 @@
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
@@ -39,7 +39,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> 
     content_x: f32,
     params: &'a WindowParams,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
     active_face_state: &'face DisplayRowActiveFaceState,
 }
 
@@ -78,7 +78,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         content_x: f32,
         params: &'a WindowParams,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
         active_face_state: &'face DisplayRowActiveFaceState,
     ) -> Self {
         Self {
@@ -88,7 +88,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
             content_x,
             params,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
             active_face_state,
         }
     }
@@ -163,7 +163,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
                         self.params,
                         host,
                         self.glyph_y_offset,
-                        self.default_row_height,
+                        self.fallback_metrics,
                         start_position,
                     )
                 });

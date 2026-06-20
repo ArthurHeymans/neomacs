@@ -9,8 +9,8 @@ use crate::display_item::{
 #[cfg(test)]
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
-    DisplayRowSourceState,
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowRenderClipBehavior,
+    DisplayRowRenderPolicy, DisplayRowSourceState,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
@@ -433,7 +433,7 @@ pub(crate) struct DisplayPropertyReplacementAppendRequest {
     replacement_source: BufferDisplayReplacementSource,
     item: DisplayPropertyReplacementSourceItem,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
 }
 
@@ -442,14 +442,14 @@ impl DisplayPropertyReplacementAppendRequest {
         replacement_source: BufferDisplayReplacementSource,
         item: DisplayPropertyReplacementSourceItem,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
         start_position: DisplayRowPosition,
     ) -> Self {
         Self {
             replacement_source,
             item,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
             start_position,
         }
     }
@@ -469,7 +469,7 @@ impl DisplayPropertyReplacementAppendRequest {
         params: &WindowParams,
         display_host: Option<&dyn DisplayHost>,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
         start_position: DisplayRowPosition,
     ) -> Option<Self> {
         let item = DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
@@ -489,7 +489,7 @@ impl DisplayPropertyReplacementAppendRequest {
             descriptor.replacement_source(),
             item,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
             start_position,
         ))
     }
@@ -515,7 +515,7 @@ impl DisplayPropertyReplacementAppendRequest {
             replacement_source: self.replacement_source,
             item,
             glyph_y_offset: self.glyph_y_offset,
-            default_row_height: self.default_row_height,
+            fallback_metrics: self.fallback_metrics,
             start_position: self.start_position,
         }
     }
@@ -581,7 +581,7 @@ pub(crate) struct DisplayPropertyReplacementAppendPlan {
     replacement_source: BufferDisplayReplacementSource,
     item: DisplayPropertyReplacementAppendPlanItem,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
 }
 
@@ -609,7 +609,7 @@ impl DisplayPropertyReplacementAppendPlan {
             row_geometry,
             active_face_state,
             self.glyph_y_offset,
-            self.default_row_height,
+            self.fallback_metrics,
         );
         self.item.append_to_text_row(
             replacement_append_context,
@@ -749,7 +749,7 @@ pub(crate) struct DisplayReplacementRowAppendContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     placement: DisplayRowAppendPlacement,
     active_face: &'a DisplayRowActiveFaceState,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl<'a> DisplayReplacementRowAppendContext<'a> {
@@ -759,14 +759,14 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         geometry: &DisplayRowGeometryState,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             replacement_source,
             append_surface,
             placement: DisplayRowAppendPlacement::from_geometry_state(geometry, glyph_y_offset),
             active_face,
-            default_row_height,
+            fallback_metrics,
         }
     }
 
@@ -775,7 +775,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.placement,
             DisplayRowAppendMetrics::from_active_face_state(
                 self.active_face,
-                self.default_row_height,
+                self.fallback_metrics.row_height(),
             ),
         )
     }
@@ -785,7 +785,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.placement,
             DisplayRowAppendMetrics::from_active_face_state(
                 self.active_face,
-                self.default_row_height,
+                self.fallback_metrics.row_height(),
             ),
         )
     }
@@ -797,7 +797,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 self.active_face,
                 height_px,
                 ascent_px,
-                self.default_row_height,
+                self.fallback_metrics.row_height(),
             ),
         )
     }

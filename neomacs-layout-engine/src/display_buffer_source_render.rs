@@ -491,6 +491,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         'surface: 'request,
     {
         let start_charpos = replacement.start_charpos();
+        let active_face_metrics = self.active_face_state.metrics();
         let request = BufferDisplayPropertyTextReplacementResolveRequest::new(
             replacement,
             self.loop_context.text_start_byte(),
@@ -498,7 +499,11 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.loop_context.content_x(),
             self.params,
             0.0,
-            self.loop_context.char_height(),
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                active_face_metrics.char_width,
+                self.loop_context.char_height(),
+                active_face_metrics.ascent,
+            ),
             self.active_face_state,
         );
         let current_x = *self.state.progress.row.x;

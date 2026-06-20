@@ -9103,7 +9103,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
         ),
         item,
         -2.0,
-        18.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         DisplayRowPosition { x_px: 24.0, col: 4 },
     );
 
@@ -9162,7 +9162,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         &params,
         None,
         -2.0,
-        18.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
     .expect("display replacement append request");
@@ -9338,7 +9338,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         &params,
         None,
         -2.0,
-        18.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
     .expect("display replacement append request");
@@ -9460,7 +9460,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         8.0,
         &params,
         -2.0,
-        18.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         &active_face,
     )
     .resolve_and_render(
@@ -10063,7 +10063,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         &geometry,
         &active_face,
         0.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
     let request = DisplayReplacementStretchSourceItem::from_extents(13.0, 16.0, 12.0)
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 })
@@ -10153,7 +10153,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         &geometry,
         &active_face,
         0.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
     let request = DisplayReplacementSourceMappedTextItem::new("??")
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
@@ -10338,7 +10338,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         &geometry,
         &active_face,
         2.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
     let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
     let mut face_ids = FrameFaceIdAllocator::new(4);
