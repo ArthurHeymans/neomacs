@@ -1,7 +1,7 @@
 use super::*;
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetupRequest;
+use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetup;
 use crate::display_buffer_text_tail_render::BufferTextWindowTailDecorationState;
 use crate::display_buffer_text_tail_render::BufferTextWindowTailRequestContext;
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowGeometryState, DisplayRowMarker};
@@ -209,7 +209,7 @@ fn walk_setup_applies_hscroll_prefix_and_reserved_surface_policy() {
 #[test]
 fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     let walk_setup = setup_request().into_setup();
-    let output_setup = BufferTextWindowOutputSetupRequest::new(
+    let output_setup = BufferTextWindowOutputSetup::new(
         FrameId(3),
         WindowId(9),
         99,
@@ -223,8 +223,9 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
         32.0,
         48.0,
         80.0,
-    )
-    .into_setup(5, &walk_setup);
+        5,
+        &walk_setup,
+    );
 
     assert_eq!(output_setup.row_visibility_limit.max_rows, 5);
     assert_eq!(output_setup.row_visibility_limit.bottom_y, 80.0);
@@ -238,7 +239,7 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
 fn loop_request_context_carries_buffer_and_window_policy() {
     let params = window_params();
     let walk_setup = setup_request().into_setup();
-    let output_setup = BufferTextWindowOutputSetupRequest::new(
+    let output_setup = BufferTextWindowOutputSetup::new(
         FrameId(3),
         WindowId(9),
         99,
@@ -252,8 +253,9 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         32.0,
         48.0,
         80.0,
-    )
-    .into_setup(5, &walk_setup);
+        5,
+        &walk_setup,
+    );
     let context = BufferTextWindowLoopRequestContext::new(
         neovm_core::buffer::BufferId(42),
         11,
@@ -321,7 +323,7 @@ fn tail_decoration_request_reports_rows_considered_for_decorations() {
     setup.box_face.activate(DisplayRowMarker::Row(2), 24.0);
 
     let params = window_params();
-    let output_setup = BufferTextWindowOutputSetupRequest::new(
+    let output_setup = BufferTextWindowOutputSetup::new(
         FrameId(3),
         WindowId(9),
         99,
@@ -335,8 +337,9 @@ fn tail_decoration_request_reports_rows_considered_for_decorations() {
         32.0,
         80.0,
         112.0,
-    )
-    .into_setup(5, &setup);
+        5,
+        &setup,
+    );
 
     let context = BufferTextWindowTailRequestContext::new(
         &params,

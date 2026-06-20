@@ -6,7 +6,7 @@ pub(crate) use crate::display_buffer_text_render_attempt::{
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
 };
 use crate::display_buffer_text_render_plan::{
-    BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSetup,
 };
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
@@ -180,10 +180,14 @@ where
         )
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
-        let output_setup = BufferTextWindowOutputSetupRequest::from_window_geometry(
-            frame_id, window_id, params, &geometry,
-        )
-        .into_setup(geometry.max_rows, &walk_setup);
+        let output_setup = BufferTextWindowOutputSetup::from_window_geometry(
+            frame_id,
+            window_id,
+            params,
+            &geometry,
+            geometry.max_rows,
+            &walk_setup,
+        );
 
         let body_plan = output_setup.into_body_plan(
             &walk_setup,

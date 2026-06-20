@@ -42,22 +42,6 @@ use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 
-pub(crate) struct BufferTextWindowOutputSetupRequest {
-    frame_id: FrameId,
-    window_id: WindowId,
-    output_window_id: u64,
-    display_text_row_base: usize,
-    display_text_rows: usize,
-    bottom_chrome_rows: usize,
-    cols: usize,
-    bounds: Rect,
-    text_bounds: Rect,
-    selected: bool,
-    text_y: f32,
-    text_height: f32,
-    visibility_bottom_y: f32,
-}
-
 pub(crate) struct BufferTextWindowOutputSetup {
     pub(crate) begin_request: BufferTextWindowBeginRequest,
     pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
@@ -112,7 +96,7 @@ pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
     default_face_char_width: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
 }
-impl BufferTextWindowOutputSetupRequest {
+impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         frame_id: FrameId,
@@ -128,8 +112,10 @@ impl BufferTextWindowOutputSetupRequest {
         text_y: f32,
         text_height: f32,
         visibility_bottom_y: f32,
+        max_rows: usize,
+        walk_setup: &BufferTextWindowWalkSetup,
     ) -> Self {
-        Self {
+        Self::from_parts(
             frame_id,
             window_id,
             output_window_id,
@@ -143,7 +129,9 @@ impl BufferTextWindowOutputSetupRequest {
             text_y,
             text_height,
             visibility_bottom_y,
-        }
+            max_rows,
+            walk_setup,
+        )
     }
 
     pub(crate) fn from_window_geometry(
@@ -151,6 +139,8 @@ impl BufferTextWindowOutputSetupRequest {
         window_id: WindowId,
         params: &WindowParams,
         geometry: &BufferTextWindowGeometry,
+        max_rows: usize,
+        walk_setup: &BufferTextWindowWalkSetup,
     ) -> Self {
         Self::new(
             frame_id,
@@ -166,30 +156,45 @@ impl BufferTextWindowOutputSetupRequest {
             geometry.text_y,
             geometry.text_height,
             geometry.visibility_bottom_y,
+            max_rows,
+            walk_setup,
         )
     }
 
-    pub(crate) fn into_setup(
-        self,
+    #[allow(clippy::too_many_arguments)]
+    fn from_parts(
+        frame_id: FrameId,
+        window_id: WindowId,
+        output_window_id: u64,
+        display_text_row_base: usize,
+        display_text_rows: usize,
+        bottom_chrome_rows: usize,
+        cols: usize,
+        bounds: Rect,
+        text_bounds: Rect,
+        selected: bool,
+        text_y: f32,
+        text_height: f32,
+        visibility_bottom_y: f32,
         max_rows: usize,
         walk_setup: &BufferTextWindowWalkSetup,
     ) -> BufferTextWindowOutputSetup {
-        let output_cols = self.cols.max(1);
+        let output_cols = cols.max(1);
         BufferTextWindowOutputSetup {
             begin_request: BufferTextWindowBeginRequest::new(
-                self.frame_id,
-                self.window_id,
-                self.display_text_row_base,
+                frame_id,
+                window_id,
+                display_text_row_base,
                 walk_setup.text_area_left,
                 walk_setup.window_top,
-                self.output_window_id,
-                self.display_text_row_base + self.display_text_rows + self.bottom_chrome_rows,
+                output_window_id,
+                display_text_row_base + display_text_rows + bottom_chrome_rows,
                 output_cols,
-                self.bounds,
-                self.text_bounds,
-                self.selected,
+                bounds,
+                text_bounds,
+                selected,
                 walk_setup.row_geometry.display_text_row_begin(
-                    self.display_text_row_base,
+                    display_text_row_base,
                     walk_setup.col,
                     walk_setup.x,
                 ),
@@ -200,17 +205,17 @@ impl BufferTextWindowOutputSetupRequest {
                 // GNU `resize_mini_window` measurement can emit content rows
                 // beyond the window's current physical height (see
                 // `BufferTextWindowGeometry::visibility_bottom_y`).
-                bottom_y: self.visibility_bottom_y,
+                bottom_y: visibility_bottom_y,
             },
             row_limit: DisplayRowLimit { max_rows },
             body_install_context: BufferTextWindowBodyInstallContext::new(
-                self.output_window_id,
-                self.display_text_row_base,
+                output_window_id,
+                display_text_row_base,
                 output_cols,
             ),
             retry_bounds: BufferTextWindowRetryBounds::new(
-                (self.text_y - walk_setup.window_top).round() as i64,
-                (self.text_y + self.text_height - walk_setup.window_top).round() as i64,
+                (text_y - walk_setup.window_top).round() as i64,
+                (text_y + text_height - walk_setup.window_top).round() as i64,
             ),
         }
     }
