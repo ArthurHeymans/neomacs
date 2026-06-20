@@ -9,7 +9,6 @@ use crate::display_buffer_text_item_append::{
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -25,6 +24,7 @@ use crate::display_row_walk_state::{
     SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, WordWrapBreakCandidate,
     WordWrapRenderState,
 };
+use crate::display_source::DisplaySourceStepChar;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
@@ -73,7 +73,7 @@ impl BufferTextSourceCharOverflowAction {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextOverflowRenderRequest<'a> {
     prepared_append: &'a BufferTextSourceCharPreparedAppend,
-    source_step_char: BufferTextSourceStepChar,
+    source_step_char: DisplaySourceStepChar,
     context: BufferTextOverflowRenderContext,
 }
 
@@ -163,7 +163,7 @@ impl BufferTextOverflowRenderOutcome {
 impl<'a> BufferTextOverflowRenderRequest<'a> {
     pub(crate) fn new(
         prepared_append: &'a BufferTextSourceCharPreparedAppend,
-        source_step_char: BufferTextSourceStepChar,
+        source_step_char: DisplaySourceStepChar,
         context: BufferTextOverflowRenderContext,
     ) -> Self {
         Self {
@@ -600,7 +600,7 @@ impl BufferTextCharacterWrapSourceAction {
         }
     }
 
-    pub(crate) fn from_source_step_char(source_char: BufferTextSourceStepChar) -> Self {
+    pub(crate) fn from_source_step_char(source_char: DisplaySourceStepChar) -> Self {
         Self::new(source_char.start_byte_idx(), source_char.start_charpos())
     }
 

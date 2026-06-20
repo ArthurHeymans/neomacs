@@ -20,7 +20,6 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferTextLineBreakRenderRequest,
 };
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -35,6 +34,7 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_transition::DisplayRowTransitionContinuation;
+use crate::display_source::DisplaySourceStepChar;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
@@ -154,7 +154,7 @@ fn render_source_item_and_apply<B: LayoutBufferView>(
 }
 
 fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
-    source_step_char: BufferTextSourceStepChar,
+    source_step_char: DisplaySourceStepChar,
     source_end_charpos: Option<i64>,
     source_end_byte_idx: Option<usize>,
     source_item: crate::display_item::DisplayItem,
@@ -597,7 +597,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     fn render_selective_display_tail_for_context<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
-        source_step_char: BufferTextSourceStepChar,
+        source_step_char: DisplaySourceStepChar,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome
     where
@@ -616,7 +616,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     fn render_line_break_for_context<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
-        source_char: BufferTextSourceStepChar,
+        source_char: DisplaySourceStepChar,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation
     where

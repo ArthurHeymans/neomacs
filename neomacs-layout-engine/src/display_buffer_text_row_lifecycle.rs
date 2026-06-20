@@ -9,7 +9,6 @@ use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
@@ -38,6 +37,7 @@ use crate::display_row_walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
     LineNumberRenderState, TrailingWhitespaceRenderState,
 };
+use crate::display_source::DisplaySourceStepChar;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
@@ -471,7 +471,7 @@ pub(crate) fn consume_hscroll_skip_from_position(
 }
 
 fn consume_source_char_for_hscroll(
-    source_char: BufferTextSourceStepChar,
+    source_char: DisplaySourceStepChar,
     hscroll_skip: &mut HorizontalScrollSkipState,
     tab_width: i32,
 ) -> BufferHscrollSkipAction {
@@ -497,7 +497,7 @@ fn consume_source_char_for_hscroll(
 }
 
 fn hscroll_skip_column_width(
-    source_char: BufferTextSourceStepChar,
+    source_char: DisplaySourceStepChar,
     tab_width: i32,
     consumed_columns: i32,
 ) -> i32 {
@@ -672,7 +672,7 @@ impl<'a> BufferHscrollSkipRenderContext<'a> {
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
-    source_char: BufferTextSourceStepChar,
+    source_char: DisplaySourceStepChar,
     context: BufferSelectiveDisplayTailRenderContext<'a>,
 }
 
@@ -815,7 +815,7 @@ impl<'a> BufferInvisibleTextRenderContext<'a> {
 
 impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
     pub(crate) fn new(
-        source_char: BufferTextSourceStepChar,
+        source_char: DisplaySourceStepChar,
         context: BufferSelectiveDisplayTailRenderContext<'a>,
     ) -> Self {
         Self {
@@ -1440,7 +1440,7 @@ pub(crate) struct BufferTextLineBreakSourceAction {
 }
 
 pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
-    source_char: BufferTextSourceStepChar,
+    source_char: DisplaySourceStepChar,
     context: BufferTextLineBreakRenderContext<'a>,
 }
 
@@ -1504,7 +1504,7 @@ impl<'a> BufferTextLineBreakRenderContext<'a> {
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
     pub(crate) fn new(
-        source_char: BufferTextSourceStepChar,
+        source_char: DisplaySourceStepChar,
         context: BufferTextLineBreakRenderContext<'a>,
     ) -> Self {
         debug_assert_eq!(source_char.ch(), '\n');
@@ -1680,7 +1680,7 @@ impl BufferTextLineBreakSourceAction {
 
     pub(crate) fn for_source_step_newline<B: LayoutBufferView>(
         buffer: &B,
-        source_char: BufferTextSourceStepChar,
+        source_char: DisplaySourceStepChar,
         char_h: f32,
         extra_line_spacing: f32,
     ) -> Self {

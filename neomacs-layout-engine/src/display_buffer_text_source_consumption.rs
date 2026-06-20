@@ -4,13 +4,12 @@ use std::collections::VecDeque;
 
 use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourcePosition,
-    BufferTextSourceStepChar,
 };
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, DisplayItem, DisplayItemKind, DisplayRowBreakReason,
     DisplaySourcePosition, RenderFaceRef, SourceSpan,
 };
-use crate::display_source::DisplaySourceContext;
+use crate::display_source::{DisplaySourceContext, DisplaySourceStepChar};
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
@@ -108,8 +107,8 @@ impl BufferTextSourceItem {
         Ok(self)
     }
 
-    pub(crate) fn source_step_char(&self) -> Option<BufferTextSourceStepChar> {
-        Some(BufferTextSourceStepChar::new(
+    pub(crate) fn source_step_char(&self) -> Option<DisplaySourceStepChar> {
+        Some(DisplaySourceStepChar::new(
             self.direct_source_char()?,
             self.start_byte_idx,
             self.start_charpos,
@@ -208,7 +207,7 @@ impl BufferTextSourceItem {
     }
 
     #[cfg(test)]
-    pub(crate) fn into_render_parts(self) -> Option<(BufferTextSourceStepChar, DisplayItem)> {
+    pub(crate) fn into_render_parts(self) -> Option<(DisplaySourceStepChar, DisplayItem)> {
         let source_step_char = self.source_step_char()?;
         Some((source_step_char, self.item))
     }

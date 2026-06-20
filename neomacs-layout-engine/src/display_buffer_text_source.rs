@@ -6,8 +6,9 @@ use crate::display_item::{
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
     DisplayItemSource, DisplayPropertySourceCursorAction, DisplayPropertySourcePlan,
-    DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
-    classify_text_source_char, display_item_kind_for_text_source_char,
+    DisplaySourceContext, DisplaySourceStepChar, LispStringSourceStack,
+    TextSourceCharClassification, classify_text_source_char,
+    display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -243,15 +244,6 @@ pub(crate) struct BufferTextSourcePosition {
     charpos: i64,
 }
 
-/// A single source character aligned with the current buffer byte and char
-/// positions for the row walk.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSourceStepChar {
-    ch: char,
-    start_byte_idx: usize,
-    start_charpos: i64,
-}
-
 impl BufferTextSourcePosition {
     pub(crate) const fn new(byte_idx: usize, charpos: i64) -> Self {
         Self { byte_idx, charpos }
@@ -289,7 +281,7 @@ impl BufferTextSourcePosition {
         self.byte_idx == byte_idx && self.charpos == charpos
     }
 
-    pub(crate) fn consume_step_char(&mut self, text: &[u8]) -> Option<BufferTextSourceStepChar> {
+    pub(crate) fn consume_step_char(&mut self, text: &[u8]) -> Option<DisplaySourceStepChar> {
         if self.byte_idx >= text.len() {
             return None;
         }
@@ -300,7 +292,7 @@ impl BufferTextSourcePosition {
             return None;
         }
         self.advance_one_char(ch_len);
-        Some(BufferTextSourceStepChar::new(
+        Some(DisplaySourceStepChar::new(
             ch,
             start_byte_idx,
             start_charpos,
@@ -332,45 +324,6 @@ impl BufferTextSourcePosition {
             return false;
         };
         source_char.ch() == '\n' || self.consume_until_line_break(text)
-    }
-}
-
-impl BufferTextSourceStepChar {
-    pub(crate) const fn new(ch: char, start_byte_idx: usize, start_charpos: i64) -> Self {
-        Self {
-            ch,
-            start_byte_idx,
-            start_charpos,
-        }
-    }
-
-    pub(crate) fn ch(self) -> char {
-        self.ch
-    }
-
-    pub(crate) fn start_byte_idx(self) -> usize {
-        self.start_byte_idx
-    }
-
-    pub(crate) fn start_charpos(self) -> i64 {
-        self.start_charpos
-    }
-
-    pub(crate) fn source_range(self) -> crate::display_source::BufferTextSourceRange {
-        crate::display_source::BufferTextSourceRange::single_char(CharPos0::new(
-            self.start_charpos as usize,
-        ))
-    }
-
-    pub(crate) fn source_char(
-        self,
-        nobreak_display_policy: i32,
-    ) -> crate::display_source::BufferTextSourceChar {
-        crate::display_source::BufferTextSourceChar::new(
-            self.ch,
-            self.source_range().start(),
-            nobreak_display_policy,
-        )
     }
 }
 

@@ -23,7 +23,6 @@ use crate::display_buffer_text_progress::{
 };
 use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
 use crate::display_buffer_text_source_render::*;
@@ -2382,7 +2381,7 @@ fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
 #[test]
 fn buffer_text_source_step_char_records_word_wrap_candidate() {
     let context = RowTransitionTestContext::new("source-step-char-word-wrap");
-    let source_char = BufferTextSourceStepChar::new('a', 1, 6);
+    let source_char = DisplaySourceStepChar::new('a', 1, 6);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
 
@@ -2408,7 +2407,7 @@ fn buffer_text_source_step_char_builds_line_break_action() {
         buffer.insert("a\nb");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let source_char = BufferTextSourceStepChar::new('\n', 1, 1);
+    let source_char = DisplaySourceStepChar::new('\n', 1, 1);
 
     let action =
         BufferTextLineBreakSourceAction::for_source_step_newline(&snapshot, source_char, 16.0, 5.0);
@@ -2677,7 +2676,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let active_face = test_active_face_state(9, 8.0);
     let text = b"\nnext";
     let mut byte_idx = 1;
-    let source_char = BufferTextSourceStepChar::new('\n', 0, 0);
+    let source_char = DisplaySourceStepChar::new('\n', 0, 0);
     let mut charpos = 0;
     let mut cursor_info = CursorCaptureState::new();
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -2869,7 +2868,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     );
     let text = b"a\rb\nc";
     let mut byte_idx = 2;
-    let source_step_char = BufferTextSourceStepChar::new('\r', 1, 1);
+    let source_step_char = DisplaySourceStepChar::new('\r', 1, 1);
     let mut charpos = 1;
     let mut col = 0;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -3420,7 +3419,7 @@ fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
 
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_source_step_char() {
-    let source_char = BufferTextSourceStepChar::new('界', "a".len(), 9);
+    let source_char = DisplaySourceStepChar::new('界', "a".len(), 9);
     let action = BufferTextCharacterWrapSourceAction::from_source_step_char(source_char);
     let mut rewind_position = BufferTextSourcePosition::new("a界".len(), 10);
 
@@ -3533,7 +3532,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         .id();
     let text = b"a";
     let mut byte_idx = 0;
-    let source_step_char = BufferTextSourceStepChar::new('a', 0, 21);
+    let source_step_char = DisplaySourceStepChar::new('a', 0, 21);
     let prepared_append = BufferTextSourceCharPreparedAppend {
         plan: BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(

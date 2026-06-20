@@ -214,6 +214,43 @@ impl BufferTextSourceRange {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplaySourceStepChar {
+    ch: char,
+    start_byte_idx: usize,
+    start_charpos: i64,
+}
+
+impl DisplaySourceStepChar {
+    pub(crate) const fn new(ch: char, start_byte_idx: usize, start_charpos: i64) -> Self {
+        Self {
+            ch,
+            start_byte_idx,
+            start_charpos,
+        }
+    }
+
+    pub(crate) fn ch(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn start_byte_idx(self) -> usize {
+        self.start_byte_idx
+    }
+
+    pub(crate) fn start_charpos(self) -> i64 {
+        self.start_charpos
+    }
+
+    pub(crate) fn source_range(self) -> BufferTextSourceRange {
+        BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
+    }
+
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+        BufferTextSourceChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceAppendItem {
     ControlChar { ch: char },

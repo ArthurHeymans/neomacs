@@ -7,13 +7,13 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderRequest,
     BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
 };
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
 };
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_source::DisplaySourceStepChar;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
 
@@ -126,7 +126,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn selective_display_tail_request<'a>(
         self,
-        source_step_char: BufferTextSourceStepChar,
+        source_step_char: DisplaySourceStepChar,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
@@ -157,7 +157,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn line_break_request<'a>(
         self,
-        source_char: BufferTextSourceStepChar,
+        source_char: DisplaySourceStepChar,
         text: &'a [u8],
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
