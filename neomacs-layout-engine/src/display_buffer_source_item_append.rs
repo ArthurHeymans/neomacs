@@ -1,5 +1,5 @@
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 #[cfg(test)]
 use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_append_context::{
@@ -61,7 +61,7 @@ pub(crate) struct BufferSourceRowAppendContext<'source, 'surface, B: LayoutBuffe
     append_surface: &'surface DisplayRowAppendSurface,
     active_face: &'source DisplayRowActiveFaceState,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl<'source, 'surface, B: LayoutBufferView + ?Sized>
@@ -73,7 +73,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         append_surface: &'surface DisplayRowAppendSurface,
         active_face: &'source DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             buffer,
@@ -81,7 +81,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             append_surface,
             active_face,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
         }
     }
 
@@ -97,7 +97,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             geometry,
             self.active_face,
             self.glyph_y_offset,
-            self.default_row_height,
+            self.fallback_metrics,
         )
     }
 

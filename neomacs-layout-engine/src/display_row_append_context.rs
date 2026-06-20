@@ -2,8 +2,9 @@ use crate::composition::{
     base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
-    DisplayRowRenderBounds, DisplayRowSourceRenderRequest, DisplayRowSourceRequestPolicy,
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds, DisplayRowSourceRenderRequest,
+    DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
@@ -309,7 +310,7 @@ pub(crate) struct DisplayRowTextAppendContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     geometry: &'a DisplayRowGeometryState,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl<'a> DisplayRowTextAppendContext<'a> {
@@ -317,13 +318,13 @@ impl<'a> DisplayRowTextAppendContext<'a> {
         append_surface: &'a DisplayRowAppendSurface,
         geometry: &'a DisplayRowGeometryState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             append_surface,
             geometry,
             glyph_y_offset,
-            default_row_height,
+            fallback_metrics,
         }
     }
 
@@ -339,7 +340,7 @@ impl<'a> DisplayRowTextAppendContext<'a> {
             height,
             ascent,
             char_width,
-            self.default_row_height,
+            self.fallback_metrics.row_height(),
         )
     }
 }
@@ -356,14 +357,14 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
         geometry: &'row DisplayRowGeometryState,
         active_face: &'face DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             text_context: DisplayRowTextAppendContext::new(
                 append_surface,
                 geometry,
                 glyph_y_offset,
-                default_row_height,
+                fallback_metrics,
             ),
             active_face,
         }
@@ -376,7 +377,7 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
                 self.text_context.geometry,
                 self.text_context.glyph_y_offset,
                 self.active_face,
-                self.text_context.default_row_height,
+                self.text_context.fallback_metrics.row_height(),
             )
     }
 
@@ -393,7 +394,7 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
                 self.text_context.geometry,
                 self.text_context.glyph_y_offset,
                 self.active_face,
-                self.text_context.default_row_height,
+                self.text_context.fallback_metrics.row_height(),
             )
     }
 

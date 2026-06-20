@@ -6,7 +6,8 @@ use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
-    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowSourceState,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
+    DisplayRowSourceState,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -56,7 +57,7 @@ impl<'row> LispStringRowAppendContext<'row> {
         geometry: &'row DisplayRowGeometryState,
         active_face: &'row DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             active_face_context: DisplayRowActiveFaceAppendContext::new(
@@ -64,7 +65,7 @@ impl<'row> LispStringRowAppendContext<'row> {
                 geometry,
                 active_face,
                 glyph_y_offset,
-                default_row_height,
+                fallback_metrics,
             ),
         }
     }
@@ -553,7 +554,11 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             self.row_geometry,
             self.active_face_state,
             self.glyph_y_offset,
-            self.default_row_height,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                self.active_face_state.metrics().char_width,
+                self.default_row_height,
+                self.active_face_state.metrics().ascent,
+            ),
         )
         .render_prefix_source_to_text_row_and_emit(
             state,
@@ -615,7 +620,11 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             self.append_surface,
             geometry,
             self.glyph_y_offset,
-            self.metrics.default_row_height,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                self.metrics.char_width,
+                self.metrics.default_row_height,
+                self.metrics.ascent,
+            ),
         )
         .text_row_frame(
             self.metrics.height,

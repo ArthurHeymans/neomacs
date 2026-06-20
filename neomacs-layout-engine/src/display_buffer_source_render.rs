@@ -22,7 +22,7 @@ use crate::display_buffer_source_row_lifecycle::{
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -200,13 +200,18 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 
     let buffer_source_char = source_step_char.source_char(context.params.nobreak_char_display);
+    let active_face_metrics = active_face_state.metrics();
     let buffer_row_append_context = BufferSourceRowAppendContext::new(
         buffer,
         context.buffer_id,
         context.append_surface,
         &active_face_state,
         context.glyph_y_offset,
-        context.char_h,
+        DisplayRowFallbackMetrics::from_default_face_extents(
+            active_face_metrics.char_width,
+            context.char_h,
+            active_face_metrics.ascent,
+        ),
     );
     let append_position = DisplayRowPosition {
         x_px: *progress.row.x,

@@ -4095,8 +4095,14 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = DisplaySourceRowAppendState::default();
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
 
@@ -4142,8 +4148,14 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = DisplaySourceRowAppendState::default();
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
 
@@ -4267,8 +4279,13 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let append_context =
-        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
+    let append_context = SyntheticTextRowAppendContext::new(
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let progress = append_context
         .append_request_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -4362,19 +4379,19 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
-        .render_active_marker_to_text_row(
-            &mut text_row_source_render_state(
-                &mut builder,
-                &mut output_emitter,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            &geometry,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            SyntheticTextMarker::InvisibleEllipsis,
-        )
-        .expect("active marker end position");
+    .render_active_marker_to_text_row(
+        &mut text_row_source_render_state(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        &geometry,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        SyntheticTextMarker::InvisibleEllipsis,
+    )
+    .expect("active marker end position");
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
     builder
@@ -4431,18 +4448,18 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
-        .render_hscroll_truncation_marker_to_text_row(
-            &mut text_row_source_render_state(
-                &mut builder,
-                &mut output_emitter,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            &geometry,
-            0.0,
-        )
-        .expect("hscroll marker end position");
+    .render_hscroll_truncation_marker_to_text_row(
+        &mut text_row_source_render_state(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        &geometry,
+        0.0,
+    )
+    .expect("hscroll marker end position");
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -5673,8 +5690,13 @@ fn display_row_text_append_context_builds_text_frame_from_shared_surface() {
     );
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
 
-    let frame = DisplayRowTextAppendContext::new(&surface, &geometry, 2.0, 14.0)
-        .text_row_frame(16.0, 11.0, 9.0);
+    let frame = DisplayRowTextAppendContext::new(
+        &surface,
+        &geometry,
+        2.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
+    )
+    .text_row_frame(16.0, 11.0, 9.0);
 
     assert_eq!(frame.row, 3);
     assert_eq!(frame.glyph_y, 22.0);
@@ -5718,9 +5740,14 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     );
 
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 12.0);
-    let frame =
-        DisplayRowActiveFaceAppendContext::new(&surface, &geometry, &active_face, 2.0, 16.0)
-            .active_face_frame();
+    let frame = DisplayRowActiveFaceAppendContext::new(
+        &surface,
+        &geometry,
+        &active_face,
+        2.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
+    .active_face_frame();
 
     assert_eq!(frame.row, 3);
     assert_eq!(frame.glyph_y, 22.0);
@@ -5730,9 +5757,14 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     assert_eq!(frame.face_space_width, 8.0);
     assert_eq!(frame.default_row_height, 16.0);
 
-    let full_text_frame =
-        DisplayRowActiveFaceAppendContext::new(&surface, &geometry, &active_face, 2.0, 16.0)
-            .full_text_width_active_face_frame();
+    let full_text_frame = DisplayRowActiveFaceAppendContext::new(
+        &surface,
+        &geometry,
+        &active_face,
+        2.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
+    .full_text_width_active_face_frame();
     assert_eq!(full_text_frame.geometry.width, 140.0);
 }
 
@@ -6125,8 +6157,13 @@ fn lisp_string_append_context_appends_fragment_items() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let append_context =
-        LispStringRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
+    let append_context = LispStringRowAppendContext::new(
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
 
     let request = LispStringSourceAppendRequest::new(
         DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -6204,8 +6241,14 @@ fn buffer_text_source_append_context_appends_source_char() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
@@ -6545,8 +6588,14 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
@@ -7409,8 +7458,14 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     let source_item =
         buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
 
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let mut append_state = DisplaySourceRowAppendState::default();
     let measured_width = append_context
         .resolve_source_render_plan_request_to_text_row(
@@ -7506,8 +7561,14 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
 
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
@@ -7579,8 +7640,14 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
 
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
@@ -8031,8 +8098,14 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
@@ -8143,8 +8216,14 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_char = DisplaySourceTextChar::new('\u{0007}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
@@ -8229,8 +8308,14 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let append_context =
-        BufferSourceRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    );
     let source_char = DisplaySourceTextChar::new('\u{fff0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
@@ -10066,8 +10151,13 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
     let active_face = test_active_face_state(3, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 18.0, 13.0);
 
-    let append_context =
-        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
+    let append_context = SyntheticTextRowAppendContext::new(
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 10.0, 8.0),
+    );
     let progress = append_context
         .append_request_to_text_row_and_emit(
             &mut text_row_source_render_state(

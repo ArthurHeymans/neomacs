@@ -233,7 +233,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         geometry: &'a DisplayRowGeometryState,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             active_face_context: DisplayRowActiveFaceAppendContext::new(
@@ -241,7 +241,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 geometry,
                 active_face,
                 glyph_y_offset,
-                default_row_height,
+                fallback_metrics,
             ),
         }
     }
@@ -331,7 +331,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             geometry,
             self.active_face,
             self.glyph_y_offset,
-            self.metrics.row_height(),
+            self.metrics,
         )
     }
 
