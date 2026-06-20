@@ -43,6 +43,7 @@ pub(crate) mod display_origin;
 pub(crate) mod display_output_builder;
 pub(crate) mod display_output_install_request;
 pub(crate) mod display_output_row_grid;
+pub(crate) mod display_output_row_request;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;
 pub(crate) mod display_row;

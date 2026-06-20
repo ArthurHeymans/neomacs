@@ -15,6 +15,10 @@ use crate::display_output_install_request::{
     OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
 };
 use crate::display_output_row_grid::{OutputWindowGridEntry, OutputWindowRowGrid};
+use crate::display_output_row_request::{
+    OutputCompleteRowInstallRequest, OutputCurrentRowDecorationRequest, OutputRowBeginRequest,
+    OutputRowLifecycleRequest, OutputRowMetricsRequest,
+};
 #[cfg(test)]
 use crate::display_row::resolved_display_row_face;
 #[cfg(test)]
@@ -25,9 +29,10 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
+#[cfg(test)]
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, GlyphRowRole};
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, GlyphRowRole, PhysCursor, StipplePattern, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    PhysCursor, StipplePattern, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -73,160 +78,6 @@ impl OutputWindowLifecycleRequest {
                     ));
                 }
             }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct OutputRowBeginRequest {
-    row: usize,
-    role: GlyphRowRole,
-    mode_line: bool,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct OutputCompleteRowInstallRequest {
-    row: usize,
-    role: GlyphRowRole,
-    mode_line: bool,
-    glyph_row: GlyphRow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct OutputRowMetricsRequest {
-    /// Stored row Y, relative to the window matrix origin.
-    pixel_y: f32,
-    height_px: f32,
-    ascent_px: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OutputCurrentRowDecorationRequest {
-    MarkTruncatedLeft,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum OutputRowLifecycleRequest {
-    Begin(OutputRowBeginRequest),
-    Complete(OutputCompleteRowInstallRequest),
-    Metrics {
-        row: usize,
-        metrics: OutputRowMetricsRequest,
-    },
-    Finalize {
-        row: usize,
-    },
-    Cursor {
-        row: usize,
-        col: u16,
-        style: CursorStyle,
-    },
-    CurrentDecoration(OutputCurrentRowDecorationRequest),
-}
-
-impl OutputRowBeginRequest {
-    pub(crate) fn new(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
-        Self {
-            row,
-            role,
-            mode_line,
-        }
-    }
-
-    pub(crate) fn row(self) -> usize {
-        self.row
-    }
-
-    pub(crate) fn role(self) -> GlyphRowRole {
-        self.role
-    }
-
-    pub(crate) fn mode_line(self) -> bool {
-        self.mode_line
-    }
-}
-
-impl OutputCompleteRowInstallRequest {
-    pub(crate) fn new(
-        row: usize,
-        role: GlyphRowRole,
-        mode_line: bool,
-        glyph_row: GlyphRow,
-    ) -> Self {
-        Self {
-            row,
-            role,
-            mode_line,
-            glyph_row,
-        }
-    }
-}
-
-impl OutputRowMetricsRequest {
-    pub(crate) fn new(pixel_y: f32, height_px: f32, ascent_px: f32) -> Self {
-        Self {
-            pixel_y,
-            height_px,
-            ascent_px,
-        }
-    }
-
-    pub(crate) fn pixel_y(self) -> f32 {
-        self.pixel_y
-    }
-
-    pub(crate) fn height_px(self) -> f32 {
-        self.height_px
-    }
-
-    pub(crate) fn ascent_px(self) -> f32 {
-        self.ascent_px
-    }
-}
-
-impl OutputRowLifecycleRequest {
-    pub(crate) fn begin(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
-        Self::Begin(OutputRowBeginRequest::new(row, role, mode_line))
-    }
-
-    pub(crate) fn complete(
-        row: usize,
-        role: GlyphRowRole,
-        mode_line: bool,
-        glyph_row: GlyphRow,
-    ) -> Self {
-        Self::Complete(OutputCompleteRowInstallRequest::new(
-            row, role, mode_line, glyph_row,
-        ))
-    }
-
-    pub(crate) fn metrics(row: usize, pixel_y: f32, height_px: f32, ascent_px: f32) -> Self {
-        Self::Metrics {
-            row,
-            metrics: OutputRowMetricsRequest::new(pixel_y, height_px, ascent_px),
-        }
-    }
-
-    pub(crate) fn finalize(row: usize) -> Self {
-        Self::Finalize { row }
-    }
-
-    pub(crate) fn cursor(row: usize, col: u16, style: CursorStyle) -> Self {
-        Self::Cursor { row, col, style }
-    }
-
-    pub(crate) fn current_decoration(decoration: OutputCurrentRowDecorationRequest) -> Self {
-        Self::CurrentDecoration(decoration)
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::Begin(begin) => builder.begin_current_row(begin),
-            Self::Complete(complete) => builder.install_complete_row(complete),
-            Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
-            Self::Finalize { row } => builder.finalize_output_row(row),
-            Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
-            Self::CurrentDecoration(decoration) => builder.decorate_current_row(decoration),
         }
     }
 }
@@ -466,7 +317,20 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn install_output_row_lifecycle(&mut self, request: OutputRowLifecycleRequest) {
-        request.install(self);
+        match request {
+            OutputRowLifecycleRequest::Begin(begin) => self.begin_current_row(begin),
+            OutputRowLifecycleRequest::Complete(complete) => self.install_complete_row(complete),
+            OutputRowLifecycleRequest::Metrics { row, metrics } => {
+                self.write_row_metrics_at(row, metrics);
+            }
+            OutputRowLifecycleRequest::Finalize { row } => self.finalize_output_row(row),
+            OutputRowLifecycleRequest::Cursor { row, col, style } => {
+                self.write_row_cursor(row, col, style);
+            }
+            OutputRowLifecycleRequest::CurrentDecoration(decoration) => {
+                self.decorate_current_row(decoration);
+            }
+        }
     }
 
     #[cfg(test)]

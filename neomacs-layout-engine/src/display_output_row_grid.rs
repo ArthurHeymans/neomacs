@@ -5,7 +5,7 @@
 //! is responsible only for placing, finalizing, and exporting matrix rows.
 
 use crate::display_cursor::CursorVisualColumnRows;
-use crate::display_output_builder::{OutputRowBeginRequest, OutputRowMetricsRequest};
+use crate::display_output_row_request::{OutputRowBeginRequest, OutputRowMetricsRequest};
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow, WindowMatrixEntry};
@@ -75,9 +75,9 @@ impl OutputWindowRowGrid {
         let Some(row) = self.row_mut(row) else {
             return;
         };
-        row.pixel_y = metrics.pixel_y();
-        row.height_px = metrics.height_px().max(0.0);
-        row.ascent_px = metrics.ascent_px().max(0.0).min(row.height_px.max(0.0));
+        row.pixel_y = metrics.pixel_y;
+        row.height_px = metrics.height_px.max(0.0);
+        row.ascent_px = metrics.ascent_px.max(0.0).min(row.height_px.max(0.0));
     }
 
     pub(crate) fn write_row_cursor(
@@ -101,12 +101,12 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn begin_row(&mut self, begin: OutputRowBeginRequest) {
-        let Some(row) = self.row_mut(begin.row()) else {
+        let Some(row) = self.row_mut(begin.row) else {
             return;
         };
-        row.role = begin.role();
+        row.role = begin.role;
         row.enabled = true;
-        row.mode_line = begin.mode_line();
+        row.mode_line = begin.mode_line;
     }
 
     pub(crate) fn finalize_row(
