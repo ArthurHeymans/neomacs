@@ -6,7 +6,8 @@ use crate::display_buffer_text_source::{
     BufferTextSourcePosition,
 };
 use crate::display_buffer_text_source_lowering::{
-    BufferTextLoweredDisplayItem, BufferTextSourceLoweringState,
+    BufferTextDirectSourceItemLoweringRequest, BufferTextLoweredDisplayItem,
+    BufferTextSourceLoweringState,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
@@ -305,7 +306,7 @@ impl BufferTextSourceConsumptionState {
         match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
             source,
             context,
-            BufferTextDisplayReplacementMode::ConsumedSourceItem,
+            BufferTextDisplayReplacementMode::LoweredSourceItem,
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
                 .consume_aligned_display_item(item, position)
@@ -349,6 +350,9 @@ impl BufferTextSourceConsumptionState {
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextLoweredDisplayItem> {
-        self.lowering.consume_source_item(item, position)
+        match BufferTextDirectSourceItemLoweringRequest::new(item).lower(position) {
+            Ok(item) => Some(item),
+            Err(item) => self.lowering.consume_text_run_item(item, position),
+        }
     }
 }

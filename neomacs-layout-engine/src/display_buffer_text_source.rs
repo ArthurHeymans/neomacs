@@ -291,12 +291,12 @@ pub(crate) enum BufferTextSourceCursorItem {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextDisplayReplacementMode {
     InlineSourceItems,
-    ConsumedSourceItem,
+    LoweredSourceItem,
 }
 
 impl BufferTextDisplayReplacementMode {
     pub(crate) fn consumes_typed_replacements(self) -> bool {
-        matches!(self, Self::ConsumedSourceItem)
+        matches!(self, Self::LoweredSourceItem)
     }
 
     fn inlines_replacement_strings(self) -> bool {

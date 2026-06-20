@@ -32,6 +32,11 @@ pub(crate) struct BufferTextSourceLoweringState {
     pending_text_run: Option<DisplayTextRunItemCursor>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextDirectSourceItemLoweringRequest {
+    item: BufferTextSourceItem,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct BufferTextSplitItemAlignment {
     text_start_byte: usize,
@@ -150,7 +155,7 @@ impl BufferTextSourceLoweringState {
         step
     }
 
-    pub(crate) fn consume_source_item(
+    pub(crate) fn consume_text_run_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
@@ -166,11 +171,20 @@ impl BufferTextSourceLoweringState {
             );
             return None;
         }
-        let item = match Self::try_into_direct_lowered_display_item(item, position) {
-            Ok(step) => return Some(step),
-            Err(item) => item,
-        };
         self.split_text_run_item(item, position)
+    }
+}
+
+impl BufferTextDirectSourceItemLoweringRequest {
+    pub(crate) fn new(item: BufferTextSourceItem) -> Self {
+        Self { item }
+    }
+
+    pub(crate) fn lower(
+        self,
+        position: &mut BufferTextSourcePosition,
+    ) -> Result<BufferTextLoweredDisplayItem, BufferTextSourceItem> {
+        Self::try_into_direct_lowered_display_item(self.item, position)
     }
 
     fn try_into_direct_lowered_display_item(
@@ -200,7 +214,9 @@ impl BufferTextSourceLoweringState {
             item.into_item(),
         ))
     }
+}
 
+impl BufferTextSourceLoweringState {
     fn split_text_run_item(
         &mut self,
         item: BufferTextSourceItem,
