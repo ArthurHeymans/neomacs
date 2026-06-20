@@ -8,8 +8,10 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
-use crate::display_row::{DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan};
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
+use crate::display_source_append_plan::{
+    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
+};
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;

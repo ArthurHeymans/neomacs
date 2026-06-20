@@ -28,8 +28,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState, DisplaySourceAppendMeasurementKind,
-    DisplaySourceAppendRenderPlan,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
@@ -73,6 +72,10 @@ use crate::display_source::{
     DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
     DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
     DisplayReplacementStringSourceItem,
+};
+use crate::display_source_append_plan::{
+    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_source_resolver::{
     DisplayPropertyReplacementAppendRequestResolver, DisplayPropertyReplacementSourceResolveRequest,

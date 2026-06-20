@@ -46,6 +46,7 @@ pub(crate) mod display_row_special_glyphs;
 pub(crate) mod display_row_transition;
 pub(crate) mod display_row_walk_state;
 pub(crate) mod display_source;
+pub(crate) mod display_source_append_plan;
 pub(crate) mod display_source_resolver;
 pub mod display_space;
 pub mod display_spec;

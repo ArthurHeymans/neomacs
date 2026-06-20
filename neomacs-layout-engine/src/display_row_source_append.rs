@@ -2,7 +2,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowRenderPolicy,
-    DisplayRowSourceState, DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowSourceState,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -12,6 +12,9 @@ use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_source::{DisplayItemOnceSource, DisplayItemSource, SyntheticTextItemSource};
+use crate::display_source_append_plan::{
+    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+};
 use crate::neovm_bridge::ResolvedFace;
 
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;

@@ -11,11 +11,7 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
-    DisplaySourceAppendRenderPolicy,
-};
+use crate::display_row::{DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy};
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendSurface,
@@ -40,6 +36,10 @@ use crate::display_source::{
     BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
     BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest,
     DisplaySourceNaturalMeasurementRequest,
+};
+use crate::display_source_append_plan::{
+    DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
+    DisplaySourceAppendRenderPolicy,
 };
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
