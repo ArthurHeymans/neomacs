@@ -1,11 +1,11 @@
 //! Buffer text visible-loop single-step rendering.
 
-use crate::display_buffer_text_consumed_render::BufferTextWindowConsumedRenderState;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_loop_context::{
-    BufferTextWindowConsumedDisplayItemRenderRequest, BufferTextWindowLoopRequestContext,
+    BufferTextWindowLoopRequestContext, BufferTextWindowLoweredDisplayItemRenderRequest,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
+use crate::display_buffer_text_lowered_render::BufferTextWindowLoweredRenderState;
 use crate::display_buffer_text_pre_source_render::{
     BufferTextWindowPreSourceOutcome, BufferTextWindowPreSourceRenderState,
 };
@@ -98,10 +98,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
             unreachable!("source render stop/continue outcomes handled above");
         };
         let consumed_outcome =
-            BufferTextWindowConsumedRenderState::new(self.loop_context, self.state.reborrow())
+            BufferTextWindowLoweredRenderState::new(self.loop_context, self.state.reborrow())
                 .render_for_context(
                     source_walk,
-                    BufferTextWindowConsumedDisplayItemRenderRequest {
+                    BufferTextWindowLoweredDisplayItemRenderRequest {
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
                         source_item,

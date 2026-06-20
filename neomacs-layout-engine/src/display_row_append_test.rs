@@ -1933,7 +1933,7 @@ fn buffer_text_source_consumption_state_preserves_single_char_source_item() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(text_start_byte)
-        .consumed_display_item_from_item(item, &mut position)
+        .lowered_display_item_from_item(item, &mut position)
         .expect("source step");
 
     let source_char = step.source_char();
@@ -2055,7 +2055,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .consumed_display_item_from_source_item(typed_item, &mut position)
+        .lowered_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should retain direct source char");
 
     assert_eq!(position.byte_idx(), 2);
@@ -2090,7 +2090,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
     let mut position = BufferTextSourcePosition::new(1, 1);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .consumed_display_item_from_source_item(typed_item, &mut position)
+        .lowered_display_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should advance over covered source span");
 
     assert_eq!(position.byte_idx(), 4);
@@ -2216,7 +2216,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .consumed_display_item_from_item(source_item, &mut position)
+        .lowered_display_item_from_item(source_item, &mut position)
         .expect("source step");
 
     let (_, source_item) = step.into_parts();
@@ -2288,7 +2288,7 @@ fn buffer_text_source_consumption_state_rejects_non_buffer_items() {
     let mut position = BufferTextSourcePosition::new(3, 7);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .consumed_display_item_from_item(item, &mut position);
+        .lowered_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(3, 7));
@@ -2321,7 +2321,7 @@ fn buffer_text_source_consumption_state_rejects_replacement_items() {
     let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
-        .consumed_display_item_from_item(item, &mut position);
+        .lowered_display_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
@@ -6366,9 +6366,9 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
     );
 
-    let outcome = BufferTextConsumedDisplayItemRenderRequest::new(
-        BufferTextConsumedDisplayItem::new(source_step_char, source_item),
-        BufferTextConsumedDisplayItemRenderContext::new(
+    let outcome = BufferTextLoweredDisplayItemRenderRequest::new(
+        BufferTextLoweredDisplayItem::new(source_step_char, source_item),
+        BufferTextLoweredDisplayItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,
                 &face_resolver,
@@ -6408,43 +6408,38 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     .render_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextConsumedDisplayItemRenderRequestState::new(
-            BufferTextWindowLoopMutableState::new(
-                &mut append_state,
-                &mut invisible_text_checkpoint,
-                BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-                text_row_source_render_state(
-                    &mut context.builder,
-                    &mut context.output_emitter,
-                    &mut context.eval,
-                    &mut font_metrics,
-                    &face_resolver,
-                ),
-                &mut row_extend,
-                &mut box_face,
-                &mut line_numbers,
-                &mut context.geometry,
-                &mut context.row_flags,
-                &mut context.hit_rows,
-                &mut hit_row_range,
-                &mut prefix_request,
-                &mut hscroll_skip,
-                &mut word_wrap,
-                &mut trailing_whitespace,
-                &mut face_scan,
-                &mut context.row_y_positions,
-                &mut cursor_info,
-                &mut face_ids,
-                &surface,
-                overlay_context,
+        BufferTextLoweredDisplayItemRenderRequestState::new(BufferTextWindowLoopMutableState::new(
+            &mut append_state,
+            &mut invisible_text_checkpoint,
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
             ),
-        ),
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
+        )),
     );
 
-    assert_eq!(
-        outcome,
-        BufferTextConsumedDisplayItemRenderOutcome::Rendered
-    );
+    assert_eq!(outcome, BufferTextLoweredDisplayItemRenderOutcome::Rendered);
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 8.0);

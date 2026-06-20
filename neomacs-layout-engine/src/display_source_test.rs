@@ -873,7 +873,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextSourceConsumptionItem::ConsumedDisplayItem(first)) =
+    let Some(BufferTextSourceConsumptionItem::LoweredDisplayItem(first)) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");
@@ -936,7 +936,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextSourceConsumptionItem::ConsumedDisplayItem(first)) =
+    let Some(BufferTextSourceConsumptionItem::LoweredDisplayItem(first)) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");

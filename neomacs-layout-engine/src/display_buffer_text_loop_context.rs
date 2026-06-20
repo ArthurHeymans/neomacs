@@ -2,7 +2,7 @@
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_overflow::{
-    BufferTextConsumedDisplayItemRenderContext, BufferTextConsumedDisplayItemRenderRequest,
+    BufferTextLoweredDisplayItemRenderContext, BufferTextLoweredDisplayItemRenderRequest,
 };
 use crate::display_buffer_text_row_lifecycle::{
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
@@ -12,7 +12,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
 };
 use crate::display_buffer_text_source_lowering::{
-    BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
+    BufferTextLoweredDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -44,9 +44,9 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowConsumedDisplayItemRenderRequest<'a> {
+pub(crate) struct BufferTextWindowLoweredDisplayItemRenderRequest<'a> {
     pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    pub(crate) source_item: BufferTextConsumedDisplayItem,
+    pub(crate) source_item: BufferTextLoweredDisplayItem,
     pub(crate) text: &'a [u8],
     pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
     pub(crate) params: &'a WindowParams,
@@ -198,20 +198,20 @@ impl BufferTextWindowLoopRequestContext {
         )
     }
 
-    pub(crate) fn consumed_display_item_request<'a>(
+    pub(crate) fn lowered_display_item_request<'a>(
         self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-        source_item: BufferTextConsumedDisplayItem,
+        source_item: BufferTextLoweredDisplayItem,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         params: &'a WindowParams,
         glyph_y_offset: f32,
-    ) -> BufferTextConsumedDisplayItemRenderRequest<'a> {
-        BufferTextConsumedDisplayItemRenderRequest::new(
+    ) -> BufferTextLoweredDisplayItemRenderRequest<'a> {
+        BufferTextLoweredDisplayItemRenderRequest::new(
             source_item,
-            BufferTextConsumedDisplayItemRenderContext::new(
+            BufferTextLoweredDisplayItemRenderContext::new(
                 layout_resolution_context,
                 text,
                 self.text_start_byte,

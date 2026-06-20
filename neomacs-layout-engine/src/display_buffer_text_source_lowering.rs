@@ -21,7 +21,7 @@ pub(crate) struct BufferTextSourceStepChar {
 /// A typed display item consumed by the buffer text row walk after it has been
 /// aligned with the current buffer byte/char cursor.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextConsumedDisplayItem {
+pub(crate) struct BufferTextLoweredDisplayItem {
     source_char: BufferTextSourceStepChar,
     item: DisplayItem,
 }
@@ -94,7 +94,7 @@ impl BufferTextSourceStepChar {
     }
 }
 
-impl BufferTextConsumedDisplayItem {
+impl BufferTextLoweredDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
     }
@@ -136,13 +136,13 @@ impl BufferTextSourceLoweringState {
     pub(crate) fn next_pending_display_item(
         &mut self,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         let text_start_byte = self.text_start_byte;
         let pending = self.pending_text_run.as_mut()?;
         let item = pending.next_item();
         let finished = pending.is_finished();
         let step = item.and_then(|item| {
-            Self::consumed_display_item_from_split_text_item(text_start_byte, item, position)
+            Self::lowered_display_item_from_split_text_item(text_start_byte, item, position)
         });
         if finished || step.is_none() {
             self.pending_text_run = None;
@@ -154,7 +154,7 @@ impl BufferTextSourceLoweringState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
                 "BufferTextSourceLoweringState: validated source item at byte {} charpos {} \
@@ -166,17 +166,17 @@ impl BufferTextSourceLoweringState {
             );
             return None;
         }
-        let item = match Self::try_into_direct_consumed_display_item(item, position) {
+        let item = match Self::try_into_direct_lowered_display_item(item, position) {
             Ok(step) => return Some(step),
             Err(item) => item,
         };
         self.split_text_run_item(item, position)
     }
 
-    fn try_into_direct_consumed_display_item(
+    fn try_into_direct_lowered_display_item(
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextConsumedDisplayItem, BufferTextSourceItem> {
+    ) -> Result<BufferTextLoweredDisplayItem, BufferTextSourceItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
                 "BufferTextSourceLoweringState: validated source item at byte {} charpos {} \
@@ -195,7 +195,7 @@ impl BufferTextSourceLoweringState {
         let start_charpos = item.start_charpos();
         let byte_len = item.buffer_byte_len().unwrap_or_else(|| ch.len_utf8());
         position.advance_byte_idx_to(start_byte_idx.saturating_add(byte_len));
-        Ok(BufferTextConsumedDisplayItem::new(
+        Ok(BufferTextLoweredDisplayItem::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             item.into_item(),
         ))
@@ -205,7 +205,7 @@ impl BufferTextSourceLoweringState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         match DisplayTextRunItemCursor::from_item(item.into_item()) {
             Ok(cursor) => {
                 self.pending_text_run = Some(cursor);
@@ -221,11 +221,11 @@ impl BufferTextSourceLoweringState {
         }
     }
 
-    fn consumed_display_item_from_split_text_item(
+    fn lowered_display_item_from_split_text_item(
         text_start_byte: usize,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         let alignment = BufferTextSplitItemAlignment::for_position(text_start_byte, *position);
         let (start_byte_idx, start_charpos) = alignment.split_text_item_start(&item)?;
         let ch = match &item.kind {
@@ -249,7 +249,7 @@ impl BufferTextSourceLoweringState {
         };
         let end_byte_idx = alignment.split_text_item_end_byte_idx(&item)?;
         position.advance_byte_idx_to(end_byte_idx);
-        Some(BufferTextConsumedDisplayItem::new(
+        Some(BufferTextLoweredDisplayItem::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             item,
         ))

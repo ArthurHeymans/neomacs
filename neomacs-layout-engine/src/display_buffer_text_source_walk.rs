@@ -16,7 +16,7 @@ use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSource
 use crate::display_buffer_text_source_consumption::{
     BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState, BufferTextSourceItem,
 };
-use crate::display_buffer_text_source_lowering::BufferTextConsumedDisplayItem;
+use crate::display_buffer_text_source_lowering::BufferTextLoweredDisplayItem;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -44,7 +44,7 @@ struct BufferTextWindowSourceConsumption {
 }
 
 struct BufferTextWindowFallbackSourceConsumption {
-    source_item: Option<BufferTextConsumedDisplayItem>,
+    source_item: Option<BufferTextLoweredDisplayItem>,
     source_position: BufferTextSourcePosition,
 }
 
@@ -81,7 +81,7 @@ impl BufferTextWindowFallbackSourceConsumption {
     fn apply_to_progress(
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         progress.apply_source_position(self.source_position);
         self.source_item
     }
@@ -175,7 +175,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         &mut self,
         source_item: BufferTextSourceItem,
         progress: &mut BufferTextWindowProgressState<'_>,
-    ) -> Option<BufferTextConsumedDisplayItem> {
+    ) -> Option<BufferTextLoweredDisplayItem> {
         self.consume_fallback_source_item(source_item, progress.source_position())
             .apply_to_progress(progress)
     }

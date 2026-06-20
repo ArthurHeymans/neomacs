@@ -1,4 +1,4 @@
-//! Buffer text overflow and consumed-item rendering.
+//! Buffer text overflow and lowered-item rendering.
 //!
 //! This module owns the buffer-specific overflow lifecycle for main text and
 //! special display items while delegating actual item appends to the shared row
@@ -13,7 +13,7 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_lowering::{
-    BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
+    BufferTextLoweredDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -50,13 +50,13 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'rows, 'emit, 'surface> {
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
-pub(crate) struct BufferTextConsumedDisplayItemRenderRequest<'a> {
-    source_item: BufferTextConsumedDisplayItem,
-    context: BufferTextConsumedDisplayItemRenderContext<'a>,
+pub(crate) struct BufferTextLoweredDisplayItemRenderRequest<'a> {
+    source_item: BufferTextLoweredDisplayItem,
+    context: BufferTextLoweredDisplayItemRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextConsumedDisplayItemRenderContext<'a> {
+pub(crate) struct BufferTextLoweredDisplayItemRenderContext<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     text: &'a [u8],
     text_start_byte: usize,
@@ -77,7 +77,7 @@ pub(crate) struct BufferTextConsumedDisplayItemRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextConsumedDisplayItemRenderRequestState<'rows, 'emit, 'surface> {
+pub(crate) struct BufferTextLoweredDisplayItemRenderRequestState<'rows, 'emit, 'surface> {
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
@@ -94,7 +94,7 @@ impl<'rows, 'emit, 'surface> BufferTextSpecialOverflowRenderState<'rows, 'emit, 
 }
 
 impl<'rows, 'emit, 'surface>
-    BufferTextConsumedDisplayItemRenderRequestState<'rows, 'emit, 'surface>
+    BufferTextLoweredDisplayItemRenderRequestState<'rows, 'emit, 'surface>
 {
     pub(crate) fn new(state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>) -> Self {
         Self { state }
@@ -206,7 +206,7 @@ pub(crate) enum BufferTextSourceAppendContinuation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextConsumedDisplayItemRenderOutcome {
+pub(crate) enum BufferTextLoweredDisplayItemRenderOutcome {
     Rendered,
     ContinueBufferWalk,
     Stop,
@@ -218,7 +218,7 @@ impl BufferTextSourceAppendContinuation {
     }
 }
 
-impl BufferTextConsumedDisplayItemRenderOutcome {
+impl BufferTextLoweredDisplayItemRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
     }
@@ -247,7 +247,7 @@ impl BufferTextOverflowRenderOutcome {
     }
 }
 
-impl<'a> BufferTextConsumedDisplayItemRenderContext<'a> {
+impl<'a> BufferTextLoweredDisplayItemRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
@@ -292,10 +292,10 @@ impl<'a> BufferTextConsumedDisplayItemRenderContext<'a> {
     }
 }
 
-impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
+impl<'a> BufferTextLoweredDisplayItemRenderRequest<'a> {
     pub(crate) fn new(
-        source_item: BufferTextConsumedDisplayItem,
-        context: BufferTextConsumedDisplayItemRenderContext<'a>,
+        source_item: BufferTextLoweredDisplayItem,
+        context: BufferTextLoweredDisplayItemRenderContext<'a>,
     ) -> Self {
         debug_assert_ne!(source_item.source_char().ch(), '\n');
         Self {
@@ -308,9 +308,9 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextConsumedDisplayItemRenderRequestState<'_, '_, '_>,
-    ) -> BufferTextConsumedDisplayItemRenderOutcome {
-        let BufferTextConsumedDisplayItemRenderRequestState { state } = state;
+        state: BufferTextLoweredDisplayItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextLoweredDisplayItemRenderOutcome {
+        let BufferTextLoweredDisplayItemRenderRequestState { state } = state;
         let BufferTextWindowLoopMutableState {
             append_state,
             invisible_text_checkpoint,
@@ -436,10 +436,10 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
                     ),
                 );
                 if special_overflow_outcome.should_break() {
-                    return BufferTextConsumedDisplayItemRenderOutcome::Stop;
+                    return BufferTextLoweredDisplayItemRenderOutcome::Stop;
                 }
                 if special_overflow_outcome.should_continue_buffer_walk() {
-                    return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
+                    return BufferTextLoweredDisplayItemRenderOutcome::ContinueBufferWalk;
                 }
 
                 if special_prepared_append
@@ -455,9 +455,9 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
                     )
                     .should_break()
                 {
-                    return BufferTextConsumedDisplayItemRenderOutcome::Stop;
+                    return BufferTextLoweredDisplayItemRenderOutcome::Stop;
                 }
-                return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
+                return BufferTextLoweredDisplayItemRenderOutcome::ContinueBufferWalk;
             }
             BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
         };
@@ -509,10 +509,10 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
             )),
         );
         if overflow_outcome.should_break() {
-            return BufferTextConsumedDisplayItemRenderOutcome::Stop;
+            return BufferTextLoweredDisplayItemRenderOutcome::Stop;
         }
         if overflow_outcome.should_continue_buffer_walk() {
-            return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
+            return BufferTextLoweredDisplayItemRenderOutcome::ContinueBufferWalk;
         }
 
         {
@@ -577,13 +577,13 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
             )
             .should_break()
         {
-            return BufferTextConsumedDisplayItemRenderOutcome::Stop;
+            return BufferTextLoweredDisplayItemRenderOutcome::Stop;
         }
         if let Some(end_charpos) = source_end_charpos {
             *progress.charpos = (*progress.charpos).max(end_charpos);
         }
 
-        BufferTextConsumedDisplayItemRenderOutcome::Rendered
+        BufferTextLoweredDisplayItemRenderOutcome::Rendered
     }
 }
 
