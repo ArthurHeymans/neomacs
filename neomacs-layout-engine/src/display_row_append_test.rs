@@ -4,7 +4,6 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
@@ -82,6 +81,7 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
+use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::display_source::*;
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferTextSourceRenderPlanRequest,
@@ -9264,7 +9264,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
     ]);
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let replacement = BufferTextReplacementItem::new(
+    let replacement = BufferDisplayPropertyReplacementItem::new(
         value,
         classification,
         BufferDisplayReplacementSource::spanning(

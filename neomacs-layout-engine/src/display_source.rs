@@ -862,6 +862,140 @@ impl DisplayPropertyReplacementDescriptor {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferDisplayPropertyReplacementItem {
+    descriptor: DisplayPropertyReplacementDescriptor,
+    start_byte_pos: EmacsBytePos,
+    end_byte_pos: EmacsBytePos,
+    start_charpos: CharPos0,
+    end_charpos: CharPos0,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferDisplayPropertyFallbackItem {
+    item: DisplayItem,
+    start_byte_idx: usize,
+    start_charpos: i64,
+    source_char: Option<char>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BufferDisplayPropertyReplacementAnchor {
+    byte_idx: usize,
+    charpos: i64,
+}
+
+impl BufferDisplayPropertyReplacementItem {
+    pub(crate) fn new(
+        value: Value,
+        classification: DisplayPropertyClassification,
+        replacement_source: BufferDisplayReplacementSource,
+        start_byte_pos: EmacsBytePos,
+        end_byte_pos: EmacsBytePos,
+        start_charpos: CharPos0,
+        end_charpos: CharPos0,
+    ) -> Self {
+        Self {
+            descriptor: DisplayPropertyReplacementDescriptor::new(
+                value,
+                classification,
+                replacement_source,
+                start_charpos,
+                end_charpos,
+            ),
+            start_byte_pos,
+            end_byte_pos,
+            start_charpos,
+            end_charpos,
+        }
+    }
+
+    pub(crate) fn descriptor(&self) -> &DisplayPropertyReplacementDescriptor {
+        &self.descriptor
+    }
+
+    pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
+        self.start_byte_pos.get().checked_sub(text_start_byte)
+    }
+
+    pub(crate) fn source_anchor(
+        &self,
+        text_start_byte: usize,
+    ) -> Option<BufferDisplayPropertyReplacementAnchor> {
+        Some(BufferDisplayPropertyReplacementAnchor {
+            byte_idx: self.start_byte_idx(text_start_byte)?,
+            charpos: self.start_charpos(),
+        })
+    }
+
+    pub(crate) fn start_charpos(&self) -> i64 {
+        self.start_charpos.get() as i64
+    }
+
+    pub(crate) fn source_text<'a>(
+        &self,
+        text_start_byte: usize,
+        text: &'a [u8],
+    ) -> Option<&'a [u8]> {
+        Some(text.get(self.start_byte_idx(text_start_byte)?..)?)
+    }
+
+    pub(crate) fn fallback_display_item(
+        &self,
+        text_start_byte: usize,
+        text: &[u8],
+        face: RenderFaceRef,
+    ) -> Option<BufferDisplayPropertyFallbackItem> {
+        let start_byte_idx = self.start_byte_idx(text_start_byte)?;
+        let end_byte_idx = self.end_byte_pos.get().checked_sub(text_start_byte)?;
+        let source_text = std::str::from_utf8(text.get(start_byte_idx..end_byte_idx)?).ok()?;
+        if source_text.is_empty() {
+            return None;
+        }
+        let source_char = source_text.chars().next();
+        let replacement_source = self.descriptor.replacement_source();
+        let item = DisplayItem::new(
+            SourceSpan::new(
+                DisplaySourcePosition::buffer(
+                    replacement_source.buffer_id(),
+                    self.start_charpos,
+                    self.start_byte_pos,
+                ),
+                DisplaySourcePosition::buffer(
+                    replacement_source.buffer_id(),
+                    self.end_charpos,
+                    self.end_byte_pos,
+                ),
+            ),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
+        );
+        Some(BufferDisplayPropertyFallbackItem {
+            item,
+            start_byte_idx,
+            start_charpos: self.start_charpos(),
+            source_char,
+        })
+    }
+}
+
+impl BufferDisplayPropertyFallbackItem {
+    pub(crate) fn into_parts(self) -> (DisplayItem, usize, i64, Option<char>) {
+        (
+            self.item,
+            self.start_byte_idx,
+            self.start_charpos,
+            self.source_char,
+        )
+    }
+}
+
+impl BufferDisplayPropertyReplacementAnchor {
+    pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
+        self.byte_idx == byte_idx && self.charpos == charpos
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayReplacementSourceMappedTextItem {
     text: Box<str>,

@@ -1,13 +1,12 @@
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplaySourcePosition, DisplayTextRun,
     RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
-    BufferDisplayReplacementSource, DisplayItemSource, DisplayPropertySourceCursorAction,
-    DisplayPropertySourcePlan, DisplaySourceContext, LispStringSourceStack,
-    TextSourceCharClassification, classify_text_source_char,
+    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItemSource,
+    DisplayPropertySourceCursorAction, DisplayPropertySourcePlan, DisplaySourceContext,
+    LispStringSourceStack, TextSourceCharClassification, classify_text_source_char,
     display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
@@ -378,7 +377,7 @@ impl BufferTextSourceStepChar {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceCursorItem {
     Item(DisplayItem),
-    Replacement(BufferTextReplacementItem),
+    Replacement(BufferDisplayPropertyReplacementItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -518,8 +517,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         classification: DisplayPropertyClassification,
         start: CharPos0,
         end: CharPos0,
-    ) -> BufferTextReplacementItem {
-        BufferTextReplacementItem::new(
+    ) -> BufferDisplayPropertyReplacementItem {
+        BufferDisplayPropertyReplacementItem::new(
             value,
             classification,
             self.display_replacement_source(start, end),

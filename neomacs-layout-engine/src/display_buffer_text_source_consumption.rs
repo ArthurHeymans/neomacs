@@ -2,7 +2,6 @@
 
 use std::collections::VecDeque;
 
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
     BufferTextSourcePosition, BufferTextSourceStepChar,
@@ -11,7 +10,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, RenderFaceRef,
     SourceSpan,
 };
-use crate::display_source::DisplaySourceContext;
+use crate::display_source::{BufferDisplayPropertyReplacementItem, DisplaySourceContext};
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
@@ -26,13 +25,13 @@ pub(crate) struct BufferTextSourceItem {
 #[derive(Clone, Debug, PartialEq)]
 enum BufferTextAlignedSourceCursorItem {
     Item(BufferTextSourceItem),
-    Replacement(BufferTextReplacementItem),
+    Replacement(BufferDisplayPropertyReplacementItem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceConsumptionItem {
     DisplayItem(BufferTextSourceItem),
-    Replacement(BufferTextReplacementItem),
+    Replacement(BufferDisplayPropertyReplacementItem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -307,7 +306,7 @@ impl BufferTextSourceConsumptionState {
     fn replacement_matches(
         &self,
         position: BufferTextSourcePosition,
-        item: &BufferTextReplacementItem,
+        item: &BufferDisplayPropertyReplacementItem,
     ) -> Option<bool> {
         let anchor = item.source_anchor(self.text_start_byte)?;
         Some(anchor.matches(position.byte_idx(), position.charpos()))

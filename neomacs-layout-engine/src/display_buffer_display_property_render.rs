@@ -1,4 +1,3 @@
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
@@ -12,6 +11,7 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
@@ -34,7 +34,7 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
 }
 
 pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
-    replacement: BufferTextReplacementItem,
+    replacement: BufferDisplayPropertyReplacementItem,
     text_start_byte: usize,
     text: &'a [u8],
     content_x: f32,
@@ -73,7 +73,7 @@ impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
 impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        replacement: BufferTextReplacementItem,
+        replacement: BufferDisplayPropertyReplacementItem,
         text_start_byte: usize,
         text: &'a [u8],
         content_x: f32,
@@ -95,11 +95,18 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
     }
 
     fn fallback_render_item(&self) -> Option<BufferTextSourceItem> {
-        self.replacement.fallback_render_item(
+        let fallback = self.replacement.fallback_display_item(
             self.text_start_byte,
             self.text,
             RenderFaceRef::FaceId(self.active_face_state.face_id()),
-        )
+        )?;
+        let (item, start_byte_idx, start_charpos, source_char) = fallback.into_parts();
+        Some(BufferTextSourceItem::new(
+            item,
+            start_byte_idx,
+            start_charpos,
+            source_char,
+        ))
     }
 
     fn render_append_request<B: LayoutBufferView>(

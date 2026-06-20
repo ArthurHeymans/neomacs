@@ -5,7 +5,6 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
-use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_item_append::{
@@ -37,6 +36,7 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_transition::DisplayRowTransitionContinuation;
+use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
@@ -485,7 +485,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        replacement: BufferTextReplacementItem,
+        replacement: BufferDisplayPropertyReplacementItem,
         buffer: &B,
     ) -> bool
     where
