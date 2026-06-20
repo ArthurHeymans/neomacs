@@ -1,8 +1,8 @@
 //! Buffer text visible-loop rendering.
 
 use crate::display_buffer_display_property_render::{
+    BufferDisplayPropertyTextReplacementApplyOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
-    BufferDisplayPropertyTextReplacementResolveOutcome,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
@@ -368,36 +368,23 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             active_face_state,
             self.loop_context.point_charpos(),
         );
-        let resolve_outcome =
-            self.source_render
-                .with_font_metrics_and_display_host(|font_metrics, host| {
-                    request.resolve(
-                        font_metrics,
-                        host,
-                        *self.progress.row.x,
-                        self.progress.row_position(),
-                    )
-                });
-        match resolve_outcome {
-            BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
-                let update = request.render_and_apply(
-                    buffer,
-                    BufferDisplayPropertyTextReplacementRenderState::new(
-                        text,
-                        self.source_render.reborrow(),
-                        self.face_ids,
-                        self.append_surface,
-                        self.row_geometry,
-                        self.cursor_info,
-                        active_face_state,
-                        self.progress.reborrow(),
-                    ),
-                );
-                source_walk
-                    .commit_display_property_replacement_for_render(update, &mut self.progress);
+        match request.resolve_and_apply(
+            buffer,
+            BufferDisplayPropertyTextReplacementRenderState::new(
+                text,
+                self.source_render.reborrow(),
+                self.face_ids,
+                self.append_surface,
+                self.row_geometry,
+                self.cursor_info,
+                active_face_state,
+                self.progress.reborrow(),
+            ),
+        ) {
+            BufferDisplayPropertyTextReplacementApplyOutcome::Rendered => {
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
-            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
+            BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
                 let Some(source_step) = source_walk
                     .consume_fallback_source_item_for_render(source_item, &mut self.progress)
                 else {
@@ -415,7 +402,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     buffer,
                 )
             }
-            BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
+            BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
                 BufferTextWindowLoopStepOutcome::StopBufferWalk
             }
         }

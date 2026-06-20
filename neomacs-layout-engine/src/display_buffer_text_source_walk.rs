@@ -4,7 +4,6 @@
 //! consumption of buffer text, display-property fallback items, and source
 //! position updates used by row lifecycle renderers.
 
-use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementWalkUpdate;
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
@@ -860,22 +859,6 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         source_position: BufferTextSourcePosition,
     ) -> BufferTextWindowSourcePositionConsumption<()> {
         BufferTextWindowSourcePositionConsumption::new((), source_position)
-    }
-
-    fn commit_display_property_replacement(
-        &mut self,
-        update: BufferDisplayPropertyTextReplacementWalkUpdate,
-    ) -> BufferTextWindowSourcePositionConsumption<()> {
-        self.source_position_update(update.source_position())
-    }
-
-    pub(crate) fn commit_display_property_replacement_for_render(
-        &mut self,
-        update: BufferDisplayPropertyTextReplacementWalkUpdate,
-        progress: &mut BufferTextWindowProgressState<'_>,
-    ) {
-        self.commit_display_property_replacement(update)
-            .apply_to_progress(progress);
     }
 }
 

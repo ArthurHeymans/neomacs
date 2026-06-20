@@ -31,8 +31,14 @@ pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
     source_position: BufferTextSourcePosition,
 }
 
-pub(crate) enum BufferDisplayPropertyTextReplacementResolveOutcome {
+enum BufferDisplayPropertyTextReplacementResolveOutcome {
     Resolved(BufferDisplayPropertyTextReplacementRenderRequest),
+    Fallback(BufferTextSourceItem),
+    Stop,
+}
+
+pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
+    Rendered,
     Fallback(BufferTextSourceItem),
     Stop,
 }
@@ -49,7 +55,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a> {
     point_charpos: i64,
 }
 
-pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest {
+struct BufferDisplayPropertyTextReplacementRenderRequest {
     append_request: DisplayPropertyReplacementAppendRequest,
     skip_to: i64,
     start_charpos: i64,
@@ -118,7 +124,7 @@ impl<'a> BufferDisplayPropertyTextReplacementResolveRequest<'a> {
         }
     }
 
-    pub(crate) fn resolve(
+    fn resolve(
         self,
         font_metrics: &mut Option<FontMetricsService>,
         display_host: Option<&dyn DisplayHost>,
@@ -166,10 +172,37 @@ impl<'a> BufferDisplayPropertyTextReplacementResolveRequest<'a> {
             ),
         )
     }
+
+    pub(crate) fn resolve_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+    ) -> BufferDisplayPropertyTextReplacementApplyOutcome {
+        let current_x = *state.progress.row.x;
+        let start_position = state.progress.row_position();
+        let resolve_outcome =
+            state
+                .source_render
+                .with_font_metrics_and_display_host(|font_metrics, host| {
+                    self.resolve(font_metrics, host, current_x, start_position)
+                });
+        match resolve_outcome {
+            BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
+                request.render_and_apply(buffer, state);
+                BufferDisplayPropertyTextReplacementApplyOutcome::Rendered
+            }
+            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
+                BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item)
+            }
+            BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
+                BufferDisplayPropertyTextReplacementApplyOutcome::Stop
+            }
+        }
+    }
 }
 
 impl BufferDisplayPropertyTextReplacementRenderRequest {
-    pub(crate) fn new(
+    fn new(
         append_request: DisplayPropertyReplacementAppendRequest,
         skip_to: i64,
         start_charpos: i64,
@@ -183,11 +216,11 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
         }
     }
 
-    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+    fn render_and_apply<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) -> BufferDisplayPropertyTextReplacementWalkUpdate {
+    ) {
         let BufferDisplayPropertyTextReplacementRenderState {
             text,
             mut source_render,
@@ -220,7 +253,7 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
         );
         let walk_update = replacement_outcome.walk_update(text, progress.source_position());
         progress.row.apply_position(walk_update.row_position());
-        walk_update
+        progress.apply_source_position(walk_update.source_position());
     }
 }
 
