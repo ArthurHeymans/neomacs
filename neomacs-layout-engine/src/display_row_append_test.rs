@@ -44,8 +44,9 @@ use crate::display_row_geometry::{
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
     DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
-    append_lisp_string_to_text_row, apply_pending_display_source_faces, render_face_ref_id,
+    LispStringSourceAppendRequest, LispStringSourceAppendSessionRequest, LispStringSourceId,
+    LispStringSourceRowAppendSession, append_lisp_string_to_text_row,
+    apply_pending_display_source_faces, render_face_ref_id,
 };
 use crate::display_row_output_install::DisplayRowCurrentRowOutput;
 use crate::display_row_output_install::append_rendered_display_row_fragment_to_text_row_and_emit;
@@ -5896,6 +5897,7 @@ fn lisp_string_append_context_appends_fragment_items() {
         LispStringSourceId::PREFIX,
         Value::string("=>"),
     );
+    let session_request = LispStringSourceAppendSessionRequest::new(request, 0, base_face);
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -5905,9 +5907,7 @@ fn lisp_string_append_context_appends_fragment_items() {
             &face_resolver,
         ),
         &mut face_ids,
-        0,
-        base_face,
-        request,
+        session_request,
     );
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
@@ -8226,8 +8226,15 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         LispStringSourceId::OVERLAY_STRING,
         Value::string("a\nb"),
     );
+    let session_request = LispStringSourceAppendSessionRequest::new(request, 7, base_face);
     let mut append_context = LispStringSourceRowAppendSession::new(
-        request, 7, base_face, &surface, 0.0, 16.0, 12.0, 8.0, 16.0,
+        session_request,
+        &surface,
+        0.0,
+        16.0,
+        12.0,
+        8.0,
+        16.0,
     )
     .expect("lisp string source session");
 

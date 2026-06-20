@@ -72,14 +72,10 @@ impl<'row> LispStringRowAppendContext<'row> {
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
-        base_face_id: u32,
-        base_face: &'row ResolvedFace,
-        request: LispStringSourceAppendRequest,
+        request: LispStringSourceAppendSessionRequest<'row>,
     ) -> DisplayRowPosition {
         let position = request.position();
-        let Some(mut source_session) =
-            LispStringSourceAppendSession::new(request, base_face_id, base_face)
-        else {
+        let Some(mut source_session) = LispStringSourceAppendSession::new(request) else {
             return position;
         };
         let frame = self.active_face_context.active_face_frame();
@@ -100,9 +96,11 @@ impl<'row> LispStringRowAppendContext<'row> {
         self.render_active_face_source_request_to_text_row_and_emit(
             state,
             face_ids,
-            base_face.face_id(),
-            base_face.face(),
-            prefix_source.append_request(position),
+            LispStringSourceAppendSessionRequest::new(
+                prefix_source.append_request(position),
+                base_face.face_id(),
+                base_face.face(),
+            ),
         )
     }
 }
@@ -196,16 +194,36 @@ impl LispStringSourceAppendRequest {
         }
     }
 
-    fn position(self) -> DisplayRowPosition {
-        self.position
-    }
-
     fn into_source(self, base_face_id: u32) -> Option<LispStringSourceCursor> {
         LispStringSourceCursor::new(
             self.source_id.raw(),
             self.value,
             RenderFaceRef::FaceId(base_face_id),
         )
+    }
+}
+
+pub(crate) struct LispStringSourceAppendSessionRequest<'a> {
+    append_request: LispStringSourceAppendRequest,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+}
+
+impl<'a> LispStringSourceAppendSessionRequest<'a> {
+    pub(crate) fn new(
+        append_request: LispStringSourceAppendRequest,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> Self {
+        Self {
+            append_request,
+            base_face_id,
+            base_face,
+        }
+    }
+
+    fn position(&self) -> DisplayRowPosition {
+        self.append_request.position
     }
 }
 
@@ -217,17 +235,13 @@ pub(crate) struct LispStringSourceAppendSession<'a> {
 }
 
 impl<'a> LispStringSourceAppendSession<'a> {
-    fn new(
-        request: LispStringSourceAppendRequest,
-        base_face_id: u32,
-        base_face: &'a ResolvedFace,
-    ) -> Option<Self> {
-        let source = request.into_source(base_face_id)?;
+    fn new(request: LispStringSourceAppendSessionRequest<'a>) -> Option<Self> {
+        let source = request.append_request.into_source(request.base_face_id)?;
         Some(Self {
             source,
             source_state: DisplayRowSourceState::default(),
-            base_face_id,
-            base_face,
+            base_face_id: request.base_face_id,
+            base_face: request.base_face,
         })
     }
 
@@ -517,9 +531,7 @@ pub(crate) struct LispStringSourceRowAppendSession<'a> {
 impl<'a> LispStringSourceRowAppendSession<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        request: LispStringSourceAppendRequest,
-        base_face_id: u32,
-        base_face: &'a ResolvedFace,
+        request: LispStringSourceAppendSessionRequest<'a>,
         append_surface: &'a DisplayRowAppendSurface,
         glyph_y_offset: f32,
         height: f32,
@@ -527,7 +539,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         char_width: f32,
         default_row_height: f32,
     ) -> Option<Self> {
-        let source_session = LispStringSourceAppendSession::new(request, base_face_id, base_face)?;
+        let source_session = LispStringSourceAppendSession::new(request)?;
         Some(Self {
             source_session,
             append_surface,
@@ -597,9 +609,9 @@ pub(crate) fn append_lisp_string_to_text_row(
 ) -> DisplayRowPosition {
     let request =
         LispStringSourceAppendRequest::new(position, LispStringSourceId(source_id), text_value);
-    let Some(mut source_session) =
-        LispStringSourceAppendSession::new(request, base_face_id, base_face)
-    else {
+    let session_request =
+        LispStringSourceAppendSessionRequest::new(request, base_face_id, base_face);
+    let Some(mut source_session) = LispStringSourceAppendSession::new(session_request) else {
         return position;
     };
     source_session
