@@ -71,20 +71,80 @@ pub(crate) struct DisplayRowFace {
     pub(crate) box_color2: Option<Color>,
     pub(crate) box_h_line_width: i32,
     pub(crate) terminal_inverse_video: bool,
-    pub(crate) font_char_width: f32,
-    pub(crate) font_ascent: f32,
-    pub(crate) font_descent: i32,
+    pub(crate) metrics: DisplayRowFaceMetrics,
     pub(crate) underline_position: i32,
     pub(crate) underline_thickness: i32,
 }
 
-impl DisplayRowFace {
-    pub(crate) fn from_resolved(face_id: u32, face: &ResolvedFace) -> Self {
-        let font_descent = if face.font_line_height > 0.0 && face.font_ascent > 0.0 {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DisplayRowFaceMetrics {
+    pub(crate) char_width_px: f32,
+    pub(crate) ascent_px: f32,
+    pub(crate) descent_px: i32,
+}
+
+impl DisplayRowFaceMetrics {
+    pub(crate) fn from_resolved(face: &ResolvedFace) -> Self {
+        let descent_px = if face.font_line_height > 0.0 && face.font_ascent > 0.0 {
             (face.font_line_height - face.font_ascent).max(0.0).ceil() as i32
         } else {
             0
         };
+        Self {
+            char_width_px: face.font_char_width,
+            ascent_px: face.font_ascent,
+            descent_px,
+        }
+    }
+
+    pub(crate) fn from_font_metrics(metrics: FontMetrics) -> Self {
+        Self {
+            char_width_px: metrics.char_width,
+            ascent_px: metrics.ascent,
+            descent_px: metrics.descent.max(0.0).ceil() as i32,
+        }
+    }
+
+    pub(crate) fn line_height_px(self) -> f32 {
+        (self.ascent_px + self.descent_px as f32).max(1.0)
+    }
+
+    pub(crate) fn has_char_width(self, fallback_char_width: f32) -> bool {
+        DisplayRowCharWidthPolicy::new(fallback_char_width).has_width(self.char_width_px)
+    }
+
+    pub(crate) fn char_width_px(self, fallback_char_width: f32) -> f32 {
+        DisplayRowCharWidthPolicy::new(fallback_char_width).width(self.char_width_px)
+    }
+
+    pub(crate) fn char_width_or_measured_px(
+        self,
+        fallback_char_width: f32,
+        measured_width: Option<f32>,
+    ) -> f32 {
+        DisplayRowCharWidthPolicy::new(fallback_char_width)
+            .width_or_measured(self.char_width_px, measured_width)
+    }
+
+    pub(crate) fn normalize_char_width(&mut self, fallback_char_width: f32) {
+        self.char_width_px = self.char_width_px(fallback_char_width);
+    }
+
+    pub(crate) fn include_in_layout(self, layout: &mut DisplayRowLayout) {
+        let glyph_ascent = self.ascent_px.max(0.0);
+        let glyph_height = self.line_height_px();
+        let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
+        let row_descent = (layout.height_px - layout.ascent_px).max(0.0);
+        layout.ascent_px = layout
+            .ascent_px
+            .max(glyph_ascent)
+            .min(glyph_height.max(layout.height_px));
+        layout.height_px = (layout.ascent_px + row_descent.max(glyph_descent)).max(glyph_height);
+    }
+}
+
+impl DisplayRowFace {
+    pub(crate) fn from_resolved(face_id: u32, face: &ResolvedFace) -> Self {
         let box_type = BoxType::from_gnu_code(face.box_type).unwrap_or_default();
         Self {
             face_id,
@@ -122,20 +182,18 @@ impl DisplayRowFace {
             box_color2: None,
             box_h_line_width: face.box_line_width,
             terminal_inverse_video: face.terminal_inverse_video,
-            font_char_width: face.font_char_width,
-            font_ascent: face.font_ascent,
-            font_descent,
+            metrics: DisplayRowFaceMetrics::from_resolved(face),
             underline_position: 1,
             underline_thickness: 1,
         }
     }
 
     pub(crate) fn has_char_width(&self, fallback_char_width: f32) -> bool {
-        DisplayRowCharWidthPolicy::new(fallback_char_width).has_width(self.font_char_width)
+        self.metrics.has_char_width(fallback_char_width)
     }
 
     pub(crate) fn char_width_px(&self, fallback_char_width: f32) -> f32 {
-        DisplayRowCharWidthPolicy::new(fallback_char_width).width(self.font_char_width)
+        self.metrics.char_width_px(fallback_char_width)
     }
 
     pub(crate) fn char_width_or_measured_px(
@@ -143,12 +201,12 @@ impl DisplayRowFace {
         fallback_char_width: f32,
         measured_width: Option<f32>,
     ) -> f32 {
-        DisplayRowCharWidthPolicy::new(fallback_char_width)
-            .width_or_measured(self.font_char_width, measured_width)
+        self.metrics
+            .char_width_or_measured_px(fallback_char_width, measured_width)
     }
 
     pub(crate) fn normalize_char_width(&mut self, fallback_char_width: f32) {
-        self.font_char_width = self.char_width_px(fallback_char_width);
+        self.metrics.normalize_char_width(fallback_char_width);
     }
 
     pub(crate) fn render_face(&self) -> Face {
@@ -197,8 +255,8 @@ impl DisplayRowFace {
             box_border_speed: self.box_border_speed,
             box_color2: self.box_color2,
             font_file_path: self.font_file_path.clone(),
-            font_ascent: self.font_ascent as i32,
-            font_descent: self.font_descent,
+            font_ascent: self.metrics.ascent_px as i32,
+            font_descent: self.metrics.descent_px,
             underline_position: self.underline_position.max(1),
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
@@ -213,9 +271,7 @@ pub(crate) fn resolved_display_row_face(
 ) -> DisplayRowFace {
     let mut render_face = DisplayRowFace::from_resolved(face_id, face);
     if let Some(metrics) = metrics {
-        render_face.font_char_width = metrics.char_width;
-        render_face.font_ascent = metrics.ascent;
-        render_face.font_descent = metrics.descent.max(0.0).ceil() as i32;
+        render_face.metrics = DisplayRowFaceMetrics::from_font_metrics(metrics);
     }
     render_face
 }
@@ -255,9 +311,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
             return fallback_row_height.max(1.0);
         }
         let face = self.realize_face(0, face, char_w, fallback_ascent, fallback_row_height);
-        let line_height = (face.font_ascent + face.font_descent as f32)
-            .max(1.0)
-            .ceil();
+        let line_height = face.metrics.line_height_px().ceil();
         let box_pixels = if face.box_type != BoxType::None && face.box_h_line_width != 0 {
             2.0 * face.box_h_line_width.unsigned_abs() as f32
         } else {
@@ -302,30 +356,31 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         row_height: f32,
     ) {
         let needs_metrics = !face.has_char_width(fallback_char_width)
-            || face.font_ascent <= 0.0
-            || (face.font_ascent + face.font_descent as f32) <= 0.0;
+            || face.metrics.ascent_px <= 0.0
+            || face.metrics.line_height_px() <= 0.0;
 
         if needs_metrics && let Some(metrics) = self.measured_font_metrics_for_face(face) {
             if !face.has_char_width(fallback_char_width) {
-                face.font_char_width =
+                face.metrics.char_width_px =
                     DisplayRowCharWidthPolicy::new(fallback_char_width).width(metrics.char_width);
             }
-            if face.font_ascent <= 0.0 && metrics.ascent > 0.0 {
-                face.font_ascent = metrics.ascent;
+            if face.metrics.ascent_px <= 0.0 && metrics.ascent > 0.0 {
+                face.metrics.ascent_px = metrics.ascent;
             }
-            if (face.font_ascent + face.font_descent as f32) <= 0.0 && metrics.line_height > 0.0 {
-                face.font_descent = (metrics.line_height - metrics.ascent).max(0.0).ceil() as i32;
+            if face.metrics.line_height_px() <= 0.0 && metrics.line_height > 0.0 {
+                face.metrics.descent_px =
+                    (metrics.line_height - metrics.ascent).max(0.0).ceil() as i32;
             }
         }
 
         face.normalize_char_width(fallback_char_width);
-        if face.font_ascent <= 0.0 {
-            face.font_ascent = fallback_ascent.max(1.0);
+        if face.metrics.ascent_px <= 0.0 {
+            face.metrics.ascent_px = fallback_ascent.max(1.0);
         }
-        if (face.font_ascent + face.font_descent as f32) <= 0.0
-            || (face.font_descent <= 0 && row_height > face.font_ascent)
+        if face.metrics.line_height_px() <= 0.0
+            || (face.metrics.descent_px <= 0 && row_height > face.metrics.ascent_px)
         {
-            face.font_descent = (row_height - face.font_ascent).max(0.0).ceil() as i32;
+            face.metrics.descent_px = (row_height - face.metrics.ascent_px).max(0.0).ceil() as i32;
         }
     }
 }
@@ -2185,15 +2240,7 @@ fn display_source_position_advance(
 }
 
 fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
-    let glyph_ascent = face.font_ascent.max(0.0);
-    let glyph_height = (glyph_ascent + face.font_descent.max(0) as f32).max(1.0);
-    let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
-    let row_descent = (layout.height_px - layout.ascent_px).max(0.0);
-    layout.ascent_px = layout
-        .ascent_px
-        .max(glyph_ascent)
-        .min(glyph_height.max(layout.height_px));
-    layout.height_px = (layout.ascent_px + row_descent.max(glyph_descent)).max(glyph_height);
+    face.metrics.include_in_layout(layout);
 }
 
 impl DisplayMediaReplacement {
@@ -2478,7 +2525,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
             .collect();
         let row_ascent = row_face
-            .font_ascent
+            .metrics
+            .ascent_px
             .max(geometry.ascent)
             .min(geometry.height.max(1.0));
         let mut row_layout = geometry.to_layout(
