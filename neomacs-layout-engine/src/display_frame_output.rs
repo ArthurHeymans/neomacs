@@ -59,6 +59,10 @@ pub(crate) struct FrameOutputOwner {
     pending_tab_bar: Option<FrameTabBarState>,
 }
 
+pub(crate) struct FrameOutputTarget<'a> {
+    builder: &'a mut DisplayOutputBuilder,
+}
+
 struct FrameOutputSession<'builder, 'chrome, 'tab> {
     builder: &'builder mut DisplayOutputBuilder,
     pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
@@ -84,6 +88,10 @@ impl FrameOutputOwner {
 
     pub(crate) fn text_window_output_target(&mut self) -> TextWindowOutputTarget<'_> {
         TextWindowOutputTarget::from_builder(&mut self.builder)
+    }
+
+    fn frame_output_target(&mut self) -> FrameOutputTarget<'_> {
+        FrameOutputTarget::from_builder(&mut self.builder)
     }
 
     pub(crate) fn reset(&mut self) {
@@ -129,11 +137,11 @@ impl FrameOutputOwner {
     }
 
     pub(crate) fn render_frame_state(&mut self, request: FrameOutputStateRenderRequest<'_>) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_window_info(&mut self, request: WindowFrameInfoRenderRequest<'_>) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_latest_window_info_effects(
@@ -141,7 +149,7 @@ impl FrameOutputOwner {
         request: WindowFrameInfoEffectsRenderRequest<'_>,
         curr_window_infos: &mut HashMap<i64, WindowInfo>,
     ) {
-        request.render_latest_and_apply(&mut self.builder, curr_window_infos);
+        request.render_latest_and_apply(self.frame_output_target(), curr_window_infos);
     }
 
     pub(crate) fn render_window_decorations(
@@ -149,35 +157,165 @@ impl FrameOutputOwner {
         request: WindowFrameDecorationsRenderRequest<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        request.render_and_apply(&mut self.builder, render_services);
+        request.render_and_apply(self.frame_output_target(), render_services);
     }
 
     pub(crate) fn render_line_animation_hints(
         &mut self,
         request: FrameLineAnimationHintsRenderRequest<'_>,
     ) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_window_switch_hint(
         &mut self,
         request: FrameWindowSwitchHintRenderRequest<'_>,
     ) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_theme_transition_hint(
         &mut self,
         request: FrameThemeTransitionHintRenderRequest<'_>,
     ) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_topology_transition_hint(
         &mut self,
         request: FrameTopologyTransitionHintRenderRequest<'_>,
     ) {
-        request.render_and_apply(&mut self.builder);
+        request.render_and_apply(self.frame_output_target());
+    }
+}
+
+impl<'a> FrameOutputTarget<'a> {
+    pub(crate) fn from_builder(builder: &'a mut DisplayOutputBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn reborrow(&mut self) -> FrameOutputTarget<'_> {
+        FrameOutputTarget {
+            builder: self.builder,
+        }
+    }
+
+    fn builder(&mut self) -> &mut DisplayOutputBuilder {
+        self.builder
+    }
+
+    fn text_window_output_target(&mut self) -> TextWindowOutputTarget<'_> {
+        TextWindowOutputTarget::from_builder(self.builder())
+    }
+
+    fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
+        self.builder.set_output_frame_identity(
+            identity.frame_id,
+            identity.parent_id,
+            identity.parent_x,
+            identity.parent_y,
+            identity.z_order,
+            identity.undecorated,
+            identity.border_width,
+            identity.border_color,
+            identity.background_alpha,
+            identity.no_accept_focus,
+        );
+    }
+
+    fn set_background_color(&mut self, color: Color) {
+        self.builder.set_output_background_color(color);
+    }
+
+    fn background_color(&self) -> Color {
+        *self.builder.background_color()
+    }
+
+    fn set_font_pixel_size(&mut self, font_pixel_size: f32) {
+        self.builder.set_output_font_pixel_size(font_pixel_size);
+    }
+
+    fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        install_output_resolved_face(self.builder(), face_id, face, metrics);
+    }
+
+    fn add_background(&mut self, bounds: Rect, color: Color) {
+        self.builder.add_output_background(bounds, color);
+    }
+
+    fn add_window_info(&mut self, info: WindowInfo) {
+        self.builder.add_output_window_info(info);
+    }
+
+    fn latest_window_info(&self) -> Option<WindowInfo> {
+        self.builder.window_infos().last().cloned()
+    }
+
+    fn window_infos(&self) -> &[WindowInfo] {
+        self.builder.window_infos()
+    }
+
+    fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
+        self.builder.add_output_transition_hint(hint);
+    }
+
+    fn transition_hints(&self) -> &[WindowTransitionHint] {
+        self.builder.transition_hints()
+    }
+
+    fn add_effect_hint(&mut self, hint: WindowEffectHint) {
+        self.builder.add_output_effect_hint(hint);
+    }
+
+    fn add_border(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: Color,
+    ) {
+        self.builder
+            .add_output_border(window_id, x, y, width, height, color);
+    }
+
+    fn add_scroll_bar(&mut self, item: ScrollBarItem) {
+        self.builder.add_output_scroll_bar(item);
+    }
+
+    fn window_cursor_y(&self, info: &WindowInfo) -> Option<f32> {
+        let in_window = |x: f32, y: f32, hollow: bool| -> bool {
+            !hollow
+                && x >= info.bounds.x
+                && x < info.bounds.x + info.bounds.width
+                && y >= info.bounds.y
+                && y < info.bounds.y + info.bounds.height
+        };
+        if let Some(phys) = self.builder.phys_cursor()
+            && in_window(phys.x, phys.y, phys.style.is_hollow())
+        {
+            return Some(phys.y);
+        }
+        for cursor in self.builder.cursors() {
+            if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
+                return Some(cursor.y);
+            }
+        }
+        None
+    }
+
+    fn content_height_before_minibuffer(&self, frame_height: f32) -> f32 {
+        self.builder
+            .window_infos()
+            .iter()
+            .find(|w| w.is_minibuffer)
+            .map_or(frame_height, |w| w.bounds.y)
     }
 }
 
@@ -245,24 +383,13 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         if let Some(identity) = self.identity {
-            state.set_output_frame_identity(
-                identity.frame_id,
-                identity.parent_id,
-                identity.parent_x,
-                identity.parent_y,
-                identity.z_order,
-                identity.undecorated,
-                identity.border_width,
-                identity.border_color,
-                identity.background_alpha,
-                identity.no_accept_focus,
-            );
+            state.set_frame_identity(identity);
         }
-        state.set_output_background_color(self.background_color);
-        state.set_output_font_pixel_size(self.font_pixel_size);
-        install_output_resolved_face(state, 0, self.default_face, self.default_metrics);
+        state.set_background_color(self.background_color);
+        state.set_font_pixel_size(self.font_pixel_size);
+        state.install_resolved_face(0, self.default_face, self.default_metrics);
     }
 }
 
@@ -310,12 +437,12 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
         Self { params, metadata }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
-        state.add_output_background(
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
+        state.add_background(
             self.params.bounds,
             Color::from_pixel(self.params.default_bg),
         );
-        state.add_output_window_info(WindowInfo {
+        state.add_window_info(WindowInfo {
             window_id: self.params.window_id,
             buffer_id: self.params.buffer_id,
             window_start: self.params.window_start,
@@ -350,27 +477,27 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
 
     pub(crate) fn render_latest_and_apply(
         self,
-        state: &mut DisplayOutputBuilder,
+        mut state: FrameOutputTarget<'_>,
         curr_window_infos: &mut HashMap<i64, WindowInfo>,
     ) {
-        let Some(curr) = state.window_infos().last().cloned() else {
+        let Some(curr) = state.latest_window_info() else {
             return;
         };
-        self.record_transition_hint(state, &curr);
+        self.record_transition_hint(state.reborrow(), &curr);
         self.record_effect_hints(state, &curr);
         curr_window_infos.insert(curr.window_id, curr);
     }
 
-    fn record_transition_hint(&self, state: &mut DisplayOutputBuilder, curr: &WindowInfo) {
+    fn record_transition_hint(&self, mut state: FrameOutputTarget<'_>, curr: &WindowInfo) {
         let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
             return;
         };
         if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, curr) {
-            state.add_output_transition_hint(hint);
+            state.add_transition_hint(hint);
         }
     }
 
-    fn record_effect_hints(&self, state: &mut DisplayOutputBuilder, curr: &WindowInfo) {
+    fn record_effect_hints(&self, mut state: FrameOutputTarget<'_>, curr: &WindowInfo) {
         if curr.is_minibuffer {
             return;
         }
@@ -383,7 +510,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         }
 
         if prev.buffer_id != curr.buffer_id {
-            state.add_output_effect_hint(WindowEffectHint::TextFadeIn {
+            state.add_effect_hint(WindowEffectHint::TextFadeIn {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
             });
@@ -400,21 +527,21 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             -1
         };
         let delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-        state.add_output_effect_hint(WindowEffectHint::TextFadeIn {
+        state.add_effect_hint(WindowEffectHint::TextFadeIn {
             window_id: curr.window_id,
             bounds: curr.bounds,
         });
-        state.add_output_effect_hint(WindowEffectHint::ScrollLineSpacing {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            direction,
-        });
-        state.add_output_effect_hint(WindowEffectHint::ScrollMomentum {
+        state.add_effect_hint(WindowEffectHint::ScrollLineSpacing {
             window_id: curr.window_id,
             bounds: curr.bounds,
             direction,
         });
-        state.add_output_effect_hint(WindowEffectHint::ScrollVelocityFade {
+        state.add_effect_hint(WindowEffectHint::ScrollMomentum {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            direction,
+        });
+        state.add_effect_hint(WindowEffectHint::ScrollVelocityFade {
             window_id: curr.window_id,
             bounds: curr.bounds,
             delta,
@@ -438,7 +565,7 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         for (window_id, curr) in self.curr_window_infos {
             if curr.is_minibuffer {
                 continue;
@@ -456,13 +583,13 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
                 continue;
             }
 
-            if let Some(edit_y) = find_window_cursor_y_in_state(state, curr) {
+            if let Some(edit_y) = state.window_cursor_y(curr) {
                 let offset = if curr.buffer_size > prev.buffer_size {
                     -curr.char_height
                 } else {
                     curr.char_height
                 };
-                state.add_output_effect_hint(WindowEffectHint::LineAnimation {
+                state.add_effect_hint(WindowEffectHint::LineAnimation {
                     window_id: curr.window_id,
                     bounds: curr.bounds,
                     edit_y: edit_y + curr.char_height,
@@ -484,7 +611,7 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let new_selected = state
             .window_infos()
             .iter()
@@ -492,10 +619,7 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
             if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
-                state.add_output_effect_hint(WindowEffectHint::WindowSwitchFade {
-                    window_id,
-                    bounds,
-                });
+                state.add_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
             }
             *self.prev_selected_window_id = window_id;
         }
@@ -521,14 +645,14 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
-        let bg = *state.background_color();
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
+        let bg = state.background_color();
         let new_bg = (bg.r, bg.g, bg.b, bg.a);
         if let Some(old_bg) = *self.prev_background
             && color_changed_for_theme_transition(old_bg, new_bg)
         {
-            let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
-            state.add_output_effect_hint(WindowEffectHint::ThemeTransition {
+            let full_h = state.content_height_before_minibuffer(self.frame_height);
+            state.add_effect_hint(WindowEffectHint::ThemeTransition {
                 bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
             });
         }
@@ -558,7 +682,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         if self.prev_window_infos.is_empty() {
             return;
         }
@@ -576,8 +700,8 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
             return;
         }
 
-        let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
-        state.add_output_transition_hint(WindowTransitionHint {
+        let full_h = state.content_height_before_minibuffer(self.frame_height);
+        state.add_transition_hint(WindowTransitionHint {
             window_id: 0,
             bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
             kind: WindowTransitionKind::Crossfade,
@@ -587,27 +711,6 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
     }
 }
 
-fn find_window_cursor_y_in_state(state: &DisplayOutputBuilder, info: &WindowInfo) -> Option<f32> {
-    let in_window = |x: f32, y: f32, hollow: bool| -> bool {
-        !hollow
-            && x >= info.bounds.x
-            && x < info.bounds.x + info.bounds.width
-            && y >= info.bounds.y
-            && y < info.bounds.y + info.bounds.height
-    };
-    if let Some(phys) = state.phys_cursor()
-        && in_window(phys.x, phys.y, phys.style.is_hollow())
-    {
-        return Some(phys.y);
-    }
-    for cursor in state.cursors() {
-        if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
-            return Some(cursor.y);
-        }
-    }
-    None
-}
-
 fn color_changed_for_theme_transition(
     old_bg: (f32, f32, f32, f32),
     new_bg: (f32, f32, f32, f32),
@@ -615,14 +718,6 @@ fn color_changed_for_theme_transition(
     (new_bg.0 - old_bg.0).abs() > 0.02
         || (new_bg.1 - old_bg.1).abs() > 0.02
         || (new_bg.2 - old_bg.2).abs() > 0.02
-}
-
-fn frame_content_height_before_minibuffer(state: &DisplayOutputBuilder, frame_height: f32) -> f32 {
-    state
-        .window_infos()
-        .iter()
-        .find(|w| w.is_minibuffer)
-        .map_or(frame_height, |w| w.bounds.y)
 }
 
 fn non_minibuffer_window_ids(window_infos: &HashMap<i64, WindowInfo>) -> HashSet<i64> {
@@ -657,17 +752,18 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
 
     pub(crate) fn render_and_apply(
         self,
-        state: &mut DisplayOutputBuilder,
+        mut state: FrameOutputTarget<'_>,
         mut render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        WindowScrollBarsRenderRequest::new(self.params, self.info).render_and_apply(state);
-        self.render_right_divider(state, render_services.reborrow());
+        WindowScrollBarsRenderRequest::new(self.params, self.info)
+            .render_and_apply(state.reborrow());
+        self.render_right_divider(state.reborrow(), render_services.reborrow());
         self.render_bottom_divider(state);
     }
 
     fn render_right_divider(
         &self,
-        state: &mut DisplayOutputBuilder,
+        mut state: FrameOutputTarget<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
         if self.params.is_minibuffer() || self.geometry.is_rightmost {
@@ -696,7 +792,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         }
 
         if self.frame_params.window_system {
-            state.add_output_border(
+            state.add_border(
                 self.params.window_id,
                 self.geometry.right_edge - 1.0,
                 self.params.bounds.y,
@@ -706,11 +802,11 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
             );
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(TextWindowOutputTarget::from_builder(state), render_services);
+                .install_and_apply(state.text_window_output_target(), render_services);
         }
     }
 
-    fn render_bottom_divider(&self, state: &mut DisplayOutputBuilder) {
+    fn render_bottom_divider(&self, state: FrameOutputTarget<'_>) {
         if self.params.is_minibuffer()
             || self.geometry.is_bottommost
             || self.frame_params.bottom_divider_width <= 0
@@ -775,14 +871,14 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         }
     }
 
-    fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         if self.width <= 0.0 || self.height <= 0.0 {
             return;
         }
 
         let inner = Color::from_pixel(self.frame_params.divider_fg);
         if self.primary_size() < 3.0 {
-            state.add_output_border(
+            state.add_border(
                 self.window_id,
                 self.x,
                 self.y,
@@ -797,8 +893,8 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         let last = Color::from_pixel(self.frame_params.divider_last_fg);
         match self.orientation {
             WindowDividerOrientation::Vertical => {
-                state.add_output_border(self.window_id, self.x, self.y, 1.0, self.height, first);
-                state.add_output_border(
+                state.add_border(self.window_id, self.x, self.y, 1.0, self.height, first);
+                state.add_border(
                     self.window_id,
                     self.x + 1.0,
                     self.y,
@@ -806,7 +902,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     self.height,
                     inner,
                 );
-                state.add_output_border(
+                state.add_border(
                     self.window_id,
                     self.x + self.width - 1.0,
                     self.y,
@@ -816,8 +912,8 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                 );
             }
             WindowDividerOrientation::Horizontal => {
-                state.add_output_border(self.window_id, self.x, self.y, self.width, 1.0, first);
-                state.add_output_border(
+                state.add_border(self.window_id, self.x, self.y, self.width, 1.0, first);
+                state.add_border(
                     self.window_id,
                     self.x,
                     self.y + 1.0,
@@ -825,7 +921,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     (self.height - 2.0).max(0.0),
                     inner,
                 );
-                state.add_output_border(
+                state.add_border(
                     self.window_id,
                     self.x,
                     self.y + self.height - 1.0,
@@ -864,7 +960,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
         Self { params, info }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut DisplayOutputBuilder) {
+    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
         let chrome_top = self.params.header_line_height + self.params.tab_line_height;
@@ -894,7 +990,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 track_height,
             );
 
-            state.add_output_scroll_bar(ScrollBarItem {
+            state.add_scroll_bar(ScrollBarItem {
                 window_id: self.params.window_id,
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
@@ -935,7 +1031,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 0.0
             };
 
-            state.add_output_scroll_bar(ScrollBarItem {
+            state.add_scroll_bar(ScrollBarItem {
                 window_id: self.params.window_id,
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
