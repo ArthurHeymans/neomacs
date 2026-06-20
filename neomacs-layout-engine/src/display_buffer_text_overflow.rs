@@ -13,8 +13,7 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceRenderItemKind,
-    BufferTextSourceStepChar,
+    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -321,11 +320,7 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        match self.source_item.kind() {
-            BufferTextSourceRenderItemKind::Direct => {
-                self.render_direct_and_apply(source_walk, buffer, state)
-            }
-        }
+        self.render_direct_and_apply(source_walk, buffer, state)
     }
 
     fn render_direct_and_apply<B: LayoutBufferView>(
@@ -334,15 +329,8 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        let Ok(source_item) = self.source_item.into_direct() else {
-            debug_assert!(
-                false,
-                "split-text-run buffer source item entered direct render branch"
-            );
-            return BufferTextSourceItemRenderOutcome::Stop;
-        };
         BufferTextDirectSourceItemRenderRequest {
-            source_item,
+            source_item: self.source_item,
             context: self.context,
         }
         .render_and_apply(source_walk, buffer, state)

@@ -2026,7 +2026,6 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
 
     assert_eq!(position.byte_idx(), 1);
     assert_eq!(position.charpos(), 0);
-    assert_eq!(step.kind(), BufferTextSourceRenderItemKind::Direct);
     assert_eq!(step.source_char().ch(), 'a');
     let (_, source_item) = step.into_parts();
     match &source_item.kind {
@@ -2175,11 +2174,10 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         .consume(&mut position)
         .ok()
         .expect("multi-char text run remains a direct source item");
-    assert_eq!(step.kind(), BufferTextSourceRenderItemKind::Direct);
     assert_eq!(step.source_char().ch(), 'a');
     assert_eq!(position, BufferTextSourcePosition::new(2, 0));
 
-    let direct = step.into_direct().ok().expect("direct item");
+    let direct = step;
     let (first, pending) = direct
         .split_text_run_items(0)
         .expect("direct multi-char text run splits for rendering");
@@ -2263,13 +2261,12 @@ fn buffer_text_source_consumption_state_splits_persistent_text_run() {
     let item = source_consumption
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("source item");
-    assert_eq!(item.kind(), BufferTextSourceRenderItemKind::Direct);
     assert_eq!(item.source_char().ch(), 'a');
     assert_eq!(item.source_char().start_byte_idx(), 0);
     assert_eq!(position.byte_idx(), 3);
     assert_eq!(position.charpos(), 0);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
-    let direct = item.into_direct().ok().expect("direct item");
+    let direct = item;
     let (first, pending) = direct
         .split_text_run_items(0)
         .expect("direct text run splits at render boundary");
@@ -6366,10 +6363,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     );
 
     let outcome = BufferTextSourceItemRenderRequest::new(
-        BufferTextSourceRenderItem::Direct(BufferTextDirectDisplayItem::new(
-            source_step_char,
-            source_item,
-        )),
+        BufferTextDirectDisplayItem::new(source_step_char, source_item),
         BufferTextSourceItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,

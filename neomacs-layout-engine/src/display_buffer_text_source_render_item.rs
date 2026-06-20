@@ -24,15 +24,7 @@ pub(crate) struct BufferTextDirectDisplayItem {
     item: DisplayItem,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceRenderItem {
-    Direct(BufferTextDirectDisplayItem),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceRenderItemKind {
-    Direct,
-}
+pub(crate) type BufferTextSourceRenderItem = BufferTextDirectDisplayItem;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextDirectDisplayItemRequest {
@@ -100,6 +92,18 @@ impl BufferTextDirectDisplayItem {
         Self { source_char, item }
     }
 
+    pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
+        self.source_char
+    }
+
+    pub(crate) fn is_explicit_line_break(&self) -> bool {
+        matches!(
+            self.item.kind,
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn end_charpos(&self) -> i64 {
         display_item_buffer_end_charpos(&self.item)
@@ -163,63 +167,12 @@ impl BufferTextDirectDisplayItem {
         }
         let mut iter = items.into_iter();
         let first = iter.next()?;
-        let pending = iter.map(BufferTextSourceRenderItem::Direct).collect();
+        let pending = iter.collect();
         Some((first, pending))
     }
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         (self.source_char, self.item)
-    }
-}
-
-impl BufferTextSourceRenderItem {
-    pub(crate) fn kind(&self) -> BufferTextSourceRenderItemKind {
-        match self {
-            Self::Direct(_) => BufferTextSourceRenderItemKind::Direct,
-        }
-    }
-
-    pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
-        match self {
-            Self::Direct(item) => item.source_char,
-        }
-    }
-
-    pub(crate) fn is_explicit_line_break(&self) -> bool {
-        let item = match self {
-            Self::Direct(item) => &item.item,
-        };
-        matches!(
-            item.kind,
-            DisplayItemKind::RowBreak(row_break)
-                if row_break.reason == DisplayRowBreakReason::ExplicitNewline
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn end_charpos(&self) -> i64 {
-        match self {
-            Self::Direct(item) => item.end_charpos(),
-        }
-    }
-
-    pub(crate) fn end_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
-        match self {
-            Self::Direct(item) => item.end_byte_idx(text_start_byte),
-        }
-    }
-
-    pub(crate) fn into_direct(self) -> Result<BufferTextDirectDisplayItem, Self> {
-        match self {
-            Self::Direct(item) => Ok(item),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
-        match self {
-            Self::Direct(item) => item.into_parts(),
-        }
     }
 }
 
@@ -233,7 +186,6 @@ impl BufferTextDirectDisplayItemRequest {
         position: &mut BufferTextSourcePosition,
     ) -> Result<BufferTextSourceRenderItem, BufferTextSourceItem> {
         Self::try_into_direct_display_item(self.item, position)
-            .map(BufferTextSourceRenderItem::Direct)
     }
 
     fn try_into_direct_display_item(
