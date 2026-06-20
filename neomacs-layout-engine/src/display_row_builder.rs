@@ -32,6 +32,12 @@ pub(crate) struct DisplayRowLayout {
     pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
 }
 
+impl DisplayRowLayout {
+    fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
+        DisplayRowTextNaturalAdvancePolicy::new(self.tab_policy.clone(), self.char_width_px)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayTabPolicy {
     pub(crate) origin_x_px: f32,
@@ -114,6 +120,13 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
         };
         measured.unwrap_or_else(|| {
             policy.resolve_with(self.natural_advance_request(), glyph_advance_px)
+        })
+    }
+
+    fn resolve_advance_px_with_writer(self, writer: &mut DisplayRowWriter<'_, '_, '_>) -> f32 {
+        let policy = writer.layout.natural_text_advance_policy();
+        self.resolve_advance_px(&policy, |ch, face_id, columns| {
+            writer.glyph_advance_px(ch, face_id, columns)
         })
     }
 }
@@ -907,7 +920,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 byte_offset,
                 &measurement,
             );
-            let advance = self.writer.text_char_advance_px(advance_request);
+            let advance = advance_request.resolve_advance_px_with_writer(&mut self.writer);
             if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
                 status = DisplayRowAppendStatus::Clipped;
                 break;
@@ -1161,7 +1174,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 );
             }
             DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
-                let advance = self.text_char_advance_px(advance_request);
+                let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_run_member_to_area(
                     &mut self.row,
                     self.area_index,
@@ -1172,7 +1185,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 );
             }
             DisplayRowTextNaturalAdvanceKind::FaceColumns { columns } if columns > 1 => {
-                let advance = self.text_char_advance_px(advance_request);
+                let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_wide_char_to_area(
                     &mut self.row,
                     self.area_index,
@@ -1183,7 +1196,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 );
             }
             DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => {
-                let advance = self.text_char_advance_px(advance_request);
+                let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_char_to_area(
                     &mut self.row,
                     self.area_index,
@@ -1204,16 +1217,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
             glyph.vertical_offset_px = vertical_offset_px;
         }
-    }
-
-    fn text_char_advance_px(&mut self, request: DisplayRowTextCharAdvanceRequest<'_>) -> f32 {
-        let policy = DisplayRowTextNaturalAdvancePolicy::new(
-            self.layout.tab_policy.clone(),
-            self.layout.char_width_px,
-        );
-        request.resolve_advance_px(&policy, |ch, face_id, columns| {
-            self.glyph_advance_px(ch, face_id, columns)
-        })
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
@@ -1247,29 +1250,18 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn current_text_position(&self) -> DisplayRowPosition {
+        let metrics = self.current_text_metrics();
         DisplayRowPosition {
-            x_px: self.layout.tab_policy.origin_x_px + self.current_text_width_px(),
-            col: usize::from(self.current_text_cols()),
+            x_px: self.layout.tab_policy.origin_x_px + metrics.width_px,
+            col: metrics.width_cols,
         }
     }
 
-    fn current_text_cols(&self) -> u16 {
-        self.row.glyphs[self.area_index]
-            .iter()
-            .filter(|glyph| !glyph.padding)
-            .map(|glyph| match &glyph.glyph_type {
-                GlyphType::Stretch { width_cols } => (*width_cols).max(1),
-                // A composed cluster occupies its `string-width` worth of
-                // cells (GNU `cmp->width`), matching the per-char advance in
-                // `from_glyphs` so the running column never disagrees with the
-                // buffer-side `current-column` when a TAB resumes the row.
-                GlyphType::Composite { text } => crate::composition::composed_cluster_cols(text)
-                    .min(usize::from(u16::MAX))
-                    as u16,
-                _ if glyph.wide => 2,
-                _ => 1,
-            })
-            .sum()
+    fn current_text_metrics(&self) -> DisplayRowWriteMetrics {
+        DisplayRowWriteMetrics::from_glyphs(
+            &self.row.glyphs[self.area_index],
+            self.layout.char_width_px,
+        )
     }
 
     fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: usize) -> f32 {
@@ -1385,31 +1377,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             DisplayStretchWidth::AlignTo(expr) => {
                 let target = self.length_expr_pixels(expr)?;
-                let current = self.current_text_width_px();
+                let current = self.current_text_metrics().width_px;
                 let pixels = (target - current).max(0.0);
                 let cols = (pixels / self.layout.char_width_px.max(1.0)).round() as u16;
                 Some((cols, pixels))
             }
         }
-    }
-
-    fn current_text_width_px(&self) -> f32 {
-        self.row.glyphs[self.area_index]
-            .iter()
-            .map(|glyph| match glyph.glyph_type {
-                GlyphType::Stretch { width_cols } => {
-                    if glyph.pixel_width > 0.0 {
-                        glyph.pixel_width
-                    } else {
-                        f32::from(width_cols) * self.layout.char_width_px.max(1.0)
-                    }
-                }
-                _ if glyph.pixel_width > 0.0 => glyph.pixel_width,
-                _ if glyph.wide => self.layout.char_width_px.max(1.0) * 2.0,
-                _ if glyph.padding => 0.0,
-                _ => self.layout.char_width_px.max(1.0),
-            })
-            .sum()
     }
 
     fn length_pixels(&self, length: &DisplayLength, em_px: f32) -> Option<f32> {
