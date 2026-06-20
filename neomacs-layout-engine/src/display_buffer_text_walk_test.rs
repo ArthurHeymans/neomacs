@@ -1,9 +1,9 @@
 use super::*;
 use crate::display_buffer_text_render::{
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowTailDecorationState, BufferTextWindowTailRequestContext,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetupRequest,
 };
+use crate::display_buffer_text_tail_decoration::BufferTextWindowTailDecorationState;
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowGeometryState, DisplayRowMarker};
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::{Color, Rect};
