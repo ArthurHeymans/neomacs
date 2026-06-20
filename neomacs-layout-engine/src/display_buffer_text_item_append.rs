@@ -1,7 +1,7 @@
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_render::{
-    BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
-    BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
+    BufferTextConsumedDisplayItemRenderState, BufferTextSourceAppendContinuation,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
     BufferTextSpecialSourceCharRenderState,
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
@@ -650,7 +650,7 @@ impl BufferTextSourceCharPreparedAppend {
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
         ch: char,
-        state: &mut BufferTextSourceCharRenderState<'_>,
+        state: &mut BufferTextConsumedDisplayItemRenderState<'_>,
     ) -> BufferTextSourceAppendContinuation {
         let Some(outcome) = self.append_to_text_row(context, geometry, &mut state.source_render)
         else {

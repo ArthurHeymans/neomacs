@@ -6106,7 +6106,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         &append_context,
         &geometry,
         ' ',
-        &mut BufferTextSourceCharRenderState::new(
+        &mut BufferTextConsumedDisplayItemRenderState::new(
             text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
@@ -6217,9 +6217,9 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
     );
 
-    let outcome = BufferTextSourceCharRenderRequest::new(
+    let outcome = BufferTextConsumedDisplayItemRenderRequest::new(
         BufferTextConsumedDisplayItem::new(source_step_char, source_item),
-        BufferTextSourceCharRenderContext::new(
+        BufferTextConsumedDisplayItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,
                 &face_resolver,
@@ -6258,7 +6258,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     )
     .render_and_apply(
         &snapshot,
-        BufferTextSourceCharRenderRequestState::new(
+        BufferTextConsumedDisplayItemRenderRequestState::new(
             &mut append_state,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -6285,7 +6285,10 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         ),
     );
 
-    assert_eq!(outcome, BufferTextSourceCharRenderOutcome::Rendered);
+    assert_eq!(
+        outcome,
+        BufferTextConsumedDisplayItemRenderOutcome::Rendered
+    );
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 8.0);

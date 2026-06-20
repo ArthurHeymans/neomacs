@@ -690,7 +690,7 @@ struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
-struct BufferTextConsumedDisplayItemRenderRequest<'a> {
+struct BufferTextWindowConsumedDisplayItemRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     source_item: BufferTextConsumedDisplayItem,
     text: &'a [u8],
@@ -857,7 +857,7 @@ impl BufferTextWindowLoopRequestContext {
         )
     }
 
-    pub(crate) fn source_char_request<'a>(
+    pub(crate) fn consumed_display_item_request<'a>(
         self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
         source_item: BufferTextConsumedDisplayItem,
@@ -867,10 +867,10 @@ impl BufferTextWindowLoopRequestContext {
         active_face_state: &'a DisplayRowActiveFaceState,
         params: &'a WindowParams,
         glyph_y_offset: f32,
-    ) -> BufferTextSourceCharRenderRequest<'a> {
-        BufferTextSourceCharRenderRequest::new(
+    ) -> BufferTextConsumedDisplayItemRenderRequest<'a> {
+        BufferTextConsumedDisplayItemRenderRequest::new(
             source_item,
-            BufferTextSourceCharRenderContext::new(
+            BufferTextConsumedDisplayItemRenderContext::new(
                 layout_resolution_context,
                 text,
                 self.text_start_byte,
@@ -2896,7 +2896,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         match consumed_source {
             BufferTextConsumedSourceItem::DisplayItem(source_item) => {
                 return self.render_consumed_display_item_for_context(
-                    BufferTextConsumedDisplayItemRenderRequest {
+                    BufferTextWindowConsumedDisplayItemRenderRequest {
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
                         source_item,
@@ -2960,10 +2960,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
 
     fn render_consumed_display_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        request: BufferTextConsumedDisplayItemRenderRequest<'request>,
+        request: BufferTextWindowConsumedDisplayItemRenderRequest<'request>,
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
-        let BufferTextConsumedDisplayItemRenderRequest {
+        let BufferTextWindowConsumedDisplayItemRenderRequest {
             layout_resolution_context,
             source_item,
             text,
@@ -2994,7 +2994,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 return BufferTextWindowLoopStepOutcome::StopBufferWalk;
             }
         } else {
-            let char_render_outcome = self.render_source_char_for_context(
+            let char_render_outcome = self.render_text_consumed_display_item_for_context(
                 layout_resolution_context,
                 source_item,
                 text,
@@ -3077,7 +3077,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 };
                 self.progress.apply_source_position(source_position);
                 self.render_consumed_display_item_for_context(
-                    BufferTextConsumedDisplayItemRenderRequest {
+                    BufferTextWindowConsumedDisplayItemRenderRequest {
                         layout_resolution_context,
                         source_item: source_step,
                         text,
@@ -3258,7 +3258,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_line_break(request, buffer)
     }
 
-    fn render_source_char_for_context<'request, B: LayoutBufferView>(
+    fn render_text_consumed_display_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: BufferTextConsumedDisplayItem,
@@ -3266,11 +3266,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,
         buffer: &B,
-    ) -> BufferTextSourceCharRenderOutcome
+    ) -> BufferTextConsumedDisplayItemRenderOutcome
     where
         'surface: 'request,
     {
-        let request = self.loop_context.source_char_request(
+        let request = self.loop_context.consumed_display_item_request(
             layout_resolution_context,
             source_item,
             text,
@@ -3280,7 +3280,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             params,
             0.0,
         );
-        self.render_source_char(request, buffer)
+        self.render_text_consumed_display_item(request, buffer)
     }
 
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
@@ -3380,14 +3380,14 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         )
     }
 
-    fn render_source_char<B: LayoutBufferView>(
+    fn render_text_consumed_display_item<B: LayoutBufferView>(
         &mut self,
-        request: BufferTextSourceCharRenderRequest<'_>,
+        request: BufferTextConsumedDisplayItemRenderRequest<'_>,
         buffer: &B,
-    ) -> BufferTextSourceCharRenderOutcome {
+    ) -> BufferTextConsumedDisplayItemRenderOutcome {
         request.render_and_apply(
             buffer,
-            BufferTextSourceCharRenderRequestState::new(
+            BufferTextConsumedDisplayItemRenderRequestState::new(
                 self.append_state,
                 self.progress.reborrow(),
                 self.source_render.reborrow(),
@@ -6658,13 +6658,13 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
     row_y_positions: &'a mut DisplayRowYPositions,
 }
 
-pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
+pub(crate) struct BufferTextConsumedDisplayItemRenderRequest<'a> {
     source_item: BufferTextConsumedDisplayItem,
-    context: BufferTextSourceCharRenderContext<'a>,
+    context: BufferTextConsumedDisplayItemRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextSourceCharRenderContext<'a> {
+pub(crate) struct BufferTextConsumedDisplayItemRenderContext<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     text: &'a [u8],
     text_start_byte: usize,
@@ -6685,7 +6685,7 @@ pub(crate) struct BufferTextSourceCharRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
+pub(crate) struct BufferTextConsumedDisplayItemRenderRequestState<'a, 'emit> {
     append_state: &'emit mut BufferTextRowAppendState,
     progress: BufferTextWindowProgressState<'emit>,
     source_render: TextRowSourceRenderState<'emit>,
@@ -6777,7 +6777,7 @@ impl<'a, 'emit> BufferTextSpecialOverflowRenderState<'a, 'emit> {
     }
 }
 
-impl<'a, 'emit> BufferTextSourceCharRenderRequestState<'a, 'emit> {
+impl<'a, 'emit> BufferTextConsumedDisplayItemRenderRequestState<'a, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         append_state: &'emit mut BufferTextRowAppendState,
@@ -6925,20 +6925,20 @@ pub(crate) enum BufferTextSourceAppendContinuation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceCharRenderOutcome {
+pub(crate) enum BufferTextConsumedDisplayItemRenderOutcome {
     Rendered,
     ContinueBufferWalk,
     Stop,
 }
 
-pub(crate) struct BufferTextSourceCharRenderState<'a> {
+pub(crate) struct BufferTextConsumedDisplayItemRenderState<'a> {
     pub(crate) source_render: TextRowSourceRenderState<'a>,
     pub(crate) trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
     pub(crate) word_wrap: &'a mut WordWrapRenderState,
     pub(crate) progress: BufferTextWindowProgressState<'a>,
 }
 
-impl<'a> BufferTextSourceCharRenderState<'a> {
+impl<'a> BufferTextConsumedDisplayItemRenderState<'a> {
     pub(crate) fn new(
         source_render: TextRowSourceRenderState<'a>,
         trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
@@ -6986,7 +6986,7 @@ impl BufferTextSourceAppendContinuation {
     }
 }
 
-impl BufferTextSourceCharRenderOutcome {
+impl BufferTextConsumedDisplayItemRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
     }
@@ -7015,7 +7015,7 @@ impl BufferTextOverflowRenderOutcome {
     }
 }
 
-impl<'a> BufferTextSourceCharRenderContext<'a> {
+impl<'a> BufferTextConsumedDisplayItemRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
@@ -7060,10 +7060,10 @@ impl<'a> BufferTextSourceCharRenderContext<'a> {
     }
 }
 
-impl<'a> BufferTextSourceCharRenderRequest<'a> {
+impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
     pub(crate) fn new(
         source_item: BufferTextConsumedDisplayItem,
-        context: BufferTextSourceCharRenderContext<'a>,
+        context: BufferTextConsumedDisplayItemRenderContext<'a>,
     ) -> Self {
         debug_assert_ne!(source_item.source_char().ch(), '\n');
         Self {
@@ -7075,9 +7075,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
         buffer: &B,
-        state: BufferTextSourceCharRenderRequestState<'_, '_>,
-    ) -> BufferTextSourceCharRenderOutcome {
-        let BufferTextSourceCharRenderRequestState {
+        state: BufferTextConsumedDisplayItemRenderRequestState<'_, '_>,
+    ) -> BufferTextConsumedDisplayItemRenderOutcome {
+        let BufferTextConsumedDisplayItemRenderRequestState {
             append_state,
             mut progress,
             source_render,
@@ -7187,10 +7187,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     ),
                 );
                 if special_overflow_outcome.should_break() {
-                    return BufferTextSourceCharRenderOutcome::Stop;
+                    return BufferTextConsumedDisplayItemRenderOutcome::Stop;
                 }
                 if special_overflow_outcome.should_continue_buffer_walk() {
-                    return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+                    return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
                 }
 
                 if special_prepared_append
@@ -7208,9 +7208,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     )
                     .should_break()
                 {
-                    return BufferTextSourceCharRenderOutcome::Stop;
+                    return BufferTextConsumedDisplayItemRenderOutcome::Stop;
                 }
-                return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+                return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
             }
             BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
         };
@@ -7254,10 +7254,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             ),
         );
         if overflow_outcome.should_break() {
-            return BufferTextSourceCharRenderOutcome::Stop;
+            return BufferTextConsumedDisplayItemRenderOutcome::Stop;
         }
         if overflow_outcome.should_continue_buffer_walk() {
-            return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+            return BufferTextConsumedDisplayItemRenderOutcome::ContinueBufferWalk;
         }
 
         {
@@ -7315,7 +7315,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 &buffer_row_append_context,
                 &append_geometry,
                 ch,
-                &mut BufferTextSourceCharRenderState::new(
+                &mut BufferTextConsumedDisplayItemRenderState::new(
                     source_render.reborrow(),
                     trailing_whitespace,
                     word_wrap,
@@ -7324,13 +7324,13 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             )
             .should_break()
         {
-            return BufferTextSourceCharRenderOutcome::Stop;
+            return BufferTextConsumedDisplayItemRenderOutcome::Stop;
         }
         if let Some(end_charpos) = source_end_charpos {
             *progress.charpos = (*progress.charpos).max(end_charpos);
         }
 
-        BufferTextSourceCharRenderOutcome::Rendered
+        BufferTextConsumedDisplayItemRenderOutcome::Rendered
     }
 }
 
