@@ -130,14 +130,6 @@ impl BufferTextReplacementItem {
 }
 
 impl BufferTextReplacementSourceAnchor {
-    pub(crate) fn byte_idx(self) -> usize {
-        self.byte_idx
-    }
-
-    pub(crate) fn charpos(self) -> i64 {
-        self.charpos
-    }
-
     pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
         self.byte_idx == byte_idx && self.charpos == charpos
     }

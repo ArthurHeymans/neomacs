@@ -282,6 +282,115 @@ impl BufferTextSourcePosition {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BufferTextSourceAlignmentRequest {
+    text_start_byte: usize,
+    position: BufferTextSourcePosition,
+    source_char: Option<char>,
+}
+
+impl BufferTextSourceAlignmentRequest {
+    fn new(
+        text_start_byte: usize,
+        position: BufferTextSourcePosition,
+        source_char: Option<char>,
+    ) -> Self {
+        Self {
+            text_start_byte,
+            position,
+            source_char,
+        }
+    }
+
+    fn for_position(text_start_byte: usize, position: BufferTextSourcePosition) -> Self {
+        Self::new(text_start_byte, position, None)
+    }
+
+    fn align_display_item(self, item: DisplayItem) -> Option<BufferTextSourceItem> {
+        let DisplaySourcePosition::Buffer { byte_pos, .. } = item.span.start else {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: typed cursor yielded a non-buffer-span item; \
+                 a display property escaped the render_next_step checkpoints"
+            );
+            return None;
+        };
+        let start_byte_idx = byte_pos.get().checked_sub(self.text_start_byte)?;
+        if start_byte_idx != self.position.byte_idx() {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: typed cursor byte position {} did not match \
+                 buffer walk byte index {}",
+                start_byte_idx,
+                self.position.byte_idx()
+            );
+            return None;
+        }
+        let DisplaySourcePosition::Buffer { char_pos, .. } = item.span.start else {
+            unreachable!("buffer byte position match implies buffer source position");
+        };
+        let start_charpos = char_pos.get() as i64;
+        if start_charpos != self.position.charpos() {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: typed cursor char position {} did not match \
+                 buffer walk char position {}",
+                start_charpos,
+                self.position.charpos()
+            );
+            return None;
+        }
+        Some(BufferTextSourceItem::new(
+            item,
+            start_byte_idx,
+            start_charpos,
+            self.source_char,
+        ))
+    }
+
+    fn replacement_matches(self, item: &BufferTextReplacementItem) -> Option<bool> {
+        let anchor = item.source_anchor(self.text_start_byte)?;
+        Some(anchor.matches(self.position.byte_idx(), self.position.charpos()))
+    }
+
+    fn split_text_item_start(self, item: &DisplayItem) -> Option<(usize, i64)> {
+        let DisplaySourcePosition::Buffer {
+            char_pos, byte_pos, ..
+        } = &item.span.start
+        else {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer-span item"
+            );
+            return None;
+        };
+        let start_byte_idx = byte_pos.get().checked_sub(self.text_start_byte)?;
+        let start_charpos = char_pos.get() as i64;
+        if !self.position.matches(start_byte_idx, start_charpos) {
+            tracing::debug!(
+                "BufferTextConsumedItemAdapter: split text run at byte {} charpos {} did not \
+                 match buffer walk byte {} charpos {}",
+                start_byte_idx,
+                start_charpos,
+                self.position.byte_idx(),
+                self.position.charpos()
+            );
+            return None;
+        }
+        Some((start_byte_idx, start_charpos))
+    }
+
+    fn split_text_item_end_byte_idx(self, item: &DisplayItem) -> Option<usize> {
+        let DisplaySourcePosition::Buffer {
+            byte_pos: end_byte_pos,
+            ..
+        } = &item.span.end
+        else {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer end span"
+            );
+            return None;
+        };
+        end_byte_pos.get().checked_sub(self.text_start_byte)
+    }
+}
+
 /// A single source character aligned with the current buffer byte and char
 /// positions for the row walk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -566,7 +675,8 @@ impl BufferTextConsumedItemAdapter {
 
         let source_char = source.char_at(expected_source_pos);
         let item = source.next_item(context)?;
-        self.validate_source_item(item, *position, source_char)
+        BufferTextSourceAlignmentRequest::new(self.text_start_byte, *position, source_char)
+            .align_display_item(item)
     }
 
     fn next_buffer_walk_item_from_source<B: LayoutBufferView + ?Sized>(
@@ -590,18 +700,22 @@ impl BufferTextConsumedItemAdapter {
         let source_char = source.char_at(expected_source_pos);
         match source.next_buffer_walk_item(context)? {
             BufferTextSourceCursorItem::Item(item) => {
-                let item = self.validate_source_item(item, *position, source_char)?;
+                let item = BufferTextSourceAlignmentRequest::new(
+                    self.text_start_byte,
+                    *position,
+                    source_char,
+                )
+                .align_display_item(item)?;
                 self.consumed_display_item_from_source_item(item, position)
                     .map(BufferTextConsumedSourceItem::DisplayItem)
             }
             BufferTextSourceCursorItem::Replacement(item) => {
-                let anchor = item.source_anchor(self.text_start_byte)?;
-                if !anchor.matches(position.byte_idx(), position.charpos()) {
+                if !BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
+                    .replacement_matches(&item)?
+                {
                     tracing::error!(
-                        "BufferTextConsumedItemAdapter: display replacement at byte {:?} charpos {} \
-                         did not match buffer walk byte {} charpos {}",
-                        anchor.byte_idx(),
-                        anchor.charpos(),
+                        "BufferTextConsumedItemAdapter: display replacement did not match \
+                         buffer walk byte {} charpos {}",
                         position.byte_idx(),
                         position.charpos()
                     );
@@ -631,7 +745,8 @@ impl BufferTextConsumedItemAdapter {
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextConsumedDisplayItem> {
-        let item = self.validate_source_item(item, *position, None)?;
+        let item = BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
+            .align_display_item(item)?;
         self.consumed_display_item_from_source_item(item, position)
     }
 
@@ -656,53 +771,6 @@ impl BufferTextConsumedItemAdapter {
             Err(item) => item,
         };
         self.split_text_run_item(item, position)
-    }
-
-    fn validate_source_item(
-        &self,
-        item: DisplayItem,
-        position: BufferTextSourcePosition,
-        source_char: Option<char>,
-    ) -> Option<BufferTextSourceItem> {
-        let buffer_byte_pos = match item.span.start {
-            DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
-            _ => {
-                tracing::error!(
-                    "BufferTextConsumedItemAdapter: typed cursor yielded a non-buffer-span item; \
-                     a display property escaped the render_next_step checkpoints"
-                );
-                return None;
-            }
-        };
-        let start_byte_idx = buffer_byte_pos.get().checked_sub(self.text_start_byte)?;
-        if start_byte_idx != position.byte_idx() {
-            tracing::error!(
-                "BufferTextConsumedItemAdapter: typed cursor byte position {} did not match \
-                 buffer walk byte index {}",
-                start_byte_idx,
-                position.byte_idx()
-            );
-            return None;
-        }
-        let DisplaySourcePosition::Buffer { char_pos, .. } = item.span.start else {
-            unreachable!("buffer byte position match implies buffer source position");
-        };
-        let start_charpos = char_pos.get() as i64;
-        if start_charpos != position.charpos() {
-            tracing::error!(
-                "BufferTextConsumedItemAdapter: typed cursor char position {} did not match \
-                 buffer walk char position {}",
-                start_charpos,
-                position.charpos()
-            );
-            return None;
-        }
-        Some(BufferTextSourceItem::new(
-            item,
-            start_byte_idx,
-            start_charpos,
-            source_char,
-        ))
     }
 
     fn split_text_run_item(
@@ -747,38 +815,8 @@ impl BufferTextConsumedItemAdapter {
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextConsumedDisplayItem> {
-        let DisplaySourcePosition::Buffer {
-            char_pos, byte_pos, ..
-        } = &item.span.start
-        else {
-            tracing::error!(
-                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer-span item"
-            );
-            return None;
-        };
-        let start_byte_idx = byte_pos.get().checked_sub(text_start_byte)?;
-        let start_charpos = char_pos.get() as i64;
-        if !position.matches(start_byte_idx, start_charpos) {
-            tracing::debug!(
-                "BufferTextConsumedItemAdapter: split text run at byte {} charpos {} did not \
-                 match buffer walk byte {} charpos {}",
-                start_byte_idx,
-                start_charpos,
-                position.byte_idx(),
-                position.charpos()
-            );
-            return None;
-        }
-        let DisplaySourcePosition::Buffer {
-            byte_pos: end_byte_pos,
-            ..
-        } = &item.span.end
-        else {
-            tracing::error!(
-                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer end span"
-            );
-            return None;
-        };
+        let alignment = BufferTextSourceAlignmentRequest::for_position(text_start_byte, *position);
+        let (start_byte_idx, start_charpos) = alignment.split_text_item_start(&item)?;
         let ch = match &item.kind {
             DisplayItemKind::TextRun(run) => {
                 let mut chars = run.text.chars();
@@ -798,7 +836,7 @@ impl BufferTextConsumedItemAdapter {
                 return None;
             }
         };
-        let end_byte_idx = end_byte_pos.get().checked_sub(text_start_byte)?;
+        let end_byte_idx = alignment.split_text_item_end_byte_idx(&item)?;
         position.advance_byte_idx_to(end_byte_idx);
         Some(BufferTextConsumedDisplayItem::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
