@@ -6,17 +6,18 @@
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_item_append::{
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext,
     BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
+use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::{
     BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
-use crate::display_cursor::{CursorCaptureState, capture_cursor_info};
+use crate::display_cursor::capture_cursor_info;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -107,24 +108,8 @@ pub(crate) struct BufferTextConsumedDisplayItemRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextConsumedDisplayItemRenderRequestState<'a, 'emit> {
-    append_state: &'emit mut BufferTextRowAppendState,
-    progress: BufferTextWindowProgressState<'emit>,
-    source_render: TextRowSourceRenderState<'emit>,
-    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    line_numbers: &'emit mut LineNumberRenderState,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    row_flags: &'emit mut DisplayRowFlags,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    prefix_request: &'emit mut DisplayRowPrefixRequest,
-    hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    word_wrap: &'emit mut WordWrapRenderState,
-    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    face_scan: &'emit mut FaceScanCheckpoint,
-    row_y_positions: &'a mut DisplayRowYPositions,
-    cursor_info: &'emit mut CursorCaptureState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+pub(crate) struct BufferTextConsumedDisplayItemRenderRequestState<'rows, 'emit, 'surface> {
+    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
 impl<'a, 'emit> BufferTextOverflowRenderState<'a, 'emit> {
@@ -199,46 +184,11 @@ impl<'a, 'emit> BufferTextSpecialOverflowRenderState<'a, 'emit> {
     }
 }
 
-impl<'a, 'emit> BufferTextConsumedDisplayItemRenderRequestState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        append_state: &'emit mut BufferTextRowAppendState,
-        progress: BufferTextWindowProgressState<'emit>,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        line_numbers: &'emit mut LineNumberRenderState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        row_y_positions: &'a mut DisplayRowYPositions,
-        cursor_info: &'emit mut CursorCaptureState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            append_state,
-            progress,
-            source_render,
-            row_extend,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-            face_scan,
-            row_y_positions,
-            cursor_info,
-            face_ids,
-        }
+impl<'rows, 'emit, 'surface>
+    BufferTextConsumedDisplayItemRenderRequestState<'rows, 'emit, 'surface>
+{
+    pub(crate) fn new(state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>) -> Self {
+        Self { state }
     }
 }
 
@@ -498,9 +448,10 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextConsumedDisplayItemRenderRequestState<'_, '_>,
+        state: BufferTextConsumedDisplayItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextConsumedDisplayItemRenderOutcome {
-        let BufferTextConsumedDisplayItemRenderRequestState {
+        let BufferTextConsumedDisplayItemRenderRequestState { state } = state;
+        let BufferTextWindowLoopMutableState {
             append_state,
             mut progress,
             source_render,
@@ -518,6 +469,7 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
             row_y_positions,
             cursor_info,
             face_ids,
+            ..
         } = state;
         let mut source_render = source_render;
         let context = self.context;

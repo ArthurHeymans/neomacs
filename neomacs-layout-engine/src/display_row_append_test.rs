@@ -16,6 +16,7 @@ use crate::display_buffer_text_append::{
 };
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::*;
+use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
@@ -6285,9 +6286,11 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut byte_idx = 1;
     let source_step_char = BufferTextSourceStepChar::new('a', 0, 0);
     let mut append_state = BufferTextRowAppendState::default();
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
     let mut col = 0;
     let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
     let mut x = 0.0;
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
@@ -6360,29 +6363,35 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         &mut source_walk,
         &snapshot,
         BufferTextConsumedDisplayItemRenderRequestState::new(
-            &mut append_state,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-            text_row_source_render_state(
-                &mut context.builder,
-                &mut context.output_emitter,
-                &mut context.eval,
-                &mut font_metrics,
-                &face_resolver,
+            BufferTextWindowLoopMutableState::new(
+                &mut append_state,
+                &mut invisible_text_checkpoint,
+                BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+                text_row_source_render_state(
+                    &mut context.builder,
+                    &mut context.output_emitter,
+                    &mut context.eval,
+                    &mut font_metrics,
+                    &face_resolver,
+                ),
+                &mut row_extend,
+                &mut box_face,
+                &mut line_numbers,
+                &mut context.geometry,
+                &mut context.row_flags,
+                &mut context.hit_rows,
+                &mut hit_row_range,
+                &mut prefix_request,
+                &mut hscroll_skip,
+                &mut word_wrap,
+                &mut trailing_whitespace,
+                &mut face_scan,
+                &mut context.row_y_positions,
+                &mut cursor_info,
+                &mut face_ids,
+                &surface,
+                overlay_context,
             ),
-            &mut row_extend,
-            &mut line_numbers,
-            &mut context.geometry,
-            &mut context.row_flags,
-            &mut context.hit_rows,
-            &mut hit_row_range,
-            &mut prefix_request,
-            &mut hscroll_skip,
-            &mut word_wrap,
-            &mut trailing_whitespace,
-            &mut face_scan,
-            &mut context.row_y_positions,
-            &mut cursor_info,
-            &mut face_ids,
         ),
     );
 

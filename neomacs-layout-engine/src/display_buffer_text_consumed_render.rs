@@ -254,25 +254,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
         request.render_and_apply(
             source_walk,
             buffer,
-            BufferTextConsumedDisplayItemRenderRequestState::new(
-                self.state.append_state,
-                self.state.progress.reborrow(),
-                self.state.source_render.reborrow(),
-                self.state.row_extend,
-                self.state.line_numbers,
-                self.state.row_geometry,
-                self.state.row_flags,
-                self.state.hit_rows,
-                self.state.hit_row_range,
-                self.state.prefix_request,
-                self.state.hscroll_skip,
-                self.state.word_wrap,
-                self.state.trailing_whitespace,
-                self.state.face_scan,
-                self.state.row_y_positions,
-                self.state.cursor_info,
-                self.state.face_ids,
-            ),
+            BufferTextConsumedDisplayItemRenderRequestState::new(self.state.reborrow()),
         )
     }
 }

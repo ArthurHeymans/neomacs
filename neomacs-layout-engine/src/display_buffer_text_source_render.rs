@@ -9,7 +9,9 @@ use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_source_consumption::BufferTextConsumedDisplayItem;
+use crate::display_buffer_text_source_consumption::{
+    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem,
+};
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::neovm_bridge::LayoutBufferView;
@@ -20,12 +22,6 @@ pub(crate) enum BufferTextWindowSourceRenderOutcome {
     DisplayItem(BufferTextConsumedDisplayItem),
     ContinueBufferWalk,
     StopBufferWalk,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum BufferTextWindowSourceRenderItem {
-    DisplayItem(BufferTextConsumedDisplayItem),
-    Replacement(BufferTextReplacementItem),
 }
 
 pub(crate) struct BufferTextWindowSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face> {
@@ -80,17 +76,15 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.state.face_ids,
             &mut self.state.source_render.reborrow(),
             self.state.row_geometry,
-            BufferTextWindowSourceRenderItem::DisplayItem,
-            BufferTextWindowSourceRenderItem::Replacement,
         ) else {
             return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
         };
 
         match source_item {
-            BufferTextWindowSourceRenderItem::DisplayItem(source_item) => {
+            BufferTextSourceConsumptionItem::DisplayItem(source_item) => {
                 BufferTextWindowSourceRenderOutcome::DisplayItem(source_item)
             }
-            BufferTextWindowSourceRenderItem::Replacement(replacement) => {
+            BufferTextSourceConsumptionItem::Replacement(replacement) => {
                 self.consume_replacement(source_walk, replacement, buffer)
             }
         }
