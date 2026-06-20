@@ -20,6 +20,7 @@ use super::window_output::{
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringSourceRenderRequest, DisplayRowOwner,
     DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
@@ -28,7 +29,6 @@ use crate::display_row::{
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
-use crate::display_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;

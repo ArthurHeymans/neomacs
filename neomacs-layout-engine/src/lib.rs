@@ -48,6 +48,7 @@ pub(crate) mod display_output_window_request;
 pub(crate) mod display_output_window_state;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;
+pub(crate) mod display_rendered_row_output_install;
 pub(crate) mod display_row;
 pub(crate) mod display_row_append_context;
 pub(crate) mod display_row_builder;
