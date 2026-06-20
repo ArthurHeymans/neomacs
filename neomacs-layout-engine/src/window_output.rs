@@ -452,17 +452,6 @@ pub(crate) fn restore_text_window_retry_checkpoint(
     );
 }
 
-fn install_display_text_row_metrics(
-    output_builder: &mut DisplayOutputBuilder,
-    display_row_index: usize,
-    metrics: DisplayTextRowMetrics,
-) -> DisplayTextRowStoredMetrics {
-    install_text_output_row_metrics(
-        output_builder,
-        display_text_row_metrics_request(display_row_index, metrics),
-    )
-}
-
 fn display_text_row_metrics_request(
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
@@ -479,17 +468,6 @@ fn finish_output_rows(
     output_builder: &mut DisplayOutputBuilder,
     output_emitter: &WindowOutputEmitter,
 ) {
-    for metric in output_emitter.row_metrics() {
-        let _ = install_display_text_row_metrics(
-            output_builder,
-            metric.display_row_index,
-            DisplayTextRowMetrics {
-                y: metric.pixel_y,
-                height: metric.height,
-                ascent: metric.ascent,
-            },
-        );
-    }
     if let Some(metric) = output_emitter.row_metrics().last() {
         finalize_display_text_row(output_builder, metric.display_row_index);
     }
