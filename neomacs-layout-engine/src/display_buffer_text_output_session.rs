@@ -10,7 +10,6 @@ use crate::display_buffer_text_tail_render::{
 };
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
-use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::WindowHitData;
 use crate::neovm_bridge::FaceResolver;
@@ -36,19 +35,6 @@ pub(crate) struct BufferTextWindowRenderAttemptContext<'a, 'face> {
     pub(crate) frame_face_id_counter: &'a mut u32,
     pub(crate) hit_data: &'a mut Vec<WindowHitData>,
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-}
-
-pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    pub(crate) output: TextWindowOutputTarget<'output>,
-    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
-}
-
-pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
-    pub(crate) output: TextWindowOutputTarget<'output>,
-    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
-    pub(crate) evaluator: &'output mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,36 +114,6 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
             font_metrics,
             face_resolver,
         )
-    }
-}
-
-impl<'emit, 'output, 'face> BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    pub(crate) fn new(
-        output: TextWindowOutputTarget<'output>,
-        output_emitter: &'output mut WindowOutputEmitter,
-        render_services: ChromeRowRenderServices<'emit, 'face>,
-    ) -> Self {
-        Self {
-            output,
-            output_emitter,
-            render_services,
-        }
-    }
-}
-
-impl<'emit, 'output, 'face> BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
-    pub(crate) fn new(
-        output: TextWindowOutputTarget<'output>,
-        output_emitter: &'output mut WindowOutputEmitter,
-        evaluator: &'output mut Context,
-        render_services: ChromeRowRenderServices<'emit, 'face>,
-    ) -> Self {
-        Self {
-            output,
-            output_emitter,
-            evaluator,
-            render_services,
-        }
     }
 }
 

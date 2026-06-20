@@ -7,9 +7,9 @@ use crate::display_buffer_text_body_render::BufferTextWindowWalkSetup;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_output_session::{
-    BufferTextWindowBodyInstallPublishState, BufferTextWindowOutputState,
-    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderAttemptContext,
-    BufferTextWindowRenderAttemptOutcome, BufferTextWindowRetryPlan,
+    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
+    BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
+    BufferTextWindowRetryPlan,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::BufferTextWindowSource;
@@ -555,12 +555,10 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         let mut render_services =
             ChromeRowRenderServices::new(font_metrics, face_resolver, face_ids);
         let redisplay_positions = walk_setup.install_body_and_publish_redisplay(
-            BufferTextWindowBodyInstallPublishState::new(
-                output.reborrow(),
-                &mut self.output_emitter,
-                evaluator,
-                render_services.reborrow(),
-            ),
+            output.reborrow(),
+            &mut self.output_emitter,
+            evaluator,
+            render_services.reborrow(),
             &self.tail_context,
             self.publish_request,
         );
