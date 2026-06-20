@@ -2,8 +2,8 @@ use crate::display_buffer_text_render::SyntheticTextSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
-    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowSourceState,
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowRenderPolicy, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
@@ -75,9 +75,7 @@ pub(crate) fn measure_single_display_item_width_with_policy<P: DisplayRowRenderP
     let face_id = render_face_ref_id(item.face, fallback_face_id);
     let mut item = item.clone();
     item.face = RenderFaceRef::FaceId(face_id);
-    let request = frame
-        .source_render_request(position, face_id, base_face, kind)
-        .with_render_bounds(DisplayRowRenderBounds::unbounded_from(position));
+    let request = frame.source_append_measure_request(position, face_id, base_face, kind);
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut source = DisplayItemOnceSource::new(item);
     let mut source_state = DisplayRowSourceState::default();

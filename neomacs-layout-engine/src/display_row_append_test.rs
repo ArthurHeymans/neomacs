@@ -5343,6 +5343,43 @@ fn display_row_append_frame_builds_source_request_directly() {
 }
 
 #[test]
+fn display_row_append_frame_builds_source_measure_request() {
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = resolver.default_face();
+    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+
+    let request = frame
+        .source_append_measure_request(position, 42, base_face, DisplayRowAppendKind::SourceText)
+        .row_request();
+
+    assert_eq!(request.render_bounds().start, position);
+    assert_eq!(request.render_bounds().max_x, DisplayRowMaxX::Unbounded);
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.role(), GlyphRowRole::Text);
+    assert_eq!(request.geometry().char_width, 9.0);
+}
+
+#[test]
 fn display_row_source_append_render_request_uses_frame_policy() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
