@@ -93,7 +93,7 @@ struct DisplayItemSourceMeasureRequest<'frame, 'face> {
     kind: DisplayRowAppendKind,
 }
 
-pub(crate) struct SingleDisplayItemSourceRequest<'frame, 'face> {
+struct SingleDisplayItemSourceRequest<'frame, 'face> {
     base_face: &'face ResolvedFace,
     fallback_face_id: u32,
     frame: &'frame DisplayRowAppendFrame,
@@ -257,7 +257,7 @@ impl SyntheticTextMarker {
 }
 
 impl<'a> SyntheticTextRowAppendContext<'a> {
-    pub(crate) fn new(
+    fn new(
         append_surface: &'a DisplayRowAppendSurface,
         geometry: &'a DisplayRowGeometryState,
         active_face: &'a DisplayRowActiveFaceState,
@@ -649,7 +649,7 @@ where
     )
 }
 
-pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
+fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     state: &mut TextRowSourceRenderState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
     render_policy: &mut P,
@@ -678,7 +678,7 @@ pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     Some(outcome.into_append_progress(prepared.position))
 }
 
-pub(crate) fn render_single_display_item_naturally(
+fn render_single_display_item_naturally(
     state: &mut TextRowSourceRenderState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
 ) -> Option<DisplayRowAppendProgress> {
@@ -686,7 +686,7 @@ pub(crate) fn render_single_display_item_naturally(
     render_single_display_item_with_policy(state, request, &mut render_policy)
 }
 
-pub(crate) fn measure_single_display_item_width_with_policy<P: DisplayRowRenderPolicy>(
+fn measure_single_display_item_width_with_policy<P: DisplayRowRenderPolicy>(
     state: &mut TextRowSourceMeasureState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
     render_policy: &mut P,
@@ -720,7 +720,7 @@ pub(crate) fn measure_single_display_item_width_with_policy<P: DisplayRowRenderP
     )
 }
 
-pub(crate) fn measure_single_display_item_width_naturally(
+fn measure_single_display_item_width_naturally(
     state: &mut TextRowSourceMeasureState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
 ) -> Option<f32> {
@@ -728,7 +728,7 @@ pub(crate) fn measure_single_display_item_width_naturally(
     measure_single_display_item_width_with_policy(state, request, &mut render_policy)
 }
 
-pub(crate) fn measure_single_display_item_width_with_source_fallback(
+fn measure_single_display_item_width_with_source_fallback(
     state: &mut TextRowSourceMeasureState<'_>,
     request: SingleDisplayItemSourceRequest<'_, '_>,
     fallback_width: DisplaySourceFallbackWidth,
