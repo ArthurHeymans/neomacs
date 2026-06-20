@@ -2,9 +2,11 @@
 
 use std::collections::VecDeque;
 
-use crate::display_buffer_text_source::{BufferTextDisplayReplacementMode, BufferTextSourceCursor};
+use crate::display_buffer_text_source::{
+    BufferTextCursorItem, BufferTextDisplayReplacementMode, BufferTextSourceCursor,
+};
 use crate::display_item::{
-    BufferDisplayPropertyReplacementItem, DisplayItem, DisplayItemKind, DisplaySourcePosition,
+    BufferDisplayPropertyReplacementItem, DisplayItem, DisplaySourcePosition,
 };
 use crate::display_source::{DisplaySourceContext, DisplaySourceItem, DisplaySourceTextPosition};
 use crate::neovm_bridge::LayoutBufferView;
@@ -129,7 +131,7 @@ impl BufferSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: DisplaySourceTextPosition,
         replacement_mode: BufferTextDisplayReplacementMode,
-    ) -> Option<(DisplayItem, Option<char>)> {
+    ) -> Option<(BufferTextCursorItem, Option<char>)> {
         let expected_source_pos = Self::expected_source_pos(position);
         if source.current_char_pos() != expected_source_pos {
             source.reset_to(expected_source_pos);
@@ -137,7 +139,7 @@ impl BufferSourceConsumptionState {
 
         let source_char = source.char_at(expected_source_pos);
         let item = source.next_cursor_item(context, replacement_mode)?;
-        if let DisplayItemKind::BufferDisplayPropertyReplacement(replacement) = &item.kind {
+        if let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = &item {
             if !self.replacement_matches(position, replacement)? {
                 tracing::error!(
                     "BufferSourceConsumptionState: display replacement did not match \
@@ -175,14 +177,12 @@ impl BufferSourceConsumptionState {
             *position,
             BufferTextDisplayReplacementMode::InlineSourceItems,
         )?;
-        if matches!(
-            item.0.kind,
-            DisplayItemKind::BufferDisplayPropertyReplacement(_)
-        ) {
+        let (item, source_char) = item;
+        let BufferTextCursorItem::Item(item) = item else {
             debug_assert!(false, "inline source cursor surfaced a buffer replacement");
             return None;
-        }
-        self.align_display_item(*position, item.1, item.0)
+        };
+        self.align_display_item(*position, source_char, item)
     }
 
     pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
@@ -201,12 +201,15 @@ impl BufferSourceConsumptionState {
             *position,
             BufferTextDisplayReplacementMode::TypedReplacementItem,
         )?;
-        if let DisplayItemKind::BufferDisplayPropertyReplacement(replacement) = item.0.kind {
+        if let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = item.0 {
             return Some(BufferSourceConsumedItem::DisplayPropertyReplacement(
                 replacement,
             ));
         }
-        let item = self.align_display_item(*position, item.1, item.0)?;
+        let BufferTextCursorItem::Item(display_item) = item.0 else {
+            unreachable!("replacement cursor item handled above");
+        };
+        let item = self.align_display_item(*position, item.1, display_item)?;
         let item = self.consume_aligned_display_item(item, position)?;
         self.prepare_render_source_item(item)
             .map(BufferSourceConsumedItem::Renderable)

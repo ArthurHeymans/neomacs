@@ -180,7 +180,6 @@ pub(crate) enum DisplayItemKind {
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
     MediaReplacement(DisplayMediaReplacement),
-    BufferDisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
     RowBreak(DisplayRowBreak),
     #[allow(dead_code)]
     CursorAnchor(CursorAnchor),
@@ -421,27 +420,6 @@ impl BufferDisplayPropertyReplacementItem {
             start_charpos: self.start_charpos(),
             source_char,
         })
-    }
-
-    pub(crate) fn into_display_item(self, face: RenderFaceRef) -> DisplayItem {
-        let replacement_source = self.descriptor.replacement_source();
-        let span = SourceSpan::new(
-            DisplaySourcePosition::buffer(
-                replacement_source.buffer_id(),
-                self.start_charpos,
-                self.start_byte_pos,
-            ),
-            DisplaySourcePosition::buffer(
-                replacement_source.buffer_id(),
-                self.end_charpos,
-                self.end_byte_pos,
-            ),
-        );
-        DisplayItem::new(
-            span,
-            face,
-            DisplayItemKind::BufferDisplayPropertyReplacement(self),
-        )
     }
 }
 
