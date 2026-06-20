@@ -61,12 +61,6 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     tab_line_height: f32,
 }
 
-pub(crate) struct BufferTextWindowFinishInstallState<'a> {
-    pub(crate) finish_state: BufferTextWindowFinishState<'a>,
-    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-}
-
 pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     source_render: TextRowSourceRenderState<'emit>,
@@ -277,12 +271,15 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         )
     }
 
-    pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
-        let finished_window = self
-            .finish_request()
-            .finish_and_snapshot(state.finish_state);
-        state.hit_data.push(finished_window.hit_data);
-        state.display_snapshots.push(finished_window.snapshot);
+    pub(crate) fn finish_and_install(
+        &self,
+        finish_state: BufferTextWindowFinishState<'_>,
+        hit_data: &mut Vec<WindowHitData>,
+        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
+    ) {
+        let finished_window = self.finish_request().finish_and_snapshot(finish_state);
+        hit_data.push(finished_window.hit_data);
+        display_snapshots.push(finished_window.snapshot);
     }
 }
 

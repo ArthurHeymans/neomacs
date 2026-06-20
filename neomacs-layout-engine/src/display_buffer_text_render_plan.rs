@@ -14,9 +14,8 @@ use crate::display_buffer_text_render_attempt::{
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_tail_render::{
-    BufferTextWindowBodyInstallContext, BufferTextWindowFinishInstallState,
-    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowRetryBounds,
-    BufferTextWindowTailRequestContext,
+    BufferTextWindowBodyInstallContext, BufferTextWindowPostLoopRenderOutcome,
+    BufferTextWindowRetryBounds, BufferTextWindowTailRequestContext,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
@@ -539,17 +538,16 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
             chrome_request,
             render_services.reborrow(),
         );
-        self.tail_context
-            .finish_and_install(BufferTextWindowFinishInstallState {
-                finish_state: BufferTextWindowFinishState::new(
-                    output,
-                    self.output_emitter,
-                    evaluator,
-                    std::mem::take(&mut walk_setup.hit_rows),
-                ),
-                hit_data,
-                display_snapshots,
-            });
+        self.tail_context.finish_and_install(
+            BufferTextWindowFinishState::new(
+                output,
+                self.output_emitter,
+                evaluator,
+                std::mem::take(&mut walk_setup.hit_rows),
+            ),
+            hit_data,
+            display_snapshots,
+        );
         redisplay_positions
     }
 
