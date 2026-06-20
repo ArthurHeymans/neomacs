@@ -11,12 +11,11 @@ use super::display_status_line::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_item::DisplaySourcePosition;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
-use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
+use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_output_install::{
     DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
@@ -33,6 +32,7 @@ use crate::display_row_output_install::{
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
+use crate::display_row_text_output::{TextOutputSpan, TextOutputSpanContext};
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
@@ -70,32 +70,6 @@ struct CurrentRowProgress {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct TextOutputSpan {
-    buffer_pos: LispCharPos1,
-    row: usize,
-    row_y: f32,
-    glyph_y: f32,
-    height: f32,
-    start: DisplayRowPosition,
-    end: DisplayRowPosition,
-}
-
-impl TextOutputSpan {
-    fn can_merge(self, next: Self) -> bool {
-        self.buffer_pos == next.buffer_pos
-            && self.row == next.row
-            && self.row_y == next.row_y
-            && self.glyph_y == next.glyph_y
-            && self.height == next.height
-            && self.end == next.start
-    }
-
-    fn merge(&mut self, next: Self) {
-        self.end = next.end;
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextRowOutput {
     pub(crate) row: usize,
     pub(crate) row_y: f32,
@@ -104,25 +78,8 @@ pub(crate) struct TextRowOutput {
 }
 
 impl TextRowOutput {
-    fn span_for_buffer_slot(self, slot: &DisplayRowGlyphSlot) -> Option<TextOutputSpan> {
-        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
-            return None;
-        };
-        Some(TextOutputSpan {
-            buffer_pos: layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
-            row: self.row,
-            row_y: self.row_y,
-            glyph_y: self.glyph_y,
-            height: self.height,
-            start: DisplayRowPosition {
-                x_px: slot.x_px,
-                col: slot.col,
-            },
-            end: DisplayRowPosition {
-                x_px: slot.x_px + slot.width_px,
-                col: slot.col + slot.width_cols,
-            },
-        })
+    fn span_context(self) -> TextOutputSpanContext {
+        TextOutputSpanContext::new(self.row, self.row_y, self.glyph_y, self.height)
     }
 }
 
@@ -965,32 +922,16 @@ impl WindowOutputEmitter {
         &mut self,
         evaluator: &mut Context,
         output: TextRowOutput,
-        slots: &[DisplayRowGlyphSlot],
+        slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
         end: DisplayRowPosition,
     ) {
-        let mut emitted = false;
-        let mut pending_span: Option<TextOutputSpan> = None;
-        for slot in slots {
-            let Some(span) = output.span_for_buffer_slot(slot) else {
-                continue;
-            };
-            emitted = true;
-            if let Some(pending) = pending_span.as_mut()
-                && pending.can_merge(span)
-            {
-                pending.merge(span);
-                continue;
-            }
-            if let Some(pending) = pending_span.take() {
-                self.emit_text_output_span(evaluator, pending);
-            }
-            pending_span = Some(span);
-        }
-        if let Some(pending) = pending_span.take() {
-            self.emit_text_output_span(evaluator, pending);
-        }
-        if !emitted {
+        let spans = output.span_context().spans_for_source_slots(slots);
+        if spans.is_empty() {
             self.move_text_output_to(evaluator, output.row, end.col, output.row_y, end.x_px);
+            return;
+        }
+        for span in spans {
+            self.emit_text_output_span(evaluator, span);
         }
     }
 
