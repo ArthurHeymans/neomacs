@@ -150,12 +150,12 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     geometry: &DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
 ) -> bool {
-    let Some(_text) = source_item.ascii_text_run() else {
+    let Some(text) = source_item.ascii_text_run() else {
         return false;
     };
     if context.overlay_context.is_enabled()
         || word_wrap.is_enabled()
-        || trailing_whitespace.is_enabled()
+        || (trailing_whitespace.is_enabled() && text.contains(' '))
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
     {
@@ -217,9 +217,19 @@ fn capture_whole_text_run_cursor_if_point(
     );
 }
 
+fn apply_whole_text_run_trailing_whitespace_state(
+    text: &str,
+    trailing_whitespace: &mut TrailingWhitespaceRenderState,
+) {
+    if trailing_whitespace.is_enabled() && !text.contains(' ') {
+        trailing_whitespace.reset_after_row_transition();
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     source_item: DisplayItem,
+    source_text: &str,
     source_end_charpos: Option<i64>,
     source_end_byte_idx: Option<usize>,
     active_face_state: &DisplayRowActiveFaceState,
@@ -228,6 +238,7 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     position: DisplayRowPosition,
     point_charpos: i64,
     cursor_info: &mut CursorCaptureState,
+    trailing_whitespace: &mut TrailingWhitespaceRenderState,
     source_render: &mut TextRowSourceRenderState<'_>,
     progress: &mut DisplaySourceProgressState<'_>,
 ) -> BufferSourceItemRenderOutcome {
@@ -249,6 +260,7 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         point_charpos,
         &append_progress,
     );
+    apply_whole_text_run_trailing_whitespace_state(source_text, trailing_whitespace);
     progress.row.apply_position(append_progress.end);
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
@@ -339,10 +351,12 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &append_geometry,
         &mut source_render,
     ) {
+        let source_text = source_item.ascii_text_run().unwrap_or_default().to_owned();
         let (_source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
             source_item.into_render_parts();
         return render_whole_text_run_and_apply(
             source_item,
+            &source_text,
             source_end_charpos,
             source_end_byte_idx,
             &active_face_state,
@@ -351,6 +365,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             append_position,
             context.point_charpos,
             cursor_info,
+            trailing_whitespace,
             &mut source_render,
             &mut progress,
         );
