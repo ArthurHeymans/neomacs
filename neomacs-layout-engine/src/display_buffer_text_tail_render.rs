@@ -67,11 +67,6 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowPostLoopRenderState<'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
 pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     source_render: TextRowSourceRenderState<'emit>,
@@ -153,18 +148,6 @@ impl BufferTextWindowRetryBounds {
 
     pub(crate) fn text_area_bottom(self) -> i64 {
         self.text_area_bottom
-    }
-}
-
-impl<'emit> BufferTextWindowPostLoopRenderState<'emit> {
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            face_ids,
-        }
     }
 }
 

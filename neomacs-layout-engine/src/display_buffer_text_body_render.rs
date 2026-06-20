@@ -18,8 +18,8 @@ use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestCon
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_buffer_text_tail_render::{
-    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowPostLoopRenderState,
-    BufferTextWindowPostLoopState, BufferTextWindowTailRequestContext,
+    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowPostLoopState,
+    BufferTextWindowTailRequestContext,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
@@ -356,7 +356,8 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        state: &mut BufferTextWindowPostLoopRenderState<'_>,
+        source_render: TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         loop_context: BufferTextWindowLoopRequestContext,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
@@ -367,14 +368,14 @@ impl BufferTextWindowWalkSetup {
     ) -> BufferTextWindowPostLoopRenderOutcome {
         BufferTextWindowPostLoopState::new(
             loop_context,
-            state.source_render.reborrow(),
+            source_render,
             BufferTextWindowRowProgressState::new(&mut self.x, &mut self.col),
             &mut self.row_geometry,
             &mut self.cursor_info,
             &mut self.hit_rows,
             &mut self.hit_row_range,
             &mut self.row_y_positions,
-            state.face_ids,
+            face_ids,
             overlay_context,
         )
         .render_tail_and_decide_retry(
@@ -453,10 +454,8 @@ impl BufferTextWindowWalkSetup {
         );
 
         self.render_tail_and_decide_retry(
-            &mut BufferTextWindowPostLoopRenderState::new(
-                state.source_render.reborrow(),
-                state.face_ids,
-            ),
+            state.source_render.reborrow(),
+            state.face_ids,
             loop_context,
             tail_context,
             text,
