@@ -16,6 +16,7 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
+use crate::display_row_append_context::DisplayRowAppendSourceRenderRequest;
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_output_install::{
     DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
@@ -676,15 +677,15 @@ impl<'a> TextRowSourceRenderState<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        request: DisplayRowSourceRenderRequest<'_>,
-        output: TextRowOutput,
+        request: DisplayRowAppendSourceRenderRequest<'_>,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
+        let (row_request, output) = request.into_parts();
         let result = render_display_item_source_into_current_text_row(
             &mut current_text_render_state(self, face_ids),
             source,
             source_state,
-            request,
+            row_request,
             render_policy,
         )?;
         Some(

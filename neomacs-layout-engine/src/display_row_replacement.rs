@@ -125,7 +125,7 @@ impl DisplayReplacementStringSourceAppendRequest {
             return position;
         };
         let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-        let (request, output) = append_context.frame.source_render_parts(
+        let request = append_context.frame.source_append_render_request(
             position,
             append_context.face_id,
             append_context.base_face,
@@ -138,7 +138,6 @@ impl DisplayReplacementStringSourceAppendRequest {
             &mut source,
             &mut source_state,
             request,
-            output,
             &mut render_policy,
         ) else {
             return position;

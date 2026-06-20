@@ -491,6 +491,34 @@ pub(crate) struct DisplayRowAppendFrame {
     pub(crate) face_space_width: f32,
 }
 
+pub(crate) struct DisplayRowAppendSourceRenderRequest<'face> {
+    row_request: DisplayRowSourceRenderRequest<'face>,
+    output: TextRowOutput,
+}
+
+impl<'face> DisplayRowAppendSourceRenderRequest<'face> {
+    fn new(row_request: DisplayRowSourceRenderRequest<'face>, output: TextRowOutput) -> Self {
+        Self {
+            row_request,
+            output,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn row_request(self) -> DisplayRowSourceRenderRequest<'face> {
+        self.row_request
+    }
+
+    #[cfg(test)]
+    pub(crate) fn output(&self) -> TextRowOutput {
+        self.output
+    }
+
+    pub(crate) fn into_parts(self) -> (DisplayRowSourceRenderRequest<'face>, TextRowOutput) {
+        (self.row_request, self.output)
+    }
+}
+
 impl DisplayRowAppendFrame {
     pub(crate) fn width_for_columns(&self, columns: usize) -> f32 {
         columns as f32 * self.geometry.char_width.max(1.0)
@@ -536,14 +564,14 @@ impl DisplayRowAppendFrame {
         }
     }
 
-    pub(crate) fn source_render_parts<'face>(
+    pub(crate) fn source_append_render_request<'face>(
         &self,
         position: DisplayRowPosition,
         face_id: u32,
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
-    ) -> (DisplayRowSourceRenderRequest<'face>, TextRowOutput) {
-        (
+    ) -> DisplayRowAppendSourceRenderRequest<'face> {
+        DisplayRowAppendSourceRenderRequest::new(
             self.source_render_request(position, face_id, base_face, kind),
             self.text_row_output(kind),
         )

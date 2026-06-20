@@ -25,7 +25,7 @@ pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
     let face_id = render_face_ref_id(item.face, fallback_face_id);
     let mut item = item;
     item.face = RenderFaceRef::FaceId(face_id);
-    let (request, output) = frame.source_render_parts(position, face_id, base_face, kind);
+    let request = frame.source_append_render_request(position, face_id, base_face, kind);
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut source = DisplayItemOnceSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
@@ -34,7 +34,6 @@ pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
         &mut source,
         &mut source_state,
         request,
-        output,
         render_policy,
     )?;
     Some(outcome.into_append_progress(position))
@@ -148,7 +147,7 @@ pub(crate) fn append_synthetic_text_to_display_row(
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let (request, output) = frame.source_render_parts(
+    let request = frame.source_append_render_request(
         position,
         face_id,
         base_face,
@@ -160,7 +159,6 @@ pub(crate) fn append_synthetic_text_to_display_row(
         &mut source,
         &mut source_state,
         request,
-        output,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress(start))

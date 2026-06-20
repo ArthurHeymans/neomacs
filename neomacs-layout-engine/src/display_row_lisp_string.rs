@@ -115,7 +115,7 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let (request, output) = frame.source_render_parts(
+    let request = frame.source_append_render_request(
         position,
         base_face_id,
         base_face,
@@ -127,7 +127,6 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         source,
         source_state,
         request,
-        output,
         &mut render_policy,
     )
 }
