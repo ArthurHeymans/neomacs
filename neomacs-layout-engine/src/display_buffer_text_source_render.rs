@@ -84,14 +84,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 BufferTextWindowSourceRenderOutcome::DisplayItem(source_item)
             }
             BufferTextSourceConsumptionItem::Replacement(replacement) => {
-                self.consume_replacement(source_walk, replacement, buffer)
+                self.consume_replacement(replacement, buffer)
             }
         }
     }
 
     fn consume_replacement<B: LayoutBufferView>(
         mut self,
-        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         replacement: BufferTextReplacementItem,
         buffer: &B,
     ) -> BufferTextWindowSourceRenderOutcome {
@@ -125,12 +124,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
-                let Some(source_step) = source_walk
-                    .consume_fallback_source_item_for_render(source_item, &mut self.state.progress)
-                else {
-                    return BufferTextWindowSourceRenderOutcome::StopBufferWalk;
-                };
-                BufferTextWindowSourceRenderOutcome::DisplayItem(source_step)
+                BufferTextWindowSourceRenderOutcome::DisplayItem(source_item)
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
                 BufferTextWindowSourceRenderOutcome::StopBufferWalk

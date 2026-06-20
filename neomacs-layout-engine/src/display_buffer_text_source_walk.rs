@@ -16,7 +16,7 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState, BufferTextSourceItem,
+    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
 };
 use crate::display_buffer_text_source_render_item::BufferTextSourceRenderItem;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -44,11 +44,6 @@ struct BufferTextWindowSourceConsumption {
     source_item: Option<BufferTextSourceConsumptionItem>,
     source_position: BufferTextSourcePosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
-}
-
-struct BufferTextWindowFallbackSourceConsumption {
-    source_item: Option<BufferTextSourceRenderItem>,
-    source_position: BufferTextSourcePosition,
 }
 
 impl BufferTextWindowSourceConsumption {
@@ -82,16 +77,6 @@ impl BufferTextWindowSourceConsumption {
             pending_faces,
         );
         source_item
-    }
-}
-
-impl BufferTextWindowFallbackSourceConsumption {
-    fn apply_to_progress(
-        self,
-        progress: &mut BufferTextWindowProgressState<'_>,
-    ) -> Option<BufferTextSourceRenderItem> {
-        progress.apply_source_position(self.source_position);
-        self.source_item
     }
 }
 
@@ -186,29 +171,6 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             source_render,
             row_geometry,
         )
-    }
-
-    fn consume_fallback_source_item(
-        &mut self,
-        source_item: BufferTextSourceItem,
-        mut source_position: BufferTextSourcePosition,
-    ) -> BufferTextWindowFallbackSourceConsumption {
-        let source_item = self
-            .source_consumption
-            .consume_fallback_source_item(source_item, &mut source_position);
-        BufferTextWindowFallbackSourceConsumption {
-            source_item,
-            source_position,
-        }
-    }
-
-    pub(crate) fn consume_fallback_source_item_for_render(
-        &mut self,
-        source_item: BufferTextSourceItem,
-        progress: &mut BufferTextWindowProgressState<'_>,
-    ) -> Option<BufferTextSourceRenderItem> {
-        self.consume_fallback_source_item(source_item, progress.source_position())
-            .apply_to_progress(progress)
     }
 
     pub(crate) fn consume_hscroll_skip(

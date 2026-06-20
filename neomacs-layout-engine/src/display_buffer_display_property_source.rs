@@ -1,4 +1,6 @@
-use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
+use crate::display_buffer_text_source_render_item::{
+    BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceStepChar,
+};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -91,12 +93,12 @@ impl BufferTextReplacementItem {
         Some(text.get(self.start_byte_idx(text_start_byte)?..)?)
     }
 
-    pub(crate) fn fallback_source_item(
+    pub(crate) fn fallback_render_item(
         &self,
         text_start_byte: usize,
         text: &[u8],
         face: RenderFaceRef,
-    ) -> Option<BufferTextSourceItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         let start_byte_idx = self.start_byte_idx(text_start_byte)?;
         let end_byte_idx = self.end_byte_pos.get().checked_sub(text_start_byte)?;
         let source_text = std::str::from_utf8(text.get(start_byte_idx..end_byte_idx)?).ok()?;
@@ -120,11 +122,9 @@ impl BufferTextReplacementItem {
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
         );
-        Some(BufferTextSourceItem::new(
+        Some(BufferTextDirectDisplayItem::new(
+            BufferTextSourceStepChar::new(source_char?, start_byte_idx, self.start_charpos()),
             item,
-            start_byte_idx,
-            self.start_charpos(),
-            source_char,
         ))
     }
 }

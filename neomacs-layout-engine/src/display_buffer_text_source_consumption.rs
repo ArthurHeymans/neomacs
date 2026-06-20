@@ -286,14 +286,6 @@ impl BufferTextSourceConsumptionState {
         }
     }
 
-    pub(crate) fn consume_fallback_source_item(
-        &mut self,
-        item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
-        self.consume_aligned_display_item(item, position)
-    }
-
     #[cfg(test)]
     pub(crate) fn render_item_from_item(
         &mut self,
