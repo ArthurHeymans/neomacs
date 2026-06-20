@@ -2,11 +2,11 @@
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_loop_context::{
-    BufferTextWindowLoopRequestContext, BufferTextWindowLoweredDisplayItemRenderRequest,
+    BufferTextWindowLoopRequestContext, BufferTextWindowSourceItemRenderRequest,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
-    BufferTextLoweredDisplayItemRenderOutcome, BufferTextLoweredDisplayItemRenderRequestState,
+    BufferTextSourceItemRenderOutcome, BufferTextSourceItemRenderRequestState,
 };
 use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
@@ -23,23 +23,23 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextWindowLoweredRenderOutcome {
+pub(crate) enum BufferTextWindowSourceItemRenderOutcome {
     ContinueBufferWalk,
     StopBufferWalk,
 }
 
-pub(crate) struct BufferTextWindowLoweredRenderState<'rows, 'emit, 'surface> {
+pub(crate) struct BufferTextWindowSourceItemRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
-impl BufferTextWindowLoweredRenderOutcome {
+impl BufferTextWindowSourceItemRenderOutcome {
     pub(crate) fn should_stop_buffer_walk(self) -> bool {
         matches!(self, Self::StopBufferWalk)
     }
 }
 
-impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 'surface> {
+impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit, 'surface> {
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
         state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
@@ -53,13 +53,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
     pub(crate) fn render_for_context<'request, B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        request: BufferTextWindowLoweredDisplayItemRenderRequest<'request>,
+        request: BufferTextWindowSourceItemRenderRequest<'request>,
         buffer: &B,
-    ) -> BufferTextWindowLoweredRenderOutcome
+    ) -> BufferTextWindowSourceItemRenderOutcome
     where
         'surface: 'request,
     {
-        let BufferTextWindowLoweredDisplayItemRenderRequest {
+        let BufferTextWindowSourceItemRenderRequest {
             layout_resolution_context,
             source_item,
             text,
@@ -74,10 +74,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
             buffer,
         );
         if selective_display_outcome.should_break() {
-            return BufferTextWindowLoweredRenderOutcome::StopBufferWalk;
+            return BufferTextWindowSourceItemRenderOutcome::StopBufferWalk;
         }
         if selective_display_outcome.should_continue_buffer_walk() {
-            return BufferTextWindowLoweredRenderOutcome::ContinueBufferWalk;
+            return BufferTextWindowSourceItemRenderOutcome::ContinueBufferWalk;
         }
 
         let is_explicit_line_break = source_item.is_explicit_line_break();
@@ -94,10 +94,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
                 )
                 .should_break()
             {
-                return BufferTextWindowLoweredRenderOutcome::StopBufferWalk;
+                return BufferTextWindowSourceItemRenderOutcome::StopBufferWalk;
             }
         } else {
-            let char_render_outcome = self.render_text_lowered_display_item_for_context(
+            let char_render_outcome = self.render_text_source_item_for_context(
                 source_walk,
                 layout_resolution_context,
                 source_item,
@@ -107,15 +107,15 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
                 buffer,
             );
             if char_render_outcome.should_break() {
-                return BufferTextWindowLoweredRenderOutcome::StopBufferWalk;
+                return BufferTextWindowSourceItemRenderOutcome::StopBufferWalk;
             }
             if char_render_outcome.should_continue_buffer_walk() {
-                return BufferTextWindowLoweredRenderOutcome::ContinueBufferWalk;
+                return BufferTextWindowSourceItemRenderOutcome::ContinueBufferWalk;
             }
             *self.state.progress.charpos = (*self.state.progress.charpos).max(end_charpos);
         }
 
-        BufferTextWindowLoweredRenderOutcome::ContinueBufferWalk
+        BufferTextWindowSourceItemRenderOutcome::ContinueBufferWalk
     }
 
     fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
@@ -159,7 +159,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
         self.render_line_break(source_walk, request, buffer)
     }
 
-    fn render_text_lowered_display_item_for_context<'request, B: LayoutBufferView>(
+    fn render_text_source_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
@@ -168,11 +168,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,
         buffer: &B,
-    ) -> BufferTextLoweredDisplayItemRenderOutcome
+    ) -> BufferTextSourceItemRenderOutcome
     where
         'surface: 'request,
     {
-        let request = self.loop_context.lowered_display_item_request(
+        let request = self.loop_context.source_item_request(
             layout_resolution_context,
             source_item,
             text,
@@ -182,7 +182,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
             params,
             0.0,
         );
-        self.render_text_lowered_display_item(source_walk, request, buffer)
+        self.render_text_source_item(source_walk, request, buffer)
     }
 
     fn render_selective_display_tail<B: LayoutBufferView>(
@@ -243,16 +243,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoweredRenderState<'rows, 'emit, 's
         )
     }
 
-    fn render_text_lowered_display_item<B: LayoutBufferView>(
+    fn render_text_source_item<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        request: crate::display_buffer_text_overflow::BufferTextLoweredDisplayItemRenderRequest<'_>,
+        request: crate::display_buffer_text_overflow::BufferTextSourceItemRenderRequest<'_>,
         buffer: &B,
-    ) -> BufferTextLoweredDisplayItemRenderOutcome {
+    ) -> BufferTextSourceItemRenderOutcome {
         request.render_and_apply(
             source_walk,
             buffer,
-            BufferTextLoweredDisplayItemRenderRequestState::new(self.state.reborrow()),
+            BufferTextSourceItemRenderRequestState::new(self.state.reborrow()),
         )
     }
 }

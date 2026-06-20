@@ -2,7 +2,7 @@
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_overflow::{
-    BufferTextLoweredDisplayItemRenderContext, BufferTextLoweredDisplayItemRenderRequest,
+    BufferTextSourceItemRenderContext, BufferTextSourceItemRenderRequest,
 };
 use crate::display_buffer_text_row_lifecycle::{
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
@@ -44,7 +44,7 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowLoweredDisplayItemRenderRequest<'a> {
+pub(crate) struct BufferTextWindowSourceItemRenderRequest<'a> {
     pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     pub(crate) source_item: BufferTextSourceRenderItem,
     pub(crate) text: &'a [u8],
@@ -198,7 +198,7 @@ impl BufferTextWindowLoopRequestContext {
         )
     }
 
-    pub(crate) fn lowered_display_item_request<'a>(
+    pub(crate) fn source_item_request<'a>(
         self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
         source_item: BufferTextSourceRenderItem,
@@ -208,10 +208,10 @@ impl BufferTextWindowLoopRequestContext {
         active_face_state: &'a DisplayRowActiveFaceState,
         params: &'a WindowParams,
         glyph_y_offset: f32,
-    ) -> BufferTextLoweredDisplayItemRenderRequest<'a> {
-        BufferTextLoweredDisplayItemRenderRequest::new(
+    ) -> BufferTextSourceItemRenderRequest<'a> {
+        BufferTextSourceItemRenderRequest::new(
             source_item,
-            BufferTextLoweredDisplayItemRenderContext::new(
+            BufferTextSourceItemRenderContext::new(
                 layout_resolution_context,
                 text,
                 self.text_start_byte,

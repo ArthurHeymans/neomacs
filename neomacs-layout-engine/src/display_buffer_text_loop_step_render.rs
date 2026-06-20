@@ -2,14 +2,14 @@
 
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_loop_context::{
-    BufferTextWindowLoopRequestContext, BufferTextWindowLoweredDisplayItemRenderRequest,
+    BufferTextWindowLoopRequestContext, BufferTextWindowSourceItemRenderRequest,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_lowered_render::BufferTextWindowLoweredRenderState;
 use crate::display_buffer_text_pre_source_render::{
     BufferTextWindowPreSourceOutcome, BufferTextWindowPreSourceRenderState,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
+use crate::display_buffer_text_source_item_render::BufferTextWindowSourceItemRenderState;
 use crate::display_buffer_text_source_render::{
     BufferTextWindowSourceRenderOutcome, BufferTextWindowSourceRenderRequest,
 };
@@ -98,10 +98,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
             unreachable!("source render stop/continue outcomes handled above");
         };
         let consumed_outcome =
-            BufferTextWindowLoweredRenderState::new(self.loop_context, self.state.reborrow())
+            BufferTextWindowSourceItemRenderState::new(self.loop_context, self.state.reborrow())
                 .render_for_context(
                     source_walk,
-                    BufferTextWindowLoweredDisplayItemRenderRequest {
+                    BufferTextWindowSourceItemRenderRequest {
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
                         source_item,

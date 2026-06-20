@@ -6367,12 +6367,12 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
     );
 
-    let outcome = BufferTextLoweredDisplayItemRenderRequest::new(
+    let outcome = BufferTextSourceItemRenderRequest::new(
         BufferTextSourceRenderItem::Lowered(BufferTextLoweredDisplayItem::new(
             source_step_char,
             source_item,
         )),
-        BufferTextLoweredDisplayItemRenderContext::new(
+        BufferTextSourceItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,
                 &face_resolver,
@@ -6412,7 +6412,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     .render_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextLoweredDisplayItemRenderRequestState::new(BufferTextWindowLoopMutableState::new(
+        BufferTextSourceItemRenderRequestState::new(BufferTextWindowLoopMutableState::new(
             &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -6443,7 +6443,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         )),
     );
 
-    assert_eq!(outcome, BufferTextLoweredDisplayItemRenderOutcome::Rendered);
+    assert_eq!(outcome, BufferTextSourceItemRenderOutcome::Rendered);
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 8.0);
