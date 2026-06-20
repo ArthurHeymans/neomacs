@@ -130,10 +130,7 @@ impl FrameOutputOwner {
     }
 
     pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        self.builder
-            .windows()
-            .last()
-            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
+        self.builder.latest_window_enabled_rows()
     }
 
     pub(crate) fn render_frame_state(&mut self, request: FrameOutputStateRenderRequest<'_>) {

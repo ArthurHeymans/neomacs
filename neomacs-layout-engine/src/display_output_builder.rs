@@ -422,13 +422,13 @@ impl OutputWindowLifecycleRequest {
             }
             Self::End => {
                 if let Some(grid) = builder.current_row_grid.take() {
-                    builder.windows.push(WindowMatrixEntry {
-                        window_id: builder.current_window_id,
-                        matrix: grid.into_matrix(),
-                        pixel_bounds: builder.current_pixel_bounds,
-                        text_pixel_bounds: builder.current_text_pixel_bounds,
-                        selected: builder.current_selected,
-                    });
+                    builder.windows.push(OutputWindowGridEntry::new(
+                        builder.current_window_id,
+                        grid,
+                        builder.current_pixel_bounds,
+                        builder.current_text_pixel_bounds,
+                        builder.current_selected,
+                    ));
                 }
             }
         }
@@ -625,6 +625,14 @@ struct OutputWindowRowGrid {
     matrix: GlyphMatrix,
 }
 
+struct OutputWindowGridEntry {
+    window_id: u64,
+    grid: OutputWindowRowGrid,
+    pixel_bounds: Rect,
+    text_pixel_bounds: Rect,
+    selected: bool,
+}
+
 impl OutputWindowRowGrid {
     fn new(nrows: usize, ncols: usize) -> Self {
         Self {
@@ -634,6 +642,14 @@ impl OutputWindowRowGrid {
 
     fn into_matrix(self) -> GlyphMatrix {
         self.matrix
+    }
+
+    fn ensure_hashes(&mut self) {
+        self.matrix.ensure_hashes();
+    }
+
+    fn enabled_row_count(&self) -> usize {
+        self.matrix.rows.iter().filter(|row| row.enabled).count()
     }
 
     fn cursor_rows(&self) -> CursorVisualColumnRows<'_> {
@@ -656,9 +672,9 @@ impl OutputWindowRowGrid {
         decorator.decorate_row(row, ncols);
     }
 
-    fn decorate_matrix_rows<D: OutputRowDecorator>(matrix: &mut GlyphMatrix, decorator: &mut D) {
-        let ncols = matrix.ncols;
-        for row in &mut matrix.rows {
+    fn decorate_rows<D: OutputRowDecorator>(&mut self, decorator: &mut D) {
+        let ncols = self.matrix.ncols;
+        for row in &mut self.matrix.rows {
             decorator.decorate_row(row, ncols);
         }
     }
@@ -718,6 +734,48 @@ impl OutputWindowRowGrid {
     }
 }
 
+impl OutputWindowGridEntry {
+    fn new(
+        window_id: u64,
+        grid: OutputWindowRowGrid,
+        pixel_bounds: Rect,
+        text_pixel_bounds: Rect,
+        selected: bool,
+    ) -> Self {
+        Self {
+            window_id,
+            grid,
+            pixel_bounds,
+            text_pixel_bounds,
+            selected,
+        }
+    }
+
+    fn decorate_rows<D: OutputRowDecorator>(&mut self, decorator: &mut D) {
+        self.grid.decorate_rows(decorator);
+    }
+
+    fn enabled_row_count(&self) -> usize {
+        self.grid.enabled_row_count()
+    }
+
+    #[cfg(test)]
+    fn window_id(&self) -> u64 {
+        self.window_id
+    }
+
+    fn into_window_matrix_entry(mut self) -> WindowMatrixEntry {
+        self.grid.ensure_hashes();
+        WindowMatrixEntry {
+            window_id: self.window_id,
+            matrix: self.grid.into_matrix(),
+            pixel_bounds: self.pixel_bounds,
+            text_pixel_bounds: self.text_pixel_bounds,
+            selected: self.selected,
+        }
+    }
+}
+
 pub(crate) enum OutputRowDecorationInstallRequest<D> {
     CurrentWindowRow { row_idx: usize, decorator: D },
     LastWindowRows { decorator: D },
@@ -750,20 +808,20 @@ where
                 let Some(entry) = builder.windows.last_mut() else {
                     return;
                 };
-                OutputWindowRowGrid::decorate_matrix_rows(&mut entry.matrix, &mut decorator);
+                entry.decorate_rows(&mut decorator);
             }
         }
     }
 }
 
 pub(crate) struct DisplayOutputBuilder {
-    windows: Vec<WindowMatrixEntry>,
+    windows: Vec<OutputWindowGridEntry>,
     current_row_grid: Option<OutputWindowRowGrid>,
     current_window_id: u64,
     current_pixel_bounds: Rect,
     current_text_pixel_bounds: Rect,
     /// Whether the window currently open in the builder is the
-    /// selected window. Copied into `WindowMatrixEntry.selected`
+    /// selected window. Copied into the protocol window entry
     /// by `end_window`. Mirrors GNU's per-frame
     /// `w == XWINDOW (selected_window)` check in
     /// `src/xdisp.c::update_window`.
@@ -1357,8 +1415,22 @@ impl DisplayOutputBuilder {
         request.install(self);
     }
 
-    pub(crate) fn windows(&self) -> &[WindowMatrixEntry] {
-        &self.windows
+    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
+        self.windows
+            .last()
+            .map(OutputWindowGridEntry::enabled_row_count)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn completed_window_count(&self) -> usize {
+        self.windows.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn completed_window_id(&self, index: usize) -> Option<u64> {
+        self.windows
+            .get(index)
+            .map(OutputWindowGridEntry::window_id)
     }
 
     pub(crate) fn window_infos(&self) -> &[WindowInfo] {
@@ -1391,17 +1463,18 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn finish(
-        mut self,
+        self,
         frame_cols: usize,
         frame_rows: usize,
         char_width: f32,
         char_height: f32,
     ) -> FrameDisplayState {
-        for entry in &mut self.windows {
-            entry.matrix.ensure_hashes();
-        }
         let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
-        state.window_matrices = self.windows;
+        state.window_matrices = self
+            .windows
+            .into_iter()
+            .map(OutputWindowGridEntry::into_window_matrix_entry)
+            .collect();
         state.backgrounds = self.backgrounds;
         state.borders = self.borders;
         state.cursors = self.cursors;

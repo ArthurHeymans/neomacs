@@ -707,8 +707,8 @@ fn close_text_window_output_closes_active_matrix_window() {
 
     close_text_window_output(TextWindowOutputTarget::from_builder(&mut builder));
 
-    assert_eq!(builder.windows().len(), 1);
-    assert_eq!(builder.windows()[0].window_id, 9);
+    assert_eq!(builder.completed_window_count(), 1);
+    assert_eq!(builder.completed_window_id(0), Some(9));
 }
 
 #[test]
