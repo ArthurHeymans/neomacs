@@ -3053,8 +3053,14 @@ fn detect_emacs_mule(
                 let before = src.pos;
                 match src.next() {
                     None => {
-                        di.found |= found;
-                        return true;
+                        // GNU's `ONE_MORE_BYTE` jumps to `no_more_source` here.
+                        // We are mid-sequence (the leading byte and zero or more
+                        // continuation bytes of this iteration are already
+                        // consumed), so `src_base < src` holds and, with
+                        // LAST_BLOCK set, GNU rejects this category rather than
+                        // reporting it found (coding.c:1907).
+                        di.rejected |= cat_mask(CodingCat::EmacsMule);
+                        return false;
                     }
                     Some(v) => {
                         c = v;
