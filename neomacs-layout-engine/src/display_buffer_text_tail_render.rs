@@ -9,7 +9,6 @@ use crate::display_buffer_text_append::{
 };
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_progress::BufferTextWindowRowProgressState;
-use crate::display_buffer_text_row_lifecycle::BufferEndOfBufferTailRenderState;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -325,16 +324,14 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
             .end_of_buffer_tail_request(byte_idx, charpos, self.overlay_context, active_face_state)
             .render_and_apply(
                 buffer,
-                BufferEndOfBufferTailRenderState::new(
-                    self.source_render.reborrow(),
-                    self.row_progress.reborrow(),
-                    self.row_geometry,
-                    self.cursor_info,
-                    self.hit_rows,
-                    self.hit_row_range,
-                    self.row_y_positions,
-                    self.face_ids,
-                ),
+                self.source_render.reborrow(),
+                self.row_progress.reborrow(),
+                self.row_geometry,
+                self.cursor_info,
+                self.hit_rows,
+                self.hit_row_range,
+                self.row_y_positions,
+                self.face_ids,
             )
             .point_is_visible_eob()
     }

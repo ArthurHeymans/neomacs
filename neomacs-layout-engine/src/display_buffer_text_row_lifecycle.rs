@@ -59,42 +59,6 @@ pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
     active_face_state: &'a DisplayRowActiveFaceState,
 }
 
-pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
-    source_render: TextRowSourceRenderState<'emit>,
-    row_progress: BufferTextWindowRowProgressState<'emit>,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    cursor_info: &'emit mut CursorCaptureState,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    row_y_positions: &'emit mut DisplayRowYPositions,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-impl<'emit> BufferEndOfBufferTailRenderState<'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        row_progress: BufferTextWindowRowProgressState<'emit>,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        cursor_info: &'emit mut CursorCaptureState,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        row_y_positions: &'emit mut DisplayRowYPositions,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            row_progress,
-            row_geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        }
-    }
-}
-
 pub(crate) struct BufferEndOfBufferTailRenderOutcome {
     point_is_visible_eob: bool,
 }
@@ -385,21 +349,19 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         Self { context }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
         buffer: &B,
-        state: BufferEndOfBufferTailRenderState<'_>,
+        source_render: TextRowSourceRenderState<'_>,
+        row_progress: BufferTextWindowRowProgressState<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        cursor_info: &mut CursorCaptureState,
+        hit_rows: &mut Vec<HitRow>,
+        hit_row_range: &mut HitRowRangeTracker,
+        row_y_positions: &mut DisplayRowYPositions,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferEndOfBufferTailRenderOutcome {
-        let BufferEndOfBufferTailRenderState {
-            source_render,
-            row_progress,
-            row_geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        } = state;
         let BufferTextWindowRowProgressState { x, col } = row_progress;
         let mut source_render = source_render;
         let context = self.context;

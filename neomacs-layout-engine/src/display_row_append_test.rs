@@ -6710,22 +6710,20 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     ))
     .render_and_apply(
         &snapshot,
-        BufferEndOfBufferTailRenderState::new(
-            text_row_source_render_state(
-                &mut context.builder,
-                &mut context.output_emitter,
-                &mut context.eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            BufferTextWindowRowProgressState::new(&mut x, &mut col),
-            &mut context.geometry,
-            &mut cursor_info,
-            &mut context.hit_rows,
-            &mut hit_row_range,
-            &mut context.row_y_positions,
-            &mut face_ids,
+        text_row_source_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
         ),
+        BufferTextWindowRowProgressState::new(&mut x, &mut col),
+        &mut context.geometry,
+        &mut cursor_info,
+        &mut context.hit_rows,
+        &mut hit_row_range,
+        &mut context.row_y_positions,
+        &mut face_ids,
     );
 
     assert!(outcome.point_is_visible_eob());
