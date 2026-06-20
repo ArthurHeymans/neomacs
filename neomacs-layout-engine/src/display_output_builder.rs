@@ -413,7 +413,7 @@ impl OutputWindowLifecycleRequest {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => {
-                builder.current_matrix = Some(GlyphMatrix::new(begin.nrows, begin.ncols));
+                builder.current_row_grid = Some(OutputWindowRowGrid::new(begin.nrows, begin.ncols));
                 builder.current_window_id = begin.window_id;
                 builder.current_pixel_bounds = begin.pixel_bounds;
                 builder.current_text_pixel_bounds = begin.text_pixel_bounds;
@@ -421,10 +421,10 @@ impl OutputWindowLifecycleRequest {
                 builder.current_row = 0;
             }
             Self::End => {
-                if let Some(matrix) = builder.current_matrix.take() {
+                if let Some(grid) = builder.current_row_grid.take() {
                     builder.windows.push(WindowMatrixEntry {
                         window_id: builder.current_window_id,
-                        matrix,
+                        matrix: grid.into_matrix(),
                         pixel_bounds: builder.current_pixel_bounds,
                         text_pixel_bounds: builder.current_text_pixel_bounds,
                         selected: builder.current_selected,
@@ -621,6 +621,103 @@ pub(crate) trait OutputRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
 }
 
+struct OutputWindowRowGrid {
+    matrix: GlyphMatrix,
+}
+
+impl OutputWindowRowGrid {
+    fn new(nrows: usize, ncols: usize) -> Self {
+        Self {
+            matrix: GlyphMatrix::new(nrows, ncols),
+        }
+    }
+
+    fn into_matrix(self) -> GlyphMatrix {
+        self.matrix
+    }
+
+    fn as_matrix(&self) -> &GlyphMatrix {
+        &self.matrix
+    }
+
+    fn row(&self, row: usize) -> Option<&GlyphRow> {
+        self.matrix.rows.get(row)
+    }
+
+    fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
+        self.matrix.rows.get_mut(row)
+    }
+
+    fn decorate_row<D: OutputRowDecorator>(&mut self, row: usize, decorator: &mut D) {
+        let ncols = self.matrix.ncols;
+        let Some(row) = self.row_mut(row) else {
+            return;
+        };
+        decorator.decorate_row(row, ncols);
+    }
+
+    fn decorate_matrix_rows<D: OutputRowDecorator>(matrix: &mut GlyphMatrix, decorator: &mut D) {
+        let ncols = matrix.ncols;
+        for row in &mut matrix.rows {
+            decorator.decorate_row(row, ncols);
+        }
+    }
+
+    fn write_row_metrics(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
+        let Some(row) = self.row_mut(row) else {
+            return;
+        };
+        DisplayOutputBuilder::write_row_metrics(
+            row,
+            metrics.pixel_y,
+            metrics.height_px,
+            metrics.ascent_px,
+        );
+    }
+
+    fn write_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
+        let Some(row) = self.row_mut(row) else {
+            return;
+        };
+        row.cursor_col = Some(col);
+        row.cursor_type = Some(style);
+    }
+
+    fn replace_row(&mut self, row: usize, source: GlyphRow) {
+        let Some(row) = self.row_mut(row) else {
+            return;
+        };
+        *row = source;
+    }
+
+    fn begin_row(&mut self, begin: OutputRowBeginRequest) {
+        let Some(row) = self.row_mut(begin.row) else {
+            return;
+        };
+        row.role = begin.role;
+        row.enabled = true;
+        row.mode_line = begin.mode_line;
+    }
+
+    fn finalize_row(
+        &mut self,
+        window_id: u64,
+        row: usize,
+        pixel_bounds: Rect,
+        phys_cursor: Option<&mut PhysCursor>,
+    ) {
+        let matrix_ncols = self.matrix.ncols;
+        let Some(matrix_row) = self.row_mut(row) else {
+            return;
+        };
+        GlyphRowFinalizationContext::new(window_id, row, pixel_bounds).finalize_row(
+            matrix_row,
+            matrix_ncols,
+            phys_cursor,
+        );
+    }
+}
+
 pub(crate) enum OutputRowDecorationInstallRequest<D> {
     CurrentWindowRow { row_idx: usize, decorator: D },
     LastWindowRows { decorator: D },
@@ -644,22 +741,16 @@ where
                 row_idx,
                 mut decorator,
             } => {
-                let Some(matrix) = builder.current_matrix.as_mut() else {
+                let Some(grid) = builder.current_row_grid.as_mut() else {
                     return;
                 };
-                let Some(row) = matrix.rows.get_mut(row_idx) else {
-                    return;
-                };
-                decorator.decorate_row(row, matrix.ncols);
+                grid.decorate_row(row_idx, &mut decorator);
             }
             Self::LastWindowRows { mut decorator } => {
                 let Some(entry) = builder.windows.last_mut() else {
                     return;
                 };
-                let matrix_cols = entry.matrix.ncols;
-                for row in &mut entry.matrix.rows {
-                    decorator.decorate_row(row, matrix_cols);
-                }
+                OutputWindowRowGrid::decorate_matrix_rows(&mut entry.matrix, &mut decorator);
             }
         }
     }
@@ -667,7 +758,7 @@ where
 
 pub(crate) struct DisplayOutputBuilder {
     windows: Vec<WindowMatrixEntry>,
-    current_matrix: Option<GlyphMatrix>,
+    current_row_grid: Option<OutputWindowRowGrid>,
     current_window_id: u64,
     current_pixel_bounds: Rect,
     current_text_pixel_bounds: Rect,
@@ -718,7 +809,7 @@ impl DisplayOutputBuilder {
     pub(crate) fn new() -> Self {
         Self {
             windows: Vec::new(),
-            current_matrix: None,
+            current_row_grid: None,
             current_window_id: 0,
             current_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
             current_text_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
@@ -765,7 +856,7 @@ impl DisplayOutputBuilder {
 
     pub(crate) fn reset(&mut self) {
         self.windows.clear();
-        self.current_matrix = None;
+        self.current_row_grid = None;
         self.current_window_id = 0;
         self.current_selected = false;
         self.current_row = 0;
@@ -974,8 +1065,8 @@ impl DisplayOutputBuilder {
     }
 
     fn with_current_row_mut<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        let matrix = self.current_matrix.as_mut()?;
-        let row = matrix.rows.get_mut(self.current_row)?;
+        let grid = self.current_row_grid.as_mut()?;
+        let row = grid.row_mut(self.current_row)?;
         Some(f(row))
     }
 
@@ -996,8 +1087,7 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn current_row_for_render(&self) -> Option<&GlyphRow> {
-        let matrix = self.current_matrix.as_ref()?;
-        matrix.rows.get(self.current_row)
+        self.current_row_grid.as_ref()?.row(self.current_row)
     }
 
     #[cfg(test)]
@@ -1006,15 +1096,8 @@ impl DisplayOutputBuilder {
     }
 
     fn write_row_metrics_at(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && row < matrix.rows.len()
-        {
-            Self::write_row_metrics(
-                &mut matrix.rows[row],
-                metrics.pixel_y,
-                metrics.height_px,
-                metrics.ascent_px,
-            );
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.write_row_metrics(row, metrics);
         }
     }
 
@@ -1024,20 +1107,15 @@ impl DisplayOutputBuilder {
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && row < matrix.rows.len()
-        {
-            matrix.rows[row].cursor_col = Some(col);
-            matrix.rows[row].cursor_type = Some(style);
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.write_row_cursor(row, col, style);
         }
     }
 
     fn replace_current_row(&mut self, source: GlyphRow) {
         let current_row = self.current_row;
-        if let Some(ref mut matrix) = self.current_matrix
-            && current_row < matrix.rows.len()
-        {
-            matrix.rows[current_row] = source;
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.replace_row(current_row, source);
         }
     }
 
@@ -1051,12 +1129,8 @@ impl DisplayOutputBuilder {
 
     fn begin_current_row(&mut self, begin: OutputRowBeginRequest) {
         self.current_row = begin.row;
-        if let Some(ref mut matrix) = self.current_matrix
-            && begin.row < matrix.rows.len()
-        {
-            matrix.rows[begin.row].role = begin.role;
-            matrix.rows[begin.row].enabled = true;
-            matrix.rows[begin.row].mode_line = begin.mode_line;
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.begin_row(begin);
         }
     }
 
@@ -1071,17 +1145,13 @@ impl DisplayOutputBuilder {
     }
 
     fn finalize_output_row(&mut self, row: usize) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            let matrix_ncols = matrix.ncols;
-            let Some(matrix_row) = matrix.rows.get_mut(row) else {
-                return;
-            };
-            GlyphRowFinalizationContext::new(
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.finalize_row(
                 self.current_window_id,
                 row,
                 self.current_pixel_bounds,
-            )
-            .finalize_row(matrix_row, matrix_ncols, self.phys_cursor.as_mut());
+                self.phys_cursor.as_mut(),
+            );
         }
     }
 
@@ -1245,7 +1315,9 @@ impl DisplayOutputBuilder {
         CursorVisualColumnResolutionContext::new(
             self.current_window_id,
             self.current_pixel_bounds,
-            self.current_matrix.as_ref(),
+            self.current_row_grid
+                .as_ref()
+                .map(OutputWindowRowGrid::as_matrix),
         )
     }
 
@@ -1260,11 +1332,9 @@ impl DisplayOutputBuilder {
         }
 
         if let Some(placement) = placement
-            && let Some(ref mut matrix) = self.current_matrix
-            && cursor.row < matrix.rows.len()
+            && let Some(grid) = self.current_row_grid.as_mut()
         {
-            matrix.rows[cursor.row].cursor_col = Some(placement.col());
-            matrix.rows[cursor.row].cursor_type = Some(cursor.style);
+            grid.write_row_cursor(cursor.row, placement.col(), cursor.style);
         }
 
         // The selected window is represented solely by the phys cursor: the
@@ -1276,11 +1346,8 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && cursor.row < matrix.rows.len()
-        {
-            matrix.rows[cursor.row].cursor_col = Some(cursor.col);
-            matrix.rows[cursor.row].cursor_type = Some(cursor.style);
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.write_row_cursor(cursor.row, cursor.col, cursor.style);
         }
 
         self.phys_cursor = Some(cursor);
