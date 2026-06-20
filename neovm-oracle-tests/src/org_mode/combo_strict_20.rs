@@ -1,0 +1,128 @@
+//! combo_strict_20.rs + strong_combo_complex_75.rs +
+//! strong_combo_complex_76.rs — relentless probes: org-babel
+//! with ob-lilypond/ob-octave/ob-sass/ob-sqlite, org-agenda
+//! file interaction, org-element normalize on obscure types,
+//! org-capture template fill, org-compat primitives,
+//! org-entities all backends, multi-temp-buffer stress.
+
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+#[test]
+fn strict_babel_esoteric_langs_2() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (list
+ :ob-lilypond (condition-case nil (require 'ob-lilypond) (error (featurep 'ob-lilypond)))
+ :ob-octave (condition-case nil (require 'ob-octave) (error (featurep 'ob-octave)))
+ :ob-sass (condition-case nil (require 'ob-sass) (error (featurep 'ob-sass)))
+ :ob-sqlite (condition-case nil (require 'ob-sqlite) (error (featurep 'ob-sqlite)))
+ :ob-maxima (condition-case nil (require 'ob-maxima) (error (featurep 'ob-maxima)))
+ :ob-forth (condition-case nil (require 'ob-forth) (error (featurep 'ob-forth)))
+ ))"##,
+    );
+}
+#[test]
+fn strict_agenda_file_interaction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'org-agenda) (list
+ :agenda-files-bound (boundp 'org-agenda-files)
+ :file-p (fboundp 'org-agenda-file-p)
+ :file-to-front-fbound (fboundp 'org-agenda-file-to-front)
+ :remove-file-fbound (fboundp 'org-agenda-remove-file)
+ :agenda-files-list (when (boundp 'org-agenda-files) (length org-agenda-files))
+ ))"##,
+    );
+}
+#[test]
+fn strict_element_normalize_obscure_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'org-element) (list
+ (org-element-normalize-contents '(special-block (:type "abstract") "  abstract\n    content\n  end"))
+ (org-element-normalize-contents '(paragraph nil "  line1\n\n\n  line2"))
+ (org-element-normalize-contents '(center-block nil "  c1\n  c2\n    c3\n  c4"))
+ ))"##,
+    );
+}
+#[test]
+fn strict_capture_template_fill() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'org-capture) (list
+ :fill-template-fbound (fboundp 'org-capture-fill-template)
+ :set-plist-fbound (fboundp 'org-capture-put)
+ :get-fbound (fboundp 'org-capture-get)
+ ))"##,
+    );
+}
+#[test]
+fn strict_compat_primitives() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'org-compat) (list
+ :buffer-substring (fboundp 'org-buffer-substring-fountain)
+ :format-time (fboundp 'org-format-time-string)
+ :time-less-p (fboundp 'org-time-less-p)
+ :time-= (fboundp 'org-time-=)
+ :time-since (fboundp 'org-time-since)
+ ))"##,
+    );
+}
+#[test]
+fn strict_entities_all_backends() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'org-entities) (let ((e (org-entity-get "alpha")))
+ (list :name (nth 0 e) :latex (nth 1 e) :latex-math (nth 2 e) :html (nth 3 e)
+  :ascii (nth 4 e) :latin1 (nth 5 e) :utf8 (nth 6 e))))"##,
+    );
+}
+#[test]
+fn strict_multibuffer_parallel_stress() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((r '()))
+ (dolist (content '("* A\n** B\n" "| a | b |\n| 1 | 2 |\n" "#+begin_src emacs-lisp\n1\n#+end_src\n"
+                    "- item1\n- item2\n" "#+TITLE: T\nContent.\n" "*bold* /italic/."))
+   (with-temp-buffer (org-mode) (insert content)
+     (push (length (org-element-map (org-element-parse-buffer) t #'identity)) r)))
+ (nreverse r))"##,
+    );
+}
+#[test]
+fn strict_org_sort_list_with_checkboxes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(with-temp-buffer (org-mode)
+ (insert "- [ ] zebra\n- [X] apple\n- [ ] mango\n")
+ (let ((r '())) (goto-char (point-min))
+  (org-sort-list nil ?a)
+  (push (list :sorted (buffer-string)) r)
+  (push (list :item-checkboxes (mapcar (lambda (i) (org-element-property :checkbox i))
+    (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
+  (nreverse r)))"##,
+    );
+}
+#[test]
+fn strict_org_deadline_with_repeater() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(with-temp-buffer (org-mode) (insert "* Task\n")
+ (let ((r '())) (goto-char (point-min))
+  (org-deadline nil "<2024-01-15 Mon +1w>")
+  (push (list :deadline (org-entry-get nil "DEADLINE")) r)
+  (let ((planning (car (org-element-map (org-element-parse-buffer) 'planning #'identity))))
+    (when planning (push (list :deadline-obj (org-element-property :deadline planning)) r)))
+  (nreverse r)))"##,
+    );
+}
+#[test]
+fn strict_org_export_dispatcher() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'ox) (list
+ :dispatch-fbound (fboundp 'org-export-dispatch)
+ :keybind-fbound (boundp 'org-export-dispatch-last-position)
+ ))"##,
+    );
+}
