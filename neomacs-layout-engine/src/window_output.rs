@@ -282,24 +282,24 @@ impl<'a> TextWindowOutputTarget<'a> {
         }
     }
 
-    fn builder(&mut self) -> &mut DisplayOutputBuilder {
+    pub(crate) fn builder(&mut self) -> &mut DisplayOutputBuilder {
         self.output_builder
     }
 }
 
 pub(crate) fn begin_text_window_output(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     request: TextWindowOutputBegin,
 ) {
-    begin_text_output_window(output_builder, request.into_output_install_request());
+    begin_text_output_window(output.builder(), request.into_output_install_request());
 }
 
 pub(crate) fn record_text_window_display_range(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     range: TextWindowDisplayRange,
 ) {
     install_text_output_display_range(
-        output_builder,
+        output.builder(),
         range.window_id as i64,
         range.window_start.as_i64(),
         range.window_end.as_i64(),
@@ -307,11 +307,11 @@ pub(crate) fn record_text_window_display_range(
 }
 
 fn record_text_window_redisplay_positions(
-    output_builder: &mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'_>,
     window_id: u64,
     positions: TextWindowRedisplayPositions,
 ) {
-    record_text_window_display_range(output_builder, positions.display_range(window_id));
+    record_text_window_display_range(output, positions.display_range(window_id));
 }
 
 fn install_text_window_row_decoration(
@@ -322,10 +322,10 @@ fn install_text_window_row_decoration(
 }
 
 pub(crate) fn install_text_window_row_decoration_request(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     request: TextWindowRowDecorationRequest,
 ) {
-    install_text_window_row_decoration(output_builder, request);
+    install_text_window_row_decoration(output.builder(), request);
 }
 
 fn begin_display_text_row(
@@ -431,23 +431,18 @@ pub(crate) fn transition_text_window_row_with_limit(
 }
 
 pub(crate) fn begin_text_window_output_and_row(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     request: TextWindowBegin,
 ) {
     let first_row = request.first_row;
-    begin_text_window_output(output_builder, request.into());
-    begin_text_window_row(
-        TextWindowOutputTarget::from_builder(output_builder),
-        output_emitter,
-        evaluator,
-        first_row,
-    );
+    begin_text_window_output(output.reborrow(), request.into());
+    begin_text_window_row(output.reborrow(), output_emitter, evaluator, first_row);
 }
 
 pub(crate) fn finish_pending_text_window_row(
-    output_builder: &mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     request: TextWindowPendingRowFinish<'_>,
 ) -> bool {
@@ -469,43 +464,40 @@ pub(crate) fn finish_pending_text_window_row(
     request
         .hit_rows
         .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
-    finish_text_window_row(
-        TextWindowOutputTarget::from_builder(output_builder),
-        output_emitter,
-        row_cursor.finish_current_row(),
-    );
+    finish_text_window_row(output, output_emitter, row_cursor.finish_current_row());
     true
 }
 
 pub(crate) fn render_window_chrome_rows(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
 ) {
     request.render(&mut WindowChromeRowsRenderState::new(
-        output_builder,
+        output.builder(),
         output_emitter,
         evaluator,
         render_services,
     ));
 }
 
-pub(crate) fn close_text_window_output(output_builder: &mut DisplayOutputBuilder) {
-    end_text_output_window(output_builder);
+pub(crate) fn close_text_window_output(mut output: TextWindowOutputTarget<'_>) {
+    end_text_output_window(output.builder());
 }
 
 pub(crate) fn install_text_window_finished_rows(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &WindowOutputEmitter,
 ) {
-    finish_output_rows(output_builder, output_emitter);
+    finish_output_rows(output.builder(), output_emitter);
 }
 
 pub(crate) fn capture_text_window_retry_checkpoint(
-    output_builder: &DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
 ) -> TextWindowOutputRetryCheckpoint {
+    let output_builder = output.builder();
     TextWindowOutputRetryCheckpoint {
         transition_hints_len: output_builder.transition_hints().len(),
         effect_hints_len: output_builder.effect_hints().len(),
@@ -513,11 +505,11 @@ pub(crate) fn capture_text_window_retry_checkpoint(
 }
 
 pub(crate) fn restore_text_window_retry_checkpoint(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     checkpoint: TextWindowOutputRetryCheckpoint,
 ) {
     restore_text_output_retry_checkpoint(
-        output_builder,
+        output.builder(),
         checkpoint.transition_hints_len,
         checkpoint.effect_hints_len,
     );
@@ -930,7 +922,7 @@ fn install_text_window_row_cursor(
 }
 
 pub(crate) fn install_text_window_terminal_right_border(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     request: TextWindowTerminalRightBorder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
 ) -> u32 {
@@ -943,9 +935,9 @@ pub(crate) fn install_text_window_terminal_right_border(
     // `frame_face_id_counter` by the decoration render, engine.rs) rather than
     // a separate `FaceResolver` counter that could collide with it.
     let border_face_id = render_services.face_ids().allocate();
-    install_output_resolved_face(output_builder, border_face_id, &border_face, None);
+    install_output_resolved_face(output.builder(), border_face_id, &border_face, None);
     install_last_window_right_border(
-        output_builder,
+        output.builder(),
         render_services.reborrow(),
         TextWindowRightBorder {
             ch: request.ch,
@@ -1068,11 +1060,11 @@ pub(crate) fn install_text_window_body_output(
         request.byte_idx,
     );
     record_text_window_redisplay_positions(
-        output.builder(),
+        output.reborrow(),
         request.window_id,
         redisplay_positions,
     );
-    install_text_window_finished_rows(output.builder(), output_emitter);
+    install_text_window_finished_rows(output.reborrow(), output_emitter);
     if let Some(markers) = request.right_edge_markers {
         let render_services =
             render_services.expect("right-edge markers require chrome render services");

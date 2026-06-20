@@ -5,7 +5,6 @@
 //! Keeping it separate from `display_row_append.rs` lets the append layer stay
 //! source-agnostic while the buffer text walker owns its own setup logic.
 
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
@@ -120,12 +119,12 @@ impl BufferTextWindowCursorEffectsRequest {
         Self { window_id, effects }
     }
 
-    pub(crate) fn install_and_apply(self, output: &mut DisplayOutputBuilder) -> bool {
+    pub(crate) fn install_and_apply(self, output: TextWindowOutputTarget<'_>) -> bool {
         let Some(effects) = self.effects else {
             return false;
         };
         install_text_window_cursor_effects(
-            TextWindowOutputTarget::from_builder(output),
+            output,
             TextWindowCursorEffects {
                 window_id: self.window_id,
                 effects,
@@ -152,7 +151,7 @@ impl BufferTextWindowTerminalRightBorderRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        output: &mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
         install_text_window_terminal_right_border(
@@ -233,7 +232,7 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
-    output_builder: &'output mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'output>,
     output_emitter: &'output mut WindowOutputEmitter,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
@@ -262,7 +261,7 @@ pub(crate) struct BufferTextWindowFinishRequest {
 }
 
 pub(crate) struct BufferTextWindowFinishState<'a> {
-    output_builder: &'a mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'a>,
     output_emitter: WindowOutputEmitter,
     evaluator: &'a mut Context,
     hit_rows: Vec<HitRow>,
@@ -363,12 +362,12 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output_builder: &'output mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'output>,
         output_emitter: &'output mut WindowOutputEmitter,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             render_services,
         }
@@ -376,14 +375,14 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'fa
 }
 
 impl<'a> BufferTextWindowFinishState<'a> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'a mut DisplayOutputBuilder,
+    pub(crate) fn new(
+        output: TextWindowOutputTarget<'a>,
         output_emitter: WindowOutputEmitter,
         evaluator: &'a mut Context,
         hit_rows: Vec<HitRow>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             evaluator,
             hit_rows,
@@ -397,7 +396,7 @@ impl<'a> BufferTextWindowFinishState<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> (Vec<HitRow>, WindowDisplaySnapshot) {
-        close_text_window_output(self.output_builder);
+        close_text_window_output(self.output);
         let snapshot = self.output_emitter.finish_snapshot(
             self.evaluator,
             text_area_left_offset,
@@ -443,7 +442,7 @@ impl BufferTextWindowBeginRequest {
 
     pub(crate) fn begin_and_apply(
         self,
-        output_builder: &mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'_>,
         evaluator: &mut Context,
     ) -> WindowOutputEmitter {
         let mut output_emitter = WindowOutputEmitter::new(
@@ -455,7 +454,7 @@ impl BufferTextWindowBeginRequest {
         );
         output_emitter.begin_update(evaluator);
         begin_text_window_output_and_row(
-            output_builder,
+            output,
             &mut output_emitter,
             evaluator,
             TextWindowBegin {
@@ -545,7 +544,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
         };
 
         let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
-            output_render.with_output_parts(|output_builder, output_emitter, _evaluator| {
+            output_render.with_output_target_parts(|mut output, output_emitter, _evaluator| {
                 let mut cursor_publish_status = initial_cursor_publish_status;
                 if cursor_requested {
                     if let Some(cursor) = cursor_info.captured() {
@@ -567,7 +566,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                             cursor,
                             &cursor_row_metrics,
                             row_geometry.row_metrics_snapshot(context.display_text_row_base),
-                            output_builder,
+                            output.reborrow(),
                             output_emitter,
                         )
                         .into();
@@ -582,7 +581,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                 }
 
                 let pending_row_finished = finish_pending_text_window_row(
-                    output_builder,
+                    output.reborrow(),
                     output_emitter,
                     TextWindowPendingRowFinish {
                         row_geometry,
@@ -604,7 +603,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     context.text_height,
                     context.char_w,
                 )
-                .publish_visual_cursors(output_builder, output_emitter);
+                .publish_visual_cursors(output.reborrow(), output_emitter);
                 (
                     cursor_publish_status,
                     pending_row_finished,
@@ -673,7 +672,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
         );
 
         install_text_window_body_output(
-            TextWindowOutputTarget::from_builder(state.output_builder),
+            state.output,
             state.output_emitter,
             TextWindowBodyOutputInstall {
                 window_id: context.window_id,

@@ -8,6 +8,7 @@ use crate::display_status_line::{
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
+use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, FrameTabBarState, GlyphRowRole, WindowEffectHint, WindowInfo,
     WindowTransitionHint, WindowTransitionKind,
@@ -705,7 +706,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
             );
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(state, render_services);
+                .install_and_apply(TextWindowOutputTarget::from_builder(state), render_services);
         }
     }
 

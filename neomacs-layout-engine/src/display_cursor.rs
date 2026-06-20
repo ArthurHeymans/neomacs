@@ -1,5 +1,4 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowTextPosition;
 use crate::display_source::DisplayPropertyReplacementCursorPolicy;
@@ -764,7 +763,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         cursor: CapturedCursorInfo,
         row_metrics: &[RowMetricsSnapshot],
         fallback_row_metric: RowMetricsSnapshot,
-        output_builder: &mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'_>,
         output_emitter: &mut WindowOutputEmitter,
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
@@ -806,7 +805,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         }
 
         publish_text_window_cursor(
-            TextWindowOutputTarget::from_builder(output_builder),
+            output,
             output_emitter,
             TextWindowCursor {
                 selected: self.params.selected,
@@ -881,7 +880,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
 
     pub(crate) fn publish_visual_cursors(
         self,
-        output_builder: &mut DisplayOutputBuilder,
+        mut output: TextWindowOutputTarget<'_>,
         output_emitter: &WindowOutputEmitter,
     ) -> VisualTextWindowCursorPublishSummary {
         let mut summary = VisualTextWindowCursorPublishSummary::default();
@@ -918,7 +917,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 continue;
             }
             publish_text_window_decorative_cursor(
-                TextWindowOutputTarget::from_builder(output_builder),
+                output.reborrow(),
                 TextWindowDecorativeCursor {
                     window_id: resolved_cursor.window_id(),
                     slot_id: resolved_cursor.slot_id,

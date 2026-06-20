@@ -28,7 +28,7 @@ use crate::display_source::{DisplayReplacementSpaceGeometry, DisplayReplacementS
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::{VisualCursorSpec, WindowKind};
-use crate::window_output::WindowOutputEmitter;
+use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
@@ -1188,7 +1188,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
             height: 16.0,
             ascent: 12.0,
         },
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
     );
 
@@ -1239,7 +1239,10 @@ fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_di
     let mut builder = DisplayOutputBuilder::new();
 
     let summary = VisualTextWindowCursorPublishContext::new(&params, 10.0, 20.0, 20.0, 80.0, 8.0)
-        .publish_visual_cursors(&mut builder, &output_emitter);
+        .publish_visual_cursors(
+            TextWindowOutputTarget::from_builder(&mut builder),
+            &output_emitter,
+        );
 
     assert_eq!(
         summary,

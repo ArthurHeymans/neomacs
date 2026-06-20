@@ -16,7 +16,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use crate::window_output::{
-    TextWindowOutputBegin, begin_text_window_output, close_text_window_output,
+    TextWindowOutputBegin, TextWindowOutputTarget, begin_text_window_output,
+    close_text_window_output,
 };
 use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -400,7 +401,7 @@ pub(crate) fn layout_mock_frame_content(
         let nrows = window.lines.len() + 1;
         let ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
         begin_text_window_output(
-            &mut builder,
+            TextWindowOutputTarget::from_builder(&mut builder),
             TextWindowOutputBegin {
                 window_id: window.window_id,
                 rows: nrows,
@@ -450,7 +451,7 @@ pub(crate) fn layout_mock_frame_content(
         );
         install_mock_display_row(&mut builder, mode_line_row, &row);
 
-        close_text_window_output(&mut builder);
+        close_text_window_output(TextWindowOutputTarget::from_builder(&mut builder));
     }
 
     if let Some(ref mini) = content.minibuffer {
@@ -458,7 +459,7 @@ pub(crate) fn layout_mock_frame_content(
         let nrows = mini.lines.len() + usize::from(has_mode_line);
         let ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
         begin_text_window_output(
-            &mut builder,
+            TextWindowOutputTarget::from_builder(&mut builder),
             TextWindowOutputBegin {
                 window_id: mini.window_id,
                 rows: nrows,
@@ -510,7 +511,7 @@ pub(crate) fn layout_mock_frame_content(
             install_mock_display_row(&mut builder, mode_line_row, &row);
         }
 
-        close_text_window_output(&mut builder);
+        close_text_window_output(TextWindowOutputTarget::from_builder(&mut builder));
     }
 
     let main_state = builder.finish(
@@ -548,7 +549,7 @@ pub(crate) fn layout_mock_frame_content(
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
         begin_text_window_output(
-            &mut cb,
+            TextWindowOutputTarget::from_builder(&mut cb),
             TextWindowOutputBegin {
                 window_id: cf.window.window_id,
                 rows: nrows,
@@ -576,7 +577,7 @@ pub(crate) fn layout_mock_frame_content(
             );
             install_mock_display_row(&mut cb, ri, &row);
         }
-        close_text_window_output(&mut cb);
+        close_text_window_output(TextWindowOutputTarget::from_builder(&mut cb));
         let cs = cb.finish(
             mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w),
             cf.window.lines.len().max(1),

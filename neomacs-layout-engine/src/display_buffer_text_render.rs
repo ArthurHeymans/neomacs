@@ -45,7 +45,6 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -95,9 +94,9 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    DisplayTextRowTransition, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
-    WindowOutputEmitter, capture_text_window_retry_checkpoint, render_window_chrome_rows,
-    restore_text_window_retry_checkpoint,
+    DisplayTextRowTransition, TextWindowOutputRetryCheckpoint, TextWindowOutputTarget,
+    TextWindowRedisplayPositions, WindowOutputEmitter, capture_text_window_retry_checkpoint,
+    render_window_chrome_rows, restore_text_window_retry_checkpoint,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -420,7 +419,7 @@ impl BufferTextWindowFallbackSourceConsumption {
 }
 
 struct BufferTextWindowOutputState<'emit> {
-    output_builder: &'emit mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'emit>,
     evaluator: &'emit mut Context,
 }
 
@@ -462,13 +461,13 @@ where
 }
 
 struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    output_builder: &'output mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'output>,
     output_emitter: &'output mut WindowOutputEmitter,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
-    output_builder: &'output mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'output>,
     output_emitter: &'output mut WindowOutputEmitter,
     evaluator: &'output mut Context,
     render_services: ChromeRowRenderServices<'emit, 'face>,
@@ -592,12 +591,12 @@ impl<'emit> BufferTextWindowBodyPassState<'emit> {
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
     fn new(
-        output_builder: &'output mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'output>,
         output_emitter: &'output mut WindowOutputEmitter,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             render_services,
         }
@@ -606,13 +605,13 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallRenderState<'emit, 'outpu
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
     fn new(
-        output_builder: &'output mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'output>,
         output_emitter: &'output mut WindowOutputEmitter,
         evaluator: &'output mut Context,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             evaluator,
             render_services,
@@ -1360,26 +1359,20 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
 }
 
 impl<'emit> BufferTextWindowOutputState<'emit> {
-    fn from_parts(
-        output_builder: &'emit mut DisplayOutputBuilder,
-        evaluator: &'emit mut Context,
-    ) -> Self {
-        Self {
-            output_builder,
-            evaluator,
-        }
+    fn from_parts(output: TextWindowOutputTarget<'emit>, evaluator: &'emit mut Context) -> Self {
+        Self { output, evaluator }
     }
 
     fn reborrow(&mut self) -> BufferTextWindowOutputState<'_> {
-        BufferTextWindowOutputState::from_parts(self.output_builder, self.evaluator)
+        BufferTextWindowOutputState::from_parts(self.output.reborrow(), self.evaluator)
     }
 
     fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        capture_text_window_retry_checkpoint(self.output_builder)
+        capture_text_window_retry_checkpoint(self.output.reborrow())
     }
 
     fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        restore_text_window_retry_checkpoint(self.output_builder, checkpoint);
+        restore_text_window_retry_checkpoint(self.output.reborrow(), checkpoint);
     }
 
     fn evaluator(&mut self) -> &mut Context {
@@ -1388,14 +1381,14 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
 
     fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(self.output_builder)
+            .install_and_apply(self.output.reborrow())
     }
 
     fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(self.output_builder, self.evaluator)
+        begin_request.begin_and_apply(self.output.reborrow(), self.evaluator)
     }
 
     fn source_render_state<'output>(
@@ -1406,7 +1399,7 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
             TextRowOutputRenderState::from_parts(
-                self.output_builder,
+                self.output.reborrow(),
                 output_emitter,
                 self.evaluator,
             ),
@@ -1420,12 +1413,7 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
         output_emitter: WindowOutputEmitter,
         hit_rows: Vec<HitRow>,
     ) -> BufferTextWindowFinishState<'emit> {
-        BufferTextWindowFinishState::from_output_builder(
-            self.output_builder,
-            output_emitter,
-            self.evaluator,
-            hit_rows,
-        )
+        BufferTextWindowFinishState::new(self.output, output_emitter, self.evaluator, hit_rows)
     }
 }
 
@@ -1449,7 +1437,7 @@ impl<'emit> BufferTextWindowBodyOutputRenderState<'emit> {
 impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        output_builder: &'a mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'a>,
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
@@ -1458,7 +1446,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
-            output: BufferTextWindowOutputState::from_parts(output_builder, evaluator),
+            output: BufferTextWindowOutputState::from_parts(output, evaluator),
             font_metrics,
             face_resolver,
             frame_face_id_counter,
@@ -1478,7 +1466,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptContext<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self::new(
-            frame_output.text_window_output_builder(),
+            TextWindowOutputTarget::from_builder(frame_output.text_window_output_builder()),
             evaluator,
             font_metrics,
             face_resolver,
@@ -1914,13 +1902,10 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
-        let BufferTextWindowOutputState {
-            output_builder,
-            evaluator,
-        } = &mut self.output;
+        let BufferTextWindowOutputState { output, evaluator } = &mut self.output;
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState::new(
-                output_builder,
+                output.reborrow(),
                 output_emitter,
                 evaluator,
                 self.render_services.reborrow(),
@@ -1935,12 +1920,9 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        let BufferTextWindowOutputState {
-            output_builder,
-            evaluator,
-        } = &mut self.output;
+        let BufferTextWindowOutputState { output, evaluator } = &mut self.output;
         render_window_chrome_rows(
-            output_builder,
+            output.reborrow(),
             output_emitter,
             evaluator,
             request,
@@ -2166,7 +2148,7 @@ impl BufferTextWindowWalkSetup {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
             .install_and_apply(BufferTextWindowBodyInstallState::new(
-                state.output_builder,
+                state.output,
                 state.output_emitter,
                 state.render_services,
             ))
@@ -2179,17 +2161,13 @@ impl BufferTextWindowWalkSetup {
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
         let BufferTextWindowBodyInstallPublishState {
-            output_builder,
+            output,
             output_emitter,
             evaluator,
             render_services,
         } = state;
         let redisplay_positions = self.install_body(
-            BufferTextWindowBodyInstallRenderState::new(
-                output_builder,
-                output_emitter,
-                render_services,
-            ),
+            BufferTextWindowBodyInstallRenderState::new(output, output_emitter, render_services),
             tail_context,
         );
         // GNU status-line percent specs read the live window state from the

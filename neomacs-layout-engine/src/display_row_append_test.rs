@@ -102,7 +102,11 @@ fn text_row_output_render_state<'a>(
     output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
     evaluator: &'a mut Context,
 ) -> TextRowOutputRenderState<'a> {
-    TextRowOutputRenderState::from_parts(builder, output_emitter, evaluator)
+    TextRowOutputRenderState::from_parts(
+        TextWindowOutputTarget::from_builder(builder),
+        output_emitter,
+        evaluator,
+    )
 }
 
 fn text_row_source_render_state<'a>(
@@ -6729,7 +6733,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
         ))
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut builder,
+            TextWindowOutputTarget::from_builder(&mut builder),
             &mut output_emitter,
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
@@ -6791,7 +6795,10 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(&mut builder, &mut eval);
+    .begin_and_apply(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut eval,
+    );
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     crate::window_output::finish_text_window_row(
@@ -6803,7 +6810,9 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             ascent: 12.0,
         },
     );
-    crate::window_output::close_text_window_output(&mut builder);
+    crate::window_output::close_text_window_output(TextWindowOutputTarget::from_builder(
+        &mut builder,
+    ));
 
     let state = builder.finish(8, 4, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);
@@ -6824,7 +6833,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
     let effects = EffectsConfig::default();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
-        .install_and_apply(&mut builder);
+        .install_and_apply(TextWindowOutputTarget::from_builder(&mut builder));
 
     assert!(installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
@@ -6835,8 +6844,8 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
 fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
-    let installed =
-        BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(&mut builder);
+    let installed = BufferTextWindowCursorEffectsRequest::new(42, None)
+        .install_and_apply(TextWindowOutputTarget::from_builder(&mut builder));
 
     assert!(!installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
@@ -6859,7 +6868,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6904,7 +6913,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     let content_face_id = face_ids.allocate();
     let mut font_metrics = None;
     let border_face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6942,7 +6951,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -7005,8 +7014,8 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
     }];
 
     let finished = BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5)
-        .finish_and_snapshot(BufferTextWindowFinishState::from_output_builder(
-            &mut builder,
+        .finish_and_snapshot(BufferTextWindowFinishState::new(
+            TextWindowOutputTarget::from_builder(&mut builder),
             output_emitter,
             &mut eval,
             hit_rows,

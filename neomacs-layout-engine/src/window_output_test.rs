@@ -588,7 +588,7 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
     builder.add_output_window_info(window_info(41));
 
     record_text_window_display_range(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         TextWindowDisplayRange {
             window_id: 41,
             window_start: LispCharPos1::new(7),
@@ -601,7 +601,7 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
     assert_eq!(info.window_end, 19);
 
     record_text_window_display_range(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         TextWindowDisplayRange {
             window_id: 42,
             window_start: LispCharPos1::new(11),
@@ -706,7 +706,7 @@ fn close_text_window_output_closes_active_matrix_window() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
 
-    close_text_window_output(&mut builder);
+    close_text_window_output(TextWindowOutputTarget::from_builder(&mut builder));
 
     assert_eq!(builder.windows().len(), 1);
     assert_eq!(builder.windows()[0].window_id, 9);
@@ -998,7 +998,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     let mut hit_rows = Vec::new();
 
     let finished = finish_pending_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         TextWindowPendingRowFinish {
             row_geometry: &row_geometry,
@@ -1069,7 +1069,7 @@ fn install_text_window_output_installs_row_metrics() {
         },
     );
 
-    install_text_window_finished_rows(&mut builder, &emitter);
+    install_text_window_finished_rows(TextWindowOutputTarget::from_builder(&mut builder), &emitter);
 
     builder.end_window();
     let state = builder.finish(5, 1, 8.0, 16.0);

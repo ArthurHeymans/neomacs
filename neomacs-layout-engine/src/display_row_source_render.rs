@@ -9,7 +9,6 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderContext, DisplayRowRenderExecutor,
@@ -41,7 +40,7 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
 
 pub(crate) struct TextRowOutputRenderState<'a> {
-    output_builder: &'a mut DisplayOutputBuilder,
+    output: TextWindowOutputTarget<'a>,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
@@ -328,12 +327,12 @@ where
 
 impl<'a> TextRowOutputRenderState<'a> {
     pub(crate) fn from_parts(
-        output_builder: &'a mut DisplayOutputBuilder,
+        output: TextWindowOutputTarget<'a>,
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
         Self {
-            output_builder,
+            output,
             output_emitter,
             evaluator,
         }
@@ -341,34 +340,25 @@ impl<'a> TextRowOutputRenderState<'a> {
 
     pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
         TextRowOutputRenderState {
-            output_builder: self.output_builder,
+            output: self.output.reborrow(),
             output_emitter: self.output_emitter,
             evaluator: self.evaluator,
         }
     }
 
-    pub(crate) fn with_output_parts<R>(
+    pub(crate) fn with_output_target_parts<R>(
         self,
-        f: impl FnOnce(&mut DisplayOutputBuilder, &mut WindowOutputEmitter, &mut Context) -> R,
+        f: impl FnOnce(TextWindowOutputTarget<'_>, &mut WindowOutputEmitter, &mut Context) -> R,
     ) -> R {
-        f(self.output_builder, self.output_emitter, self.evaluator)
+        f(self.output, self.output_emitter, self.evaluator)
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        finish_and_end_text_window_row(
-            TextWindowOutputTarget::from_builder(self.output_builder),
-            self.output_emitter,
-            metrics,
-        );
+        finish_and_end_text_window_row(self.output, self.output_emitter, metrics);
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        transition_text_window_row(
-            TextWindowOutputTarget::from_builder(self.output_builder),
-            self.output_emitter,
-            self.evaluator,
-            transition,
-        );
+        transition_text_window_row(self.output, self.output_emitter, self.evaluator, transition);
     }
 
     pub(crate) fn transition_text_row_with_limit(
@@ -377,7 +367,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         max_rows: usize,
     ) -> DisplayTextRowTransition {
         transition_text_window_row_with_limit(
-            TextWindowOutputTarget::from_builder(self.output_builder),
+            self.output,
             self.output_emitter,
             self.evaluator,
             transition,
@@ -386,16 +376,16 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        install_text_window_row_decoration_request(self.output_builder, request);
+        install_text_window_row_decoration_request(self.output, request);
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        install_output_resolved_face(self.output_builder, face_id, face, None);
+        install_output_resolved_face(self.output.builder(), face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
         install_output_resolved_face(
-            self.output_builder,
+            self.output.builder(),
             face.face_id(),
             face.resolved_face(),
             face.font_metrics(),
@@ -424,7 +414,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_resolver: &'emit FaceResolver,
     ) -> TextRowSourceMeasureState<'emit> {
         TextRowSourceMeasureState {
-            row_output: DisplayRowCurrentRowOutput::from_output_builder(self.output_builder),
+            row_output: DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
             evaluator: self.evaluator,
             font_metrics,
             face_resolver,
@@ -438,7 +428,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
         DisplayRowCurrentTextRenderState::new(
-            DisplayRowCurrentRowOutput::from_output_builder(self.output_builder),
+            DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
             self.evaluator,
             font_metrics,
             face_resolver,
@@ -453,7 +443,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
         DisplayRowCurrentSourceFragmentRenderState::new(
-            DisplayRowCurrentRowOutput::from_output_builder(self.output_builder),
+            DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
             font_metrics,
             face_resolver,
             self.evaluator.display_host.as_deref(),
@@ -474,7 +464,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         } = result;
         let end = display_row_output_end_position(result.progress);
         install_rendered_display_row_fragment_assets(
-            self.output_builder,
+            self.output.builder(),
             role,
             output.row,
             &result.faces,
