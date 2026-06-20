@@ -50,7 +50,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append_context::DisplayRowAppendSurface;
-use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowHitRange, DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit,
@@ -65,7 +65,7 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_source_append::{
-    SyntheticTextAppendRequest, SyntheticTextMarker, SyntheticTextRowAppendContext,
+    BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,
 };
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_row_transition::{
@@ -5925,110 +5925,6 @@ impl BufferTextLineBreakSourceAction {
             target,
             self.cursor_info(active_face_state, row_geometry, x, col),
         );
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferSyntheticTextRenderContext<'a> {
-    append_surface: &'a DisplayRowAppendSurface,
-    active_face: &'a DisplayRowActiveFaceState,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    default_row_ascent: f32,
-    default_char_width: f32,
-}
-
-impl<'a> BufferSyntheticTextRenderContext<'a> {
-    pub(crate) fn new(
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        default_row_ascent: f32,
-        default_char_width: f32,
-    ) -> Self {
-        Self {
-            append_surface,
-            active_face,
-            glyph_y_offset,
-            default_row_height,
-            default_row_ascent,
-            default_char_width,
-        }
-    }
-
-    pub(crate) fn active_face(self) -> &'a DisplayRowActiveFaceState {
-        self.active_face
-    }
-
-    fn row_context(
-        self,
-        geometry: &'a DisplayRowGeometryState,
-    ) -> SyntheticTextRowAppendContext<'a> {
-        SyntheticTextRowAppendContext::new(
-            self.append_surface,
-            geometry,
-            self.active_face,
-            self.glyph_y_offset,
-            self.default_row_height,
-        )
-    }
-
-    pub(crate) fn render_request_to_text_row<'face>(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        request: SyntheticTextAppendRequest,
-    ) -> Option<DisplayRowAppendProgress> {
-        self.row_context(geometry)
-            .append_request_to_text_row_and_emit(state, request)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_active_marker_to_text_row(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
-    ) -> Option<DisplayRowPosition> {
-        self.render_request_to_text_row(
-            state,
-            geometry,
-            SyntheticTextAppendRequest::active_marker(position, marker),
-        )
-        .map(|progress| progress.end)
-    }
-
-    pub(crate) fn hscroll_truncation_request(
-        self,
-        base_face: ResolvedFace,
-        content_x: f32,
-    ) -> SyntheticTextAppendRequest {
-        SyntheticTextAppendRequest::text_row_metrics_marker(
-            DisplayRowPosition {
-                x_px: content_x,
-                col: 0,
-            },
-            SyntheticTextMarker::HscrollTruncation,
-            BasicFaceId::Default.into(),
-            &base_face,
-            self.default_row_height,
-            self.default_row_ascent,
-            self.default_char_width,
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        content_x: f32,
-    ) -> Option<DisplayRowPosition> {
-        let request = self.hscroll_truncation_request(state.default_face(), content_x);
-        self.render_request_to_text_row(state, geometry, request)
-            .map(|progress| progress.end)
     }
 }
 

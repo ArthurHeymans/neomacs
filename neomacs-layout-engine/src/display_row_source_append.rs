@@ -16,6 +16,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::neovm_bridge::ResolvedFace;
+use neomacs_display_protocol::face::BasicFaceId;
 
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
@@ -63,6 +64,16 @@ pub(crate) enum SyntheticTextMarker {
 #[derive(Clone, Copy)]
 pub(crate) struct SyntheticTextRowAppendContext<'a> {
     active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferSyntheticTextRenderContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    active_face: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    default_row_ascent: f32,
+    default_char_width: f32,
 }
 
 pub(crate) struct DisplayItemSourceAppendRequest<'frame, 'face> {
@@ -306,6 +317,100 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 .text_row(face_id, &base_face, height_px, ascent_px, char_width_px)
                 .append_to_text_row_and_emit(state, position, source),
         }
+    }
+}
+
+impl<'a> BufferSyntheticTextRenderContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        default_row_ascent: f32,
+        default_char_width: f32,
+    ) -> Self {
+        Self {
+            append_surface,
+            active_face,
+            glyph_y_offset,
+            default_row_height,
+            default_row_ascent,
+            default_char_width,
+        }
+    }
+
+    pub(crate) fn active_face(self) -> &'a DisplayRowActiveFaceState {
+        self.active_face
+    }
+
+    fn row_context(
+        self,
+        geometry: &'a DisplayRowGeometryState,
+    ) -> SyntheticTextRowAppendContext<'a> {
+        SyntheticTextRowAppendContext::new(
+            self.append_surface,
+            geometry,
+            self.active_face,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+    }
+
+    pub(crate) fn render_request_to_text_row(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        geometry: &'a DisplayRowGeometryState,
+        request: SyntheticTextAppendRequest,
+    ) -> Option<DisplayRowAppendProgress> {
+        self.row_context(geometry)
+            .append_request_to_text_row_and_emit(state, request)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_active_marker_to_text_row(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        geometry: &'a DisplayRowGeometryState,
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+    ) -> Option<DisplayRowPosition> {
+        self.render_request_to_text_row(
+            state,
+            geometry,
+            SyntheticTextAppendRequest::active_marker(position, marker),
+        )
+        .map(|progress| progress.end)
+    }
+
+    pub(crate) fn hscroll_truncation_request(
+        self,
+        base_face: ResolvedFace,
+        content_x: f32,
+    ) -> SyntheticTextAppendRequest {
+        SyntheticTextAppendRequest::text_row_metrics_marker(
+            DisplayRowPosition {
+                x_px: content_x,
+                col: 0,
+            },
+            SyntheticTextMarker::HscrollTruncation,
+            BasicFaceId::Default.into(),
+            &base_face,
+            self.default_row_height,
+            self.default_row_ascent,
+            self.default_char_width,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        geometry: &'a DisplayRowGeometryState,
+        content_x: f32,
+    ) -> Option<DisplayRowPosition> {
+        let request = self.hscroll_truncation_request(state.default_face(), content_x);
+        self.render_request_to_text_row(state, geometry, request)
+            .map(|progress| progress.end)
     }
 }
 
