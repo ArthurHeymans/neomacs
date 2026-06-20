@@ -587,6 +587,11 @@ pub struct Process {
     pub tty_stdout: bool,
     /// Whether stderr is tty-backed for this process.
     pub tty_stderr: bool,
+    /// The child's real OS process id, captured at spawn time.  GNU's
+    /// `Fprocess_id` returns this pid (`XPROCESS (process)->pid`); it is `None`
+    /// for network/serial/pipe connections that have no OS child, and stays
+    /// independent of the internal `ProcessId` used to key the manager.
+    pub os_pid: Option<u32>,
     /// The actual OS child process, if spawned (pipe mode).
     #[allow(dead_code)]
     pub child: Option<Child>,
@@ -1808,6 +1813,7 @@ impl ProcessManager {
             tty_stdin,
             tty_stdout,
             tty_stderr,
+            os_pid: None,
             child: None,
             child_stdout: None,
             child_stderr: None,
@@ -1971,6 +1977,10 @@ impl ProcessManager {
             }
         };
 
+        // GNU records the child's real OS pid (create_process sets
+        // p->pid = pid). `std::process::Child::id` exposes it as a `u32`.
+        let os_pid = Some(child.id());
+
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
 
@@ -1982,6 +1992,7 @@ impl ProcessManager {
 
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.child_stdout = stdout;
+            proc.os_pid = os_pid;
             proc.child = Some(child);
             proc.status = process_status_run_value();
             // Pipe-mode processes don't have a real TTY.
@@ -2109,6 +2120,9 @@ impl ProcessManager {
             .slave
             .spawn_command(cmd)
             .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
+        // GNU records the child's real OS pid; portable_pty exposes it via
+        // `Child::process_id`.
+        let os_pid = pty_child.process_id();
 
         let pty_read = pty_pair
             .master
@@ -2131,6 +2145,7 @@ impl ProcessManager {
             }
         }
 
+        proc.os_pid = os_pid;
         proc.pty_master = Some(pty_pair.master);
         proc.pty_child = Some(pty_child);
         proc.pty_reader = Some(pty_read);
@@ -9186,12 +9201,13 @@ pub(crate) fn builtin_process_id_impl(processes: &ProcessManager, args: Vec<Valu
     let proc = processes
         .get_any(id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
-    if proc.kind == ProcessKind::Real {
-        // GNU `Fprocess_id` returns the OS PID as an integer (not the process
-        // object). Neomacs keys processes by id, which equals the PID surface.
-        Ok(Value::fixnum(id as i64))
-    } else {
-        Ok(Value::NIL)
+    // GNU `Fprocess_id` returns the child's real OS pid as an integer
+    // (`XPROCESS (process)->pid`), or nil when there is none (pid == 0), as
+    // for network/serial/pipe connections.  The internal `ProcessId` used to
+    // key the manager is kept separate and never exposed here.
+    match proc.os_pid {
+        Some(pid) => Ok(Value::fixnum(i64::from(pid))),
+        None => Ok(Value::NIL),
     }
 }
 
