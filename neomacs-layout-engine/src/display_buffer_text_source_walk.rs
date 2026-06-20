@@ -10,9 +10,9 @@ use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionConte
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
-    BufferHscrollSkipAction, BufferHscrollSkipSourceStep, BufferInvisibleTextScanAction,
-    BufferInvisibleTextScanContext, BufferSelectiveDisplayContext,
-    BufferSelectiveDisplayHiddenLines, BufferSelectiveDisplayLineTailAction,
+    BufferHscrollSkipAction, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
+    BufferSelectiveDisplayContext, BufferSelectiveDisplayHiddenLines,
+    BufferSelectiveDisplayLineTailAction, consume_hscroll_skip_from_position,
 };
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
@@ -180,12 +180,8 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         tab_width: i32,
     ) -> BufferTextWindowSourcePositionConsumption<Option<BufferHscrollSkipAction>> {
         let mut source_position = source_position;
-        let action = BufferHscrollSkipSourceStep::consume_from_position(
-            text,
-            &mut source_position,
-            hscroll_skip,
-            tab_width,
-        );
+        let action =
+            consume_hscroll_skip_from_position(text, &mut source_position, hscroll_skip, tab_width);
         BufferTextWindowSourcePositionConsumption::new(action, source_position)
     }
 

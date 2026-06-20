@@ -1033,17 +1033,12 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_step_preserves_line_break_action() {
+fn buffer_hscroll_skip_preserves_line_break_action() {
     let mut position = BufferTextSourcePosition::new(0, 10);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_position(
-        b"\nnext",
-        &mut position,
-        &mut hscroll_skip,
-        8,
-    )
-    .expect("hscroll skip action");
+    let action = consume_hscroll_skip_from_position(b"\nnext", &mut position, &mut hscroll_skip, 8)
+        .expect("hscroll skip action");
 
     assert_eq!(
         action,
@@ -1057,17 +1052,12 @@ fn buffer_hscroll_skip_source_step_preserves_line_break_action() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_step_consumes_tab_to_next_stop() {
+fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
     let mut position = BufferTextSourcePosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_position(
-        b"\tabc",
-        &mut position,
-        &mut hscroll_skip,
-        8,
-    )
-    .expect("hscroll skip action");
+    let action = consume_hscroll_skip_from_position(b"\tabc", &mut position, &mut hscroll_skip, 8)
+        .expect("hscroll skip action");
 
     assert_eq!(
         action,
@@ -1082,17 +1072,13 @@ fn buffer_hscroll_skip_source_step_consumes_tab_to_next_stop() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_step_consumes_wide_char_columns() {
+fn buffer_hscroll_skip_consumes_wide_char_columns() {
     let mut position = BufferTextSourcePosition::new(0, 3);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_position(
-        "界x".as_bytes(),
-        &mut position,
-        &mut hscroll_skip,
-        8,
-    )
-    .expect("hscroll skip action");
+    let action =
+        consume_hscroll_skip_from_position("界x".as_bytes(), &mut position, &mut hscroll_skip, 8)
+            .expect("hscroll skip action");
 
     assert_eq!(
         action,
@@ -1107,17 +1093,12 @@ fn buffer_hscroll_skip_source_step_consumes_wide_char_columns() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_step_keeps_marker_pending_while_still_skipping() {
+fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
     let mut position = BufferTextSourcePosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_position(
-        b"abc",
-        &mut position,
-        &mut hscroll_skip,
-        8,
-    )
-    .expect("hscroll skip action");
+    let action = consume_hscroll_skip_from_position(b"abc", &mut position, &mut hscroll_skip, 8)
+        .expect("hscroll skip action");
 
     assert_eq!(
         action,

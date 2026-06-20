@@ -519,11 +519,6 @@ impl<'a> BufferEndOfBufferTailRenderContext<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferHscrollSkipSourceStep {
-    source_char: BufferTextSourceStepChar,
-}
-
 pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
     context: BufferHscrollSkipRenderContext<'a>,
 }
@@ -546,56 +541,57 @@ pub(crate) struct BufferHscrollSkipRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-impl BufferHscrollSkipSourceStep {
-    fn new(source_char: BufferTextSourceStepChar) -> Self {
-        Self { source_char }
-    }
+pub(crate) fn consume_hscroll_skip_from_position(
+    text: &[u8],
+    position: &mut BufferTextSourcePosition,
+    hscroll_skip: &mut HorizontalScrollSkipState,
+    tab_width: i32,
+) -> Option<BufferHscrollSkipAction> {
+    let source_char = position.consume_step_char(text)?;
+    Some(consume_source_char_for_hscroll(
+        source_char,
+        hscroll_skip,
+        tab_width,
+    ))
+}
 
-    pub(crate) fn consume_from_position(
-        text: &[u8],
-        position: &mut BufferTextSourcePosition,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        tab_width: i32,
-    ) -> Option<BufferHscrollSkipAction> {
-        let source_char = position.consume_step_char(text)?;
-        Some(Self::new(source_char).consume_for_hscroll(hscroll_skip, tab_width))
-    }
-
-    fn consume_for_hscroll(
-        self,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        tab_width: i32,
-    ) -> BufferHscrollSkipAction {
-        let source_char = self.source_char;
-        let end_charpos = source_char.start_charpos() + 1;
-        if source_char.ch() == '\n' {
-            return BufferHscrollSkipAction::LineBreak {
-                ch_start_byte_idx: source_char.start_byte_idx(),
-                charpos: end_charpos,
-            };
-        }
-
-        hscroll_skip.consume_columns(self.column_width(tab_width, hscroll_skip.consumed_columns()));
-        BufferHscrollSkipAction::Text {
+fn consume_source_char_for_hscroll(
+    source_char: BufferTextSourceStepChar,
+    hscroll_skip: &mut HorizontalScrollSkipState,
+    tab_width: i32,
+) -> BufferHscrollSkipAction {
+    let end_charpos = source_char.start_charpos() + 1;
+    if source_char.ch() == '\n' {
+        return BufferHscrollSkipAction::LineBreak {
             ch_start_byte_idx: source_char.start_byte_idx(),
             charpos: end_charpos,
-            show_left_truncation: !hscroll_skip.should_skip()
-                && hscroll_skip.should_show_left_truncation(),
-        }
+        };
     }
 
-    fn column_width(self, tab_width: i32, consumed_columns: i32) -> i32 {
-        if self.source_char.ch() == '\t' {
-            let tab_width = tab_width.max(1);
-            return ((consumed_columns / tab_width + 1) * tab_width) - consumed_columns;
-        }
-
-        if is_wide_char(self.source_char.ch()) {
-            2
-        } else {
-            1
-        }
+    hscroll_skip.consume_columns(hscroll_skip_column_width(
+        source_char,
+        tab_width,
+        hscroll_skip.consumed_columns(),
+    ));
+    BufferHscrollSkipAction::Text {
+        ch_start_byte_idx: source_char.start_byte_idx(),
+        charpos: end_charpos,
+        show_left_truncation: !hscroll_skip.should_skip()
+            && hscroll_skip.should_show_left_truncation(),
     }
+}
+
+fn hscroll_skip_column_width(
+    source_char: BufferTextSourceStepChar,
+    tab_width: i32,
+    consumed_columns: i32,
+) -> i32 {
+    if source_char.ch() == '\t' {
+        let tab_width = tab_width.max(1);
+        return ((consumed_columns / tab_width + 1) * tab_width) - consumed_columns;
+    }
+
+    if is_wide_char(source_char.ch()) { 2 } else { 1 }
 }
 
 impl<'a> BufferHscrollSkipRenderRequest<'a> {
