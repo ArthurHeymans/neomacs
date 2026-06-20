@@ -7,8 +7,8 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
-    FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
+    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
+    ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
     max_mini_window_lines_from_value,
 };
 use super::font_metrics::FontMetricsService;
@@ -1031,25 +1031,21 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let (frame_chrome_output, pending_frame_chrome_rows) =
-            self.frame_output.frame_chrome_output_parts();
-        let Some(rendered_tab_bar) = (FrameTabBarDisplayRowRequest {
-            row_index,
-            y: tab_bar_y,
-            width,
-            height: tab_bar_height,
-            char_width: frame_params.char_width,
-            ascent: tab_bar_ascent,
-            row_height: frame_params.char_height,
-            base_face: &tab_bar_face,
-            text: tab_bar.text,
-        })
-        .render(&mut FrameTabBarDisplayRowRenderState::new(
-            frame_chrome_output,
-            pending_frame_chrome_rows,
+        let Some(rendered_tab_bar) = self.frame_output.render_frame_tab_bar_row(
+            FrameTabBarDisplayRowRequest {
+                row_index,
+                y: tab_bar_y,
+                width,
+                height: tab_bar_height,
+                char_width: frame_params.char_width,
+                ascent: tab_bar_ascent,
+                row_height: frame_params.char_height,
+                base_face: &tab_bar_face,
+                text: tab_bar.text,
+            },
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),
-        )) else {
+        ) else {
             return None;
         };
         face_ids.finish_into(&mut self.frame_face_id_counter);

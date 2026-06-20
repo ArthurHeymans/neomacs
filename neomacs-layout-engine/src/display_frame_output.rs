@@ -1,7 +1,10 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_output_install::install_output_resolved_face;
-use crate::display_status_line::ChromeRowRenderServices;
+use crate::display_status_line::{
+    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
+    FrameTabBarDisplayRowRequest,
+};
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
@@ -11,6 +14,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
+use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -81,12 +85,6 @@ impl FrameOutputOwner {
         &mut self.builder
     }
 
-    pub(crate) fn frame_chrome_output_parts(
-        &mut self,
-    ) -> (&mut DisplayOutputBuilder, &mut Vec<FrameChromeRow>) {
-        (&mut self.builder, &mut self.pending_frame_chrome_rows)
-    }
-
     pub(crate) fn reset(&mut self) {
         self.session().reset();
     }
@@ -97,6 +95,20 @@ impl FrameOutputOwner {
 
     pub(crate) fn set_tab_bar(&mut self, tab_bar: FrameTabBarState) {
         self.pending_tab_bar = Some(tab_bar);
+    }
+
+    pub(crate) fn render_frame_tab_bar_row(
+        &mut self,
+        request: FrameTabBarDisplayRowRequest<'_>,
+        render_services: ChromeRowRenderServices<'_, '_>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<FrameTabBarDisplayRowRender> {
+        request.render(&mut FrameTabBarDisplayRowRenderState::new(
+            &mut self.builder,
+            &mut self.pending_frame_chrome_rows,
+            render_services,
+            display_host,
+        ))
     }
 
     pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
