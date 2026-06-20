@@ -9806,6 +9806,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     );
     let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
 
+    let mut face_ids = FrameFaceIdAllocator::new(8);
     let progress = append_context
         .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -9815,6 +9816,7 @@ fn display_replacement_append_context_uses_face_fallback() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             DisplayReplacementItemAppendRequest::active_face(
                 DisplayItemKind::Stretch(DisplayStretch {
                     width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
@@ -9900,6 +9902,7 @@ fn display_replacement_append_context_advances_stretch_output() {
     let request = DisplayReplacementStretchSourceItem::from_extents(13.0, 16.0, 12.0)
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 })
         .expect("stretch append request");
+    let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -9909,6 +9912,7 @@ fn display_replacement_append_context_advances_stretch_output() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             request,
         )
         .expect("append progress");
@@ -9987,6 +9991,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
     );
     let request = DisplayReplacementSourceMappedTextItem::new("??")
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
+    let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -9996,6 +10001,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             request,
         )
         .expect("append progress");
@@ -10166,6 +10172,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         16.0,
     );
     let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
+    let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -10175,6 +10182,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             request,
         )
         .expect("append progress");
@@ -10299,6 +10307,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
+    let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -10308,6 +10317,7 @@ fn display_replacement_append_context_installs_image_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             DisplayReplacementItemAppendRequest::active_face(
                 DisplayItemKind::MediaReplacement(media_item.media()),
                 DisplayRowPosition { x_px: 16.0, col: 2 },
@@ -10438,6 +10448,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
+    let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -10447,6 +10458,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut face_ids,
             DisplayReplacementItemAppendRequest::active_face(
                 DisplayItemKind::MediaReplacement(media_item.media()),
                 DisplayRowPosition { x_px: 16.0, col: 2 },

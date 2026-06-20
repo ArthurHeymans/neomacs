@@ -22,12 +22,13 @@ use crate::display_row_lisp_string::LispStringSourceId;
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest, DisplayItemOnceSource,
     DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementDescriptor,
     DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
     DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
+use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::{
     DisplayPropertyReplacementSourceResolveRequest, DisplayStringBaseFace,
 };
@@ -381,6 +382,7 @@ impl DisplayReplacementItemAppendTemplate {
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         let geometry_update = self.row_geometry_update;
@@ -391,9 +393,11 @@ impl DisplayReplacementItemAppendTemplate {
         {
             row_geometry.include_glyph_vertical_metrics(height_px, ascent_px);
         }
-        let Some(progress) = replacement_append_context
-            .append_item_request_to_text_row_and_emit(state, self.into_request(position))
-        else {
+        let Some(progress) = replacement_append_context.append_item_request_to_text_row_and_emit(
+            state,
+            face_ids,
+            self.into_request(position),
+        ) else {
             return position;
         };
         if let DisplayReplacementItemRowGeometryUpdate::AfterCompleteRowExtents {
@@ -683,9 +687,13 @@ impl DisplayPropertyReplacementAppendPlanItem {
             Self::String(request) => {
                 request.append_to_text_row(replacement_append_context, state, face_ids, position)
             }
-            Self::Item(item) => {
-                item.append_to_text_row(replacement_append_context, row_geometry, state, position)
-            }
+            Self::Item(item) => item.append_to_text_row(
+                replacement_append_context,
+                row_geometry,
+                state,
+                face_ids,
+                position,
+            ),
         }
     }
 }
@@ -828,6 +836,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     pub(crate) fn append_item_request_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<DisplayRowAppendProgress> {
         let plan = request.into_plan(self.replacement_source, self.active_face.face_id());
@@ -845,7 +854,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 ascent_px,
             ),
         };
-        append_context.append_replacement_item_plan_to_text_row_and_emit(state, plan)
+        append_context.append_replacement_item_plan_to_text_row_and_emit(state, face_ids, plan)
     }
 }
 
@@ -868,13 +877,22 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn append_replacement_item_plan_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        self.single_item.render_naturally(
+        let position = plan.position;
+        let mut source = DisplayItemOnceSource::new(plan.item);
+        let mut source_state = DisplayRowSourceState::default();
+        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+        let outcome = self.single_item.render_source_with_policy(
             state,
-            plan.item,
-            plan.position,
+            face_ids,
+            &mut source,
+            &mut source_state,
+            position,
             DisplayRowAppendKind::DisplayReplacement,
-        )
+            &mut render_policy,
+        )?;
+        Some(outcome.into_append_progress(position))
     }
 }
