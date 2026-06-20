@@ -59,6 +59,44 @@ fn display_row_request_for_face<'a>(
         .source_request_for_base_face_id(base_face_id, base_face)
 }
 
+fn render_lisp_string_row_with_context(
+    renderer: &mut DisplayRowRenderer<'_>,
+    request: DisplayRowSourceRenderRequest<'_>,
+    value: Value,
+    context: &mut DisplayRowRenderContext<'_, '_>,
+) -> Option<RenderedDisplayRow> {
+    let session_request =
+        DisplayRowLispStringSourceSessionRequest::for_base_face_id(value, request.base_face_id());
+    renderer.render_lisp_string_plan_with_context(
+        request.into_render_plan(),
+        session_request,
+        context,
+    )
+}
+
+fn render_lisp_string_row(
+    renderer: &mut DisplayRowRenderer<'_>,
+    request: DisplayRowSourceRenderRequest<'_>,
+    value: Value,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+) -> Option<RenderedDisplayRow> {
+    let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
+    render_lisp_string_row_with_context(renderer, request, value, &mut context)
+}
+
+fn render_lisp_string_row_with_display_host(
+    renderer: &mut DisplayRowRenderer<'_>,
+    request: DisplayRowSourceRenderRequest<'_>,
+    value: Value,
+    face_resolver: &FaceResolver,
+    display_host: Option<&dyn DisplayHost>,
+    face_ids: &mut FrameFaceIdAllocator,
+) -> Option<RenderedDisplayRow> {
+    let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+    render_lisp_string_row_with_context(renderer, request, value, &mut context)
+}
+
 #[derive(Default)]
 struct RecordingDisplayRowMediaHost {
     image_requests: Mutex<Vec<ImageResolveRequest>>,
@@ -669,9 +707,14 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
         std::collections::HashMap::new(),
     );
 
-    let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("A中"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        request,
+        Value::string("A中"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
     assert_eq!(rendered.row.role, GlyphRowRole::TabLine);
@@ -822,9 +865,14 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
         std::collections::HashMap::new(),
     );
 
-    let rendered = DisplayRowLispStringRenderRequest::new(spec, Value::string("ABC"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        spec,
+        Value::string("ABC"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
     assert_eq!(rendered.progress.end_x, 16.0);
@@ -861,9 +909,14 @@ fn display_row_renderer_clips_from_render_bounds_start() {
         max_x: DisplayRowMaxX::Bounded(32.0),
     });
 
-    let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("ABC"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        request,
+        Value::string("ABC"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
     assert_eq!(rendered.progress.end_x, 32.0);
@@ -902,9 +955,14 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
         max_x: DisplayRowMaxX::Bounded(240.0),
     });
 
-    let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("\tX"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        request,
+        Value::string("\tX"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
@@ -1169,8 +1227,7 @@ fn render_lisp_display_row_output_with_symbols(
         role,
         symbol_values,
     );
-    DisplayRowLispStringRenderRequest::new(request, rendered)
-        .render(&mut renderer, &resolver, &mut face_ids)
+    render_lisp_string_row(&mut renderer, request, rendered, &resolver, &mut face_ids)
         .expect("display source row")
 }
 
@@ -1388,9 +1445,9 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
         std::collections::HashMap::new(),
     );
 
-    let rendered = DisplayRowLispStringRenderRequest::new(spec, rendered_text)
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered =
+        render_lisp_string_row(&mut renderer, spec, rendered_text, &resolver, &mut face_ids)
+            .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
     assert_eq!(
@@ -1443,9 +1500,15 @@ fn render_tab_line_with_media_host(
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
-    let rendered = DisplayRowLispStringRenderRequest::new(spec, rendered_text)
-        .render_with_display_host(&mut renderer, &resolver, Some(&host), &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row_with_display_host(
+        &mut renderer,
+        spec,
+        rendered_text,
+        &resolver,
+        Some(&host),
+        &mut face_ids,
+    )
+    .expect("display source row");
     (rendered, host)
 }
 
@@ -1881,9 +1944,14 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
         std::collections::HashMap::new(),
     );
 
-    let rendered = DisplayRowLispStringRenderRequest::new(spec, Value::string("\tX"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        spec,
+        Value::string("\tX"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
@@ -2581,8 +2649,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
         std::collections::HashMap::new(),
     );
 
-    let row = DisplayRowLispStringRenderRequest::new(spec, rendered)
-        .render(&mut renderer, &resolver, &mut face_ids)
+    let row = render_lisp_string_row(&mut renderer, spec, rendered, &resolver, &mut face_ids)
         .expect("display source row")
         .row;
     let glyphs = &row.glyphs[1];
@@ -2595,7 +2662,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 }
 
 #[test]
-fn display_row_lisp_string_render_request_uses_render_context() {
+fn display_row_lisp_string_source_session_uses_render_context() {
     let _eval = Context::new();
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
@@ -2619,16 +2686,20 @@ fn display_row_lisp_string_render_request_uses_render_context() {
     );
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("ctx"))
-        .render_with_context(&mut renderer, &mut context)
-        .expect("rendered context row");
+    let rendered = render_lisp_string_row_with_context(
+        &mut renderer,
+        request,
+        Value::string("ctx"),
+        &mut context,
+    )
+    .expect("rendered context row");
 
     assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
     assert_eq!(row_text_expanding_stretches(&rendered.row), "ctx");
 }
 
 #[test]
-fn display_row_render_executor_renders_lisp_string_request() {
+fn display_row_render_executor_renders_lisp_string_source_session() {
     let _eval = Context::new();
     let mut font_metrics = None;
     let table = FaceTable::new();
@@ -2652,11 +2723,12 @@ fn display_row_render_executor_renders_lisp_string_request() {
     let mut executor =
         DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
 
+    let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
+        Value::string("exec"),
+        request.base_face_id(),
+    );
     let rendered = executor
-        .render_lisp_string_request(DisplayRowLispStringRenderRequest::new(
-            request,
-            Value::string("exec"),
-        ))
+        .render_lisp_string_source_session(request, session_request)
         .expect("executor rendered lisp string row");
 
     assert_eq!(rendered.row.role, GlyphRowRole::TabBar);

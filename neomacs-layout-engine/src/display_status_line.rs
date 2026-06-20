@@ -21,10 +21,10 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowOwner,
-    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind,
+    DisplayRowBoundsPolicy, DisplayRowLispStringSourceSessionRequest, DisplayRowOwner,
+    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest,
+    DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind,
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
@@ -112,9 +112,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         self.face_ids
     }
 
-    fn render_lisp_string_request(
+    fn render_lisp_string_source_request(
         &mut self,
-        request: DisplayRowLispStringRenderRequest<'_>,
+        request: ChromeLispStringSourceRenderRequest<'_>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<RenderedDisplayRow> {
         let mut render_executor = DisplayRowRenderExecutor::new(
@@ -123,7 +123,8 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
             display_host,
             &mut *self.face_ids,
         );
-        render_executor.render_lisp_string_request(request)
+        render_executor
+            .render_lisp_string_source_session(request.row_request, request.source_session)
     }
 
     pub(crate) fn render_item_source_fragment_into_row(
@@ -170,10 +171,10 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         )
     }
 
-    fn lisp_string_render_request(
+    fn lisp_string_source_request(
         &self,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayRowLispStringRenderRequest<'face> {
+    ) -> ChromeLispStringSourceRenderRequest<'face> {
         self.lisp_string_row_request().render_request(face_ids)
     }
 
@@ -209,7 +210,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             display_row_index: self.row_index,
             bounds: self.bounds(),
             bounds_policy: DisplayRowBoundsPolicy::MeasureContent,
-            render_request: self.lisp_string_render_request(face_ids),
+            render_request: self.lisp_string_source_request(face_ids),
         }
     }
 }
@@ -265,6 +266,11 @@ struct ChromeLispStringRowRequest<'face> {
     base_face: &'face ResolvedFace,
     text: Value,
     symbol_values: std::collections::HashMap<String, Value>,
+}
+
+struct ChromeLispStringSourceRenderRequest<'face> {
+    row_request: DisplayRowSourceRenderRequest<'face>,
+    source_session: DisplayRowLispStringSourceSessionRequest,
 }
 
 impl<'face> ChromeLispStringRowRequest<'face> {
@@ -332,14 +338,17 @@ impl<'face> ChromeLispStringRowRequest<'face> {
     fn render_request(
         self,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayRowLispStringRenderRequest<'face> {
+    ) -> ChromeLispStringSourceRenderRequest<'face> {
         let (row_request, base_face, text) = self.into_render_request_parts();
-        DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
-            base_face,
+        let row_request = row_request.source_request_from_base_face(face_ids, base_face);
+        let source_session = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
             text,
-        )
+            row_request.base_face_id(),
+        );
+        ChromeLispStringSourceRenderRequest {
+            row_request,
+            source_session,
+        }
     }
 }
 
@@ -661,7 +670,7 @@ struct ChromeDisplayRowRenderRequest<'face> {
     display_row_index: u32,
     bounds: Rect,
     bounds_policy: DisplayRowBoundsPolicy,
-    render_request: DisplayRowLispStringRenderRequest<'face>,
+    render_request: ChromeLispStringSourceRenderRequest<'face>,
 }
 
 struct ChromeDisplayRowRenderedRequest {
@@ -679,7 +688,7 @@ impl<'face> ChromeDisplayRowRenderRequest<'face> {
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<ChromeDisplayRowRenderedRequest> {
         let rendered =
-            render_services.render_lisp_string_request(self.render_request, display_host)?;
+            render_services.render_lisp_string_source_request(self.render_request, display_host)?;
         Some(ChromeDisplayRowRenderedRequest {
             owner: self.owner,
             display_row_index: self.display_row_index,

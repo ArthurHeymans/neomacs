@@ -1281,11 +1281,6 @@ impl DisplayRowLispStringSourceId {
     }
 }
 
-pub(crate) struct DisplayRowLispStringRenderRequest<'a> {
-    row_request: DisplayRowSourceRenderRequest<'a>,
-    value: Value,
-}
-
 pub(crate) struct DisplayRowItemSourceRenderRequest<'a> {
     row_request: DisplayRowSourceRenderRequest<'a>,
 }
@@ -1414,69 +1409,6 @@ pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
     base_face_id: u32,
-}
-
-impl<'a> DisplayRowLispStringRenderRequest<'a> {
-    fn new(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
-        Self { row_request, value }
-    }
-
-    pub(crate) fn from_base_face_policy(
-        policy: DisplayRowSourceRequestPolicy,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face: &'a ResolvedFace,
-        value: Value,
-    ) -> Self {
-        Self::new(
-            policy.source_request_from_base_face(face_ids, base_face),
-            value,
-        )
-    }
-
-    fn into_render_parts(
-        self,
-    ) -> (
-        DisplayRowRenderPlan<'a>,
-        DisplayRowLispStringSourceSessionRequest,
-    ) {
-        let plan = self.row_request.into_render_plan();
-        let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
-            self.value,
-            plan.base_face_id,
-        );
-        (plan, session_request)
-    }
-
-    pub(crate) fn render_with_context(
-        self,
-        renderer: &mut DisplayRowRenderer<'_>,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        renderer.render_lisp_string_request_with_context(self, context)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render(
-        self,
-        renderer: &mut DisplayRowRenderer<'_>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
-        self.render_with_context(renderer, &mut context)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_with_display_host(
-        self,
-        renderer: &mut DisplayRowRenderer<'_>,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_with_context(renderer, &mut context)
-    }
 }
 
 impl<'a> DisplayRowItemSourceRenderRequest<'a> {
@@ -1686,7 +1618,7 @@ impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
+    pub(crate) fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
         Self {
             source_id: DisplayRowLispStringSourceId::ROOT,
             value,
@@ -1859,7 +1791,7 @@ impl DisplayRowSourceGeometry {
         }
     }
 
-    fn source_request_from_base_face<'face>(
+    pub(crate) fn source_request_from_base_face<'face>(
         self,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
@@ -1965,7 +1897,7 @@ impl DisplayRowSourceRequestPolicy {
         &self.symbol_values
     }
 
-    fn source_request_from_base_face<'face>(
+    pub(crate) fn source_request_from_base_face<'face>(
         self,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
@@ -2067,7 +1999,6 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         RenderFaceRef::FaceId(self.base_face_id)
     }
 
-    #[cfg(test)]
     pub(crate) fn base_face_id(&self) -> u32 {
         self.base_face_id
     }
@@ -2463,11 +2394,16 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         }
     }
 
-    pub(crate) fn render_lisp_string_request(
+    pub(crate) fn render_lisp_string_source_session(
         &mut self,
-        request: DisplayRowLispStringRenderRequest<'_>,
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        session_request: DisplayRowLispStringSourceSessionRequest,
     ) -> Option<RenderedDisplayRow> {
-        request.render_with_context(&mut self.renderer, &mut self.context)
+        self.renderer.render_lisp_string_plan_with_context(
+            row_request.into_render_plan(),
+            session_request,
+            &mut self.context,
+        )
     }
 
     pub(crate) fn render_item_source_fragment_into_row<S: DisplayItemSource>(
@@ -2505,15 +2441,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         session
             .render_next_row_plan_with_context(self, plan, context)
             .map(|result| result.rendered)
-    }
-
-    fn render_lisp_string_request_with_context(
-        &mut self,
-        request: DisplayRowLispStringRenderRequest<'_>,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        let (plan, session_request) = request.into_render_parts();
-        self.render_lisp_string_plan_with_context(plan, session_request, context)
     }
 
     fn render_display_item_source_row_step_with_context(
