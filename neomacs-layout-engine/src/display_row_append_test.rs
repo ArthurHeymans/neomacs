@@ -33,9 +33,11 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
+    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayImageItem,
+    DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayMediaReplacement,
+    DisplayPropertyReplacementDescriptor, DisplaySourceMappedText, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod,
+    RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -81,16 +83,15 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
-use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::display_source::*;
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferTextSourceRenderPlanRequest,
     BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementDescriptor, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
+    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -8658,7 +8659,7 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(4),
         EmacsBytePos::new(4),
@@ -8928,7 +8929,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
         DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
     let request = DisplayPropertyReplacementAppendRequest::new(
-        crate::display_source::BufferDisplayReplacementSource::new(
+        crate::display_item::BufferDisplayReplacementSource::new(
             BufferId(7),
             CharPos0::new(3),
             EmacsBytePos::new(12),
@@ -9720,7 +9721,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
             ]),
         }],
     );
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -9799,7 +9800,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -9884,7 +9885,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -9974,7 +9975,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -10146,7 +10147,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 4.0, 0.0, 16.0, 12.0);
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -10289,7 +10290,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         },
         DisplayTabPolicy::every(8),
     );
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
@@ -10428,7 +10429,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         },
         DisplayTabPolicy::every(8),
     );
-    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),

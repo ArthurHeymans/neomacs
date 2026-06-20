@@ -1060,6 +1060,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
             }
             DisplayItemKind::RowBreak(_)
+            | DisplayItemKind::BufferDisplayPropertyReplacement(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }

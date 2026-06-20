@@ -2,7 +2,7 @@ use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -11,7 +11,6 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 

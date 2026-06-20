@@ -2,7 +2,10 @@ use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cur
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::{DisplayItem, DisplayItemKind};
+use crate::display_item::{
+    BufferDisplayReplacementSource, DisplayItem, DisplayItemKind,
+    DisplayPropertyReplacementDescriptor,
+};
 #[cfg(test)]
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
@@ -22,11 +25,11 @@ use crate::display_row_lisp_string::LispStringSourceId;
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest, DisplayItemOnceSource,
-    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementDescriptor,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    BufferDisplayReplacementStringRequest, DisplayItemOnceSource,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::{

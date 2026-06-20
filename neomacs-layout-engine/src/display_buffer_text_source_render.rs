@@ -21,11 +21,10 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferTextLineBreakRenderRequest,
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
-use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceItem,
-};
+use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
+use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -36,7 +35,6 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
 use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_source::BufferDisplayPropertyReplacementItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
@@ -468,16 +466,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             return false;
         };
 
-        match source_item {
-            BufferTextSourceConsumptionItem::DisplayItem(source_item) => {
-                self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
-            }
-            BufferTextSourceConsumptionItem::Replacement(replacement) => self.consume_replacement(
-                source_walk,
-                layout_resolution_context,
-                replacement,
-                buffer,
-            ),
+        if source_item.is_display_property_replacement() {
+            let replacement = source_item
+                .into_display_property_replacement()
+                .expect("replacement source item reported replacement kind");
+            self.consume_replacement(source_walk, layout_resolution_context, replacement, buffer)
+        } else {
+            self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
         }
     }
 

@@ -15,7 +15,7 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
+    BufferTextSourceConsumptionState, BufferTextSourceItem,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
@@ -39,7 +39,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
 }
 
 struct BufferTextWindowSourceConsumption {
-    source_item: Option<BufferTextSourceConsumptionItem>,
+    source_item: Option<BufferTextSourceItem>,
     source_position: BufferTextSourcePosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
 }
@@ -48,14 +48,8 @@ impl BufferTextWindowSourceConsumption {
     fn apply_to_progress(
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
-    ) -> (
-        Option<BufferTextSourceConsumptionItem>,
-        Vec<PendingDisplaySourceFace>,
-    ) {
-        if !matches!(
-            self.source_item,
-            Some(BufferTextSourceConsumptionItem::DisplayItem(_))
-        ) {
+    ) -> (Option<BufferTextSourceItem>, Vec<PendingDisplaySourceFace>) {
+        if self.source_item.is_none() {
             progress.apply_source_position(self.source_position);
         }
         (self.source_item, self.pending_faces)
@@ -67,7 +61,7 @@ impl BufferTextWindowSourceConsumption {
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-    ) -> Option<BufferTextSourceConsumptionItem> {
+    ) -> Option<BufferTextSourceItem> {
         let (source_item, pending_faces) = self.apply_to_progress(progress);
         face_resolution_context.install_pending_source_faces(
             source_render,
@@ -139,7 +133,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         face_ids: &mut FrameFaceIdAllocator,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-    ) -> Option<BufferTextSourceConsumptionItem> {
+    ) -> Option<BufferTextSourceItem> {
         self.consume_source_item(
             progress.source_position(),
             face_resolution_context.clone(),

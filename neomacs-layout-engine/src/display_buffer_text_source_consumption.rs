@@ -3,14 +3,14 @@
 use std::collections::VecDeque;
 
 use crate::display_buffer_text_source::{
-    BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
-    BufferTextSourcePosition, BufferTextSourceStepChar,
+    BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourcePosition,
+    BufferTextSourceStepChar,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, RenderFaceRef,
-    SourceSpan,
+    BufferDisplayPropertyReplacementItem, DisplayItem, DisplayItemKind, DisplayRowBreakReason,
+    DisplaySourcePosition, RenderFaceRef, SourceSpan,
 };
-use crate::display_source::{BufferDisplayPropertyReplacementItem, DisplaySourceContext};
+use crate::display_source::DisplaySourceContext;
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
@@ -20,18 +20,6 @@ pub(crate) struct BufferTextSourceItem {
     start_byte_idx: usize,
     start_charpos: i64,
     source_char: Option<char>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum BufferTextAlignedSourceCursorItem {
-    Item(BufferTextSourceItem),
-    Replacement(BufferDisplayPropertyReplacementItem),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceConsumptionItem {
-    DisplayItem(BufferTextSourceItem),
-    Replacement(BufferDisplayPropertyReplacementItem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -134,6 +122,22 @@ impl BufferTextSourceItem {
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline
         )
+    }
+
+    pub(crate) fn is_display_property_replacement(&self) -> bool {
+        matches!(
+            self.item.kind,
+            DisplayItemKind::BufferDisplayPropertyReplacement(_)
+        )
+    }
+
+    pub(crate) fn into_display_property_replacement(
+        self,
+    ) -> Result<BufferDisplayPropertyReplacementItem, Self> {
+        match self.item.kind {
+            DisplayItemKind::BufferDisplayPropertyReplacement(replacement) => Ok(replacement),
+            _ => Err(self),
+        }
     }
 
     #[cfg(test)]
@@ -318,30 +322,26 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: BufferTextSourcePosition,
         replacement_mode: BufferTextDisplayReplacementMode,
-    ) -> Option<BufferTextAlignedSourceCursorItem> {
+    ) -> Option<BufferTextSourceItem> {
         let expected_source_pos = Self::expected_source_pos(position);
         if source.current_char_pos() != expected_source_pos {
             source.reset_to(expected_source_pos);
         }
 
         let source_char = source.char_at(expected_source_pos);
-        match source.next_cursor_item(context, replacement_mode)? {
-            BufferTextSourceCursorItem::Item(item) => self
-                .align_display_item(position, source_char, item)
-                .map(BufferTextAlignedSourceCursorItem::Item),
-            BufferTextSourceCursorItem::Replacement(item) => {
-                if !self.replacement_matches(position, &item)? {
-                    tracing::error!(
-                        "BufferTextSourceConsumptionState: display replacement did not match \
+        let item = source.next_cursor_item(context, replacement_mode)?;
+        if let DisplayItemKind::BufferDisplayPropertyReplacement(replacement) = &item.kind {
+            if !self.replacement_matches(position, replacement)? {
+                tracing::error!(
+                    "BufferTextSourceConsumptionState: display replacement did not match \
                          buffer walk byte {} charpos {}",
-                        position.byte_idx(),
-                        position.charpos()
-                    );
-                    return None;
-                }
-                Some(BufferTextAlignedSourceCursorItem::Replacement(item))
+                    position.byte_idx(),
+                    position.charpos()
+                );
+                return None;
             }
         }
+        self.align_display_item(position, source_char, item)
     }
 
     #[cfg(test)]
@@ -362,18 +362,17 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &BufferTextSourcePosition,
     ) -> Option<BufferTextSourceItem> {
-        match self.read_source_cursor(
+        let item = self.read_source_cursor(
             source,
             context,
             *position,
             BufferTextDisplayReplacementMode::InlineSourceItems,
-        )? {
-            BufferTextAlignedSourceCursorItem::Item(item) => Some(item),
-            BufferTextAlignedSourceCursorItem::Replacement(_) => {
-                debug_assert!(false, "inline source cursor surfaced a buffer replacement");
-                None
-            }
+        )?;
+        if item.is_display_property_replacement() {
+            debug_assert!(false, "inline source cursor surfaced a buffer replacement");
+            return None;
         }
+        Some(item)
     }
 
     pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
@@ -381,26 +380,22 @@ impl BufferTextSourceConsumptionState {
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceConsumptionItem> {
+    ) -> Option<BufferTextSourceItem> {
         if let Some(source_item) = self.pending_render_items.pop_front() {
-            return Some(BufferTextSourceConsumptionItem::DisplayItem(source_item));
+            return Some(source_item);
         }
 
-        match self.read_source_cursor(
+        let item = self.read_source_cursor(
             source,
             context,
             *position,
             BufferTextDisplayReplacementMode::TypedReplacementItem,
-        )? {
-            BufferTextAlignedSourceCursorItem::Item(item) => {
-                let item = self.consume_aligned_display_item(item, position)?;
-                self.prepare_render_source_item(item)
-                    .map(BufferTextSourceConsumptionItem::DisplayItem)
-            }
-            BufferTextAlignedSourceCursorItem::Replacement(item) => {
-                Some(BufferTextSourceConsumptionItem::Replacement(item))
-            }
+        )?;
+        if item.is_display_property_replacement() {
+            return Some(item);
         }
+        let item = self.consume_aligned_display_item(item, position)?;
+        self.prepare_render_source_item(item)
     }
 
     #[cfg(test)]
