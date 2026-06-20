@@ -2019,8 +2019,8 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
-    let step = BufferTextDirectSourceItemLoweringRequest::new(typed_item)
-        .lower(&mut position)
+    let step = BufferTextDirectDisplayItemRequest::new(typed_item)
+        .consume(&mut position)
         .ok()
         .expect("direct source step");
 
@@ -2132,7 +2132,7 @@ fn buffer_text_source_item_without_source_char_keeps_source_mapped_for_lowering(
         other => panic!("expected source-mapped text, got {other:?}"),
     }
 
-    let step = BufferTextDirectSourceItemLoweringRequest::new(typed_item).lower(&mut position);
+    let step = BufferTextDirectDisplayItemRequest::new(typed_item).consume(&mut position);
 
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     assert!(step.is_err());
@@ -6368,7 +6368,10 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     );
 
     let outcome = BufferTextLoweredDisplayItemRenderRequest::new(
-        BufferTextLoweredDisplayItem::new(source_step_char, source_item),
+        BufferTextSourceRenderItem::Lowered(BufferTextLoweredDisplayItem::new(
+            source_step_char,
+            source_item,
+        )),
         BufferTextLoweredDisplayItemRenderContext::new(
             BufferCurrentFaceResolutionContext::new(
                 &snapshot,

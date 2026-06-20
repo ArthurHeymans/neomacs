@@ -6,8 +6,7 @@ use crate::display_buffer_text_source::{
     BufferTextSourcePosition,
 };
 use crate::display_buffer_text_source_lowering::{
-    BufferTextDirectSourceItemLoweringRequest, BufferTextLoweredDisplayItem,
-    BufferTextSourceLoweringState,
+    BufferTextDirectDisplayItemRequest, BufferTextSourceLoweringState, BufferTextSourceRenderItem,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
@@ -45,7 +44,7 @@ struct BufferTextSourceCursorReadRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceConsumptionItem {
-    LoweredDisplayItem(BufferTextLoweredDisplayItem),
+    DisplayItem(BufferTextSourceRenderItem),
     Replacement(BufferTextReplacementItem),
 }
 
@@ -250,7 +249,7 @@ impl BufferTextSourceConsumptionState {
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         if let Some(step) = self.lowering.next_pending_display_item(position) {
             return Some(step);
         }
@@ -293,7 +292,7 @@ impl BufferTextSourceConsumptionState {
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceConsumptionItem> {
         if let Some(step) = self.lowering.next_pending_display_item(position) {
-            return Some(BufferTextSourceConsumptionItem::LoweredDisplayItem(step));
+            return Some(BufferTextSourceConsumptionItem::DisplayItem(step));
         }
 
         if self.lowering.has_pending_text_run() {
@@ -310,7 +309,7 @@ impl BufferTextSourceConsumptionState {
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
                 .consume_aligned_display_item(item, position)
-                .map(BufferTextSourceConsumptionItem::LoweredDisplayItem),
+                .map(BufferTextSourceConsumptionItem::DisplayItem),
             BufferTextAlignedSourceCursorItem::Replacement(item) => {
                 Some(BufferTextSourceConsumptionItem::Replacement(item))
             }
@@ -321,7 +320,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         self.consume_aligned_display_item(item, position)
     }
 
@@ -330,7 +329,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         let item = BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
             .align_display_item(item)?;
         self.consume_aligned_display_item(item, position)
@@ -341,7 +340,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         self.consume_aligned_display_item(item, position)
     }
 
@@ -349,8 +348,8 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
-        match BufferTextDirectSourceItemLoweringRequest::new(item).lower(position) {
+    ) -> Option<BufferTextSourceRenderItem> {
+        match BufferTextDirectDisplayItemRequest::new(item).consume(position) {
             Ok(item) => Some(item),
             Err(item) => self.lowering.consume_text_run_item(item, position),
         }

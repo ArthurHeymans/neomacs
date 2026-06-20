@@ -27,13 +27,25 @@ pub(crate) struct BufferTextLoweredDisplayItem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextDirectDisplayItem {
+    source_char: BufferTextSourceStepChar,
+    item: DisplayItem,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceRenderItem {
+    Direct(BufferTextDirectDisplayItem),
+    Lowered(BufferTextLoweredDisplayItem),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceLoweringState {
     text_start_byte: usize,
     pending_text_run: Option<DisplayTextRunItemCursor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextDirectSourceItemLoweringRequest {
+pub(crate) struct BufferTextDirectDisplayItemRequest {
     item: BufferTextSourceItem,
 }
 
@@ -103,26 +115,48 @@ impl BufferTextLoweredDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
     }
+}
 
+impl BufferTextDirectDisplayItem {
+    pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
+        Self { source_char, item }
+    }
+}
+
+impl BufferTextSourceRenderItem {
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
-        self.source_char
+        match self {
+            Self::Direct(item) => item.source_char,
+            Self::Lowered(item) => item.source_char,
+        }
     }
 
     pub(crate) fn is_explicit_line_break(&self) -> bool {
+        let item = match self {
+            Self::Direct(item) => &item.item,
+            Self::Lowered(item) => &item.item,
+        };
         matches!(
-            self.item.kind,
+            item.kind,
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline
         )
     }
 
     pub(crate) fn end_charpos(&self) -> i64 {
-        display_item_buffer_end_charpos(&self.item)
-            .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
+        let (source_char, item) = match self {
+            Self::Direct(item) => (item.source_char, &item.item),
+            Self::Lowered(item) => (item.source_char, &item.item),
+        };
+        display_item_buffer_end_charpos(item)
+            .unwrap_or_else(|| source_char.start_charpos().saturating_add(1))
     }
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
-        (self.source_char, self.item)
+        match self {
+            Self::Direct(item) => (item.source_char, item.item),
+            Self::Lowered(item) => (item.source_char, item.item),
+        }
     }
 }
 
@@ -141,7 +175,7 @@ impl BufferTextSourceLoweringState {
     pub(crate) fn next_pending_display_item(
         &mut self,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         let text_start_byte = self.text_start_byte;
         let pending = self.pending_text_run.as_mut()?;
         let item = pending.next_item();
@@ -152,14 +186,14 @@ impl BufferTextSourceLoweringState {
         if finished || step.is_none() {
             self.pending_text_run = None;
         }
-        step
+        step.map(BufferTextSourceRenderItem::Lowered)
     }
 
     pub(crate) fn consume_text_run_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
                 "BufferTextSourceLoweringState: validated source item at byte {} charpos {} \
@@ -175,25 +209,26 @@ impl BufferTextSourceLoweringState {
     }
 }
 
-impl BufferTextDirectSourceItemLoweringRequest {
+impl BufferTextDirectDisplayItemRequest {
     pub(crate) fn new(item: BufferTextSourceItem) -> Self {
         Self { item }
     }
 
-    pub(crate) fn lower(
+    pub(crate) fn consume(
         self,
         position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextLoweredDisplayItem, BufferTextSourceItem> {
-        Self::try_into_direct_lowered_display_item(self.item, position)
+    ) -> Result<BufferTextSourceRenderItem, BufferTextSourceItem> {
+        Self::try_into_direct_display_item(self.item, position)
+            .map(BufferTextSourceRenderItem::Direct)
     }
 
-    fn try_into_direct_lowered_display_item(
+    fn try_into_direct_display_item(
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextLoweredDisplayItem, BufferTextSourceItem> {
+    ) -> Result<BufferTextDirectDisplayItem, BufferTextSourceItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
-                "BufferTextSourceLoweringState: validated source item at byte {} charpos {} \
+                "BufferTextDirectDisplayItemRequest: validated source item at byte {} charpos {} \
                  did not match buffer walk byte {} charpos {}",
                 item.start_byte_idx(),
                 item.start_charpos(),
@@ -209,7 +244,7 @@ impl BufferTextDirectSourceItemLoweringRequest {
         let start_charpos = item.start_charpos();
         let byte_len = item.buffer_byte_len().unwrap_or_else(|| ch.len_utf8());
         position.advance_byte_idx_to(start_byte_idx.saturating_add(byte_len));
-        Ok(BufferTextLoweredDisplayItem::new(
+        Ok(BufferTextDirectDisplayItem::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             item.into_item(),
         ))
@@ -221,7 +256,7 @@ impl BufferTextSourceLoweringState {
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextLoweredDisplayItem> {
+    ) -> Option<BufferTextSourceRenderItem> {
         match DisplayTextRunItemCursor::from_item(item.into_item()) {
             Ok(cursor) => {
                 self.pending_text_run = Some(cursor);
