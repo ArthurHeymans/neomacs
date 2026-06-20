@@ -6624,7 +6624,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
 }
 
 #[test]
-fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailing_enabled() {
+fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled() {
     let mut context = RowTransitionTestContext::new("source-run-trailing-whitespace-enabled");
     let buf_id = context
         .eval
@@ -6638,7 +6638,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailin
             .buffer_manager_mut()
             .get_mut(buf_id)
             .expect("buffer");
-        buffer.insert("ab");
+        buffer.insert("a ");
     }
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
@@ -6665,7 +6665,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailin
         4,
     );
     let params = test_display_space_window_params();
-    let text = b"ab";
+    let text = b"a ";
     let mut byte_idx = 0;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
@@ -6755,8 +6755,10 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailin
     assert_eq!(x, 16.0);
     assert_eq!(col, 2);
     assert_eq!(
-        trailing_whitespace.highlight_start_x(&context.geometry),
-        None
+        trailing_whitespace
+            .highlight_start_x(&context.geometry)
+            .map(|(_color, x)| x),
+        Some(8.0)
     );
     context
         .builder
@@ -6769,7 +6771,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_trailin
             ));
             assert!(matches!(
                 text_glyphs[1].glyph_type,
-                GlyphType::Char { ch: 'b' }
+                GlyphType::Char { ch: ' ' }
             ));
         })
         .expect("current row");

@@ -143,7 +143,6 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     source_item: &DisplaySourceStepItem,
     context: &BufferSourceItemRenderContext<'_>,
     word_wrap: WordWrapRenderState,
-    trailing_whitespace: &TrailingWhitespaceRenderState,
     right_edge_px: f32,
     position: DisplayRowPosition,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
@@ -155,7 +154,6 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     };
     if context.overlay_context.is_enabled()
         || (word_wrap.is_enabled() && text.contains(' '))
-        || (trailing_whitespace.is_enabled() && text.contains(' '))
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
     {
@@ -220,9 +218,14 @@ fn capture_whole_text_run_cursor_if_point(
 fn apply_whole_text_run_trailing_whitespace_state(
     text: &str,
     trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    geometry: &DisplayRowGeometryState,
+    append_progress: &DisplayRowAppendProgress,
 ) {
-    if trailing_whitespace.is_enabled() && !text.contains(' ') {
-        trailing_whitespace.reset_after_row_transition();
+    if !trailing_whitespace.is_enabled() {
+        return;
+    }
+    for (ch, slot) in text.chars().zip(&append_progress.slots) {
+        trailing_whitespace.track_rendered_char(ch, geometry.start_marker_at_x(slot.x_px));
     }
 }
 
@@ -267,7 +270,12 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         point_charpos,
         &append_progress,
     );
-    apply_whole_text_run_trailing_whitespace_state(source_text, trailing_whitespace);
+    apply_whole_text_run_trailing_whitespace_state(
+        source_text,
+        trailing_whitespace,
+        geometry,
+        &append_progress,
+    );
     apply_whole_text_run_word_wrap_state(source_text, word_wrap);
     progress.row.apply_position(append_progress.end);
     if let Some(end_charpos) = source_end_charpos {
@@ -352,7 +360,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &source_item,
         &context,
         *word_wrap,
-        trailing_whitespace,
         context.append_surface.right_edge(),
         append_position,
         &buffer_row_append_context,
