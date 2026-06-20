@@ -6778,7 +6778,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
 }
 
 #[test]
-fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wrap_enabled() {
+fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enabled() {
     let mut context = RowTransitionTestContext::new("source-run-word-wrap-enabled");
     let buf_id = context
         .eval
@@ -6792,7 +6792,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wr
             .buffer_manager_mut()
             .get_mut(buf_id)
             .expect("buffer");
-        buffer.insert("ab");
+        buffer.insert("a b");
     }
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
@@ -6819,7 +6819,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wr
         4,
     );
     let params = test_display_space_window_params();
-    let text = b"ab";
+    let text = b"a b";
     let mut byte_idx = 0;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
@@ -6832,7 +6832,6 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wr
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(true);
-    word_wrap.allow_after_current_char(' ');
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
@@ -6851,7 +6850,7 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wr
     let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
         0,
-        2,
+        3,
         99,
         &params,
         0.0,
@@ -6904,24 +6903,29 @@ fn buffer_text_source_render_request_keeps_non_whitespace_run_whole_when_word_wr
     .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
 
     assert!(continue_buffer_walk);
-    assert_eq!(byte_idx, 2);
-    assert_eq!(charpos, 2);
-    assert_eq!(x, 16.0);
-    assert_eq!(col, 2);
+    assert_eq!(byte_idx, 3);
+    assert_eq!(charpos, 3);
+    assert_eq!(x, 24.0);
+    assert_eq!(col, 3);
     assert!(word_wrap.has_candidate());
-    assert_eq!(word_wrap.candidate().byte_idx(), 0);
-    assert_eq!(word_wrap.candidate().charpos(), 0);
+    assert_eq!(word_wrap.candidate().byte_idx(), 2);
+    assert_eq!(word_wrap.candidate().charpos(), 2);
+    assert_eq!(word_wrap.candidate().display_point_count(), 2);
     context
         .builder
         .edit_current_row_for_test(|row| {
             let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
-            assert_eq!(text_glyphs.len(), 2);
+            assert_eq!(text_glyphs.len(), 3);
             assert!(matches!(
                 text_glyphs[0].glyph_type,
                 GlyphType::Char { ch: 'a' }
             ));
             assert!(matches!(
                 text_glyphs[1].glyph_type,
+                GlyphType::Char { ch: ' ' }
+            ));
+            assert!(matches!(
+                text_glyphs[2].glyph_type,
                 GlyphType::Char { ch: 'b' }
             ));
         })

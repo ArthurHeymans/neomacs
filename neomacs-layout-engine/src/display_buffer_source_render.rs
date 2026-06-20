@@ -1,5 +1,6 @@
 //! Buffer text source consumption with replacement application.
 
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementOutcome, BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
@@ -48,7 +49,7 @@ use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::{BufferId, LispCharPos1};
 
 #[derive(Clone, Copy)]
 struct BufferSourceItemRenderContext<'a> {
@@ -142,18 +143,16 @@ impl<'a> BufferSourceItemRenderContext<'a> {
 fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     source_item: &DisplaySourceStepItem,
     context: &BufferSourceItemRenderContext<'_>,
-    word_wrap: WordWrapRenderState,
     right_edge_px: f32,
     position: DisplayRowPosition,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
     geometry: &DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
 ) -> bool {
-    let Some(text) = source_item.ascii_text_run() else {
+    if source_item.ascii_text_run().is_none() {
         return false;
-    };
+    }
     if context.overlay_context.is_enabled()
-        || (word_wrap.is_enabled() && text.contains(' '))
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
     {
@@ -180,6 +179,16 @@ fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -
         return false;
     };
     char_pos.get() as i64 == point_charpos
+}
+
+fn buffer_slot_source_position(slot: &DisplayRowGlyphSlot) -> Option<(usize, i64)> {
+    let DisplaySourcePosition::Buffer {
+        char_pos, byte_pos, ..
+    } = slot.source
+    else {
+        return None;
+    };
+    Some((byte_pos.get(), char_pos.get() as i64))
 }
 
 fn capture_whole_text_run_cursor_if_point(
@@ -229,9 +238,35 @@ fn apply_whole_text_run_trailing_whitespace_state(
     }
 }
 
-fn apply_whole_text_run_word_wrap_state(text: &str, word_wrap: &mut WordWrapRenderState) {
-    if word_wrap.is_enabled() && !text.contains(' ') {
-        word_wrap.disallow_after_current_char();
+fn apply_whole_text_run_word_wrap_state(
+    text: &str,
+    word_wrap: &mut WordWrapRenderState,
+    output_display_point_start: usize,
+    output_row_positions_start: (Option<LispCharPos1>, Option<LispCharPos1>),
+    append_progress: &DisplayRowAppendProgress,
+) {
+    if !word_wrap.is_enabled() {
+        return;
+    }
+    let mut first_run_charpos = output_row_positions_start.0;
+    let mut previous_charpos = output_row_positions_start.1;
+    for (char_offset, (ch, slot)) in text.chars().zip(&append_progress.slots).enumerate() {
+        if let Some((byte_idx, charpos)) = buffer_slot_source_position(slot) {
+            let row_first =
+                first_run_charpos.or_else(|| Some(layout_i64_char_pos_to_lisp_char_pos(charpos)));
+            if word_wrap.can_record_candidate(ch) {
+                word_wrap.record_candidate(
+                    ch,
+                    byte_idx,
+                    charpos,
+                    output_display_point_start + char_offset,
+                    (row_first, previous_charpos),
+                );
+            }
+            first_run_charpos = row_first;
+            previous_charpos = Some(layout_i64_char_pos_to_lisp_char_pos(charpos));
+        }
+        word_wrap.allow_after_current_char(ch);
     }
 }
 
@@ -249,6 +284,8 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     cursor_info: &mut CursorCaptureState,
     trailing_whitespace: &mut TrailingWhitespaceRenderState,
     word_wrap: &mut WordWrapRenderState,
+    output_display_point_start: usize,
+    output_row_positions_start: (Option<LispCharPos1>, Option<LispCharPos1>),
     source_render: &mut TextRowSourceRenderState<'_>,
     progress: &mut DisplaySourceProgressState<'_>,
 ) -> BufferSourceItemRenderOutcome {
@@ -276,7 +313,13 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         geometry,
         &append_progress,
     );
-    apply_whole_text_run_word_wrap_state(source_text, word_wrap);
+    apply_whole_text_run_word_wrap_state(
+        source_text,
+        word_wrap,
+        output_display_point_start,
+        output_row_positions_start,
+        &append_progress,
+    );
     progress.row.apply_position(append_progress.end);
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
@@ -359,7 +402,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     if whole_text_run_can_render(
         &source_item,
         &context,
-        *word_wrap,
         context.append_surface.right_edge(),
         append_position,
         &buffer_row_append_context,
@@ -367,9 +409,12 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &mut source_render,
     ) {
         let source_text = source_item.ascii_text_run().unwrap_or_default().to_owned();
-        let (source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
+        let output_display_point_start = source_render.output_emitter().display_point_len();
+        let output_row_positions_start = source_render
+            .output_emitter()
+            .current_row_display_positions();
+        let (_source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
             source_item.into_render_parts();
-        source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
         return render_whole_text_run_and_apply(
             source_item,
             &source_text,
@@ -383,6 +428,8 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             cursor_info,
             trailing_whitespace,
             word_wrap,
+            output_display_point_start,
+            output_row_positions_start,
             &mut source_render,
             &mut progress,
         );
