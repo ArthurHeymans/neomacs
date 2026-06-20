@@ -24,11 +24,6 @@ pub(crate) struct BufferTextDirectDisplayItem {
     item: DisplayItem,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextDirectDisplayItemRequest {
-    item: BufferTextSourceItem,
-}
-
 impl BufferTextSourceStepChar {
     pub(crate) const fn new(ch: char, start_byte_idx: usize, start_charpos: i64) -> Self {
         Self {
@@ -88,6 +83,34 @@ impl BufferTextSourceStepChar {
 impl BufferTextDirectDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
+    }
+
+    pub(crate) fn consume_source_item(
+        item: BufferTextSourceItem,
+        position: &mut BufferTextSourcePosition,
+    ) -> Result<Self, BufferTextSourceItem> {
+        if !position.matches(item.start_byte_idx(), item.start_charpos()) {
+            tracing::error!(
+                "BufferTextDirectDisplayItem: validated source item at byte {} charpos {} \
+                 did not match buffer walk byte {} charpos {}",
+                item.start_byte_idx(),
+                item.start_charpos(),
+                position.byte_idx(),
+                position.charpos()
+            );
+            return Err(item);
+        }
+        let Some(ch) = item.direct_source_char() else {
+            return Err(item);
+        };
+        let start_byte_idx = item.start_byte_idx();
+        let start_charpos = item.start_charpos();
+        let byte_len = item.buffer_byte_len().unwrap_or_else(|| ch.len_utf8());
+        position.advance_byte_idx_to(start_byte_idx.saturating_add(byte_len));
+        Ok(Self::new(
+            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
+            item.into_item(),
+        ))
     }
 
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
@@ -171,47 +194,6 @@ impl BufferTextDirectDisplayItem {
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         (self.source_char, self.item)
-    }
-}
-
-impl BufferTextDirectDisplayItemRequest {
-    pub(crate) fn new(item: BufferTextSourceItem) -> Self {
-        Self { item }
-    }
-
-    pub(crate) fn consume(
-        self,
-        position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextDirectDisplayItem, BufferTextSourceItem> {
-        Self::try_into_direct_display_item(self.item, position)
-    }
-
-    fn try_into_direct_display_item(
-        item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Result<BufferTextDirectDisplayItem, BufferTextSourceItem> {
-        if !position.matches(item.start_byte_idx(), item.start_charpos()) {
-            tracing::error!(
-                "BufferTextDirectDisplayItemRequest: validated source item at byte {} charpos {} \
-                 did not match buffer walk byte {} charpos {}",
-                item.start_byte_idx(),
-                item.start_charpos(),
-                position.byte_idx(),
-                position.charpos()
-            );
-            return Err(item);
-        }
-        let Some(ch) = item.direct_source_char() else {
-            return Err(item);
-        };
-        let start_byte_idx = item.start_byte_idx();
-        let start_charpos = item.start_charpos();
-        let byte_len = item.buffer_byte_len().unwrap_or_else(|| ch.len_utf8());
-        position.advance_byte_idx_to(start_byte_idx.saturating_add(byte_len));
-        Ok(BufferTextDirectDisplayItem::new(
-            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
-            item.into_item(),
-        ))
     }
 }
 

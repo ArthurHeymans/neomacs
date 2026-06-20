@@ -2020,8 +2020,7 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
-    let step = BufferTextDirectDisplayItemRequest::new(typed_item)
-        .consume(&mut position)
+    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position)
         .ok()
         .expect("direct source step");
 
@@ -2133,7 +2132,7 @@ fn buffer_text_source_item_without_source_char_rejects_source_mapped_without_sou
         other => panic!("expected source-mapped text, got {other:?}"),
     }
 
-    let step = BufferTextDirectDisplayItemRequest::new(typed_item).consume(&mut position);
+    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position);
 
     assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     assert!(step.is_err());
@@ -2171,8 +2170,7 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
         other => panic!("expected full text run, got {other:?}"),
     }
-    let step = BufferTextDirectDisplayItemRequest::new(typed_item)
-        .consume(&mut position)
+    let step = BufferTextDirectDisplayItem::consume_source_item(typed_item, &mut position)
         .ok()
         .expect("multi-char text run remains a direct source item");
     assert_eq!(step.source_char().ch(), 'a');
