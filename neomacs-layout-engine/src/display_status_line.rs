@@ -510,7 +510,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         self.target_columns().columns()
     }
 
-    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, '_>) {
+    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, 'face>) {
         let params = self.params;
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
@@ -649,12 +649,61 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     }
 }
 
-struct WindowChromeDisplayRowRenderParts<'face> {
+struct WindowChromeDisplayRowRenderRequest<'face> {
     output: ChromeRowOutput,
     owner: DisplayRowOwner,
     display_row_index: u32,
     bounds: Rect,
     render_request: DisplayRowLispStringRenderRequest<'face>,
+}
+
+impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
+    fn render_measured(
+        self,
+        render_services: &mut ChromeRowRenderServices<'_, 'face>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<WindowChromeDisplayRowRender> {
+        let rendered =
+            render_services.render_lisp_string_request(self.render_request, display_host)?;
+        let measured = MeasuredDisplayRow::new(
+            self.owner,
+            self.display_row_index,
+            self.bounds,
+            rendered,
+            DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+        );
+        Some(WindowChromeDisplayRowRender {
+            output: self.output,
+            measured,
+        })
+    }
+
+    fn render_and_apply(
+        self,
+        state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
+    ) -> Option<MeasuredDisplayRow> {
+        state
+            .output_emitter
+            .begin_chrome_progress(state.evaluator, self.output);
+        let rendered = self.render_measured(
+            &mut state.render_services,
+            state.evaluator.display_host.as_deref(),
+        )?;
+        let progress = rendered.measured.output_progress();
+        state
+            .output
+            .install_measured_window_display_row(&rendered.measured);
+        state
+            .output_emitter
+            .emit_chrome_progress(state.evaluator, rendered.output, progress);
+        state.output_emitter.finish_chrome_progress(progress);
+        Some(rendered.measured)
+    }
+}
+
+struct WindowChromeDisplayRowRender {
+    output: ChromeRowOutput,
+    measured: MeasuredDisplayRow,
 }
 
 impl<'face> WindowChromeDisplayRowRequest<'face> {
@@ -672,15 +721,15 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         )
     }
 
-    fn into_render_parts(
+    fn into_render_request(
         self,
         face_ids: &mut FrameFaceIdAllocator,
-    ) -> WindowChromeDisplayRowRenderParts<'face> {
+    ) -> WindowChromeDisplayRowRenderRequest<'face> {
         let render_request = self
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
             .render_request(face_ids);
-        WindowChromeDisplayRowRenderParts {
+        WindowChromeDisplayRowRenderRequest {
             output: self.output,
             owner: DisplayRowOwner::WindowChrome {
                 window_id: self.window_id,
@@ -717,36 +766,11 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
 
     fn render_display_row(
         &mut self,
-        request: WindowChromeDisplayRowRequest<'_>,
+        request: WindowChromeDisplayRowRequest<'face>,
     ) -> Option<MeasuredDisplayRow> {
-        let parts = request.into_render_parts(self.render_services.face_ids());
-        self.output_emitter
-            .begin_chrome_progress(self.evaluator, parts.output);
-        let rendered_row = self.render_services.render_lisp_string_request(
-            parts.render_request,
-            self.evaluator.display_host.as_deref(),
-        );
-        let measured_row = rendered_row.map(|rendered| {
-            MeasuredDisplayRow::new(
-                parts.owner,
-                parts.display_row_index,
-                parts.bounds,
-                rendered,
-                DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
-            )
-        });
-        if let Some(ref measured_row) = measured_row {
-            self.output
-                .install_measured_window_display_row(measured_row);
-            self.output_emitter.emit_chrome_progress(
-                self.evaluator,
-                parts.output,
-                measured_row.output_progress(),
-            );
-            self.output_emitter
-                .finish_chrome_progress(measured_row.output_progress());
-        }
-        measured_row
+        request
+            .into_render_request(self.render_services.face_ids())
+            .render_and_apply(self)
     }
 }
 

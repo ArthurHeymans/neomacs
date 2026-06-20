@@ -1,6 +1,7 @@
 use super::*;
 use crate::display_row::DisplayRowFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::face::FaceTable;
 
 #[test]
 fn display_row_height_for_face_uses_realized_line_height_and_box() {
@@ -76,6 +77,51 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
         policy.symbol_values().get("align-to").copied(),
         Some(align_value)
     );
+}
+
+#[test]
+fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver
+        .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut render_services =
+        ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+    let mut symbol_values = std::collections::HashMap::new();
+    symbol_values.insert("align-to".to_string(), Value::make_int(12));
+
+    let render = WindowChromeDisplayRowRequest {
+        window_id: 42,
+        kind: WindowChromeKind::ModeLine,
+        selected: true,
+        display_row_index: 3,
+        output: ChromeRowOutput { row: 3, y: 24.0 },
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 24.0, 96.0, 16.0),
+        char_width: 8.0,
+        ascent: 12.0,
+        tab_policy: DisplayTabPolicy::every(4),
+        base_face: &base_face,
+        symbol_values,
+        text: WindowChromeDisplayText::new(Value::string("mode"), true),
+    }
+    .into_render_request(render_services.face_ids())
+    .render_measured(&mut render_services, None)
+    .expect("chrome row should render");
+
+    assert_eq!(render.output, ChromeRowOutput { row: 3, y: 24.0 });
+    assert_eq!(
+        render.measured.owner,
+        DisplayRowOwner::WindowChrome {
+            window_id: 42,
+            kind: WindowChromeKind::ModeLine,
+        }
+    );
+    assert_eq!(render.measured.row_index, 3);
+    assert_eq!(render.measured.bounds.y, 24.0);
+    assert_eq!(render.measured.output_progress().y, 24.0);
 }
 
 #[test]
