@@ -994,6 +994,23 @@ pub struct TaggedHeap {
     /// Mutator->GC channel (Phase 5): the SATB barrier appends the overwritten
     /// children here (locked); the GC thread drains them into its gray worklist.
     satb_shared: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
+    /// Per-cycle dedup for the COARSE (bulk) SATB barrier. A bulk mutator
+    /// (`with_hash_table_mut`, `with_vector_data_mut`, char-table, …) hands a
+    /// `&mut` to an arbitrary closure, so the barrier — which runs BEFORE the
+    /// store and cannot know which slot the closure will touch — conservatively
+    /// snapshots the owner's WHOLE pre-image. Doing that on every write is O(n)
+    /// per write => O(n²) to build an n-element container (the `(ucs-names)` OOM).
+    /// SATB only needs each owner's start-of-cycle child set logged ONCE: at the
+    /// owner's FIRST mutation this cycle, all its snapshot-time children are still
+    /// present (a child can only be unlinked by a mutation of this owner, which is
+    /// itself this first write firing the barrier pre-store), so that single
+    /// snapshot is a superset of every child reachable at snapshot time. Later
+    /// writes can only overwrite values already logged (or born-black new ones),
+    /// so re-snapshotting is pure waste. We record owners snapshotted this cycle
+    /// here and skip the re-enumeration. Cleared at every mark start
+    /// (`concurrent_begin`/`begin_collection`). Conses (2 children, O(1) barrier)
+    /// bypass it; only multi-child veclike/string owners are deduped.
+    satb_snapshotted_owners: FxHashSet<usize>,
     /// Veclikes/strings the GC thread reached but did NOT trace (their backing
     /// can be reallocated by the mutator, so reading it concurrently would be a
     /// UAF). They are marked black and parked here, then traced at the
@@ -1075,6 +1092,7 @@ impl TaggedHeap {
             incremental_mark_us: 0,
             concurrent_mark_running: false,
             satb_shared: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            satb_snapshotted_owners: FxHashSet::default(),
             deferred_veclikes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             gc_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -2226,6 +2244,11 @@ impl TaggedHeap {
         self.gray_queue.clear();
         self.weak_hash_tables.clear();
         self.mark_cons_block_cache = None;
+        // New mark cycle: the per-cycle SATB pre-image dedup set must start empty
+        // so each owner's full pre-image is snapshotted once for THIS cycle's
+        // start-of-cycle reachability (a carried-over entry would wrongly suppress
+        // the snapshot of an owner whose children differ this cycle).
+        self.satb_snapshotted_owners.clear();
         self.seed_internal_runtime_roots();
         if partitioned {
             // Re-scan dumped/tenured objects mutated to point at young heap
@@ -3319,8 +3342,30 @@ impl TaggedHeap {
     /// (pre-overwrite) children to the shared buffer the GC thread drains. Reuses
     /// the gray-queue child enumeration with `self.gray_queue` as scratch (it is
     /// empty during concurrent marking — the snapshot was handed to the thread).
+    ///
+    /// Per-cycle dedup for multi-child owners (veclike/string): the barrier can't
+    /// know which slot the bulk closure will touch, so it logs the owner's WHOLE
+    /// pre-image; doing that on every write is O(n) per write => O(n²) to build an
+    /// n-element container (hash table, char-table, or a vector filled by `aset`
+    /// in a loop — the `(ucs-names)` OOM). SATB only needs each owner's
+    /// start-of-cycle child set logged ONCE: at the owner's FIRST mutation this
+    /// cycle every snapshot-time child is still present (a child can only be
+    /// unlinked by a mutation of THIS owner, i.e. this very first barrier firing
+    /// pre-store), so one snapshot is a superset of the snapshot-time children;
+    /// later writes overwrite only already-logged values (or born-black new ones,
+    /// which need no logging). So re-snapshotting is pure waste — skip it. The
+    /// snapshot set is cleared at every mark start (`concurrent_begin`).
+    ///
+    /// Conses (exactly two children) bypass the dedup: their barrier is already
+    /// O(1), and a per-write `HashSet` insert on the hot car/cdr path would cost
+    /// more than it saves. Re-logging a cons's 2 children is still SATB-correct.
     fn push_value_children_to_satb_shared(&mut self, owner: TaggedValue) {
         debug_assert!(self.gray_queue.is_empty());
+        // Multi-child owners are deduped once per cycle; conses fall through to
+        // the cheap direct enumeration below.
+        if !owner.is_cons() && !self.satb_snapshotted_owners.insert(owner.bits()) {
+            return; // this owner's full pre-image was already logged this cycle
+        }
         self.push_value_children_to_gray(owner, "satb-concurrent");
         if !self.gray_queue.is_empty() {
             let mut shared = self.satb_shared.lock().unwrap();
@@ -4407,6 +4452,201 @@ mod ownership_tests {
             unsafe { (*b_cdr.xcons_ptr()).load_car() }.0,
             TaggedValue::fixnum(3).0,
         );
+    }
+
+    /// Regression test for the O(n²) SATB blow-up: building a large container
+    /// (here a hash table) in a loop WHILE a concurrent mark is running must log
+    /// each container's pre-image to the SATB buffer at most ONCE per cycle, not
+    /// re-enumerate ALL of the container's children on every single mutation.
+    ///
+    /// Before the per-cycle dedup fix, every `puthash` ran
+    /// `push_value_children_to_satb_shared` -> `collect_veclike_children`, which
+    /// enumerates `ht.data.values()` + `ht.key_snapshots.values()` — the WHOLE
+    /// table. N inserts each snapshot ~k*N values => Θ(N²) entries pushed into
+    /// `satb_shared` (and the equivalent memory), which OOMs on a 200K-entry
+    /// build like `(ucs-names)`. The fix snapshots the table's full pre-image
+    /// once, so the cumulative SATB volume is O(N).
+    ///
+    /// We drive the SATB barrier directly (set `concurrent_mark_running` without
+    /// launching the background GC thread) so nothing drains `satb_shared`
+    /// concurrently and the cumulative push count is deterministic.
+    #[test]
+    fn satb_barrier_on_growing_hash_table_is_linear_not_quadratic() {
+        use crate::emacs_core::value::{HashTableTest, LispHashTable};
+
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // An `equal` hash table whose VALUES are heap objects (conses), so the
+        // SATB enumeration actually pushes them to the shared buffer.
+        let table = heap.alloc_hash_table(LispHashTable::new(HashTableTest::Equal));
+
+        // Arm the SATB barrier exactly as `launch_concurrent_mark` does, but
+        // WITHOUT the GC thread, so `satb_shared` is never drained and its length
+        // measures the cumulative SATB push volume deterministically.
+        heap.concurrent_mark_running = true;
+        TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(true));
+
+        const N: i64 = 50_000;
+        for i in 0..N {
+            // Each value is a fresh heap cons (a brand-new key => an INSERT, no
+            // prior value at that key for SATB to log).
+            let value = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::fixnum(0));
+            let key = crate::emacs_core::value::HashKey::Int(i);
+            let key_snapshot = TaggedValue::fixnum(i);
+            crate::tagged::mutate::with_hash_table_mut(table, |ht| {
+                ht.data.insert(key.clone(), value);
+                ht.key_snapshots.insert(key.clone(), key_snapshot);
+                ht.insertion_order.push(key.clone());
+                ht.note_hash_key_inserted(key);
+            });
+        }
+
+        let satb_len = heap.satb_shared.lock().unwrap().len();
+
+        // Disarm before dropping the heap so no later mutation hits the barrier.
+        heap.concurrent_mark_running = false;
+        TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(false));
+
+        // O(n) bound. The full pre-image is snapshotted at most a small constant
+        // number of times across the whole cycle (ideally once), so the
+        // cumulative pushes are within a small multiple of N. The buggy
+        // (re-enumerate-on-every-write) barrier produces ~N²/2 ≈ 1.25e9 pushes
+        // for N=50_000, blowing far past this bound.
+        let bound = (N as usize) * 4;
+        assert!(
+            satb_len <= bound,
+            "SATB barrier is super-linear: pushed {satb_len} values for {N} inserts \
+             (O(n) bound is {bound}); the per-write full-container enumeration was \
+             not deduplicated per cycle",
+        );
+    }
+
+    /// End-to-end correctness for the per-cycle SATB dedup under a REAL concurrent
+    /// mark + sweep: a hash table is mutated MANY times during marking (so the
+    /// dedup suppresses all but the first per-owner snapshot), values are
+    /// OVERWRITTEN (update) and the table is GROWN (insert+resize/rehash), and
+    /// churn garbage is allocated and dropped. After termination + sweep:
+    ///   * every value reachable through the live table survives and is readable;
+    ///   * a value that was OVERWRITTEN before the snapshot-time first mutation is
+    ///     retained by the SATB pre-image (Yuasa: it was live at snapshot time);
+    ///   * unrooted pre-mark garbage is reclaimed.
+    /// If the dedup ever dropped a still-reachable value's pre-image, the sweep
+    /// would free a live cons and the readback would observe corruption (and TSan
+    /// /ASan would fault). Mirrors `concurrent_mark_overlaps_mutation_and_retains_live_set`
+    /// but exercises the deduped multi-child (hash-table) owner path specifically.
+    #[test]
+    fn concurrent_mark_dedup_retains_hash_table_live_set() {
+        use crate::emacs_core::value::{HashKey, HashTableTest, LispHashTable};
+
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Build the table BEFORE the mark so its initial values are part of the
+        // start-of-cycle snapshot. Each value is a heap cons we can read back.
+        let table = heap.alloc_hash_table(LispHashTable::new(HashTableTest::Equal));
+        const PRE: i64 = 2_000;
+        for i in 0..PRE {
+            let value = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::fixnum(0));
+            let key = HashKey::Int(i);
+            crate::tagged::mutate::with_hash_table_mut(table, |ht| {
+                ht.data.insert(key.clone(), value);
+                ht.key_snapshots.insert(key.clone(), TaggedValue::fixnum(i));
+                ht.insertion_order.push(key.clone());
+                ht.note_hash_key_inserted(key);
+            });
+        }
+        // Pre-mark garbage: reachable from nothing.
+        let _garbage = heap.alloc_cons(TaggedValue::fixnum(-99), TaggedValue::fixnum(0));
+
+        // Start a real concurrent mark with the table as the sole root.
+        heap.concurrent_begin();
+        heap.seed_root(table);
+        heap.launch_concurrent_mark();
+
+        // While the GC thread marks: (a) OVERWRITE an existing key's value — the
+        // OLD cons leaves the table and must be retained via the SATB pre-image;
+        // (b) GROW the table with many new keys (insert + resize/rehash), whose
+        // values are born-black; (c) churn-allocate dropped garbage.
+        let key0 = HashKey::Int(0);
+        let old_value0 =
+            crate::tagged::mutate::with_hash_table_mut(table, |ht| ht.data[&key0]).unwrap();
+        let new_value0 = heap.alloc_cons(TaggedValue::fixnum(123_456), TaggedValue::fixnum(0));
+        crate::tagged::mutate::with_hash_table_mut(table, |ht| {
+            *ht.data.get_mut(&key0).unwrap() = new_value0;
+        });
+        for i in PRE..(PRE + 3_000) {
+            let value = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::fixnum(0));
+            let key = HashKey::Int(i);
+            crate::tagged::mutate::with_hash_table_mut(table, |ht| {
+                maybe_resize_for_test(ht);
+                ht.data.insert(key.clone(), value);
+                ht.key_snapshots.insert(key.clone(), TaggedValue::fixnum(i));
+                ht.insertion_order.push(key.clone());
+                ht.note_hash_key_inserted(key);
+            });
+        }
+        for _ in 0..5_000 {
+            let _ = heap.alloc_cons(TaggedValue::fixnum(0), TaggedValue::fixnum(0));
+        }
+
+        // Terminate stop-the-world + sweep.
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(table);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // (1) The overwritten OLD value (live at snapshot time, then unlinked) must
+        //     still be a readable, non-swept cons (SATB pre-image retained it).
+        assert!(old_value0.is_cons());
+        assert_eq!(
+            unsafe { (*old_value0.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(0).0,
+            "overwritten pre-snapshot value was swept — dedup dropped a live pre-image",
+        );
+        // (2) Every value currently in the table is readable (none swept).
+        let snapshot = table.with_hash_table_mut(|ht| {
+            ht.data
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect::<Vec<_>>()
+        });
+        let entries = snapshot.expect("hash table");
+        assert_eq!(entries.len() as i64, PRE + 3_000);
+        for (key, value) in entries {
+            assert!(
+                value.is_cons(),
+                "table value {key:?} is not a cons (swept?)"
+            );
+            let car = unsafe { (*value.xcons_ptr()).load_car() }.0;
+            let expected = match key {
+                HashKey::Int(0) => TaggedValue::fixnum(123_456).0, // the updated value
+                HashKey::Int(n) => TaggedValue::fixnum(n).0,
+                other => panic!("unexpected key {other:?}"),
+            };
+            assert_eq!(car, expected, "table value {key:?} corrupted/swept");
+        }
+    }
+}
+
+/// Test-only growth helper mirroring the production insert resize policy closely
+/// enough to force rehashes during the concurrent-mark stress test.
+#[cfg(test)]
+fn maybe_resize_for_test(ht: &mut crate::emacs_core::value::LispHashTable) {
+    let len = ht.data.len() as i64;
+    if len >= ht.size {
+        ht.size = if ht.size == 0 { 6 } else { ht.size * 2 };
+        ht.data.reserve(ht.size as usize);
+        ht.key_snapshots.reserve(ht.size as usize);
+        ht.rebuild_iterable_hash_keys_from_data();
     }
 }
 
