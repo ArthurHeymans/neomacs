@@ -3445,11 +3445,28 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
 }
 
 #[test]
-fn x_popup_menu_interactive_keymap_flattens_submenu_entries() {
+fn x_popup_menu_interactive_keymap_collapses_submenu_on_tty() {
+    // A frame with no window system is a TTY frame (effective_window_system =
+    // None). GNU `single_menu_item` (src/menu.c:407-433) renders a submenu on a
+    // TTY frame as ONE collapsed line whose label gains the `" >"` suffix; the
+    // child-recursion (`single_keymap_panes`) is inside the
+    // `#if USE_X_TOOLKIT || USE_GTK || ...` block and is compiled out for TTY,
+    // so the children are NOT inlined into the parent pane (they are opened on
+    // demand by `tty_menu_activate`). This test previously asserted the GUI
+    // toolkit behavior (children flattened into the same pane), which is wrong
+    // for a TTY frame and ballooned panes like Help -> Describe past the
+    // screen height.
     let mut eval = crate::emacs_core::Context::new();
     let scratch = eval.buffers.create_buffer("*scratch*");
     let frame_id = eval.frames.create_frame("popup-owner", 800, 600, scratch);
     eval.frames.select_frame(frame_id);
+    assert!(
+        eval.frames
+            .get(frame_id)
+            .and_then(|f| f.effective_window_system())
+            .is_none(),
+        "test fixture frame should be a TTY frame (no window system)"
+    );
     let (tx, rx) = crossbeam_channel::unbounded();
     eval.input_rx = Some(rx);
     let host = RecordingPopupHost::default();
@@ -3481,18 +3498,26 @@ fn x_popup_menu_interactive_keymap_flattens_submenu_entries() {
     assert!(result.is_nil());
     let shown = shown.lock().unwrap();
     assert_eq!(shown.len(), 1);
-    assert_eq!(shown[0].entries.len(), 2);
-    assert_eq!(shown[0].entries[0].label, "Line Wrapping in this Buffer");
+    // Only the collapsed submenu header is pushed — its children are NOT
+    // inlined — and the label gains the GNU `" >"` suffix.
+    assert_eq!(shown[0].entries.len(), 1);
+    assert_eq!(shown[0].entries[0].label, "Line Wrapping in this Buffer >");
     assert!(shown[0].entries[0].submenu);
     assert_eq!(shown[0].entries[0].depth, 0);
-    assert_eq!(shown[0].entries[1].label, "Visual Line Mode");
-    assert!(!shown[0].entries[1].submenu);
-    assert_eq!(shown[0].entries[1].depth, 1);
 }
 
 #[test]
 fn x_popup_menu_interactive_submenu_selection_returns_full_event_path() {
     let mut eval = crate::emacs_core::Context::new();
+    // On a window-system (GUI) frame the toolkit renders nested submenu panes,
+    // so GNU recurses into the submenu (`single_keymap_panes`, the
+    // `#if USE_X_TOOLKIT || ...` branch in src/menu.c:422-433) and the child
+    // entry is reachable. Selecting it returns the full nested event path.
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol(gui_window_system_symbol())));
     let (tx, rx) = crossbeam_channel::unbounded();
     eval.input_rx = Some(rx);
     eval.set_display_host(Box::new(RecordingPopupHost::default()));

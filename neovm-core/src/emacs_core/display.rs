@@ -1148,6 +1148,7 @@ fn popup_menu_item_from_binding(
     key: Value,
     def: Value,
     depth: u32,
+    is_tty: bool,
 ) -> Option<(PopupMenuEntry, Option<Value>)> {
     if !def.is_cons() {
         return None;
@@ -1167,7 +1168,7 @@ fn popup_menu_item_from_binding(
         let submenu = super::keymap::is_list_keymap(&command);
         return Some((
             PopupMenuEntry {
-                label,
+                label: submenu_label(label, submenu, is_tty),
                 shortcut: String::new(),
                 enabled: !command.is_nil(),
                 separator: false,
@@ -1182,7 +1183,7 @@ fn popup_menu_item_from_binding(
     let submenu = super::keymap::is_list_keymap(&cdr);
     Some((
         PopupMenuEntry {
-            label,
+            label: submenu_label(label, submenu, is_tty),
             shortcut: String::new(),
             enabled: !cdr.is_nil(),
             separator: false,
@@ -1193,7 +1194,22 @@ fn popup_menu_item_from_binding(
     ))
 }
 
-fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value>)> {
+/// Append GNU's submenu indicator to a TTY menu label.
+///
+/// GNU `single_menu_item` (src/menu.c:407-413): when the menu-updating frame is
+/// a TTY frame and the item is itself a keymap (a submenu), it concatenates the
+/// `AUTO_STRING (" >")` suffix so the collapsed line shows it opens a submenu.
+/// On window-system frames the toolkit draws the submenu arrow itself, so no
+/// suffix is added there.
+fn submenu_label(label: String, submenu: bool, is_tty: bool) -> String {
+    if submenu && is_tty {
+        format!("{label} >")
+    } else {
+        label
+    }
+}
+
+fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEntry>, Vec<Value>)> {
     if !super::keymap::is_list_keymap(&menu) {
         return None;
     }
@@ -1203,6 +1219,7 @@ fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value
     fn append_keymap(
         menu: Value,
         depth: u32,
+        is_tty: bool,
         path: &mut Vec<Value>,
         entries: &mut Vec<PopupMenuEntry>,
         events: &mut Vec<Value>,
@@ -1212,7 +1229,8 @@ fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value
         }
 
         super::keymap::list_keymap_for_each_binding(&menu, |key, def| {
-            let Some((entry, submenu)) = popup_menu_item_from_binding(key, def, depth) else {
+            let Some((entry, submenu)) = popup_menu_item_from_binding(key, def, depth, is_tty)
+            else {
                 return;
             };
 
@@ -1220,15 +1238,27 @@ fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value
             entries.push(entry);
             events.push(popup_menu_key_event_from_path(path));
 
-            if let Some(child_menu) = submenu {
-                append_keymap(child_menu, depth + 1, path, entries, events);
+            // GNU `single_menu_item` (src/menu.c:422-433) recurses into a
+            // submenu's panes (`single_keymap_panes`) only inside the
+            // `#if USE_X_TOOLKIT || USE_GTK || HAVE_NS || ...` block, i.e.
+            // exclusively for window-system frames whose toolkit renders nested
+            // panes. For a TTY frame that code is compiled out: the submenu is
+            // pushed as a single collapsed line (ending in `" >"`) and its
+            // children are shown on demand by `tty_menu_activate` (src/term.c).
+            // So on TTY we must NOT inline the submenu's children here —
+            // recursing flattens, e.g., all of Help -> Describe's items into
+            // the parent pane and pushes later items off-screen.
+            if !is_tty {
+                if let Some(child_menu) = submenu {
+                    append_keymap(child_menu, depth + 1, is_tty, path, entries, events);
+                }
             }
 
             path.pop();
         });
     }
 
-    append_keymap(menu, 0, &mut Vec::new(), &mut entries, &mut events);
+    append_keymap(menu, 0, is_tty, &mut Vec::new(), &mut entries, &mut events);
     Some((entries, events))
 }
 
@@ -1409,7 +1439,13 @@ impl TtyMenuNavigationCommand {
 }
 
 fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
-    let Some((entries, events)) = popup_menu_from_keymap(menu) else {
+    // GNU keys submenu rendering off `Vmenu_updating_frame` being a TTY frame
+    // (`is_tty_frame`, src/menu.c:407). For `x-popup-menu` that is the selected
+    // frame; a TTY frame has no window system (`effective_window_system` =
+    // None). On TTY each submenu collapses to one `" >"` line instead of being
+    // inlined; on a window-system frame the toolkit owns nested panes.
+    let is_tty = selected_frame_window_system_symbol(ctx).is_none();
+    let Some((entries, events)) = popup_menu_from_keymap(menu, is_tty) else {
         tracing::info!("x-popup-menu interactive: menu is not a keymap");
         return Ok(Value::NIL);
     };
