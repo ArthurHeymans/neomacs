@@ -15063,3 +15063,137 @@ fn set_current_message_handles_back_to_back_messages_of_differing_multibyteness(
         "echo buffer holds the latest (multibyte) message after a unibyte one"
     );
 }
+
+/// Helper: a runtime-startup context wired with a live scratch buffer,
+/// selected frame and window so `command_loop_1` has somewhere to run.
+fn command_loop_test_context() -> Context {
+    let mut ev = runtime_startup_context();
+    let scratch = ev.buffers.create_buffer("*command-loop-finding*");
+    ev.buffers.set_current(scratch);
+    let frame = ev.frames.create_frame("F1", 80, 24, scratch);
+    assert!(
+        ev.frames.select_frame(frame),
+        "command loop test should have a selected frame"
+    );
+    ev
+}
+
+/// Finding 1 — pressing a truly-unbound key must run the per-command
+/// finalize tail like GNU `command_loop_1` (keyboard.c:1506-1648): it
+/// sets `this-command`/`real-this-command` to nil, runs
+/// `pre-command-hook`, invokes the `undefined` command
+/// (`call0 (Qundefined)` at keyboard.c:1514 — dings and echoes
+/// "<key> is undefined"), then runs `post-command-hook`.
+///
+/// Before the fix neomacs short-circuited the nil-binding case with a
+/// bare `continue`, so the message never appeared and per-command hooks
+/// were skipped. This test drives one unbound `<f9>` keypress through
+/// the loop and asserts both effects.
+#[test]
+fn unbound_key_runs_undefined_command_and_per_command_hooks() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    // A Rust subr the post-command-hook can call to (a) count and (b)
+    // stop the loop after the first iteration, so the test terminates.
+    fn stop_command_loop_for_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-command-loop-for-test",
+        stop_command_loop_for_test,
+        0,
+        Some(0),
+    );
+
+    // The command loop runs `post-command-hook` once in its entry
+    // prologue before reading any key (GNU keyboard.c does the same).
+    // Gate the counters on `(eq last-command-event 'f9)` so they only
+    // fire for the iteration that actually processed the unbound key,
+    // not for that prologue run.
+    //
+    // We queue a second, *bound* key (`a` -> a stop command) after the
+    // unbound `<f9>`. That guarantees the loop terminates whether or not
+    // the unbound key runs the per-command hooks: in the buggy state the
+    // `<f9>` iteration short-circuits (counters stay 0) and the `a`
+    // command stops the loop; in the fixed state the `<f9>` iteration
+    // runs the hooks (counters become 1) and then `a` stops the loop.
+    ev.eval_str(
+        r#"(progn
+             (setq neo-pre-count 0)
+             (setq neo-post-count 0)
+             (fset 'neo-stop-key-command
+                   (lambda () (interactive) (neo-stop-command-loop-for-test)))
+             (keymap-set global-map "a" 'neo-stop-key-command)
+             (add-hook 'pre-command-hook
+                       (lambda ()
+                         (when (eq last-command-event 'f9)
+                           (setq neo-pre-count (1+ neo-pre-count)))))
+             (add-hook 'post-command-hook
+                       (lambda ()
+                         (when (eq last-command-event 'f9)
+                           (setq neo-post-count (1+ neo-post-count))
+                           ;; The `undefined' command logs "<key> is
+                           ;; undefined" to *Messages* (GNU `message' always
+                           ;; calls `message_dolog'). Capture the last line of
+                           ;; *Messages* during this very iteration; reading
+                           ;; the next key (`a') would clear the echo area.
+                           (setq neo-undefined-message
+                                 (with-current-buffer (messages-buffer)
+                                   (save-excursion
+                                     (goto-char (point-max))
+                                     (forward-line (if (bolp) -1 0))
+                                     (buffer-substring-no-properties
+                                      (line-beginning-position)
+                                      (line-end-position)))))))))"#,
+    )
+    .expect("install per-command hooks");
+
+    // `<f9>` is unbound in the default global map.
+    assert!(
+        ev.eval_str("(key-binding (kbd \"<f9>\"))")
+            .expect("key lookup")
+            .is_nil(),
+        "<f9> must be unbound for this test"
+    );
+
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::symbol("f9"));
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('a' as i64));
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should exit through the stop command");
+
+    assert_eq!(
+        ev.eval_symbol("neo-pre-count").expect("pre count"),
+        Value::fixnum(1),
+        "pre-command-hook must run for an unbound key (GNU keyboard.c:1509)"
+    );
+    assert_eq!(
+        ev.eval_symbol("neo-post-count").expect("post count"),
+        Value::fixnum(1),
+        "post-command-hook must run for an unbound key (GNU keyboard.c:1563)"
+    );
+
+    let message = ev
+        .eval_symbol("neo-undefined-message")
+        .expect("captured message variable");
+    let message = message
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .expect("the `undefined' command should have echoed a string message");
+    assert!(
+        message.contains("is undefined"),
+        "unbound key should echo \"... is undefined\" (GNU subr.el `undefined'), got: {message:?}"
+    );
+}

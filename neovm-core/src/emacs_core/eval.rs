@@ -5811,12 +5811,22 @@ impl Context {
                 return Ok(Value::NIL);
             }
 
+            // A non-empty key sequence with a nil binding is a truly-unbound
+            // key. GNU `command_loop_1` does NOT short-circuit this case: it
+            // sets `Vthis_command = cmd` (= nil) at keyboard.c:1506, runs
+            // `pre-command-hook` (1509), then `if (NILP (Vthis_command))
+            // call0 (Qundefined);` (1512-1514) — the `undefined` command in
+            // subr.el dings and echoes "<key> is undefined" — and finally
+            // runs `post-command-hook` (1563) plus the deactivate-mark /
+            // recent-keys bookkeeping like any other command. Routing the
+            // nil-binding case through the SAME finalize tail below (rather
+            // than a bare `continue`) restores those per-command hooks and
+            // the user-visible "is undefined" feedback. Keyboard/command-loop
+            // audit Finding 1. (The `undefined` command itself sets
+            // `prefix-arg`, so we no longer reset it here.)
             if binding.is_nil() {
-                // Undefined key sequence — reset prefix arg
-                self.assign("prefix-arg", Value::NIL);
                 let desc: Vec<String> = keys.iter().map(|v| format!("{:?}", v)).collect();
                 tracing::info!("Undefined key sequence: {}", desc.join(" "));
-                continue;
             }
 
             // Set this-command, real-this-command, last-command-event,
@@ -6143,6 +6153,20 @@ impl Context {
         // pre-command-hook that mutated the symbol takes effect.
         let cmd = self.eval_symbol("this-command").unwrap_or(command);
         if cmd.is_nil() {
+            // GNU `command_loop_1` keyboard.c:1512-1514:
+            //   if (NILP (Vthis_command))
+            //     /* nil means key is undefined.  */
+            //     call0 (Qundefined);
+            // The `undefined` command (subr.el) dings, echoes
+            // "<key> is undefined", forces a mode-line update, and sets
+            // `prefix-arg` for down-mouse events. Invoke it so an unbound
+            // key gives the same feedback as GNU instead of silently doing
+            // nothing. If `undefined` is not yet defined (minimal runtimes),
+            // fall back to a bare ding so the key is still audible.
+            if self.obarray.fboundp("undefined") {
+                return self.apply(Value::symbol("undefined"), vec![]);
+            }
+            let _ = super::builtins::dispatch_builtin(self, "ding", vec![]);
             return Ok(Value::NIL);
         }
         self.apply(Value::symbol("command-execute"), vec![cmd])
