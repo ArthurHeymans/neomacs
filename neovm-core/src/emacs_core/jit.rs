@@ -2,11 +2,12 @@
 //! modern JIT path. See `bytecode/ELISP_VM_MODERNIZATION.md` for the full
 //! design + phased roadmap.
 //!
-//! **Phase 0.** Gated behind the `jit` cargo feature (default OFF): production
-//! builds are byte-for-byte unchanged while this is built out. The bytecode
-//! interpreter (`bytecode::Vm`) is always the **Tier 0** engine — the
+//! Gated behind the `jit` cargo feature, which is **default-ON** (`default =
+//! ["jit"]`): the baseline (Tier-1) Cranelift JIT is qualified and shipping. The
+//! bytecode interpreter (`bytecode::Vm`) is always the **Tier 0** engine — the
 //! correctness oracle that mirrors GNU Emacs 31.0.90 and the deoptimization
-//! landing pad. It is never removed.
+//! landing pad. It is never removed. (The optimizing speculative Tier-2 on the
+//! typed-SSA MIR is the in-progress frontier; see the modernization plan.)
 //!
 //! Design rule (carried over from the GC work): every dispatch over an
 //! execution tier is an **exhaustive `match`** with no catch-all arm, so adding
