@@ -13,8 +13,8 @@ use crate::display_buffer_text_render_attempt::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_tail_render::{
-    BufferTextWindowBodyInstallContext, BufferTextWindowPostLoopRenderOutcome,
-    BufferTextWindowRetryBounds, BufferTextWindowTailRequestContext,
+    BufferTextWindowBodyInstallContext, BufferTextWindowRetryBounds,
+    BufferTextWindowTailRequestContext,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
@@ -29,16 +29,12 @@ use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
-use crate::hit_test::WindowHitData;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
-use crate::window_output::{
-    TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
-    render_window_chrome_rows,
-};
+use crate::window_output::render_window_chrome_rows;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::BufferId;
-use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
+use neovm_core::window::{FrameId, WindowId};
 
 pub(crate) struct BufferTextWindowOutputSetup {
     pub(crate) begin_request: BufferTextWindowBeginRequest,
@@ -55,14 +51,6 @@ pub(crate) struct BufferTextWindowDefaultFacePlan {
     ascent: f32,
     measurement_policy: DisplayRowMeasurementPolicy,
 }
-struct BufferTextWindowRenderedBody<'a> {
-    output_emitter: WindowOutputEmitter,
-    post_loop: BufferTextWindowPostLoopRenderOutcome,
-    retry_bounds: BufferTextWindowRetryBounds,
-    publish_request: BufferTextWindowRedisplayPublishRequest,
-    tail_context: BufferTextWindowTailRequestContext<'a>,
-}
-
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -398,121 +386,57 @@ impl BufferTextWindowOutputSetup {
             buf_access,
         );
 
-        let rendered_body = BufferTextWindowRenderedBody {
-            output_emitter,
-            post_loop,
-            retry_bounds: self.retry_bounds,
-            publish_request,
-            tail_context,
-        };
-        rendered_body.finish_or_prepare_retry(
-            walk_setup,
-            chrome_request,
-            output,
-            font_metrics,
-            face_resolver,
-            &mut face_ids,
-            retry_checkpoint,
-            hit_data,
-            display_snapshots,
-            frame_face_id_counter,
-            remaining_visibility_retries,
-        )
-    }
-}
-
-impl<'a> BufferTextWindowRenderedBody<'a> {
-    fn retry_plan(&self, walk_setup: &BufferTextWindowWalkSetup) -> BufferTextWindowRetryPlan {
-        BufferTextWindowRetryPlan::from_post_loop(
-            self.tail_context.params.window_id,
-            self.tail_context.window_start,
-            self.tail_context.params.point_charpos().get(),
+        let retry_plan = BufferTextWindowRetryPlan::from_post_loop(
+            tail_context.params.window_id,
+            tail_context.window_start,
+            tail_context.params.point_charpos().get(),
             walk_setup.charpos,
             self.retry_bounds,
-            self.post_loop,
-        )
-    }
+            post_loop,
+        );
+        retry_plan.log_visibility_adjustments();
 
-    fn install_body_chrome_and_finish(
-        mut self,
-        walk_setup: &mut BufferTextWindowWalkSetup,
-        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
-        output_state: BufferTextWindowOutputState<'_>,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        hit_data: &mut Vec<WindowHitData>,
-        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
-    ) -> TextWindowRedisplayPositions {
+        if let Some(window_start) = retry_plan.should_retry(remaining_visibility_retries) {
+            retry_plan.log_retry(window_start, remaining_visibility_retries);
+            output.restore_retry_checkpoint(retry_checkpoint);
+            *frame_face_id_counter = face_ids.finish();
+            return BufferTextWindowRenderAttemptOutcome::Retry { window_start };
+        }
+
         let BufferTextWindowOutputState {
             mut output,
             evaluator,
-        } = output_state;
+        } = output;
         let mut render_services =
-            ChromeRowRenderServices::new(font_metrics, face_resolver, face_ids);
+            ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
+        let mut output_emitter = output_emitter;
         let redisplay_positions = walk_setup.install_body_and_publish_redisplay(
             output.reborrow(),
-            &mut self.output_emitter,
+            &mut output_emitter,
             evaluator,
             render_services.reborrow(),
-            &self.tail_context,
-            self.publish_request,
+            &tail_context,
+            publish_request,
         );
         render_window_chrome_rows(
             output.reborrow(),
-            &mut self.output_emitter,
+            &mut output_emitter,
             evaluator,
             chrome_request,
             render_services.reborrow(),
         );
-        self.tail_context.finish_and_install(
+        tail_context.finish_and_install(
             BufferTextWindowFinishState::new(
                 output,
-                self.output_emitter,
+                output_emitter,
                 evaluator,
                 std::mem::take(&mut walk_setup.hit_rows),
             ),
             hit_data,
             display_snapshots,
         );
-        redisplay_positions
-    }
-
-    fn finish_or_prepare_retry(
-        self,
-        walk_setup: &mut BufferTextWindowWalkSetup,
-        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
-        mut output: BufferTextWindowOutputState<'_>,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        retry_checkpoint: TextWindowOutputRetryCheckpoint,
-        hit_data: &mut Vec<WindowHitData>,
-        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
-        frame_face_id_counter: &mut u32,
-        remaining_visibility_retries: usize,
-    ) -> BufferTextWindowRenderAttemptOutcome {
-        let retry_plan = self.retry_plan(walk_setup);
-        retry_plan.log_visibility_adjustments();
-
-        if let Some(window_start) = retry_plan.should_retry(remaining_visibility_retries) {
-            retry_plan.log_retry(window_start, remaining_visibility_retries);
-            output.restore_retry_checkpoint(retry_checkpoint);
-            *frame_face_id_counter = (*face_ids).finish();
-            return BufferTextWindowRenderAttemptOutcome::Retry { window_start };
-        }
-
-        let redisplay_positions = self.install_body_chrome_and_finish(
-            walk_setup,
-            chrome_request,
-            output,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            hit_data,
-            display_snapshots,
-        );
-        *frame_face_id_counter = (*face_ids).finish();
+        drop(render_services);
+        *frame_face_id_counter = face_ids.finish();
         BufferTextWindowRenderAttemptOutcome::Finished {
             redisplay_positions,
         }
