@@ -31,7 +31,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextRowOutput, WindowOutputEmitter, finish_and_end_text_window_row,
+    TextRowOutput, TextWindowOutputTarget, WindowOutputEmitter, finish_and_end_text_window_row,
     install_text_window_row_decoration_request, transition_text_window_row,
     transition_text_window_row_with_limit,
 };
@@ -355,12 +355,16 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        finish_and_end_text_window_row(self.output_builder, self.output_emitter, metrics);
+        finish_and_end_text_window_row(
+            TextWindowOutputTarget::from_builder(self.output_builder),
+            self.output_emitter,
+            metrics,
+        );
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
         transition_text_window_row(
-            self.output_builder,
+            TextWindowOutputTarget::from_builder(self.output_builder),
             self.output_emitter,
             self.evaluator,
             transition,
@@ -373,7 +377,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         max_rows: usize,
     ) -> DisplayTextRowTransition {
         transition_text_window_row_with_limit(
-            self.output_builder,
+            TextWindowOutputTarget::from_builder(self.output_builder),
             self.output_emitter,
             self.evaluator,
             transition,

@@ -267,6 +267,26 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) hit_rows: &'a mut Vec<HitRow>,
 }
 
+pub(crate) struct TextWindowOutputTarget<'a> {
+    output_builder: &'a mut DisplayOutputBuilder,
+}
+
+impl<'a> TextWindowOutputTarget<'a> {
+    pub(crate) fn from_builder(output_builder: &'a mut DisplayOutputBuilder) -> Self {
+        Self { output_builder }
+    }
+
+    pub(crate) fn reborrow(&mut self) -> TextWindowOutputTarget<'_> {
+        TextWindowOutputTarget {
+            output_builder: self.output_builder,
+        }
+    }
+
+    fn builder(&mut self) -> &mut DisplayOutputBuilder {
+        self.output_builder
+    }
+}
+
 pub(crate) fn begin_text_window_output(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowOutputBegin,
@@ -335,12 +355,12 @@ fn finalize_display_text_row(output_builder: &mut DisplayOutputBuilder, display_
 }
 
 pub(crate) fn begin_text_window_row(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     begin: DisplayTextRowBegin,
 ) -> usize {
-    let display_row_index = begin_display_text_row(output_builder, begin);
+    let display_row_index = begin_display_text_row(output.builder(), begin);
     output_emitter.begin_display_text_row(
         evaluator,
         begin.display_row_index,
@@ -353,24 +373,24 @@ pub(crate) fn begin_text_window_row(
 }
 
 pub(crate) fn finish_text_window_row(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let finish = finish_display_text_row(output_builder, display_row_index, metrics);
+    let finish = finish_display_text_row(output.builder(), display_row_index, metrics);
     output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
     finish
 }
 
 pub(crate) fn finish_and_end_text_window_row(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
     let matrix_metrics = finish_text_output_row(
-        output_builder,
+        output.builder(),
         display_text_row_metrics_request(display_row_index, metrics),
     );
     output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
@@ -381,14 +401,14 @@ pub(crate) fn finish_and_end_text_window_row(
 }
 
 pub(crate) fn transition_text_window_row(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     transition: DisplayTextRowGeometryTransition,
 ) -> DisplayTextRowTransition {
-    finish_and_end_text_window_row(output_builder, output_emitter, transition.finished_row);
+    finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
     begin_text_window_row(
-        output_builder,
+        output.reborrow(),
         output_emitter,
         evaluator,
         transition.begin_row,
@@ -397,17 +417,17 @@ pub(crate) fn transition_text_window_row(
 }
 
 pub(crate) fn transition_text_window_row_with_limit(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     transition: DisplayTextRowGeometryTransition,
     max_rows: usize,
 ) -> DisplayTextRowTransition {
     if transition.begin_row.row >= max_rows {
-        finish_and_end_text_window_row(output_builder, output_emitter, transition.finished_row);
+        finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
         return DisplayTextRowTransition::ExhaustedRows;
     }
-    transition_text_window_row(output_builder, output_emitter, evaluator, transition)
+    transition_text_window_row(output.reborrow(), output_emitter, evaluator, transition)
 }
 
 pub(crate) fn begin_text_window_output_and_row(
@@ -418,7 +438,12 @@ pub(crate) fn begin_text_window_output_and_row(
 ) {
     let first_row = request.first_row;
     begin_text_window_output(output_builder, request.into());
-    begin_text_window_row(output_builder, output_emitter, evaluator, first_row);
+    begin_text_window_row(
+        TextWindowOutputTarget::from_builder(output_builder),
+        output_emitter,
+        evaluator,
+        first_row,
+    );
 }
 
 pub(crate) fn finish_pending_text_window_row(
@@ -445,7 +470,7 @@ pub(crate) fn finish_pending_text_window_row(
         .hit_rows
         .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
     finish_text_window_row(
-        output_builder,
+        TextWindowOutputTarget::from_builder(output_builder),
         output_emitter,
         row_cursor.finish_current_row(),
     );
@@ -838,19 +863,19 @@ pub(crate) struct TextWindowOutputRetryCheckpoint {
 }
 
 pub(crate) fn install_text_window_cursor_effects(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     request: TextWindowCursorEffects,
 ) {
-    install_text_output_cursor_effects(output_builder, request.window_id, request.effects);
+    install_text_output_cursor_effects(output.builder(), request.window_id, request.effects);
 }
 
 pub(crate) fn publish_text_window_decorative_cursor(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     cursor: TextWindowDecorativeCursor,
 ) {
     if let Some(effects) = cursor.effects {
         install_text_window_cursor_effects(
-            output_builder,
+            output.reborrow(),
             TextWindowCursorEffects {
                 window_id: cursor.window_id,
                 effects,
@@ -858,7 +883,7 @@ pub(crate) fn publish_text_window_decorative_cursor(
         );
     }
     install_text_window_cursor_artifact(
-        output_builder,
+        output.builder(),
         TextWindowCursorArtifact {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
@@ -999,17 +1024,17 @@ impl TextWindowCursorPublication {
 
     fn publish(
         self,
-        output_builder: &mut DisplayOutputBuilder,
+        mut output: TextWindowOutputTarget<'_>,
         output_emitter: &mut WindowOutputEmitter,
     ) -> TextWindowCursorPublicationOutcome {
         let installed_cursor_artifact = self.cursor_artifact.is_some();
         if let Some(cursor) = self.cursor_artifact {
-            install_text_window_cursor_artifact(output_builder, cursor);
+            install_text_window_cursor_artifact(output.builder(), cursor);
         }
-        install_text_window_row_cursor(output_builder, self.row, self.row_col, self.style);
+        install_text_window_row_cursor(output.builder(), self.row, self.row_col, self.style);
         output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
-            store_text_window_phys_cursor(output_builder, cursor);
+            store_text_window_phys_cursor(output.builder(), cursor);
         }
         TextWindowCursorPublicationOutcome {
             installed_cursor_artifact,
@@ -1022,16 +1047,16 @@ impl TextWindowCursorPublication {
 }
 
 pub(crate) fn publish_text_window_cursor(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     cursor: TextWindowCursor,
 ) -> TextWindowCursorPublicationOutcome {
-    let publication = TextWindowCursorPublication::resolve(output_builder, cursor);
-    publication.publish(output_builder, output_emitter)
+    let publication = TextWindowCursorPublication::resolve(output.builder(), cursor);
+    publication.publish(output, output_emitter)
 }
 
 pub(crate) fn install_text_window_body_output(
-    output_builder: &mut DisplayOutputBuilder,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &WindowOutputEmitter,
     request: TextWindowBodyOutputInstall<'_>,
     render_services: Option<ChromeRowRenderServices<'_, '_>>,
@@ -1042,12 +1067,16 @@ pub(crate) fn install_text_window_body_output(
         request.text_start_byte,
         request.byte_idx,
     );
-    record_text_window_redisplay_positions(output_builder, request.window_id, redisplay_positions);
-    install_text_window_finished_rows(output_builder, output_emitter);
+    record_text_window_redisplay_positions(
+        output.builder(),
+        request.window_id,
+        redisplay_positions,
+    );
+    install_text_window_finished_rows(output.builder(), output_emitter);
     if let Some(markers) = request.right_edge_markers {
         let render_services =
             render_services.expect("right-edge markers require chrome render services");
-        install_right_edge_markers(output_builder, render_services, markers);
+        install_right_edge_markers(output.builder(), render_services, markers);
     }
     redisplay_positions
 }

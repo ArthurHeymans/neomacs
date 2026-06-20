@@ -6,8 +6,8 @@ use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, WindowOutputEmitter,
-    publish_text_window_cursor, publish_text_window_decorative_cursor,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowOutputTarget,
+    WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
@@ -806,7 +806,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         }
 
         publish_text_window_cursor(
-            output_builder,
+            TextWindowOutputTarget::from_builder(output_builder),
             output_emitter,
             TextWindowCursor {
                 selected: self.params.selected,
@@ -918,7 +918,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 continue;
             }
             publish_text_window_decorative_cursor(
-                output_builder,
+                TextWindowOutputTarget::from_builder(output_builder),
                 TextWindowDecorativeCursor {
                     window_id: resolved_cursor.window_id(),
                     slot_id: resolved_cursor.slot_id,

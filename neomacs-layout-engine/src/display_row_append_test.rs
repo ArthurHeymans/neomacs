@@ -81,6 +81,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::DisplayTextRowTransition;
+use crate::window_output::TextWindowOutputTarget;
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6694,7 +6695,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     crate::window_output::begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
         &mut eval,
         crate::window_output::DisplayTextRowBegin {
@@ -6708,7 +6709,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
     crate::window_output::finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
         crate::window_output::DisplayTextRowMetrics {
             y: 2.0,
@@ -6794,7 +6795,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     crate::window_output::finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
         crate::window_output::DisplayTextRowMetrics {
             y: 9.0,

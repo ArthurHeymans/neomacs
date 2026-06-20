@@ -11,6 +11,7 @@ use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
+use super::TextWindowOutputTarget;
 use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
 use super::TextWindowRowDecorationRequest;
@@ -489,7 +490,7 @@ fn text_matrix_row_output_begins_row() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     let outcome = begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -546,7 +547,7 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -558,7 +559,7 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
         },
     );
     let outcome = finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 20.0,
@@ -639,7 +640,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     emitter.begin_update(&mut eval);
 
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -652,7 +653,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
@@ -663,7 +664,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     builder.end_row();
 
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -675,7 +676,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         },
     );
     finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 16.0,
@@ -737,7 +738,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
     let outcome = publish_text_window_cursor(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         TextWindowCursor {
             selected: true,
@@ -789,7 +790,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let effects = EffectsConfig::default();
 
     publish_text_window_decorative_cursor(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
@@ -822,7 +823,7 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     let effects = EffectsConfig::default();
 
     install_text_window_cursor_effects(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         TextWindowCursorEffects {
             window_id: 42,
             effects: effects.clone(),
@@ -858,7 +859,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -887,7 +888,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
     );
 
     finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
@@ -928,7 +929,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -941,7 +942,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
     );
 
     finish_and_end_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 0.0,
@@ -979,7 +980,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -1046,7 +1047,7 @@ fn install_text_window_output_installs_row_metrics() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -1059,7 +1060,7 @@ fn install_text_window_output_installs_row_metrics() {
     );
     write_char_to_current_row(&mut builder, 'x', 7, 0);
     finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 2.0,
@@ -1102,7 +1103,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -1116,7 +1117,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row(&mut builder, 'x', 7, 0);
     finish_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         DisplayTextRowMetrics {
             y: 2.0,
@@ -1126,7 +1127,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     );
 
     let positions = install_text_window_body_output(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         TextWindowBodyOutputInstall {
             window_id: 41,
@@ -1196,7 +1197,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -1209,7 +1210,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     );
 
     let transition = transition_text_window_row_with_limit(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowGeometryTransition {
@@ -1260,7 +1261,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     begin_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowBegin {
@@ -1273,7 +1274,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
     );
 
     transition_text_window_row(
-        &mut builder,
+        TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         &mut eval,
         DisplayTextRowGeometryTransition {
