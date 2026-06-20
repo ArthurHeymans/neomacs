@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_row::DisplayRowFace;
+use crate::display_row::{DisplayRowFace, DisplayRowFallbackMetrics};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::face::FaceTable;
 
@@ -15,7 +15,11 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
     face.box_line_width = 1;
 
     assert_eq!(
-        window_chrome_row_height_for_face(&mut font_metrics, &face, 8.0, 12.0, 20.0),
+        window_chrome_row_height_for_face(
+            &mut font_metrics,
+            &face,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 20.0, 12.0),
+        ),
         20.0
     );
 }
@@ -55,9 +59,7 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
     let policy = ChromeLispStringRowRequest::new(
         3.0,
         80.0,
-        16.0,
-        8.0,
-        12.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayTabPolicy::every(4),
         DisplayOrigin::ModeLine { selected: true },
         &base_face,

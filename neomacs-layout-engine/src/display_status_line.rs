@@ -158,9 +158,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         ChromeLispStringRowRequest::new(
             self.y,
             self.width,
-            self.metrics.row_height(),
-            self.metrics.char_width(),
-            self.metrics.ascent(),
+            self.metrics,
             DisplayTabPolicy::every(8),
             DisplayOrigin::TabBar,
             self.base_face,
@@ -255,9 +253,7 @@ impl WindowChromeDisplayText {
 struct ChromeLispStringRowRequest<'face> {
     y: f32,
     width: f32,
-    row_height: f32,
-    char_width: f32,
-    ascent: f32,
+    metrics: DisplayRowFallbackMetrics,
     tab_policy: DisplayTabPolicy,
     origin: DisplayOrigin,
     base_face: &'face ResolvedFace,
@@ -270,9 +266,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
     fn new(
         y: f32,
         width: f32,
-        row_height: f32,
-        char_width: f32,
-        ascent: f32,
+        metrics: DisplayRowFallbackMetrics,
         tab_policy: DisplayTabPolicy,
         origin: DisplayOrigin,
         base_face: &'face ResolvedFace,
@@ -281,9 +275,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         Self {
             y,
             width,
-            row_height,
-            char_width,
-            ascent,
+            metrics,
             tab_policy,
             origin,
             base_face,
@@ -306,9 +298,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         let Self {
             y,
             width,
-            row_height,
-            char_width,
-            ascent,
+            metrics,
             tab_policy,
             origin,
             base_face,
@@ -316,7 +306,13 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             symbol_values,
         } = self;
         let policy = DisplayRowSourceRequestPolicy::from_origin(
-            y, width, row_height, char_width, ascent, tab_policy, origin,
+            y,
+            width,
+            metrics.row_height(),
+            metrics.char_width(),
+            metrics.ascent(),
+            tab_policy,
+            origin,
         )
         .with_symbol_values(symbol_values);
         (policy, base_face, text)
@@ -402,9 +398,7 @@ impl WindowChromeRowsPlan {
         params: &WindowParams,
         face_resolver: &FaceResolver,
         font_metrics: &mut Option<FontMetricsService>,
-        char_width: f32,
-        fallback_ascent: f32,
-        fallback_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         let mode_line_face = (params.mode_line_height > 0.0).then(|| {
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
@@ -424,27 +418,21 @@ impl WindowChromeRowsPlan {
             window_chrome_row_height_for_face(
                 font_metrics,
                 face,
-                char_width,
-                fallback_ascent,
-                fallback_row_height,
+                fallback_metrics,
             )
         });
         let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
             window_chrome_row_height_for_face(
                 font_metrics,
                 face,
-                char_width,
-                fallback_ascent,
-                fallback_row_height,
+                fallback_metrics,
             )
         });
         let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
             window_chrome_row_height_for_face(
                 font_metrics,
                 face,
-                char_width,
-                fallback_ascent,
-                fallback_row_height,
+                fallback_metrics,
             )
         });
 
@@ -744,9 +732,11 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         ChromeLispStringRowRequest::new(
             self.bounds.y,
             self.bounds.width,
-            self.bounds.height,
-            self.metrics.char_width(),
-            self.metrics.ascent(),
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                self.metrics.char_width(),
+                self.bounds.height,
+                self.metrics.ascent(),
+            ),
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
@@ -1185,15 +1175,13 @@ fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> Displ
 pub(crate) fn window_chrome_row_height_for_face(
     font_metrics: &mut Option<FontMetricsService>,
     face: &ResolvedFace,
-    char_width: f32,
-    fallback_ascent: f32,
-    fallback_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 ) -> f32 {
     DisplayRowFaceRealizer::new(font_metrics).row_height_for_face(
         face,
-        char_width,
-        fallback_ascent,
-        fallback_row_height,
+        fallback_metrics.char_width(),
+        fallback_metrics.ascent(),
+        fallback_metrics.row_height(),
     )
 }
 

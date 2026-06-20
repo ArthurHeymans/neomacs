@@ -116,9 +116,7 @@ where
             params,
             state.face_resolver,
             &mut *state.font_metrics,
-            char_w,
-            default_face.ascent(),
-            default_face.row_height(),
+            default_face.metrics(),
         );
         let chrome_heights = BufferWindowChromeHeights::new(
             chrome_plan.mode_line_height(),
