@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
-use crate::display_buffer_text_source_walk::{
+use crate::display_buffer_text_source_consumption::{
     BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
 };
 use crate::display_item::{

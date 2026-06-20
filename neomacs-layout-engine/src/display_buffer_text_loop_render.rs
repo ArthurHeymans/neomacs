@@ -15,6 +15,9 @@ use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
+use crate::display_buffer_text_source_consumption::{
+    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem, BufferTextSourceStepChar,
+};
 use crate::display_buffer_text_source_walk::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;

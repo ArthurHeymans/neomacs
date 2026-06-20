@@ -4,7 +4,7 @@ use crate::display_buffer_text_overflow::{
     BufferTextSpecialSourceCharRenderState,
 };
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_source_walk::BufferTextSourceStepChar;
+use crate::display_buffer_text_source_consumption::BufferTextSourceStepChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,

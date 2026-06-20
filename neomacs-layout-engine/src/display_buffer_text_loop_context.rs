@@ -11,7 +11,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderRequest,
     BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
 };
-use crate::display_buffer_text_source_walk::{
+use crate::display_buffer_text_source_consumption::{
     BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_row::DisplayRowActiveFaceState;

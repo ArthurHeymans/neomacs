@@ -8,9 +8,8 @@ use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source_walk::{
-    BufferTextSourceStepChar, BufferTextWindowSourceWalk,
-};
+use crate::display_buffer_text_source_consumption::BufferTextSourceStepChar;
+use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
