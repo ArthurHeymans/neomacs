@@ -82,28 +82,6 @@ struct BufferTextWindowRenderedBody<'a> {
     tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 
-struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
-where
-    B: LayoutBufferView,
-{
-    buffer: &'a B,
-    face_resolver: &'a FaceResolver,
-    measurement_policy: DisplayRowMeasurementPolicy,
-    default_resolved: &'a ResolvedFace,
-    default_face_char_width: f32,
-    default_face_ascent: f32,
-    default_face_height: f32,
-    char_width: f32,
-    char_height: f32,
-    font_ascent: f32,
-    window_system: bool,
-    output_window_id: u64,
-    append_surface: &'surface DisplayRowAppendSurface,
-    text_y: f32,
-    display_text_row_base: usize,
-    max_rows: usize,
-}
-
 struct BufferTextWindowRenderContexts<'a, 'surface, B>
 where
     B: LayoutBufferView,
@@ -321,25 +299,32 @@ impl BufferTextWindowOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let render_contexts = BufferTextWindowRenderContextsRequest::new(
-            buffer,
-            face_resolver,
-            default_face.measurement_policy(),
-            default_face.face(),
-            default_face.char_width(),
-            default_face.ascent(),
-            default_face.row_height(),
-            geometry.char_width,
-            geometry.char_height,
-            font_ascent,
-            window_system,
-            output_window_id,
-            append_surface,
-            geometry.text_y,
-            self.body_install_context.display_text_row_base(),
-            geometry.max_rows,
-        )
-        .into_contexts();
+        let has_overlays = !buffer.layout_overlays().is_empty();
+        let render_contexts = BufferTextWindowRenderContexts {
+            face_resolution: BufferCurrentFaceResolutionContext::new(
+                buffer,
+                face_resolver,
+                default_face.measurement_policy(),
+                default_face.face(),
+                default_face.char_width(),
+                default_face.ascent(),
+                default_face.row_height(),
+                geometry.char_width,
+                geometry.char_height,
+                font_ascent,
+                window_system,
+            ),
+            overlay_text_row: BufferOverlayStringTextRowRenderContext::new(
+                has_overlays,
+                output_window_id,
+                append_surface,
+                geometry.char_height,
+                default_face.ascent(),
+                geometry.text_y,
+                self.body_install_context.display_text_row_base(),
+                geometry.max_rows,
+            ),
+        };
         let loop_context = BufferTextWindowLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
@@ -620,79 +605,6 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         *frame_face_id_counter = (*face_ids).finish();
         BufferTextWindowRenderAttemptOutcome::Finished {
             redisplay_positions,
-        }
-    }
-}
-
-impl<'a, 'surface, B> BufferTextWindowRenderContextsRequest<'a, 'surface, B>
-where
-    B: LayoutBufferView,
-{
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        buffer: &'a B,
-        face_resolver: &'a FaceResolver,
-        measurement_policy: DisplayRowMeasurementPolicy,
-        default_resolved: &'a ResolvedFace,
-        default_face_char_width: f32,
-        default_face_ascent: f32,
-        default_face_height: f32,
-        char_width: f32,
-        char_height: f32,
-        font_ascent: f32,
-        window_system: bool,
-        output_window_id: u64,
-        append_surface: &'surface DisplayRowAppendSurface,
-        text_y: f32,
-        display_text_row_base: usize,
-        max_rows: usize,
-    ) -> Self {
-        Self {
-            buffer,
-            face_resolver,
-            measurement_policy,
-            default_resolved,
-            default_face_char_width,
-            default_face_ascent,
-            default_face_height,
-            char_width,
-            char_height,
-            font_ascent,
-            window_system,
-            output_window_id,
-            append_surface,
-            text_y,
-            display_text_row_base,
-            max_rows,
-        }
-    }
-
-    pub(crate) fn into_contexts(self) -> BufferTextWindowRenderContexts<'a, 'surface, B> {
-        let has_overlays = !self.buffer.layout_overlays().is_empty();
-        BufferTextWindowRenderContexts {
-            face_resolution: BufferCurrentFaceResolutionContext::new(
-                self.buffer,
-                self.face_resolver,
-                self.measurement_policy,
-                self.default_resolved,
-                self.default_face_char_width,
-                self.default_face_ascent,
-                self.default_face_height,
-                self.char_width,
-                self.char_height,
-                self.font_ascent,
-                self.window_system,
-            ),
-            overlay_text_row: BufferOverlayStringTextRowRenderContext::new(
-                has_overlays,
-                self.output_window_id,
-                self.append_surface,
-                self.char_height,
-                self.default_face_ascent,
-                self.text_y,
-                self.display_text_row_base,
-                self.max_rows,
-            ),
         }
     }
 }
