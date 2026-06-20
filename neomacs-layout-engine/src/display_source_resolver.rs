@@ -12,8 +12,8 @@ use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::display_source::{
     DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
-    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -261,8 +261,7 @@ pub(crate) fn resolve_display_replacement(
     replacement: &DisplayMediaReplacementProperty,
     display_host: Option<&dyn DisplayHost>,
     resolved_face: &ResolvedFace,
-    fallback_char_width: f32,
-    fallback_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 ) -> Option<ResolvedDisplayReplacement> {
     if let Some(media) = replacement.direct_replacement() {
         return Some(resolved_media_replacement(media));
@@ -272,8 +271,7 @@ pub(crate) fn resolve_display_replacement(
         &display_prop,
         display_host,
         resolved_face,
-        fallback_char_width,
-        fallback_row_height,
+        fallback_metrics,
     )
     .filter(|media| replacement.accepts_media_replacement(media))
     {
@@ -292,16 +290,14 @@ impl DisplayReplacementMediaSourceItem {
         replacement: &DisplayMediaReplacementProperty,
         display_host: Option<&dyn DisplayHost>,
         active_face_state: &DisplayRowActiveFaceState,
-        fallback_char_width: f32,
-        fallback_row_height: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Option<DisplayReplacementMediaSourceResolution> {
         match resolve_display_replacement(
             display_prop,
             replacement,
             display_host,
             active_face_state.resolved_face(),
-            fallback_char_width,
-            fallback_row_height,
+            fallback_metrics,
         )? {
             ResolvedDisplayReplacement::Media(media) => {
                 Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
@@ -371,7 +367,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         let anchor_charpos = self.anchor_charpos;
         let source_text = self.source_text;
         let face_metrics = self.face_metrics();
-        let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
+        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
             face_metrics.char_width,
             face_metrics.row_height,
             face_metrics.ascent,
@@ -409,8 +405,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                     media_replacement,
                     self.display_host,
                     self.active_face_state,
-                    face_metrics.char_width,
-                    face_metrics.row_height,
+                    fallback_metrics,
                 )?;
                 DisplayPropertyReplacementSourceInputs::empty().with_media(media)
             }
@@ -422,7 +417,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             self.current_x,
             self.content_x,
             self.params,
-            source_metrics,
+            fallback_metrics,
             source_inputs,
         )
     }
@@ -538,8 +533,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             &display_prop,
             self.params.display_host(),
             &resolved_face,
-            fallback.char_width(),
-            fallback.row_height(),
+            fallback,
         )
     }
 }
@@ -569,8 +563,7 @@ pub(crate) fn resolve_display_property_media(
     display_prop: &Value,
     display_host: Option<&dyn DisplayHost>,
     resolved_face: &ResolvedFace,
-    fallback_char_width: f32,
-    fallback_row_height: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 ) -> Option<DisplayMediaReplacement> {
     resolve_display_media_property(
         display_prop,
@@ -578,8 +571,8 @@ pub(crate) fn resolve_display_property_media(
             display_host: display_host?,
             default_fg: resolved_face.fg,
             default_bg: resolved_face.bg,
-            fallback_char_width,
-            fallback_row_height,
+            fallback_char_width: fallback_metrics.char_width(),
+            fallback_row_height: fallback_metrics.row_height(),
         },
     )
 }
@@ -746,8 +739,7 @@ mod tests {
             &DisplayMediaReplacementProperty::Xwidget(media),
             None,
             resolver.default_face(),
-            8.0,
-            16.0,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         );
 
         assert_eq!(resolved, Some(ResolvedDisplayReplacement::Media(media)));
@@ -763,8 +755,7 @@ mod tests {
             &DisplayMediaReplacementProperty::Image,
             None,
             resolver.default_face(),
-            8.0,
-            16.0,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         );
 
         assert_eq!(

@@ -9598,8 +9598,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
         &replacement,
         None,
         &active_face,
-        8.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
     .expect("direct media replacement");
 
@@ -9624,8 +9623,7 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
         &DisplayMediaReplacementProperty::Image,
         None,
         &active_face,
-        8.0,
-        16.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
     .expect("image placeholder");
 

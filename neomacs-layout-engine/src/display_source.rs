@@ -9,6 +9,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
+use crate::display_row::DisplayRowFallbackMetrics;
 use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_source_append_plan::{
@@ -1661,23 +1662,6 @@ impl DisplayPropertyReplacementSourceItem {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayPropertyReplacementSourceMetrics {
-    char_width: f32,
-    row_height: f32,
-    ascent: f32,
-}
-
-impl DisplayPropertyReplacementSourceMetrics {
-    pub(crate) fn new(char_width: f32, row_height: f32, ascent: f32) -> Self {
-        Self {
-            char_width,
-            row_height,
-            ascent,
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayPropertyReplacementSourceInputs {
     string_cursor_slot_width_px: Option<f32>,
@@ -1719,7 +1703,7 @@ impl DisplayPropertyReplacementSourceItem {
         current_x: f32,
         content_x: f32,
         params: &WindowParams,
-        metrics: DisplayPropertyReplacementSourceMetrics,
+        metrics: DisplayRowFallbackMetrics,
         inputs: DisplayPropertyReplacementSourceInputs,
     ) -> Option<Self> {
         match display_property.replacement()? {
@@ -1738,11 +1722,11 @@ impl DisplayPropertyReplacementSourceItem {
                     &value,
                     current_x,
                     content_x,
-                    metrics.char_width,
+                    metrics.char_width(),
                     inputs.stretch_display_char_width_px?,
-                    metrics.row_height,
-                    metrics.ascent,
-                    metrics.char_width,
+                    metrics.row_height(),
+                    metrics.ascent(),
+                    metrics.char_width(),
                     params,
                 ),
             )),
