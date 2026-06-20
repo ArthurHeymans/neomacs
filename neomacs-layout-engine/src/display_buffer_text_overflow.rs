@@ -11,14 +11,12 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::{
     BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -29,15 +27,14 @@ use crate::display_row_geometry::{
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
-use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::{
     DisplayRowOverflowTransitionPlan, DisplayRowTextWindowEmitContext,
     DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
 };
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState,
-    SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
-    WordWrapBreakCandidate, WordWrapRenderState,
+    SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, WordWrapBreakCandidate,
+    WordWrapRenderState,
 };
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::{LineWrapMode, WindowParams};
@@ -213,55 +210,6 @@ pub(crate) enum BufferTextConsumedDisplayItemRenderOutcome {
     Rendered,
     ContinueBufferWalk,
     Stop,
-}
-
-pub(crate) struct BufferTextConsumedDisplayItemRenderState<'a> {
-    pub(crate) source_render: TextRowSourceRenderState<'a>,
-    pub(crate) trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
-    pub(crate) word_wrap: &'a mut WordWrapRenderState,
-    pub(crate) progress: BufferTextWindowProgressState<'a>,
-}
-
-impl<'a> BufferTextConsumedDisplayItemRenderState<'a> {
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'a>,
-        trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
-        word_wrap: &'a mut WordWrapRenderState,
-        progress: BufferTextWindowProgressState<'a>,
-    ) -> Self {
-        Self {
-            source_render,
-            trailing_whitespace,
-            word_wrap,
-            progress,
-        }
-    }
-}
-
-pub(crate) struct BufferTextSpecialSourceCharRenderState<'a> {
-    pub(crate) face_ids: &'a mut FrameFaceIdAllocator,
-    pub(crate) source_render: TextRowSourceRenderState<'a>,
-    pub(crate) face_scan: &'a mut FaceScanCheckpoint,
-    pub(crate) word_wrap: &'a mut WordWrapRenderState,
-    pub(crate) progress: BufferTextWindowProgressState<'a>,
-}
-
-impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
-    pub(crate) fn new(
-        face_ids: &'a mut FrameFaceIdAllocator,
-        source_render: TextRowSourceRenderState<'a>,
-        face_scan: &'a mut FaceScanCheckpoint,
-        word_wrap: &'a mut WordWrapRenderState,
-        progress: BufferTextWindowProgressState<'a>,
-    ) -> Self {
-        Self {
-            face_ids,
-            source_render,
-            face_scan,
-            word_wrap,
-            progress,
-        }
-    }
 }
 
 impl BufferTextSourceAppendContinuation {
@@ -499,13 +447,11 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
                         &buffer_row_append_context,
                         row_geometry,
                         context.params,
-                        &mut BufferTextSpecialSourceCharRenderState::new(
-                            face_ids,
-                            source_render.reborrow(),
-                            face_scan,
-                            word_wrap,
-                            progress.reborrow(),
-                        ),
+                        face_ids,
+                        &mut source_render.reborrow(),
+                        face_scan,
+                        word_wrap,
+                        &mut progress.reborrow(),
                     )
                     .should_break()
                 {
@@ -624,12 +570,10 @@ impl<'a> BufferTextConsumedDisplayItemRenderRequest<'a> {
                 &buffer_row_append_context,
                 &append_geometry,
                 ch,
-                &mut BufferTextConsumedDisplayItemRenderState::new(
-                    source_render.reborrow(),
-                    trailing_whitespace,
-                    word_wrap,
-                    progress.reborrow(),
-                ),
+                &mut source_render.reborrow(),
+                trailing_whitespace,
+                word_wrap,
+                &mut progress.reborrow(),
             )
             .should_break()
         {

@@ -1,7 +1,6 @@
 use crate::display_buffer_text_overflow::{
-    BufferTextConsumedDisplayItemRenderState, BufferTextSourceAppendContinuation,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    BufferTextSpecialSourceCharRenderState,
+    BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction,
 };
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source_consumption::BufferTextSourceStepChar;
@@ -660,18 +659,20 @@ impl BufferTextSourceCharPreparedAppend {
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
         ch: char,
-        state: &mut BufferTextConsumedDisplayItemRenderState<'_>,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        word_wrap: &mut WordWrapRenderState,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) -> BufferTextSourceAppendContinuation {
-        let Some(outcome) = self.append_to_text_row(context, geometry, &mut state.source_render)
-        else {
+        let Some(outcome) = self.append_to_text_row(context, geometry, source_render) else {
             return BufferTextSourceAppendContinuation::Stopped;
         };
         outcome.apply_rendered_char_to_walk_state(
-            state.trailing_whitespace,
-            state.word_wrap,
+            trailing_whitespace,
+            word_wrap,
             ch,
             geometry,
-            &mut state.progress,
+            progress,
         );
         BufferTextSourceAppendContinuation::Rendered
     }
@@ -925,22 +926,18 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
         params: &WindowParams,
-        state: &mut BufferTextSpecialSourceCharRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_scan: &mut FaceScanCheckpoint,
+        word_wrap: &mut WordWrapRenderState,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) -> BufferTextSourceAppendContinuation {
-        let Some(outcome) = self.append_to_text_row(
-            context,
-            geometry,
-            params,
-            state.face_ids,
-            &mut state.source_render,
-        ) else {
+        let Some(outcome) =
+            self.append_to_text_row(context, geometry, params, face_ids, source_render)
+        else {
             return BufferTextSourceAppendContinuation::Stopped;
         };
-        outcome.apply_rendered_special_char_to_walk_state(
-            state.face_scan,
-            state.word_wrap,
-            &mut state.progress,
-        );
+        outcome.apply_rendered_special_char_to_walk_state(face_scan, word_wrap, progress);
         BufferTextSourceAppendContinuation::Rendered
     }
 }

@@ -6234,27 +6234,23 @@ fn buffer_text_source_append_context_appends_source_char() {
     let mut byte_idx = 0;
     let mut end_x = 0.0;
     let mut end_col = 0;
+    let mut source_render = text_row_source_render_state(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
+    let mut progress =
+        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
     let continuation = prepared_append.append_to_text_row_and_apply(
         &append_context,
         &geometry,
         ' ',
-        &mut BufferTextConsumedDisplayItemRenderState::new(
-            text_row_source_render_state(
-                &mut builder,
-                &mut output_emitter,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            &mut trailing_whitespace,
-            &mut word_wrap,
-            BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut end_x,
-                &mut end_col,
-            ),
-        ),
+        &mut source_render,
+        &mut trailing_whitespace,
+        &mut word_wrap,
+        &mut progress,
     );
     assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
     assert_eq!(
@@ -8037,28 +8033,24 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let mut byte_idx = 0;
     let mut end_x = 0.0;
     let mut end_col = 0;
+    let mut source_render = text_row_source_render_state(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
+    let mut progress =
+        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
     let continuation = prepared_append.append_to_text_row_and_apply(
         &append_context,
         &geometry,
         &params,
-        &mut BufferTextSpecialSourceCharRenderState::new(
-            &mut policy_face_ids,
-            text_row_source_render_state(
-                &mut builder,
-                &mut output_emitter,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            &mut face_scan,
-            &mut word_wrap,
-            BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut end_x,
-                &mut end_col,
-            ),
-        ),
+        &mut policy_face_ids,
+        &mut source_render,
+        &mut face_scan,
+        &mut word_wrap,
+        &mut progress,
     );
     assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
     assert!(face_scan.should_resolve_at(1));
