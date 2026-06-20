@@ -7,11 +7,11 @@ use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_render::BufferTextWindowLoopRenderState;
-use crate::display_buffer_text_output_session::{
-    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
-};
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
+};
+use crate::display_buffer_text_render_attempt::{
+    BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
 };
 use crate::display_buffer_text_render_plan::BufferTextWindowDefaultFacePlan;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;

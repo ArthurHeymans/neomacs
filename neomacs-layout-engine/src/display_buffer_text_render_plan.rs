@@ -6,7 +6,7 @@ use crate::display_buffer_text_append::{
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetup;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_output_session::{
+use crate::display_buffer_text_render_attempt::{
     BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
     BufferTextWindowRetryPlan,

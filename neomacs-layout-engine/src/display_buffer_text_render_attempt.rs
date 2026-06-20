@@ -1,4 +1,4 @@
-//! Buffer text output session, retry, and publish lifecycle.
+//! Buffer text render-attempt state, retry, and publish lifecycle.
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_append::{

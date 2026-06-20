@@ -2,7 +2,7 @@
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
-pub(crate) use crate::display_buffer_text_output_session::{
+pub(crate) use crate::display_buffer_text_render_attempt::{
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
 };
 use crate::display_buffer_text_render_plan::{
