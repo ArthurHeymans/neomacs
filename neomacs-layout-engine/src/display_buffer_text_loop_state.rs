@@ -1,6 +1,5 @@
 //! Shared mutable state for buffer text visible-loop rendering.
 
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -20,7 +19,6 @@ use crate::hit_test::HitRow;
 use neomacs_display_protocol::types::Color;
 
 pub(crate) struct BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
-    pub(crate) append_state: &'emit mut BufferTextRowAppendState,
     pub(crate) invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
     pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
@@ -46,7 +44,6 @@ pub(crate) struct BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
 impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        append_state: &'emit mut BufferTextRowAppendState,
         invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
         progress: BufferTextWindowProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
@@ -69,7 +66,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
         overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     ) -> Self {
         Self {
-            append_state,
             invisible_text_checkpoint,
             progress,
             source_render,
@@ -95,7 +91,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
 
     pub(crate) fn reborrow(&mut self) -> BufferTextWindowLoopMutableState<'_, '_, 'surface> {
         BufferTextWindowLoopMutableState {
-            append_state: self.append_state,
             invisible_text_checkpoint: self.invisible_text_checkpoint,
             progress: self.progress.reborrow(),
             source_render: self.source_render.reborrow(),

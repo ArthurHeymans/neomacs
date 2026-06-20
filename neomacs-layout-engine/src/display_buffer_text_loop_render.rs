@@ -1,7 +1,6 @@
 //! Buffer text visible-loop rendering.
 
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
@@ -42,7 +41,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
-        append_state: &'emit mut BufferTextRowAppendState,
         invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
         progress: BufferTextWindowProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
@@ -67,7 +65,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         Self {
             loop_context,
             state: BufferTextWindowLoopMutableState::new(
-                append_state,
                 invisible_text_checkpoint,
                 progress,
                 source_render,

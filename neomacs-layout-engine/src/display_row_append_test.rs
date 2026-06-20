@@ -1139,7 +1139,6 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut box_face = BoxFaceRowState::inactive();
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -1178,7 +1177,6 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     .render_next_and_apply(
         &mut source_walk,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -1714,7 +1712,6 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut face_ids = FrameFaceIdAllocator::new(7);
-    let mut append_state = BufferTextRowAppendState::default();
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -1742,7 +1739,6 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
         &mut source_walk,
         &snapshot,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut checkpoints,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -2701,7 +2697,6 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut hit_row_range = HitRowRangeTracker::new(0);
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut face_scan = FaceScanCheckpoint::initial();
     let row_limit = context.row_limit;
@@ -2746,7 +2741,6 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         &mut source_walk,
         &snapshot,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -2888,7 +2882,6 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut cursor_info = CursorCaptureState::new();
@@ -2923,7 +2916,6 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
         &mut source_walk,
         &snapshot,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -3319,7 +3311,6 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let text = b"a";
     let mut byte_idx = 0;
     let mut charpos = 21;
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut col = 10;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -3371,7 +3362,6 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         &mut source_walk,
         &snapshot,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -3566,7 +3556,6 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         },
     };
     let mut charpos = 21;
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut col = 10;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -3620,7 +3609,6 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         &mut source_walk,
         text,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -6400,7 +6388,6 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let params = test_display_space_window_params();
     let text = b"ab";
     let mut byte_idx = 0;
-    let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
     let mut col = 0;
@@ -6458,7 +6445,6 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         &params,
         &active_face,
         BufferTextWindowLoopMutableState::new(
-            &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -6563,22 +6549,17 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         &mut font_metrics,
         &face_resolver,
     );
-    let mut preparation_state = BufferTextSourceCharPreparationState::from_source_render(
-        &mut append_state,
-        &mut source_render,
-    );
 
     let prepared_append = append_context
         .prepare_source_item_for_current_text_row(
-            BufferTextSourceDisplayItemPreparationRequest::new(
-                geometry,
-                &source_char,
-                b"a",
-                0,
-                DisplayRowPosition { x_px: 0.0, col: 0 },
-                &source_item,
-            ),
-            &mut preparation_state,
+            geometry,
+            &mut append_state,
+            &mut source_render,
+            &source_char,
+            b"a",
+            0,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            &source_item,
         )
         .into_text()
         .expect("ordinary buffer char should prepare text append");

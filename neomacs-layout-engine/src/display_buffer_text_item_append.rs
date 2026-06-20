@@ -377,21 +377,29 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_source_item_for_current_text_row(
         &self,
-        request: BufferTextSourceDisplayItemPreparationRequest<'_>,
-        state: &mut BufferTextSourceCharPreparationState<'_>,
+        geometry: DisplayRowGeometryState,
+        append_state: &mut BufferTextRowAppendState,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        source_char: &BufferTextSourceChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
     ) -> BufferTextPreparedSourceCharAppend {
-        let cluster_tail = state.measure.current_cluster_tail();
+        let mut measure = source_render.measure_state();
+        let cluster_tail = measure.current_cluster_tail();
         self.prepare_source_item_char_at(
-            &request.geometry,
-            state.append_state,
-            &mut state.measure,
-            request.source_char,
-            request.text,
-            request.byte_idx,
-            request.position,
-            request.source_item,
+            &geometry,
+            append_state,
+            &mut measure,
+            source_char,
+            text,
+            byte_idx,
+            position,
+            source_item,
             cluster_tail,
         )
     }
@@ -461,53 +469,6 @@ fn matching_special_display_item(
             Some(source_item)
         }
         _ => None,
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferTextSourceDisplayItemPreparationRequest<'a> {
-    geometry: DisplayRowGeometryState,
-    source_char: &'a BufferTextSourceChar,
-    text: &'a [u8],
-    byte_idx: usize,
-    position: DisplayRowPosition,
-    source_item: &'a DisplayItem,
-}
-
-impl<'a> BufferTextSourceDisplayItemPreparationRequest<'a> {
-    pub(crate) fn new(
-        geometry: DisplayRowGeometryState,
-        source_char: &'a BufferTextSourceChar,
-        text: &'a [u8],
-        byte_idx: usize,
-        position: DisplayRowPosition,
-        source_item: &'a DisplayItem,
-    ) -> Self {
-        Self {
-            geometry,
-            source_char,
-            text,
-            byte_idx,
-            position,
-            source_item,
-        }
-    }
-}
-
-pub(crate) struct BufferTextSourceCharPreparationState<'a> {
-    append_state: &'a mut BufferTextRowAppendState,
-    measure: TextRowSourceMeasureState<'a>,
-}
-
-impl<'a> BufferTextSourceCharPreparationState<'a> {
-    pub(crate) fn from_source_render(
-        append_state: &'a mut BufferTextRowAppendState,
-        source_render: &'a mut TextRowSourceRenderState<'_>,
-    ) -> Self {
-        Self {
-            append_state,
-            measure: source_render.measure_state(),
-        }
     }
 }
 

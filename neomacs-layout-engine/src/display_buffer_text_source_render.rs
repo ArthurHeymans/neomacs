@@ -10,7 +10,6 @@ use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionConte
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_item_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext,
-    BufferTextSourceCharPreparationState, BufferTextSourceDisplayItemPreparationRequest,
 };
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
@@ -168,7 +167,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
 ) -> BufferTextSourceItemRenderOutcome {
     let mut source_item = source_item;
     let BufferTextWindowLoopMutableState {
-        append_state,
         invisible_text_checkpoint,
         mut progress,
         source_render,
@@ -218,23 +216,16 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     };
     let append_geometry = *row_geometry;
 
-    let prepared_append = {
-        let mut preparation_state = BufferTextSourceCharPreparationState::from_source_render(
-            append_state,
-            &mut source_render,
-        );
-        buffer_row_append_context.prepare_source_item_for_current_text_row(
-            BufferTextSourceDisplayItemPreparationRequest::new(
-                append_geometry,
-                &buffer_source_char,
-                context.text,
-                source_step_char.start_byte_idx(),
-                append_position,
-                &source_item,
-            ),
-            &mut preparation_state,
-        )
-    };
+    let prepared_append = buffer_row_append_context.prepare_source_item_for_current_text_row(
+        append_geometry,
+        source_walk.append_state(),
+        &mut source_render,
+        &buffer_source_char,
+        context.text,
+        source_step_char.start_byte_idx(),
+        append_position,
+        &source_item,
+    );
 
     let prepared_append = match prepared_append {
         BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
@@ -259,7 +250,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                 source_walk,
                 buffer,
                 BufferTextWindowLoopMutableState::new(
-                    append_state,
                     invisible_text_checkpoint,
                     progress.reborrow(),
                     source_render.reborrow(),
@@ -335,7 +325,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         source_walk,
         context.text,
         BufferTextWindowLoopMutableState::new(
-            append_state,
             invisible_text_checkpoint,
             progress.reborrow(),
             source_render.reborrow(),

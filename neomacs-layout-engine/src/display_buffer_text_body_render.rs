@@ -4,7 +4,6 @@ use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_render::BufferTextWindowLoopRenderState;
 use crate::display_buffer_text_progress::{
@@ -93,7 +92,6 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) row_geometry: DisplayRowGeometryState,
     pub(crate) row_y_positions: DisplayRowYPositions,
     pub(crate) trailing_whitespace: TrailingWhitespaceRenderState,
-    pub(crate) buffer_text_append_state: BufferTextRowAppendState,
     pub(crate) row_extend: DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: BoxFaceRowState,
     pub(crate) cursor_info: CursorCaptureState,
@@ -283,7 +281,6 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
                 self.trailing_whitespace_enabled,
                 self.trailing_whitespace_bg,
             ),
-            buffer_text_append_state: BufferTextRowAppendState::default(),
             row_extend: DisplayRowScopedValue::inactive(),
             box_face: BoxFaceRowState::inactive(),
             cursor_info: CursorCaptureState::new(),
@@ -315,7 +312,6 @@ impl BufferTextWindowWalkSetup {
 
         BufferTextWindowLoopRenderState::new(
             loop_context,
-            &mut self.buffer_text_append_state,
             &mut self.invisible_text_checkpoint,
             BufferTextWindowProgressState::new(
                 &mut self.byte_idx,
