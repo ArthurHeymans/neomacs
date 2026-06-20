@@ -39,7 +39,7 @@ use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy)]
-struct BufferTextSourceItemRenderContext<'a> {
+struct BufferSourceItemRenderContext<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     text: &'a [u8],
     text_start_byte: usize,
@@ -61,19 +61,19 @@ struct BufferTextSourceItemRenderContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceItemRenderOutcome {
+pub(crate) enum BufferSourceItemRenderOutcome {
     Rendered,
     ContinueBufferWalk,
     Stop,
 }
 
-impl BufferTextSourceItemRenderOutcome {
+impl BufferSourceItemRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
     }
 }
 
-pub(crate) struct BufferTextWindowSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face> {
+pub(crate) struct BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face> {
     loop_context: BufferTextWindowLoopRequestContext,
     text: &'request [u8],
     params: &'request WindowParams,
@@ -81,7 +81,7 @@ pub(crate) struct BufferTextWindowSourceRenderRequest<'rows, 'request, 'emit, 's
     state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
-impl<'a> BufferTextSourceItemRenderContext<'a> {
+impl<'a> BufferSourceItemRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
@@ -128,14 +128,14 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
 
 fn render_source_item_and_apply<B: LayoutBufferView>(
     source_item: DisplaySourceItem,
-    context: BufferTextSourceItemRenderContext<'_>,
+    context: BufferSourceItemRenderContext<'_>,
     source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
-) -> BufferTextSourceItemRenderOutcome {
+) -> BufferSourceItemRenderOutcome {
     debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
     let Some(source_step_char) = source_item.source_step_char() else {
-        return BufferTextSourceItemRenderOutcome::Stop;
+        return BufferSourceItemRenderOutcome::Stop;
     };
     let source_end_charpos = source_item.buffer_end_charpos();
     let source_end_byte_idx = source_item.end_byte_idx(context.text_start_byte);
@@ -157,11 +157,11 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     source_end_charpos: Option<i64>,
     source_end_byte_idx: Option<usize>,
     source_item: crate::display_item::DisplayItem,
-    context: BufferTextSourceItemRenderContext<'_>,
+    context: BufferSourceItemRenderContext<'_>,
     source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
-) -> BufferTextSourceItemRenderOutcome {
+) -> BufferSourceItemRenderOutcome {
     let mut source_item = source_item;
     let BufferTextWindowLoopMutableState {
         invisible_text_checkpoint,
@@ -270,10 +270,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                 ),
             );
             if special_overflow_outcome.should_break() {
-                return BufferTextSourceItemRenderOutcome::Stop;
+                return BufferSourceItemRenderOutcome::Stop;
             }
             if special_overflow_outcome.should_continue_buffer_walk() {
-                return BufferTextSourceItemRenderOutcome::ContinueBufferWalk;
+                return BufferSourceItemRenderOutcome::ContinueBufferWalk;
             }
 
             if special_prepared_append
@@ -289,12 +289,12 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                 )
                 .should_break()
             {
-                return BufferTextSourceItemRenderOutcome::Stop;
+                return BufferSourceItemRenderOutcome::Stop;
             }
             if let Some(end_byte_idx) = source_end_byte_idx {
                 *progress.byte_idx = end_byte_idx;
             }
-            return BufferTextSourceItemRenderOutcome::ContinueBufferWalk;
+            return BufferSourceItemRenderOutcome::ContinueBufferWalk;
         }
         DisplaySourcePreparedCharAppend::Text(prepared_append) => prepared_append,
     };
@@ -345,10 +345,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         ),
     );
     if overflow_outcome.should_break() {
-        return BufferTextSourceItemRenderOutcome::Stop;
+        return BufferSourceItemRenderOutcome::Stop;
     }
     if overflow_outcome.should_continue_buffer_walk() {
-        return BufferTextSourceItemRenderOutcome::ContinueBufferWalk;
+        return BufferSourceItemRenderOutcome::ContinueBufferWalk;
     }
 
     {
@@ -413,7 +413,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         )
         .should_break()
     {
-        return BufferTextSourceItemRenderOutcome::Stop;
+        return BufferSourceItemRenderOutcome::Stop;
     }
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
@@ -422,11 +422,11 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         *progress.byte_idx = end_byte_idx;
     }
 
-    BufferTextSourceItemRenderOutcome::Rendered
+    BufferSourceItemRenderOutcome::Rendered
 }
 
 impl<'rows, 'request, 'emit, 'surface, 'face>
-    BufferTextWindowSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face>
+    BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face>
 {
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
@@ -636,13 +636,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_item: DisplaySourceItem,
         buffer: &B,
-    ) -> BufferTextSourceItemRenderOutcome
+    ) -> BufferSourceItemRenderOutcome
     where
         'surface: 'request,
     {
         render_source_item_and_apply(
             source_item,
-            BufferTextSourceItemRenderContext::new(
+            BufferSourceItemRenderContext::new(
                 layout_resolution_context,
                 self.text,
                 self.loop_context.text_start_byte(),

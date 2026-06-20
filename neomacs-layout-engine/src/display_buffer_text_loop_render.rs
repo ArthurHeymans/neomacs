@@ -1,5 +1,6 @@
 //! Buffer text visible-loop rendering.
 
+use crate::display_buffer_source_render::BufferSourceRenderRequest;
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
@@ -9,7 +10,6 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferInvisibleTextRenderRequest,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
-use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
@@ -69,7 +69,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
                 active_face_state,
             );
 
-            if !BufferTextWindowSourceRenderRequest::new(
+            if !BufferSourceRenderRequest::new(
                 loop_context,
                 text,
                 params,

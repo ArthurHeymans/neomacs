@@ -5,6 +5,7 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_item_append::*;
+use crate::display_buffer_source_render::*;
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
@@ -23,7 +24,6 @@ use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
 use crate::display_buffer_text_source_consumption::*;
-use crate::display_buffer_text_source_render::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -6441,7 +6441,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         context.row_limit,
     );
 
-    let continue_buffer_walk = BufferTextWindowSourceRenderRequest::new(
+    let continue_buffer_walk = BufferSourceRenderRequest::new(
         loop_context,
         text,
         &params,
