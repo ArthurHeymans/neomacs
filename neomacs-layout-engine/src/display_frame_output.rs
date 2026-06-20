@@ -81,10 +81,6 @@ impl FrameOutputOwner {
         &mut self.builder
     }
 
-    pub(crate) fn output_builder(&mut self) -> &mut DisplayOutputBuilder {
-        &mut self.builder
-    }
-
     pub(crate) fn frame_chrome_output_parts(
         &mut self,
     ) -> (&mut DisplayOutputBuilder, &mut Vec<FrameChromeRow>) {
@@ -117,6 +113,58 @@ impl FrameOutputOwner {
             .windows()
             .last()
             .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
+    }
+
+    pub(crate) fn render_frame_state(&mut self, request: FrameOutputStateRenderRequest<'_>) {
+        request.render_and_apply(&mut self.builder);
+    }
+
+    pub(crate) fn render_window_info(&mut self, request: WindowFrameInfoRenderRequest<'_>) {
+        request.render_and_apply(&mut self.builder);
+    }
+
+    pub(crate) fn render_latest_window_info_effects(
+        &mut self,
+        request: WindowFrameInfoEffectsRenderRequest<'_>,
+        curr_window_infos: &mut HashMap<i64, WindowInfo>,
+    ) {
+        request.render_latest_and_apply(&mut self.builder, curr_window_infos);
+    }
+
+    pub(crate) fn render_window_decorations(
+        &mut self,
+        request: WindowFrameDecorationsRenderRequest<'_>,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) {
+        request.render_and_apply(&mut self.builder, render_services);
+    }
+
+    pub(crate) fn render_line_animation_hints(
+        &mut self,
+        request: FrameLineAnimationHintsRenderRequest<'_>,
+    ) {
+        request.render_and_apply(&mut self.builder);
+    }
+
+    pub(crate) fn render_window_switch_hint(
+        &mut self,
+        request: FrameWindowSwitchHintRenderRequest<'_>,
+    ) {
+        request.render_and_apply(&mut self.builder);
+    }
+
+    pub(crate) fn render_theme_transition_hint(
+        &mut self,
+        request: FrameThemeTransitionHintRenderRequest<'_>,
+    ) {
+        request.render_and_apply(&mut self.builder);
+    }
+
+    pub(crate) fn render_topology_transition_hint(
+        &mut self,
+        request: FrameTopologyTransitionHintRenderRequest<'_>,
+    ) {
+        request.render_and_apply(&mut self.builder);
     }
 }
 

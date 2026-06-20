@@ -212,12 +212,10 @@ impl LayoutEngine {
     ) {
         let mut decoration_face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let font_metrics = &mut self.font_metrics;
-        let frame_output = self.frame_output.output_builder();
-        WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info)
-            .render_and_apply(
-                frame_output,
-                ChromeRowRenderServices::new(font_metrics, face_resolver, &mut decoration_face_ids),
-            );
+        self.frame_output.render_window_decorations(
+            WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info),
+            ChromeRowRenderServices::new(font_metrics, face_resolver, &mut decoration_face_ids),
+        );
         decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
     }
 
@@ -226,9 +224,10 @@ impl LayoutEngine {
         curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
     ) {
         let prev_window_infos = &self.prev_window_infos;
-        let frame_output = self.frame_output.output_builder();
-        WindowFrameInfoEffectsRenderRequest::new(prev_window_infos)
-            .render_latest_and_apply(frame_output, curr_window_infos);
+        self.frame_output.render_latest_window_info_effects(
+            WindowFrameInfoEffectsRenderRequest::new(prev_window_infos),
+            curr_window_infos,
+        );
     }
 
     fn render_frame_output_hints(
@@ -239,24 +238,29 @@ impl LayoutEngine {
         let prev_window_infos = &self.prev_window_infos;
         let prev_selected_window_id = &mut self.prev_selected_window_id;
         let prev_background = &mut self.prev_background;
-        let frame_output = self.frame_output.output_builder();
-        FrameLineAnimationHintsRenderRequest::new(prev_window_infos, curr_window_infos)
-            .render_and_apply(frame_output);
-        FrameWindowSwitchHintRenderRequest::new(prev_selected_window_id)
-            .render_and_apply(frame_output);
-        FrameThemeTransitionHintRenderRequest::new(
-            prev_background,
-            frame_params.width,
-            frame_params.height,
-        )
-        .render_and_apply(frame_output);
-        FrameTopologyTransitionHintRenderRequest::new(
-            prev_window_infos,
-            curr_window_infos,
-            frame_params.width,
-            frame_params.height,
-        )
-        .render_and_apply(frame_output);
+        self.frame_output
+            .render_line_animation_hints(FrameLineAnimationHintsRenderRequest::new(
+                prev_window_infos,
+                curr_window_infos,
+            ));
+        self.frame_output
+            .render_window_switch_hint(FrameWindowSwitchHintRenderRequest::new(
+                prev_selected_window_id,
+            ));
+        self.frame_output
+            .render_theme_transition_hint(FrameThemeTransitionHintRenderRequest::new(
+                prev_background,
+                frame_params.width,
+                frame_params.height,
+            ));
+        self.frame_output.render_topology_transition_hint(
+            FrameTopologyTransitionHintRenderRequest::new(
+                prev_window_infos,
+                curr_window_infos,
+                frame_params.width,
+                frame_params.height,
+            ),
+        );
     }
 
     /// Create a new layout engine with cosmic-text font metrics.
@@ -484,14 +488,14 @@ impl LayoutEngine {
             } else {
                 None
             };
-            FrameOutputStateRenderRequest::new(
-                frame_identity,
-                Color::from_pixel(frame_params.background),
-                frame_params.font_pixel_size,
-                default_resolved,
-                default_metrics,
-            )
-            .render_and_apply(self.frame_output.output_builder());
+            self.frame_output
+                .render_frame_state(FrameOutputStateRenderRequest::new(
+                    frame_identity,
+                    Color::from_pixel(frame_params.background),
+                    frame_params.font_pixel_size,
+                    default_resolved,
+                    default_metrics,
+                ));
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -561,8 +565,8 @@ impl LayoutEngine {
                         modified: buffer.map(|b| b.is_modified()).unwrap_or(false),
                     }
                 };
-                WindowFrameInfoRenderRequest::new(params, metadata)
-                    .render_and_apply(self.frame_output.output_builder());
+                self.frame_output
+                    .render_window_info(WindowFrameInfoRenderRequest::new(params, metadata));
                 self.render_latest_window_output_info_effects(&mut curr_window_infos);
 
                 // Simplified layout for this window (no face resolution, no overlays)
