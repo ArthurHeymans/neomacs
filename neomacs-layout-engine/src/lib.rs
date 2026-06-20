@@ -21,6 +21,7 @@ pub(crate) mod display_buffer_text_output_session;
 pub(crate) mod display_buffer_text_overflow;
 pub(crate) mod display_buffer_text_progress;
 pub(crate) mod display_buffer_text_render;
+pub(crate) mod display_buffer_text_render_plan;
 pub(crate) mod display_buffer_text_row_lifecycle;
 pub(crate) mod display_buffer_text_row_prelude;
 pub(crate) mod display_buffer_text_source;

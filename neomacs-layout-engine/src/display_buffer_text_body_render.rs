@@ -15,7 +15,7 @@ use crate::display_buffer_text_output_session::{
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
-use crate::display_buffer_text_render::BufferTextWindowDefaultFacePlan;
+use crate::display_buffer_text_render_plan::BufferTextWindowDefaultFacePlan;
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;

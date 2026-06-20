@@ -5,7 +5,7 @@ use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowCursorEffectsRequest,
     BufferTextWindowFinishState, BufferTextWindowVisibilityRetryOutcome,
 };
-use crate::display_buffer_text_render::BufferTextWindowInitialFaceStateRequest;
+use crate::display_buffer_text_render_plan::BufferTextWindowInitialFaceStateRequest;
 use crate::display_buffer_text_tail_render::{
     BufferTextWindowFinishInstallState, BufferTextWindowPostLoopRenderOutcome,
     BufferTextWindowRetryBounds,
