@@ -1396,7 +1396,12 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     };
 
     action.append_left_truncation_marker_to_text_row_and_apply(
-        BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0),
+        BufferSyntheticTextRenderContext::new(
+            &surface,
+            &active_face,
+            0.0,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        ),
         &geometry,
         &mut source_render,
         DisplaySourceRowProgressState::new(&mut x, &mut col),
@@ -4351,7 +4356,12 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
-    let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
+    let end = BufferSyntheticTextRenderContext::new(
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
         .render_active_marker_to_text_row(
             &mut text_row_source_render_state(
                 &mut builder,
@@ -4415,7 +4425,12 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
-    let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
+    let end = BufferSyntheticTextRenderContext::new(
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
         .render_hscroll_truncation_marker_to_text_row(
             &mut text_row_source_render_state(
                 &mut builder,
@@ -10067,9 +10082,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
                 SyntheticTextSource::new(9, "x"),
                 7,
                 base_face,
-                16.0,
-                12.0,
-                8.0,
+                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
         )
         .expect("append progress");

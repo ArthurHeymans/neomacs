@@ -2,8 +2,8 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
-    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowRenderPolicy,
-    DisplayRowSourceState,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
+    DisplayRowRenderPolicy, DisplayRowSourceState,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -43,9 +43,7 @@ enum SyntheticTextAppendFace {
     TextRowMetrics {
         face_id: u32,
         base_face: ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
+        metrics: DisplayRowFallbackMetrics,
     },
 }
 
@@ -73,9 +71,7 @@ pub(crate) struct BufferSyntheticTextRenderContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     active_face: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
-    default_row_height: f32,
-    default_row_ascent: f32,
-    default_char_width: f32,
+    metrics: DisplayRowFallbackMetrics,
 }
 
 struct PreparedSingleDisplayItemSourceAppend {
@@ -145,9 +141,7 @@ impl SyntheticTextAppendRequest {
         source: SyntheticTextSource,
         face_id: u32,
         base_face: &ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
+        metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             position,
@@ -155,9 +149,7 @@ impl SyntheticTextAppendRequest {
             face: SyntheticTextAppendFace::TextRowMetrics {
                 face_id,
                 base_face: base_face.clone(),
-                height_px,
-                ascent_px,
-                char_width_px,
+                metrics,
             },
         }
     }
@@ -168,9 +160,7 @@ impl SyntheticTextAppendRequest {
         marker: SyntheticTextMarker,
         face_id: u32,
         base_face: &ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
+        metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             position,
@@ -178,9 +168,7 @@ impl SyntheticTextAppendRequest {
             face: SyntheticTextAppendFace::TextRowMetrics {
                 face_id,
                 base_face: base_face.clone(),
-                height_px,
-                ascent_px,
-                char_width_px,
+                metrics,
             },
         }
     }
@@ -301,11 +289,15 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             SyntheticTextAppendFace::TextRowMetrics {
                 face_id,
                 base_face,
-                height_px,
-                ascent_px,
-                char_width_px,
+                metrics,
             } => self
-                .text_row(face_id, &base_face, height_px, ascent_px, char_width_px)
+                .text_row(
+                    face_id,
+                    &base_face,
+                    metrics.row_height(),
+                    metrics.ascent(),
+                    metrics.char_width(),
+                )
                 .append_to_text_row_and_emit(state, position, source),
         }
     }
@@ -316,17 +308,13 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         append_surface: &'a DisplayRowAppendSurface,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-        default_row_height: f32,
-        default_row_ascent: f32,
-        default_char_width: f32,
+        metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self {
             append_surface,
             active_face,
             glyph_y_offset,
-            default_row_height,
-            default_row_ascent,
-            default_char_width,
+            metrics,
         }
     }
 
@@ -343,7 +331,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             geometry,
             self.active_face,
             self.glyph_y_offset,
-            self.default_row_height,
+            self.metrics.row_height(),
         )
     }
 
@@ -386,9 +374,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             SyntheticTextMarker::HscrollTruncation,
             BasicFaceId::Default.into(),
             &base_face,
-            self.default_row_height,
-            self.default_row_ascent,
-            self.default_char_width,
+            self.metrics,
         )
     }
 
