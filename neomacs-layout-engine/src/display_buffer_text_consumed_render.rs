@@ -1,14 +1,13 @@
 //! Buffer text consumed-item lifecycle rendering.
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_loop_context::{
     BufferTextWindowConsumedDisplayItemRenderRequest, BufferTextWindowLoopRequestContext,
 };
+use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
     BufferTextConsumedDisplayItemRenderOutcome, BufferTextConsumedDisplayItemRenderRequestState,
 };
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderRequest,
@@ -18,24 +17,10 @@ use crate::display_buffer_text_source_consumption::{
     BufferTextConsumedDisplayItem, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
-use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
-use crate::display_row_append_context::DisplayRowAppendSurface;
-use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryState, DisplayRowScopedValue, DisplayRowYPositions,
-};
-use crate::display_row_lisp_string::DisplayRowPrefixRequest;
-use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_row_walk_state::{
-    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
-    LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
-};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
-use neomacs_display_protocol::types::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextWindowConsumedRenderOutcome {
@@ -45,26 +30,7 @@ pub(crate) enum BufferTextWindowConsumedRenderOutcome {
 
 pub(crate) struct BufferTextWindowConsumedRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
-    append_state: &'emit mut BufferTextRowAppendState,
-    progress: BufferTextWindowProgressState<'emit>,
-    source_render: TextRowSourceRenderState<'emit>,
-    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    box_face: &'emit mut BoxFaceRowState,
-    line_numbers: &'emit mut LineNumberRenderState,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    row_flags: &'emit mut DisplayRowFlags,
-    hit_rows: &'emit mut Vec<crate::hit_test::HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    prefix_request: &'emit mut DisplayRowPrefixRequest,
-    hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    word_wrap: &'emit mut WordWrapRenderState,
-    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    face_scan: &'emit mut FaceScanCheckpoint,
-    row_y_positions: &'rows mut DisplayRowYPositions,
-    cursor_info: &'emit mut CursorCaptureState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-    append_surface: &'surface DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
 }
 
 impl BufferTextWindowConsumedRenderOutcome {
@@ -74,52 +40,13 @@ impl BufferTextWindowConsumedRenderOutcome {
 }
 
 impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, 'surface> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
-        append_state: &'emit mut BufferTextRowAppendState,
-        progress: BufferTextWindowProgressState<'emit>,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        box_face: &'emit mut BoxFaceRowState,
-        line_numbers: &'emit mut LineNumberRenderState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<crate::hit_test::HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        row_y_positions: &'rows mut DisplayRowYPositions,
-        cursor_info: &'emit mut CursorCaptureState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-        append_surface: &'surface DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+        state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
     ) -> Self {
         Self {
             loop_context,
-            append_state,
-            progress,
-            source_render,
-            row_extend,
-            box_face,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-            face_scan,
-            row_y_positions,
-            cursor_info,
-            face_ids,
-            append_surface,
-            overlay_context,
+            state,
         }
     }
 
@@ -185,7 +112,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
             if char_render_outcome.should_continue_buffer_walk() {
                 return BufferTextWindowConsumedRenderOutcome::ContinueBufferWalk;
             }
-            *self.progress.charpos = (*self.progress.charpos).max(end_charpos);
+            *self.state.progress.charpos = (*self.state.progress.charpos).max(end_charpos);
         }
 
         BufferTextWindowConsumedRenderOutcome::ContinueBufferWalk
@@ -205,7 +132,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
         let request = self.loop_context.selective_display_tail_request(
             source_step_char,
             text,
-            self.append_surface,
+            self.state.append_surface,
             active_face_state,
             0.0,
         );
@@ -226,7 +153,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
         let request = self.loop_context.line_break_request(
             source_char,
             text,
-            self.overlay_context,
+            self.state.overlay_context,
             active_face_state,
         );
         self.render_line_break(source_walk, request, buffer)
@@ -249,8 +176,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
             layout_resolution_context,
             source_item,
             text,
-            self.append_surface,
-            self.overlay_context,
+            self.state.append_surface,
+            self.state.overlay_context,
             active_face_state,
             params,
             0.0,
@@ -268,20 +195,20 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
             source_walk,
             buffer,
             BufferSelectiveDisplayTailRenderState::new(
-                self.progress.reborrow(),
-                self.source_render.reborrow(),
-                self.row_extend,
-                self.box_face,
-                self.line_numbers,
-                self.row_geometry,
-                self.row_flags,
-                self.hit_rows,
-                self.hit_row_range,
-                self.prefix_request,
-                self.hscroll_skip,
-                self.word_wrap,
-                self.trailing_whitespace,
-                self.row_y_positions,
+                self.state.progress.reborrow(),
+                self.state.source_render.reborrow(),
+                self.state.row_extend,
+                self.state.box_face,
+                self.state.line_numbers,
+                self.state.row_geometry,
+                self.state.row_flags,
+                self.state.hit_rows,
+                self.state.hit_row_range,
+                self.state.prefix_request,
+                self.state.hscroll_skip,
+                self.state.word_wrap,
+                self.state.trailing_whitespace,
+                self.state.row_y_positions,
             ),
         )
     }
@@ -296,22 +223,22 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
             source_walk,
             buffer,
             BufferTextLineBreakRenderState::new(
-                self.progress.reborrow(),
-                self.cursor_info,
-                self.row_geometry,
-                self.trailing_whitespace,
-                self.row_extend,
-                self.box_face,
-                self.source_render.reborrow(),
-                self.prefix_request,
-                self.line_numbers,
-                self.hscroll_skip,
-                self.word_wrap,
-                self.row_flags,
-                self.hit_rows,
-                self.hit_row_range,
-                self.row_y_positions,
-                self.face_ids,
+                self.state.progress.reborrow(),
+                self.state.cursor_info,
+                self.state.row_geometry,
+                self.state.trailing_whitespace,
+                self.state.row_extend,
+                self.state.box_face,
+                self.state.source_render.reborrow(),
+                self.state.prefix_request,
+                self.state.line_numbers,
+                self.state.hscroll_skip,
+                self.state.word_wrap,
+                self.state.row_flags,
+                self.state.hit_rows,
+                self.state.hit_row_range,
+                self.state.row_y_positions,
+                self.state.face_ids,
             ),
         )
     }
@@ -328,23 +255,23 @@ impl<'rows, 'emit, 'surface> BufferTextWindowConsumedRenderState<'rows, 'emit, '
             source_walk,
             buffer,
             BufferTextConsumedDisplayItemRenderRequestState::new(
-                self.append_state,
-                self.progress.reborrow(),
-                self.source_render.reborrow(),
-                self.row_extend,
-                self.line_numbers,
-                self.row_geometry,
-                self.row_flags,
-                self.hit_rows,
-                self.hit_row_range,
-                self.prefix_request,
-                self.hscroll_skip,
-                self.word_wrap,
-                self.trailing_whitespace,
-                self.face_scan,
-                self.row_y_positions,
-                self.cursor_info,
-                self.face_ids,
+                self.state.append_state,
+                self.state.progress.reborrow(),
+                self.state.source_render.reborrow(),
+                self.state.row_extend,
+                self.state.line_numbers,
+                self.state.row_geometry,
+                self.state.row_flags,
+                self.state.hit_rows,
+                self.state.hit_row_range,
+                self.state.prefix_request,
+                self.state.hscroll_skip,
+                self.state.word_wrap,
+                self.state.trailing_whitespace,
+                self.state.face_scan,
+                self.state.row_y_positions,
+                self.state.cursor_info,
+                self.state.face_ids,
             ),
         )
     }

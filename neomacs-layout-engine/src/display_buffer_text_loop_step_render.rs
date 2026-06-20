@@ -59,37 +59,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
     where
         'surface: 'request,
     {
-        let pre_source_outcome = BufferTextWindowPreSourceRenderState::new(
-            self.loop_context,
-            self.state.invisible_text_checkpoint,
-            self.state.progress.reborrow(),
-            self.state.source_render.reborrow(),
-            self.state.row_extend,
-            self.state.box_face,
-            self.state.line_numbers,
-            self.state.row_geometry,
-            self.state.row_flags,
-            self.state.hit_rows,
-            self.state.hit_row_range,
-            self.state.prefix_request,
-            self.state.hscroll_skip,
-            self.state.word_wrap,
-            self.state.trailing_whitespace,
-            self.state.face_scan,
-            self.state.row_y_positions,
-            self.state.cursor_info,
-            self.state.face_ids,
-            self.state.append_surface,
-            self.state.overlay_context,
-        )
-        .render_for_context(
-            source_walk,
-            row_prelude_context,
-            face_resolution_context.clone(),
-            text,
-            active_face_state,
-            buffer,
-        );
+        let pre_source_outcome =
+            BufferTextWindowPreSourceRenderState::new(self.loop_context, self.state.reborrow())
+                .render_for_context(
+                    source_walk,
+                    row_prelude_context,
+                    face_resolution_context.clone(),
+                    text,
+                    active_face_state,
+                    buffer,
+                );
         match pre_source_outcome {
             BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
             BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
@@ -105,12 +84,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
             text,
             params,
             active_face_state,
-            self.state.source_render.reborrow(),
-            self.state.face_ids,
-            self.state.append_surface,
-            self.state.row_geometry,
-            self.state.cursor_info,
-            self.state.progress.reborrow(),
+            self.state.reborrow(),
         )
         .consume_next(source_walk, face_resolution_context.clone(), buffer);
 
@@ -123,41 +97,20 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
         let BufferTextWindowSourceRenderOutcome::DisplayItem(source_item) = source_outcome else {
             unreachable!("source render stop/continue outcomes handled above");
         };
-        let consumed_outcome = BufferTextWindowConsumedRenderState::new(
-            self.loop_context,
-            self.state.append_state,
-            self.state.progress.reborrow(),
-            self.state.source_render.reborrow(),
-            self.state.row_extend,
-            self.state.box_face,
-            self.state.line_numbers,
-            self.state.row_geometry,
-            self.state.row_flags,
-            self.state.hit_rows,
-            self.state.hit_row_range,
-            self.state.prefix_request,
-            self.state.hscroll_skip,
-            self.state.word_wrap,
-            self.state.trailing_whitespace,
-            self.state.face_scan,
-            self.state.row_y_positions,
-            self.state.cursor_info,
-            self.state.face_ids,
-            self.state.append_surface,
-            self.state.overlay_context,
-        )
-        .render_for_context(
-            source_walk,
-            BufferTextWindowConsumedDisplayItemRenderRequest {
-                layout_resolution_context: face_resolution_context
-                    .source_item_layout_resolution_context(),
-                source_item,
-                text,
-                active_face_state,
-                params,
-            },
-            buffer,
-        );
+        let consumed_outcome =
+            BufferTextWindowConsumedRenderState::new(self.loop_context, self.state.reborrow())
+                .render_for_context(
+                    source_walk,
+                    BufferTextWindowConsumedDisplayItemRenderRequest {
+                        layout_resolution_context: face_resolution_context
+                            .source_item_layout_resolution_context(),
+                        source_item,
+                        text,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                );
         if consumed_outcome.should_stop_buffer_walk() {
             BufferTextWindowLoopStepOutcome::StopBufferWalk
         } else {
