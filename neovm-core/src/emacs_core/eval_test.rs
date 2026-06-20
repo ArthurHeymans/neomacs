@@ -2373,6 +2373,7 @@ fn read_key_sequence_function_translation_receives_prompt() {
             Value::string("Prompt> "),
             false,
             false,
+            false,
         ))
         .expect("read translated key sequence");
 
@@ -2625,6 +2626,7 @@ fn read_key_sequence_dont_downcase_last_restores_original_event() {
     let (keys, binding) = ev
         .read_key_sequence_with_options(crate::keyboard::ReadKeySequenceOptions::new(
             Value::NIL,
+            false,
             true,
             false,
         ))
@@ -2827,6 +2829,7 @@ fn read_key_sequence_can_return_switch_frame_at_sequence_start() {
     let (keys, binding) = ev
         .read_key_sequence_with_options(crate::keyboard::ReadKeySequenceOptions::new(
             Value::NIL,
+            false,
             false,
             true,
         ))
@@ -3076,6 +3079,7 @@ fn read_key_sequence_can_return_select_window_at_sequence_start() {
     let (keys, binding) = ev
         .read_key_sequence_with_options(crate::keyboard::ReadKeySequenceOptions::new(
             Value::NIL,
+            false,
             false,
             true,
         ))
@@ -4447,6 +4451,100 @@ fn read_char_fires_bootstrapped_gnu_run_with_idle_timer_while_waiting_for_input(
     assert!(idle_parts[1].as_int().is_some());
     assert!(idle_parts[2].as_int().is_some());
     assert_eq!(ev.current_idle_time_value(), Value::NIL);
+}
+
+/// GNU `read_key_sequence_vs` clears the committed `this-command-keys` at
+/// entry when CONTINUE-ECHO is nil (keyboard.c:11919-11923) so a fresh key
+/// sequence starts from an empty `(this-command-keys-vector)`. `read-key`
+/// (subr.el) depends on this: it reads a sequence with CONTINUE-ECHO nil and
+/// arms an idle timer that throws the moment `(this-command-keys-vector)` is
+/// non-empty (subr.el:3648-3665). If a command's PREVIOUS, invoking sequence
+/// were still committed when the nested read begins, the probe would fire
+/// immediately and return the wrong key.
+///
+/// This drives that exact path: it pre-seeds a STALE committed
+/// `this-command-keys` (as if a `C-x r s` invocation had just been read),
+/// arms an idle timer that snapshots `(this-command-keys-vector)` while the
+/// nested `read_key_sequence` (continue-echo = nil) is waiting, and delivers
+/// the real key only after a delay so the idle timer fires first. The
+/// snapshot MUST be empty — proving the stale invoking sequence was cleared at
+/// entry — and the read must still return the freshly delivered key.
+#[test]
+fn read_key_sequence_clears_stale_this_command_keys_at_entry_for_idle_probe() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    let scratch = ev.buffers.create_buffer("*rks-entry-clear*");
+    ev.buffers.set_current(scratch);
+    let frame = ev.frames.create_frame("F1", 80, 24, scratch);
+    assert!(ev.frames.select_frame(frame), "need a selected frame");
+
+    // Pre-seed a stale, non-empty committed key sequence, exactly as the
+    // command loop leaves it after reading the command's invoking keys
+    // (e.g. `C-x r s`). Use plain character codes so the vector is concrete.
+    ev.set_read_command_keys(vec![
+        Value::fixnum('x' as i64),
+        Value::fixnum('r' as i64),
+        Value::fixnum('s' as i64),
+    ]);
+    assert_eq!(
+        ev.read_command_keys().len(),
+        3,
+        "precondition: a stale invoking sequence is committed"
+    );
+
+    // Arm a `read-key`-style idle timer that snapshots
+    // `(this-command-keys-vector)` while the nested read is waiting.
+    ev.eval_str(
+        r#"(progn
+             (setq rks-idle-snapshot 'unset)
+             (run-with-idle-timer
+              0.01 nil
+              (lambda ()
+                (setq rks-idle-snapshot (this-command-keys-vector)))))"#,
+    )
+    .expect("arm idle snapshot timer");
+
+    // Deliver the real key only after a delay so the idle timer fires first.
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let _tx_keepalive = tx.clone();
+    thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(120));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('a'),
+        ))
+        .expect("send keypress");
+    });
+
+    let (keys, _binding) = ev
+        .read_key_sequence_with_options(crate::keyboard::ReadKeySequenceOptions::new(
+            Value::NIL,
+            false, // continue-echo = nil -> clear stale this-command-keys
+            false,
+            false,
+        ))
+        .expect("nested read should return the freshly delivered key");
+
+    assert_eq!(
+        keys,
+        vec![Value::fixnum('a' as i64)],
+        "read must return the freshly delivered key, not the stale invoking one"
+    );
+
+    let snapshot = ev
+        .eval_symbol("rks-idle-snapshot")
+        .expect("idle snapshot bound");
+    assert!(
+        snapshot.is_vector(),
+        "idle timer must have fired and captured a vector (got {snapshot:?})"
+    );
+    assert_eq!(
+        crate::emacs_core::print::print_value_with_buffers(&snapshot, &ev.buffers),
+        "[]",
+        "while the nested read (continue-echo=nil) is waiting, \
+         (this-command-keys-vector) must be EMPTY — the stale invoking \
+         sequence was cleared at entry (GNU keyboard.c:11919-11923)"
+    );
 }
 
 #[test]

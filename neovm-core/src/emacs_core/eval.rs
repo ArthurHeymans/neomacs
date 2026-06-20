@@ -5827,28 +5827,79 @@ impl Context {
             let read_result = self.read_key_sequence();
             self.unbind_to(read_specpdl_count);
 
-            // GNU `command_loop_1` keyboard.c:1409-1416: after the read, if a
-            // quit is still pending (a C-g came in but was not consumed as the
-            // returned key — e.g. it arrived during a sub-wait), clear it and
-            // re-deliver it as the next key via `unread-command-events` so it
-            // becomes exactly one `keyboard-quit`, never a direct quit. When
-            // the C-g WAS consumed as a key, `read_key_sequence` already
-            // cleared both `quit-flag` and the `quit_requested` atomic (see
-            // `clear_quit_flag_after_read_key_sequence_event`), so this is a
-            // no-op in the common case.
-            let quit_pending = !self.quit_flag_value().is_nil()
+            let (keys, binding) = read_result?;
+
+            // Reconcile a quit that became pending DURING the command-loop read.
+            //
+            // The input bridge raises the cross-thread `quit_requested` atomic
+            // EAGERLY the instant it sees a C-g in the byte stream — even while
+            // earlier keystrokes are still queued AHEAD of that C-g on the
+            // ordered input channel (neomacs-bin/src/main.rs:2260; the atomic
+            // is set ONLY for the quit char). With `inhibit-quit` bound around
+            // the read above, a `maybe_quit` during the wait drains that eager
+            // atomic into `quit-flag` while an EARLIER key is being read, so on
+            // return `quit-flag` can be set even though the C-g itself has not
+            // been read yet.
+            //
+            // GNU has no such eager cross-thread atomic: its `Vquit_flag` comes
+            // from the SIGINT handler and the quit_char arrives in-stream;
+            // `read_char` clears `Vquit_flag` exactly when it returns the
+            // quit_char as a key under `inhibit-quit` (keyboard.c:2810-2811),
+            // and the residual-quit -> `unread-command-events = (quit_char)`
+            // conversion runs ONLY where the input WAIT returned no key (after
+            // `sit_for` showing a minibuffer message, keyboard.c:1409-1416) —
+            // never after an ordinary key read.
+            //
+            // We mirror that, accounting for the eager atomic:
+            //
+            //  * If a quit is pending, CLEAR `quit-flag` and the atomic. The
+            //    pending quit corresponds to a C-g; either it was just returned
+            //    as the read key (lone C-g -> `keys` is the C-g, bound to
+            //    `keyboard-quit`, run below), or it is still queued IN-STREAM
+            //    behind keys the bridge sent ahead of it and will be read as an
+            //    ordinary key on a later iteration. Leaving `quit-flag` set
+            //    would fire a spurious quit at the next `maybe_quit` (e.g. mid
+            //    self-insert), aborting a minibuffer read partway and leaking
+            //    the remaining keys into the buffer (the `megaalpha` bug).
+            //
+            //  * Re-deliver the C-g via `unread-command-events` ONLY when the
+            //    read returned NO key — the genuine GNU case where a quit
+            //    interrupted a wait with nothing else queued, so the C-g must
+            //    become the next key exactly once. When a real key was read the
+            //    in-stream C-g is still coming, so injecting a quit_char here
+            //    would deliver the quit OUT OF ORDER, ahead of the queued keys.
+            //
+            // This keeps the single-idle-C-g fix intact: a lone C-g is read as
+            // a key bound to `keyboard-quit` (run below, exactly once) and the
+            // flag/atomic are cleared here; `sleep-for`/`accept-process-output`
+            // run as commands outside the read's `inhibit-quit` binding and
+            // stay C-g-interruptible.
+            //
+            // `while-no-input` is left untouched: when `quit-flag` equals
+            // `throw-on-input` the pending value is while-no-input's bail-out
+            // sentinel (NOT an eager C-g), so clearing it would defeat
+            // while-no-input — mirror the same guard used by
+            // `clear_quit_flag_after_read_key_sequence_event`.
+            let throw_on_input = self
+                .obarray
+                .symbol_value_id_or_nil(self.throw_on_input_symbol);
+            let quit_flag = self.quit_flag_value();
+            let is_while_no_input =
+                !throw_on_input.is_nil() && equal_value(&quit_flag, &throw_on_input, 0);
+            let quit_pending = !quit_flag.is_nil()
                 || self
                     .quit_requested
                     .load(std::sync::atomic::Ordering::Relaxed);
-            if quit_pending {
+            if quit_pending && !is_while_no_input {
                 self.set_quit_flag_value(Value::NIL);
                 self.quit_requested
                     .store(false, std::sync::atomic::Ordering::Relaxed);
-                let quit_char = Value::fixnum(self.quit_char());
-                self.push_unread_command_event(quit_char);
+                if keys.is_empty() {
+                    let quit_char = Value::fixnum(self.quit_char());
+                    self.push_unread_command_event(quit_char);
+                }
             }
 
-            let (keys, binding) = read_result?;
             self.sync_current_buffer_to_selected_window();
 
             if keys.is_empty() && binding.is_nil() {

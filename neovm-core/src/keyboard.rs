@@ -558,11 +558,20 @@ pub(crate) struct ReadKeySequenceOptions {
     pub prompt: Value,
     pub dont_downcase_last: bool,
     pub can_return_switch_frame: bool,
+    /// GNU `read_key_sequence_vs` CONTINUE-ECHO argument (keyboard.c:11904).
+    /// When false (the common case, and the default for the command loop and
+    /// for `read-key`), the committed `this-command-keys` of the *previous*
+    /// sequence is cleared at entry so the freshly read sequence starts from
+    /// scratch (keyboard.c:11919-11923). When true (e.g.
+    /// `(read-key-sequence-vector PROMPT t ...)`), the new events are appended
+    /// to the existing `this-command-keys` instead.
+    pub continue_echo: bool,
 }
 
 impl ReadKeySequenceOptions {
     pub(crate) fn new(
         prompt: Value,
+        continue_echo: bool,
         dont_downcase_last: bool,
         can_return_switch_frame: bool,
     ) -> Self {
@@ -570,6 +579,7 @@ impl ReadKeySequenceOptions {
             prompt,
             dont_downcase_last,
             can_return_switch_frame,
+            continue_echo,
         }
     }
 }
@@ -580,6 +590,7 @@ impl Default for ReadKeySequenceOptions {
             prompt: Value::NIL,
             dont_downcase_last: false,
             can_return_switch_frame: false,
+            continue_echo: false,
         }
     }
 }
@@ -3166,6 +3177,25 @@ impl crate::emacs_core::eval::Context {
 
         self.sync_keyboard_terminal_owner();
         self.command_loop.reset_key_sequence();
+
+        // GNU `read_key_sequence_vs` keyboard.c:11919-11923: when CONTINUE-ECHO
+        // is nil, reset the COMMITTED `this-command-keys` of the previous
+        // sequence (`this_command_key_count = 0; this_single_command_key_start
+        // = 0;`) so the sequence we are about to read starts fresh. neomacs's
+        // `reset_key_sequence` above only clears the in-progress accumulator,
+        // NOT the committed `command_keys`/`raw_command_keys` that back
+        // `this-command-keys(-vector)`. Without this, a command's internal
+        // `read-key` (subr.el) — which calls `read-key-sequence-vector` with
+        // CONTINUE-ECHO nil and arms an idle timer that throws as soon as
+        // `(this-command-keys-vector)` is non-empty (subr.el:3648-3665) — would
+        // observe the STALE invoking sequence and return that key immediately
+        // instead of waiting for the user's next keystroke (which then leaks
+        // into the buffer as self-insert). This mirrors GNU's clear so the
+        // probe sees an empty vector and `read-key` blocks correctly.
+        if !options.continue_echo {
+            self.clear_read_command_keys();
+        }
+
         self.assign("this-command-keys-shift-translated", Value::NIL);
         let mut shift_translation: Option<KeySequenceShiftTranslation> = None;
         let mut delayed_selection_event: Option<Value> = None;

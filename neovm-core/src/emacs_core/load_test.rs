@@ -3437,6 +3437,112 @@ fn bootstrap_runtime_read_key_after_two_minibuffers_consumes_fresh_key() {
     );
 }
 
+/// GNU `read_minibuf` saves the invoking command's `this-command-keys` on
+/// entry (minibuf.c:738-739) and `read_minibuf_unwind` restores it on exit
+/// (minibuf.c:1144-1146). A command that reads input via the minibuffer must
+/// therefore observe its OWN invoking key sequence in `(this-command-keys)`
+/// afterwards, NOT the minibuffer's terminating RET.
+///
+/// This is the latent root cause behind the register/query-replace TUI
+/// regressions: `perform-replace` and `register-read-with-preview` call
+/// `read-key` AFTER reading the minibuffer; before this fix the stale [RET]
+/// left in `this-command-keys` made `read-key`'s idle-timer
+/// `(this-command-keys-vector)` probe non-empty (subr.el:3648-3665), so it
+/// returned immediately and the user's next keystroke leaked into the buffer.
+///
+/// The command here is invoked through a bound key (`C-c t`) so the invoking
+/// `this-command-keys` is deterministic; it records the vector before and
+/// after a `read-from-minibuffer`, and the two must be equal.
+#[test]
+fn bootstrap_runtime_minibuffer_read_restores_outer_this_command_keys() {
+    init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let scratch = eval.buffers.create_buffer("*minibuf-tck-restore*");
+    eval.buffers.set_current(scratch);
+    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    assert!(
+        eval.frames.select_frame(frame_id),
+        "minibuffer this-command-keys restore test should have a selected frame"
+    );
+
+    let _ = eval.eval_str_each(
+        r#"(progn
+             (setq neo-mb-tck-log nil)
+             (defun neo-mb-tck-command ()
+               (interactive)
+               (let ((before (this-command-keys-vector))
+                     (val (read-from-minibuffer "A: ")))
+                 (setq neo-mb-tck-log
+                       (list before val (this-command-keys-vector)))
+                 (exit-recursive-edit)))
+             (keymap-global-set "C-c t" #'neo-mb-tck-command))"#,
+    );
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    // C-c t -> invoke the command (this-command-keys becomes [C-c t]).
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char_with_mods('c', crate::keyboard::Modifiers::ctrl()),
+    ))
+    .expect("queue C-c");
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('t'),
+    ))
+    .expect("queue t");
+    // Minibuffer input "alpha" then RET to exit minibuffer #1.
+    for ch in "alpha".chars() {
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char(ch),
+        ))
+        .expect("queue minibuffer chars");
+    }
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Return),
+    ))
+    .expect("queue minibuffer RET");
+    drop(tx);
+
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+
+    let result = eval
+        .recursive_edit_inner()
+        .expect("minibuffer this-command-keys command loop should exit normally");
+    assert_eq!(result, Value::NIL);
+
+    let before = eval
+        .eval_str("(aref neo-mb-tck-log 0)")
+        .or_else(|_| eval.eval_str("(nth 0 neo-mb-tck-log)"))
+        .expect("read before vector");
+    let val = eval
+        .eval_str("(nth 1 neo-mb-tck-log)")
+        .expect("read minibuffer value");
+    let after = eval
+        .eval_str("(nth 2 neo-mb-tck-log)")
+        .expect("read after vector");
+
+    assert_eq!(
+        val.as_utf8_str(),
+        Some("alpha"),
+        "the minibuffer must have read \"alpha\""
+    );
+    // The invoking key sequence must be restored after the minibuffer read,
+    // exactly as GNU `read_minibuf_unwind` restores `this_command_keys`.
+    assert_eq!(
+        crate::emacs_core::print::print_value_with_buffers(&after, &eval.buffers),
+        crate::emacs_core::print::print_value_with_buffers(&before, &eval.buffers),
+        "this-command-keys must be restored to the invoking [C-c t] after the \
+         minibuffer read, not left as the minibuffer's terminating RET"
+    );
+    // And it must specifically NOT be the lone RET ([13]) the minibuffer's
+    // own command loop committed when it exited.
+    assert_ne!(
+        crate::emacs_core::print::print_value_with_buffers(&after, &eval.buffers),
+        "[13]",
+        "this-command-keys must not be the minibuffer's terminating RET"
+    );
+}
+
 #[test]
 fn bootstrap_runtime_window_close_routes_through_handle_delete_frame() {
     init_test_tracing();

@@ -3216,7 +3216,7 @@ fn read_key_sequence_interactive_runtime_passes_prompt_options() {
     };
     let result = finish_read_key_sequence_interactive_in_runtime(
         &mut runtime,
-        crate::keyboard::ReadKeySequenceOptions::new(Value::string("Prompt> "), true, true),
+        crate::keyboard::ReadKeySequenceOptions::new(Value::string("Prompt> "), false, true, true),
     )
     .expect("interactive read");
     assert_eq!(result, Value::string("a"));
@@ -3224,6 +3224,7 @@ fn read_key_sequence_interactive_runtime_passes_prompt_options() {
         runtime.last_options,
         Some(crate::keyboard::ReadKeySequenceOptions::new(
             Value::string("Prompt> "),
+            false,
             true,
             true,
         ))

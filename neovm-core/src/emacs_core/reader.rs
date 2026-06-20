@@ -910,6 +910,21 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
     args: &[Value],
     mut run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
 ) -> EvalResult {
+    // GNU `read_minibuf` saves the OUTER command's `this-command-keys` on
+    // `minibuf_save_list` (minibuf.c:738-739, `Fthis_command_keys_vector ()`)
+    // and `read_minibuf_unwind` restores it on EVERY teardown path
+    // (minibuf.c:1144-1146, `this_command_keys = key_vec`). The minibuffer's
+    // own recursive-edit command loop reads and commits its own key sequences
+    // (the closing RET ends up as `this-command-keys` == [13]); without
+    // restoring the outer keys, the command that invoked the minibuffer (e.g.
+    // `query-replace`/`perform-replace`) would see that stale [13] in its next
+    // `read-key`, whose idle timer (subr.el:3648-3665) then throws immediately
+    // and leaks the user's real keystroke into the buffer. Snapshot here and
+    // restore unconditionally after the recursive edit so the outer
+    // `this-command-keys` survives the minibuffer recursion, exactly like GNU.
+    let saved_command_keys = eval.read_command_keys().to_vec();
+    let saved_raw_command_keys = eval.read_raw_command_keys().to_vec();
+
     let eval_ptr = std::ptr::NonNull::from(&mut *eval);
     let command_loop_depth = eval.recursive_command_loop_depth();
     let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
@@ -955,6 +970,11 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
                 .minibuffer_command_loop_inner()
         },
     );
+    // Restore the outer command's `this-command-keys` (GNU
+    // `read_minibuf_unwind`, minibuf.c:1144-1146). Done on every path — normal
+    // return, `'exit` throw, and error — so the invoking command's key context
+    // is never clobbered by the minibuffer's own command-loop reads.
+    eval.set_command_key_sequences(saved_command_keys, saved_raw_command_keys);
     if result.is_ok() {
         eval.note_interactive_minibuffer_read();
     }
@@ -1595,6 +1615,16 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         .symbol_value("current-prefix-arg")
         .copied()
         .unwrap_or(Value::NIL);
+    // GNU `read_minibuf` also saves `(this-command-keys-vector)` (minibuf.c:
+    // 738-739) and `read_minibuf_unwind` restores it (minibuf.c:1144-1146) so
+    // the invoking command's `this-command-keys` survives the minibuffer's own
+    // command-loop reads. Byte-compiled callers (`query-replace-read-to`,
+    // `register-read-with-preview`, …) reach the minibuffer through THIS VM
+    // runtime path, so the save/restore must live here too — otherwise their
+    // following `read-key` sees the minibuffer's terminating RET and fires its
+    // idle-timer probe early.
+    let saved_command_keys = shared.read_command_keys().to_vec();
+    let saved_raw_command_keys = shared.read_raw_command_keys().to_vec();
     let saved_minibuffer_history_variable = shared
         .obarray
         .symbol_value("minibuffer-history-variable")
@@ -1761,6 +1791,11 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     shared
         .obarray
         .set_symbol_value("current-prefix-arg", saved_current_prefix_arg);
+    // Restore the invoking command's `this-command-keys` (GNU
+    // `read_minibuf_unwind`, minibuf.c:1144-1146). Placed before the `?`
+    // propagations below and after the (non-`?`) `edit_result` teardown so it
+    // runs on every exit path: normal return, `'exit` throw, and error.
+    shared.set_command_key_sequences(saved_command_keys, saved_raw_command_keys);
     shared.obarray.set_symbol_value(
         "minibuffer-history-variable",
         saved_minibuffer_history_variable,
@@ -2038,8 +2073,16 @@ impl KeyboardInputRuntime for super::eval::Context {
 pub(crate) fn read_key_sequence_options_from_args(
     args: &[Value],
 ) -> crate::keyboard::ReadKeySequenceOptions {
+    // GNU `Fread_key_sequence`/`Fread_key_sequence_vector` signature
+    // (keyboard.c:11935) is
+    //   (PROMPT CONTINUE-ECHO DONT-DOWNCASE-LAST CAN-RETURN-SWITCH-FRAME ...).
+    // Arg 1 (CONTINUE-ECHO) governs whether the previous command's
+    // `this-command-keys` is preserved (non-nil) or cleared for a fresh
+    // sequence (nil); `read-key` (subr.el) passes nil here and relies on the
+    // clear so its idle-timer `(this-command-keys-vector)` probe is empty.
     crate::keyboard::ReadKeySequenceOptions::new(
         args.first().copied().unwrap_or(Value::NIL),
+        args.get(1).is_some_and(|v| v.is_truthy()),
         args.get(2).is_some_and(|v| v.is_truthy()),
         args.get(3).is_some_and(|v| v.is_truthy()),
     )
