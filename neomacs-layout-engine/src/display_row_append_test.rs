@@ -1,5 +1,6 @@
 use super::*;
 use crate::display_buffer_display_property_render::{
+    BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
@@ -9125,7 +9126,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
 }
 
 #[test]
-fn buffer_display_property_replacement_resolve_and_apply_updates_progress() {
+fn buffer_display_property_replacement_render_outcome_updates_progress() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -9197,7 +9198,7 @@ fn buffer_display_property_replacement_resolve_and_apply_updates_progress() {
     let mut x = 24.0;
     let mut col = 4usize;
 
-    BufferDisplayPropertyTextReplacementResolveRequest::new(
+    let outcome = BufferDisplayPropertyTextReplacementResolveRequest::new(
         replacement,
         12,
         b"x",
@@ -9206,12 +9207,10 @@ fn buffer_display_property_replacement_resolve_and_apply_updates_progress() {
         -2.0,
         18.0,
         &active_face,
-        3,
     )
-    .resolve_and_apply(
+    .resolve_and_render(
         &buffer,
         BufferDisplayPropertyTextReplacementRenderState::new(
-            b"x",
             text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
@@ -9222,11 +9221,20 @@ fn buffer_display_property_replacement_resolve_and_apply_updates_progress() {
             &mut face_ids,
             &surface,
             &mut geometry,
-            &mut cursor_info,
             &active_face,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
         ),
+        x,
+        DisplayRowPosition { x_px: x, col },
     );
+    let BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) = outcome else {
+        panic!("expected rendered display replacement");
+    };
+    outcome.capture_cursor_info_if_point(&mut cursor_info, &active_face, &geometry, 3, 3, byte_idx);
+    let walk_update = outcome.walk_update(b"x", BufferTextSourcePosition::new(byte_idx, charpos));
+    x = walk_update.row_position().x_px;
+    col = walk_update.row_position().col;
+    byte_idx = walk_update.source_position().byte_idx();
+    charpos = walk_update.source_position().charpos();
 
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 4);

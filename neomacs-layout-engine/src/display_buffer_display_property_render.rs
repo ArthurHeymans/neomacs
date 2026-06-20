@@ -1,5 +1,4 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::{
     BufferTextSourceItem, BufferTextSourceStepChar,
@@ -39,8 +38,8 @@ enum BufferDisplayPropertyTextReplacementResolveOutcome {
     Stop,
 }
 
-pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
-    Rendered,
+pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
+    Rendered(BufferDisplayPropertyTextReplacementOutcome),
     Fallback(BufferTextSourceItem),
     Stop,
 }
@@ -54,48 +53,35 @@ pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> 
     glyph_y_offset: f32,
     default_row_height: f32,
     active_face_state: &'face DisplayRowActiveFaceState,
-    point_charpos: i64,
 }
 
 struct BufferDisplayPropertyTextReplacementRenderRequest {
     append_request: DisplayPropertyReplacementAppendRequest,
     skip_to: i64,
-    start_charpos: i64,
-    point_charpos: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
-    text: &'emit [u8],
     source_render: TextRowSourceRenderState<'emit>,
     face_ids: &'emit mut FrameFaceIdAllocator,
     append_surface: &'emit DisplayRowAppendSurface,
     row_geometry: &'emit mut DisplayRowGeometryState,
-    cursor_info: &'emit mut CursorCaptureState,
     active_face_state: &'emit DisplayRowActiveFaceState,
-    progress: BufferTextWindowProgressState<'emit>,
 }
 
 impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        text: &'emit [u8],
         source_render: TextRowSourceRenderState<'emit>,
         face_ids: &'emit mut FrameFaceIdAllocator,
         append_surface: &'emit DisplayRowAppendSurface,
         row_geometry: &'emit mut DisplayRowGeometryState,
-        cursor_info: &'emit mut CursorCaptureState,
         active_face_state: &'emit DisplayRowActiveFaceState,
-        progress: BufferTextWindowProgressState<'emit>,
     ) -> Self {
         Self {
-            text,
             source_render,
             face_ids,
             append_surface,
             row_geometry,
-            cursor_info,
             active_face_state,
-            progress,
         }
     }
 }
@@ -111,7 +97,6 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         glyph_y_offset: f32,
         default_row_height: f32,
         active_face_state: &'face DisplayRowActiveFaceState,
-        point_charpos: i64,
     ) -> Self {
         Self {
             replacement,
@@ -122,7 +107,6 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
             glyph_y_offset,
             default_row_height,
             active_face_state,
-            point_charpos,
         }
     }
 
@@ -169,19 +153,17 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
             BufferDisplayPropertyTextReplacementRenderRequest::new(
                 request,
                 self.replacement.end_charpos(),
-                self.replacement.start_charpos(),
-                self.point_charpos,
             ),
         )
     }
 
-    pub(crate) fn resolve_and_apply<B: LayoutBufferView>(
+    pub(crate) fn resolve_and_render<B: LayoutBufferView>(
         self,
         buffer: &B,
         mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) -> BufferDisplayPropertyTextReplacementApplyOutcome {
-        let current_x = *state.progress.row.x;
-        let start_position = state.progress.row_position();
+        current_x: f32,
+        start_position: DisplayRowPosition,
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
         let resolve_outcome =
             state
                 .source_render
@@ -190,48 +172,39 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
                 });
         match resolve_outcome {
             BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
-                request.render_and_apply(buffer, state);
-                BufferDisplayPropertyTextReplacementApplyOutcome::Rendered
+                BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
+                    request.render(buffer, state),
+                )
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
-                BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item)
+                BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item)
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
-                BufferDisplayPropertyTextReplacementApplyOutcome::Stop
+                BufferDisplayPropertyTextReplacementRenderOutcome::Stop
             }
         }
     }
 }
 
 impl BufferDisplayPropertyTextReplacementRenderRequest {
-    fn new(
-        append_request: DisplayPropertyReplacementAppendRequest,
-        skip_to: i64,
-        start_charpos: i64,
-        point_charpos: i64,
-    ) -> Self {
+    fn new(append_request: DisplayPropertyReplacementAppendRequest, skip_to: i64) -> Self {
         Self {
             append_request,
             skip_to,
-            start_charpos,
-            point_charpos,
         }
     }
 
-    fn render_and_apply<B: LayoutBufferView>(
+    fn render<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) {
+    ) -> BufferDisplayPropertyTextReplacementOutcome {
         let BufferDisplayPropertyTextReplacementRenderState {
-            text,
             mut source_render,
             face_ids,
             append_surface,
             row_geometry,
-            cursor_info,
             active_face_state,
-            mut progress,
         } = state;
         let outcome = self.append_request.append_to_text_row(
             buffer,
@@ -241,21 +214,10 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
             row_geometry,
             active_face_state,
         );
-        let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
+        BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
             skip_to: self.skip_to,
-        };
-        replacement_outcome.capture_cursor_info_if_point(
-            cursor_info,
-            active_face_state,
-            row_geometry,
-            self.point_charpos,
-            self.start_charpos,
-            *progress.byte_idx,
-        );
-        let walk_update = replacement_outcome.walk_update(text, progress.source_position());
-        progress.row.apply_position(walk_update.row_position());
-        progress.apply_source_position(walk_update.source_position());
+        }
     }
 }
 

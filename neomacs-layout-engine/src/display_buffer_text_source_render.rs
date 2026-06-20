@@ -1,7 +1,7 @@
 //! Buffer text source consumption with replacement application.
 
 use crate::display_buffer_display_property_render::{
-    BufferDisplayPropertyTextReplacementApplyOutcome,
+    BufferDisplayPropertyTextReplacementOutcome, BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
@@ -123,6 +123,7 @@ impl<'request, 'emit, 'surface, 'face>
         replacement: BufferTextReplacementItem,
         buffer: &B,
     ) -> BufferTextWindowSourceRenderOutcome {
+        let start_charpos = replacement.start_charpos();
         let request = BufferDisplayPropertyTextReplacementResolveRequest::new(
             replacement,
             self.loop_context.text_start_byte(),
@@ -132,25 +133,26 @@ impl<'request, 'emit, 'surface, 'face>
             0.0,
             self.loop_context.char_height(),
             self.active_face_state,
-            self.loop_context.point_charpos(),
         );
-        match request.resolve_and_apply(
+        let current_x = *self.progress.row.x;
+        let start_position = self.progress.row_position();
+        match request.resolve_and_render(
             buffer,
             BufferDisplayPropertyTextReplacementRenderState::new(
-                self.text,
                 self.source_render.reborrow(),
                 self.face_ids,
                 self.append_surface,
                 self.row_geometry,
-                self.cursor_info,
                 self.active_face_state,
-                self.progress.reborrow(),
             ),
+            current_x,
+            start_position,
         ) {
-            BufferDisplayPropertyTextReplacementApplyOutcome::Rendered => {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
+                self.apply_replacement_outcome(outcome, start_charpos);
                 BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
             }
-            BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
                 let Some(source_step) = source_walk
                     .consume_fallback_source_item_for_render(source_item, &mut self.progress)
                 else {
@@ -158,9 +160,28 @@ impl<'request, 'emit, 'surface, 'face>
                 };
                 BufferTextWindowSourceRenderOutcome::DisplayItem(source_step)
             }
-            BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
                 BufferTextWindowSourceRenderOutcome::StopBufferWalk
             }
         }
+    }
+
+    fn apply_replacement_outcome(
+        &mut self,
+        outcome: BufferDisplayPropertyTextReplacementOutcome,
+        start_charpos: i64,
+    ) {
+        outcome.capture_cursor_info_if_point(
+            self.cursor_info,
+            self.active_face_state,
+            self.row_geometry,
+            self.loop_context.point_charpos(),
+            start_charpos,
+            *self.progress.byte_idx,
+        );
+        let walk_update = outcome.walk_update(self.text, self.progress.source_position());
+        self.progress.row.apply_position(walk_update.row_position());
+        self.progress
+            .apply_source_position(walk_update.source_position());
     }
 }
