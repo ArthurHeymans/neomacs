@@ -25,6 +25,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_source_append::measure_single_display_item_width_naturally;
 use crate::display_row_source_append::{
+    SingleDisplayItemSourceAppendRequest, SingleDisplayItemSourceMeasureRequest,
     measure_single_display_item_width_naturally_or_fallback,
     measure_single_display_item_width_with_policy, render_single_display_item_naturally,
     render_single_display_item_with_policy,
@@ -91,16 +92,15 @@ impl DisplaySourceNaturalMeasurementRequest {
         source_item: &DisplayItem,
     ) -> Option<f32> {
         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        measure_single_display_item_width_with_policy(
-            state,
+        let request = SingleDisplayItemSourceMeasureRequest::new(
             base_face,
             face_id,
             &frame,
-            source_item,
+            source_item.clone(),
             position,
             self.source_item().append_kind(),
-            &mut render_policy,
-        )
+        );
+        measure_single_display_item_width_with_policy(state, request, &mut render_policy)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -420,16 +420,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
-        render_single_display_item_with_policy(
-            state,
+        let request = SingleDisplayItemSourceAppendRequest::new(
             self.active_face.resolved_face(),
             face_id,
             &frame,
             item,
             position,
             kind,
-            &mut render_policy,
-        )
+        );
+        render_single_display_item_with_policy(state, request, &mut render_policy)
     }
 
     pub(crate) fn append_source_display_item_to_text_row(
@@ -443,16 +442,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
-        render_single_display_item_with_policy(
-            state,
+        let request = SingleDisplayItemSourceAppendRequest::new(
             self.active_face.resolved_face(),
             face_id,
             &frame,
             item,
             position,
             fallback_kind,
-            render_policy,
-        )
+        );
+        render_single_display_item_with_policy(state, request, render_policy)
     }
 
     fn append_source_char_plan_to_text_row(
@@ -1146,15 +1144,15 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<DisplayRowAppendProgress> {
-        render_single_display_item_naturally(
-            state,
+        let request = SingleDisplayItemSourceAppendRequest::new(
             self.base_face,
             self.face_id,
             &self.frame,
             item,
             position,
             fallback_kind,
-        )
+        );
+        render_single_display_item_naturally(state, request)
     }
 
     pub(crate) fn measure_source_display_item_width_or_item_fallback_to_text_row(
@@ -1165,16 +1163,15 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = self.source_item_fallback_width(&source_item);
-        measure_single_display_item_width_naturally_or_fallback(
-            state,
+        let request = SingleDisplayItemSourceMeasureRequest::new(
             self.base_face,
             self.face_id,
             &self.frame,
-            item,
+            item.clone(),
             position,
             source_item.append_kind(),
-            fallback_width,
-        )
+        );
+        measure_single_display_item_width_naturally_or_fallback(state, request, fallback_width)
     }
 }
 
@@ -1215,15 +1212,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        render_single_display_item_naturally(
-            state,
+        let request = SingleDisplayItemSourceAppendRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
             item,
             position,
             kind,
-        )
+        );
+        render_single_display_item_naturally(state, request)
     }
 
     pub(crate) fn measure_source_request_width_to_text_row(
@@ -1240,15 +1237,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        measure_single_display_item_width_naturally(
-            state,
+        let request = SingleDisplayItemSourceMeasureRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
-            &item,
+            item,
             position,
             kind,
-        )
+        );
+        measure_single_display_item_width_naturally(state, request)
     }
 
     pub(crate) fn measure_source_request_width_or_item_fallback_to_text_row(
@@ -1268,15 +1265,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         };
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        measure_single_display_item_width_naturally_or_fallback(
-            state,
+        let request = SingleDisplayItemSourceMeasureRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
-            &item,
+            item,
             position,
             kind,
-            fallback_width,
-        )
+        );
+        measure_single_display_item_width_naturally_or_fallback(state, request, fallback_width)
     }
 }

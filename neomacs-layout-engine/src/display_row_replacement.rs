@@ -19,7 +19,9 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
-use crate::display_row_source_append::render_single_display_item_naturally;
+use crate::display_row_source_append::{
+    SingleDisplayItemSourceAppendRequest, render_single_display_item_naturally,
+};
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
@@ -835,14 +837,14 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        render_single_display_item_naturally(
-            state,
+        let request = SingleDisplayItemSourceAppendRequest::new(
             self.base_face,
             self.face_id,
             &self.frame,
             plan.item,
             plan.position,
             DisplayRowAppendKind::DisplayReplacement,
-        )
+        );
+        render_single_display_item_naturally(state, request)
     }
 }
