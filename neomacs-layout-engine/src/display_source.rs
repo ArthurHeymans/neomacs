@@ -459,12 +459,6 @@ impl DisplaySourceStepItem {
             .then_some(text)
     }
 
-    pub(crate) fn has_point_inside(&self, point_charpos: i64) -> bool {
-        self.source_end_charpos.is_some_and(|end| {
-            point_charpos >= self.source_step_char.start_charpos() && point_charpos < end
-        })
-    }
-
     pub(crate) fn split_text_run_items(
         self,
         text_start_byte: usize,

@@ -20,11 +20,18 @@ use crate::display_buffer_source_row_lifecycle::{
     BufferSourceSelectiveDisplayTailRenderRequest,
 };
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_cursor::capture_cursor_info;
-use crate::display_item::{BufferDisplayPropertyReplacementItem, DisplayItem};
+use crate::display_cursor::{
+    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
+    capture_cursor_info,
+};
+use crate::display_item::{
+    BufferDisplayPropertyReplacementItem, DisplayItem, DisplaySourcePosition,
+};
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::{DisplayRowAppendKind, DisplayRowAppendSurface};
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_builder::{
+    DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
+};
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit, DisplayRowVisibilityLimit,
 };
@@ -149,7 +156,6 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     if context.overlay_context.is_enabled()
         || word_wrap.is_enabled()
         || trailing_whitespace.is_enabled()
-        || source_item.has_point_inside(context.point_charpos)
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
     {
@@ -171,14 +177,57 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
         .unwrap_or(false)
 }
 
+fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -> bool {
+    let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+        return false;
+    };
+    char_pos.get() as i64 == point_charpos
+}
+
+fn capture_whole_text_run_cursor_if_point(
+    cursor_info: &mut CursorCaptureState,
+    active_face_state: &DisplayRowActiveFaceState,
+    geometry: &DisplayRowGeometryState,
+    point_charpos: i64,
+    append_progress: &DisplayRowAppendProgress,
+) {
+    if !cursor_info.is_missing() {
+        return;
+    }
+    let Some(slot) = append_progress
+        .slots
+        .iter()
+        .find(|slot| buffer_slot_matches_charpos(slot, point_charpos))
+    else {
+        return;
+    };
+    let DisplaySourcePosition::Buffer { byte_pos, .. } = slot.source else {
+        return;
+    };
+    capture_cursor_info(
+        cursor_info,
+        CapturedCursorInfo::from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                geometry.text_position(slot.x_px, byte_pos.get(), slot.col),
+                CapturedCursorSlotWidth::Explicit(slot.width_px),
+                false,
+            ),
+        ),
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     source_item: DisplayItem,
     source_end_charpos: Option<i64>,
     source_end_byte_idx: Option<usize>,
+    active_face_state: &DisplayRowActiveFaceState,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
     geometry: &DisplayRowGeometryState,
     position: DisplayRowPosition,
+    point_charpos: i64,
+    cursor_info: &mut CursorCaptureState,
     source_render: &mut TextRowSourceRenderState<'_>,
     progress: &mut DisplaySourceProgressState<'_>,
 ) -> BufferSourceItemRenderOutcome {
@@ -193,6 +242,13 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     ) else {
         return BufferSourceItemRenderOutcome::Stop;
     };
+    capture_whole_text_run_cursor_if_point(
+        cursor_info,
+        active_face_state,
+        geometry,
+        point_charpos,
+        &append_progress,
+    );
     progress.row.apply_position(append_progress.end);
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
@@ -289,9 +345,12 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             source_item,
             source_end_charpos,
             source_end_byte_idx,
+            &active_face_state,
             &buffer_row_append_context,
             &append_geometry,
             append_position,
+            context.point_charpos,
+            cursor_info,
             &mut source_render,
             &mut progress,
         );

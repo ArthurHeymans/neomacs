@@ -6476,7 +6476,7 @@ fn buffer_text_source_append_context_appends_source_char() {
 }
 
 #[test]
-fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_state() {
+fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside() {
     let mut context = RowTransitionTestContext::new("source-char-render-request");
     let buf_id = context
         .eval
@@ -6549,7 +6549,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_sta
         buf_id,
         0,
         2,
-        99,
+        1,
         &params,
         0.0,
         false,
@@ -6605,6 +6605,11 @@ fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_sta
     assert_eq!(charpos, 2);
     assert_eq!(x, 16.0);
     assert_eq!(col, 2);
+    let cursor = cursor_info.as_ref().expect("cursor inside whole text run");
+    assert_eq!(cursor.byte_idx, 1);
+    assert_eq!(cursor.col, 1);
+    assert_eq!(cursor.x, 8.0);
+    assert_eq!(cursor.slot_width, Some(8.0));
     context
         .builder
         .edit_current_row_for_test(|row| {
