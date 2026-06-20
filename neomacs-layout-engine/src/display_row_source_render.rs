@@ -6,6 +6,7 @@
 //! helpers in `display_row_append.rs`, so that the append module does not
 //! need to own the render-state facade.
 
+use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
@@ -20,7 +21,6 @@ use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
-use crate::display_row_output_install::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{

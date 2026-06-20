@@ -10,6 +10,7 @@ use super::display_status_line::{
     WindowChromeRowsRenderState,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::{
@@ -20,7 +21,6 @@ use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
-use crate::display_row_output_install::DisplayRowCurrentRowOutput;
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };

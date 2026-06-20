@@ -1,6 +1,6 @@
 use super::*;
+use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_rendered_row_output_install::install_measured_window_display_row;
-use crate::display_row_output_install::DisplayRowCurrentRowOutput;
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::display_text_output_install::install_display_row;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
