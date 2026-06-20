@@ -4,15 +4,14 @@
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
+use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_item_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_render::{
-    BufferSourceItemLayoutResolutionContext, BufferTextWindowSourceWalk,
-};
+use crate::display_buffer_text_render::BufferTextWindowSourceWalk;
 use crate::display_buffer_text_source::{
     BufferTextConsumedDisplayItem, BufferTextSourcePosition, BufferTextSourceStepChar,
 };

@@ -8,6 +8,7 @@ use crate::display_buffer_text_append::{
     BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
     BufferTextWindowVisibilityRetryRequest,
 };
+use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_render::*;
