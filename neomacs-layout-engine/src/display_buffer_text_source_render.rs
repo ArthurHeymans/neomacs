@@ -81,7 +81,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         };
 
         match source_item {
-            BufferTextSourceConsumptionItem::DisplayItem(source_item) => {
+            BufferTextSourceConsumptionItem::ConsumedDisplayItem(source_item) => {
                 BufferTextWindowSourceRenderOutcome::DisplayItem(source_item)
             }
             BufferTextSourceConsumptionItem::Replacement(replacement) => {

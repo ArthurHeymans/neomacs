@@ -60,7 +60,7 @@ struct BufferTextSourceCursorReadRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceConsumptionItem {
-    DisplayItem(BufferTextConsumedDisplayItem),
+    ConsumedDisplayItem(BufferTextConsumedDisplayItem),
     Replacement(BufferTextReplacementItem),
 }
 
@@ -465,24 +465,6 @@ impl BufferTextSourceConsumptionState {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn next_source_consumption_result<B, R>(
-        &mut self,
-        source: &mut BufferTextSourceCursor<'_, B>,
-        context: &mut DisplaySourceContext<'_>,
-        position: &mut BufferTextSourcePosition,
-        display_item: impl FnOnce(BufferTextConsumedDisplayItem) -> R,
-        replacement: impl FnOnce(BufferTextReplacementItem) -> R,
-    ) -> Option<R>
-    where
-        B: LayoutBufferView + ?Sized,
-    {
-        match self.next_source_consumption_item(source, context, position)? {
-            BufferTextSourceConsumptionItem::DisplayItem(item) => Some(display_item(item)),
-            BufferTextSourceConsumptionItem::Replacement(item) => Some(replacement(item)),
-        }
-    }
-
     pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
@@ -490,7 +472,7 @@ impl BufferTextSourceConsumptionState {
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceConsumptionItem> {
         if let Some(step) = self.next_pending_display_item(position) {
-            return Some(BufferTextSourceConsumptionItem::DisplayItem(step));
+            return Some(BufferTextSourceConsumptionItem::ConsumedDisplayItem(step));
         }
 
         if self.pending_text_run.is_some() {
@@ -507,7 +489,7 @@ impl BufferTextSourceConsumptionState {
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
                 .consume_aligned_display_item(item, position)
-                .map(BufferTextSourceConsumptionItem::DisplayItem),
+                .map(BufferTextSourceConsumptionItem::ConsumedDisplayItem),
             BufferTextAlignedSourceCursorItem::Replacement(item) => {
                 Some(BufferTextSourceConsumptionItem::Replacement(item))
             }
