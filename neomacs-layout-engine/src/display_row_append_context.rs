@@ -7,7 +7,6 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
-use crate::display_row_source_append::DisplayRowSourceAppendRequest;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::TextRowOutput;
@@ -535,20 +534,6 @@ impl DisplayRowAppendFrame {
             line_number_width: area.line_number_width,
             face_space_width: metrics.space_width,
         }
-    }
-
-    pub(crate) fn source_append_request<'face>(
-        &self,
-        position: DisplayRowPosition,
-        face_id: u32,
-        base_face: &'face ResolvedFace,
-        kind: DisplayRowAppendKind,
-    ) -> DisplayRowSourceAppendRequest<'face> {
-        DisplayRowSourceAppendRequest::from_render_request(
-            self.source_render_request(position, face_id, base_face, kind),
-            self.text_row_output(kind),
-            position,
-        )
     }
 
     pub(crate) fn source_render_parts<'face>(

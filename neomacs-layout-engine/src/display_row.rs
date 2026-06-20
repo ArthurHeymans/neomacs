@@ -2018,6 +2018,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         RenderFaceRef::FaceId(self.base_face_id)
     }
 
+    #[cfg(test)]
     pub(crate) fn base_face_id(&self) -> u32 {
         self.base_face_id
     }

@@ -27,7 +27,7 @@ use crate::display_property::{
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
-    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderer,
+    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_append_context::*;
@@ -4706,12 +4706,9 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 8.0, col: 1 },
-        7,
-        &base_face,
-        DisplayRowAppendKind::SourceText,
-    );
+    let position = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let (request, output) =
+        frame.source_render_parts(position, 7, &base_face, DisplayRowAppendKind::SourceText);
 
     let mut source_render = text_row_source_render_state(
         &mut builder,
@@ -4721,12 +4718,13 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         &face_resolver,
     );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = request
-        .render_display_source_into_current_text_row_and_emit(
-            &mut source_render,
+    let outcome = source_render
+        .render_display_item_source_into_current_text_row_and_emit(
             &mut face_ids,
             &mut source,
             &mut source_state,
+            request,
+            output,
             &mut render_policy,
         )
         .expect("current-row fragment outcome");
@@ -4790,12 +4788,9 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     write_char_to_current_row_with_width(&mut builder, 'b', 7, 1, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        7,
-        &base_face,
-        DisplayRowAppendKind::SourceText,
-    );
+    let position = DisplayRowPosition { x_px: 0.0, col: 0 };
+    let (request, output) =
+        frame.source_render_parts(position, 7, &base_face, DisplayRowAppendKind::SourceText);
 
     let mut source_render = text_row_source_render_state(
         &mut builder,
@@ -4805,12 +4800,13 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         &face_resolver,
     );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = request
-        .render_display_source_into_current_text_row_and_emit(
-            &mut source_render,
+    let outcome = source_render
+        .render_display_item_source_into_current_text_row_and_emit(
             &mut face_ids,
             &mut source,
             &mut source_state,
+            request,
+            output,
             &mut render_policy,
         )
         .expect("current-row fragment outcome");
@@ -5015,21 +5011,11 @@ fn display_row_append_surface_builds_positioned_source_requests() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
+    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let (request, output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::SourceText);
 
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
-    assert_eq!(
-        request.render_bounds().start,
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
+    assert_eq!(request.render_bounds().start, position);
     assert_eq!(
         request.render_bounds().max_x,
         DisplayRowMaxX::Bounded(128.0)
@@ -5047,10 +5033,10 @@ fn display_row_append_surface_builds_positioned_source_requests() {
             tab_policy,
         }
     );
-    assert_eq!(request.output().row, 3);
-    assert_eq!(request.output().row_y, 20.0);
-    assert_eq!(request.output().glyph_y, 22.0);
-    assert_eq!(request.output().height, 16.0);
+    assert_eq!(output.row, 3);
+    assert_eq!(output.row_y, 20.0);
+    assert_eq!(output.glyph_y, 22.0);
+    assert_eq!(output.height, 16.0);
 }
 
 #[test]
@@ -5080,8 +5066,8 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let ordinary =
-        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::SourceText);
+    let (ordinary, ordinary_output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::SourceText);
     assert_eq!(
         ordinary.render_bounds().start,
         DisplayRowPosition { x_px: 8.0, col: 0 }
@@ -5091,43 +5077,44 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(ordinary.geometry().char_width, 9.0);
-    assert_eq!(ordinary.output().row, 3);
-    assert_eq!(ordinary.output().row_y, 20.0);
-    assert_eq!(ordinary.output().glyph_y, 22.0);
-    assert_eq!(ordinary.output().height, 16.0);
+    assert_eq!(ordinary_output.row, 3);
+    assert_eq!(ordinary_output.row_y, 20.0);
+    assert_eq!(ordinary_output.glyph_y, 22.0);
+    assert_eq!(ordinary_output.height, 16.0);
 
-    let tab = frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Tab);
+    let (tab, tab_output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::Tab);
     assert_eq!(tab.render_bounds().max_x, DisplayRowMaxX::Unbounded);
     assert_eq!(tab.geometry().char_width, 7.0);
-    assert_eq!(tab.output().height, 14.0);
+    assert_eq!(tab_output.height, 14.0);
 
-    let control =
-        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::ControlChar);
+    let (control, control_output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::ControlChar);
     assert_eq!(
         control.render_bounds().max_x,
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(control.geometry().char_width, 9.0);
-    assert_eq!(control.output().height, 14.0);
+    assert_eq!(control_output.height, 14.0);
 
-    let mapped = frame.source_append_request(
+    let (mapped, mapped_output) = frame.source_render_parts(
         position,
         42,
         base_face,
         DisplayRowAppendKind::SourceMappedText,
     );
     assert_eq!(mapped.render_bounds().max_x, DisplayRowMaxX::Bounded(128.0));
-    assert_eq!(mapped.output().height, 14.0);
+    assert_eq!(mapped_output.height, 14.0);
 
-    let glyphless =
-        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Glyphless);
+    let (glyphless, glyphless_output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::Glyphless);
     assert_eq!(
         glyphless.render_bounds().max_x,
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(glyphless.output().height, 16.0);
+    assert_eq!(glyphless_output.height, 16.0);
 
-    let replacement = frame.source_append_request(
+    let (replacement, replacement_output) = frame.source_render_parts(
         position,
         42,
         base_face,
@@ -5138,9 +5125,9 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement.geometry().char_width, 9.0);
-    assert_eq!(replacement.output().height, 16.0);
+    assert_eq!(replacement_output.height, 16.0);
 
-    let replacement_string = frame.source_append_request(
+    let (replacement_string, replacement_string_output) = frame.source_render_parts(
         position,
         42,
         base_face,
@@ -5151,7 +5138,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement_string.geometry().char_width, 7.0);
-    assert_eq!(replacement_string.output().height, 16.0);
+    assert_eq!(replacement_string_output.height, 16.0);
 }
 
 #[test]
@@ -5205,7 +5192,7 @@ fn display_row_append_kind_names_width_clip_and_output_policy() {
 }
 
 #[test]
-fn display_row_append_frame_builds_positioned_source_request() {
+fn display_row_append_frame_builds_positioned_source_render_parts() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
         3,
@@ -5230,17 +5217,11 @@ fn display_row_append_frame_builds_positioned_source_request() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
+    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let (request, output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::SourceText);
 
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
+    assert_eq!(request.render_bounds().start, position);
     assert_eq!(
         request.render_bounds().max_x,
         DisplayRowMaxX::Bounded(128.0)
@@ -5249,6 +5230,8 @@ fn display_row_append_frame_builds_positioned_source_request() {
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y, 20.0);
     assert_eq!(request.geometry().char_width, 9.0);
+    assert_eq!(output.row, 3);
+    assert_eq!(output.height, 16.0);
 }
 
 #[test]
@@ -5295,7 +5278,7 @@ fn display_row_append_frame_builds_source_request_directly() {
 }
 
 #[test]
-fn display_row_source_append_request_uses_frame_policy() {
+fn display_row_source_render_parts_use_frame_policy() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
         3,
@@ -5320,32 +5303,22 @@ fn display_row_source_append_request_uses_frame_policy() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        base_face,
-        DisplayRowAppendKind::ControlChar,
-    );
+    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let (request, output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::ControlChar);
 
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(
-        request.render_bounds().start,
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
+    assert_eq!(request.render_bounds().start, position);
     assert_eq!(
         request.render_bounds().max_x,
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.geometry().height, 16.0);
-    assert_eq!(request.output().height, 14.0);
+    assert_eq!(output.height, 14.0);
 }
 
 #[test]
-fn display_row_append_frame_builds_source_append_request() {
+fn display_row_append_frame_builds_control_char_source_render_parts() {
     let frame = test_append_frame_at(
         3,
         20.0,
@@ -5369,29 +5342,19 @@ fn display_row_append_frame_builds_source_append_request() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = frame.source_append_request(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        base_face,
-        DisplayRowAppendKind::ControlChar,
-    );
+    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let (request, output) =
+        frame.source_render_parts(position, 42, base_face, DisplayRowAppendKind::ControlChar);
 
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(
-        request.render_bounds().start,
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
+    assert_eq!(request.render_bounds().start, position);
     assert_eq!(
         request.render_bounds().max_x,
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(request.output().row, 3);
-    assert_eq!(request.output().height, 14.0);
+    assert_eq!(output.row, 3);
+    assert_eq!(output.height, 14.0);
 }
 
 #[test]
@@ -9682,7 +9645,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
 }
 
 #[test]
-fn synthetic_text_append_context_uses_source_append_request() {
+fn synthetic_text_append_context_uses_source_render_parts() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
