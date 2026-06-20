@@ -1,7 +1,7 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayRowBreakReason, DisplaySourcePosition,
-    DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayTextRun, DisplayTextRunItemCursor, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -510,101 +510,9 @@ impl BufferTextSourceItem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct PendingBufferTextRun {
-    buffer_id: BufferId,
-    text: Box<str>,
-    face: RenderFaceRef,
-    layout: DisplayItemLayout,
-    next_text_byte_offset: usize,
-    next_source_byte_idx: usize,
-    next_charpos: i64,
-}
-
-impl PendingBufferTextRun {
-    fn from_item(
-        text_start_byte: usize,
-        span: SourceSpan,
-        face: RenderFaceRef,
-        layout: DisplayItemLayout,
-        run: DisplayTextRun,
-    ) -> Option<Self> {
-        let DisplaySourcePosition::Buffer {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        } = span.start
-        else {
-            return None;
-        };
-        Some(Self {
-            buffer_id,
-            text: run.text,
-            face,
-            layout,
-            next_text_byte_offset: 0,
-            next_source_byte_idx: byte_pos.get().checked_sub(text_start_byte)?,
-            next_charpos: char_pos.get() as i64,
-        })
-    }
-
-    fn next_step(
-        &mut self,
-        text_start_byte: usize,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedDisplayItem> {
-        if !position.matches(self.next_source_byte_idx, self.next_charpos) {
-            tracing::debug!(
-                "BufferTextConsumedItemAdapter: pending text run at byte {} charpos {} did not \
-                 match buffer walk byte {} charpos {}",
-                self.next_source_byte_idx,
-                self.next_charpos,
-                position.byte_idx(),
-                position.charpos()
-            );
-            return None;
-        }
-
-        let ch = self.text[self.next_text_byte_offset..].chars().next()?;
-        let start_byte_idx = self.next_source_byte_idx;
-        let start_charpos = self.next_charpos;
-        self.next_text_byte_offset += ch.len_utf8();
-        self.next_source_byte_idx += ch.len_utf8();
-        self.next_charpos += 1;
-        position.advance_byte_idx_to(self.next_source_byte_idx);
-
-        let source_item = DisplayItem::new(
-            SourceSpan::new(
-                DisplaySourcePosition::buffer(
-                    self.buffer_id,
-                    CharPos0::new(start_charpos.max(0) as usize),
-                    EmacsBytePos::new(text_start_byte.saturating_add(start_byte_idx)),
-                ),
-                DisplaySourcePosition::buffer(
-                    self.buffer_id,
-                    CharPos0::new(start_charpos.max(0) as usize).add_len(CharLen::new(1)),
-                    EmacsBytePos::new(text_start_byte.saturating_add(self.next_source_byte_idx)),
-                ),
-            ),
-            self.face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
-        )
-        .with_layout(self.layout);
-
-        Some(BufferTextConsumedDisplayItem::new(
-            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
-            source_item,
-        ))
-    }
-
-    fn is_finished(&self) -> bool {
-        self.next_text_byte_offset >= self.text.len()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextConsumedItemAdapter {
     text_start_byte: usize,
-    pending_text_run: Option<PendingBufferTextRun>,
+    pending_text_run: Option<DisplayTextRunItemCursor>,
 }
 
 impl BufferTextConsumedItemAdapter {
@@ -802,19 +710,12 @@ impl BufferTextConsumedItemAdapter {
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextConsumedDisplayItem> {
-        let DisplayItem {
-            span,
-            face,
-            kind,
-            layout,
-        } = item.into_item();
-        match kind {
-            DisplayItemKind::TextRun(run) => {
-                self.pending_text_run =
-                    PendingBufferTextRun::from_item(self.text_start_byte, span, face, layout, run);
+        match DisplayTextRunItemCursor::from_item(item.into_item()) {
+            Ok(cursor) => {
+                self.pending_text_run = Some(cursor);
                 self.next_pending_step(position)
             }
-            _ => {
+            Err(_) => {
                 tracing::error!(
                     "BufferTextConsumedItemAdapter: typed cursor yielded a non-text item kind; \
                      a direct item escaped source-item lowering"
@@ -828,12 +729,81 @@ impl BufferTextConsumedItemAdapter {
         &mut self,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextConsumedDisplayItem> {
+        let text_start_byte = self.text_start_byte;
         let pending = self.pending_text_run.as_mut()?;
-        let step = pending.next_step(self.text_start_byte, position);
-        if pending.is_finished() || step.is_none() {
+        let item = pending.next_item();
+        let finished = pending.is_finished();
+        let step = item.and_then(|item| {
+            Self::consumed_display_item_from_split_text_item(text_start_byte, item, position)
+        });
+        if finished || step.is_none() {
             self.pending_text_run = None;
         }
         step
+    }
+
+    fn consumed_display_item_from_split_text_item(
+        text_start_byte: usize,
+        item: DisplayItem,
+        position: &mut BufferTextSourcePosition,
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        let DisplaySourcePosition::Buffer {
+            char_pos, byte_pos, ..
+        } = &item.span.start
+        else {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer-span item"
+            );
+            return None;
+        };
+        let start_byte_idx = byte_pos.get().checked_sub(text_start_byte)?;
+        let start_charpos = char_pos.get() as i64;
+        if !position.matches(start_byte_idx, start_charpos) {
+            tracing::debug!(
+                "BufferTextConsumedItemAdapter: split text run at byte {} charpos {} did not \
+                 match buffer walk byte {} charpos {}",
+                start_byte_idx,
+                start_charpos,
+                position.byte_idx(),
+                position.charpos()
+            );
+            return None;
+        }
+        let DisplaySourcePosition::Buffer {
+            byte_pos: end_byte_pos,
+            ..
+        } = &item.span.end
+        else {
+            tracing::error!(
+                "BufferTextConsumedItemAdapter: split text run yielded a non-buffer end span"
+            );
+            return None;
+        };
+        let ch = match &item.kind {
+            DisplayItemKind::TextRun(run) => {
+                let mut chars = run.text.chars();
+                let ch = chars.next()?;
+                if chars.next().is_some() {
+                    tracing::error!(
+                        "BufferTextConsumedItemAdapter: split text run yielded multiple chars"
+                    );
+                    return None;
+                }
+                ch
+            }
+            _ => {
+                tracing::error!(
+                    "BufferTextConsumedItemAdapter: split text run yielded non-text item"
+                );
+                return None;
+            }
+        };
+        let end_byte_idx = end_byte_pos.get().checked_sub(text_start_byte)?;
+        position.advance_byte_idx_to(end_byte_idx);
+        Some(BufferTextConsumedDisplayItem::new(
+            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
+            item,
+        ))
     }
 }
 

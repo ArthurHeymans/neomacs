@@ -64,6 +64,33 @@ impl DisplaySourcePosition {
             offset,
         }
     }
+
+    fn advance_text_char(&self, ch: char) -> Self {
+        match self {
+            Self::Buffer {
+                buffer_id,
+                char_pos,
+                byte_pos,
+            } => Self::buffer(
+                *buffer_id,
+                char_pos.add_len(neovm_core::buffer::CharLen::new(1)),
+                EmacsBytePos::new(byte_pos.get().saturating_add(ch.len_utf8())),
+            ),
+            Self::LispString {
+                source_id,
+                char_index,
+                byte_index,
+            } => Self::LispString {
+                source_id: *source_id,
+                char_index: char_index.saturating_add(1),
+                byte_index: byte_index.saturating_add(ch.len_utf8()),
+            },
+            Self::Synthetic { source_id, offset } => Self::Synthetic {
+                source_id: *source_id,
+                offset: offset.saturating_add(1),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -193,6 +220,60 @@ pub(crate) struct DisplayTextRun {
 impl DisplayTextRun {
     pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
         Self { text: text.into() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayTextRunItemCursor {
+    text: Box<str>,
+    face: RenderFaceRef,
+    layout: DisplayItemLayout,
+    next_text_byte_offset: usize,
+    next_source_position: DisplaySourcePosition,
+}
+
+impl DisplayTextRunItemCursor {
+    pub(crate) fn from_item(item: DisplayItem) -> Result<Self, DisplayItem> {
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+        } = item;
+        let DisplayItemKind::TextRun(run) = kind else {
+            return Err(DisplayItem {
+                span,
+                face,
+                kind,
+                layout,
+            });
+        };
+        Ok(Self {
+            text: run.text,
+            face,
+            layout,
+            next_text_byte_offset: 0,
+            next_source_position: span.start,
+        })
+    }
+
+    pub(crate) fn next_item(&mut self) -> Option<DisplayItem> {
+        let ch = self.text[self.next_text_byte_offset..].chars().next()?;
+        let start = self.next_source_position.clone();
+        self.next_text_byte_offset += ch.len_utf8();
+        self.next_source_position = start.advance_text_char(ch);
+        Some(
+            DisplayItem::new(
+                SourceSpan::new(start, self.next_source_position.clone()),
+                self.face,
+                DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
+            )
+            .with_layout(self.layout),
+        )
+    }
+
+    pub(crate) fn is_finished(&self) -> bool {
+        self.next_text_byte_offset >= self.text.len()
     }
 }
 
