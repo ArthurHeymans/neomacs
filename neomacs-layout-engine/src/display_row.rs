@@ -2378,7 +2378,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut result = self.render_display_item_source_row_fragment_step_with_context(
             plan, source, state, context,
         )?;
-        glyph_row_writer::normalize_external_row(&mut result.rendered.row);
+        glyph_row_writer::finalize_external_row(&mut result.rendered.row);
         Some(result)
     }
 

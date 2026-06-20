@@ -33,6 +33,13 @@ pub(crate) enum BufferTextSourceConsumptionItem {
     Replacement(BufferTextReplacementItem),
 }
 
+pub(crate) struct BufferTextSourceRenderItem {
+    source_step_char: BufferTextSourceStepChar,
+    item: DisplayItem,
+    end_charpos: Option<i64>,
+    end_byte_idx: Option<usize>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceConsumptionState {
     text_start_byte: usize,
@@ -201,15 +208,57 @@ impl BufferTextSourceItem {
         Some((first, pending))
     }
 
+    #[cfg(test)]
     pub(crate) fn into_render_parts(self) -> Option<(BufferTextSourceStepChar, DisplayItem)> {
         let source_step_char = self.source_step_char()?;
         Some((source_step_char, self.item))
+    }
+
+    pub(crate) fn into_render_item(
+        self,
+        text_start_byte: usize,
+    ) -> Option<BufferTextSourceRenderItem> {
+        let source_step_char = self.source_step_char()?;
+        let end_charpos = self
+            .item
+            .span
+            .buffer_end_charpos()
+            .map(|char_pos| char_pos.get() as i64);
+        let end_byte_idx = self.end_byte_idx(text_start_byte);
+        Some(BufferTextSourceRenderItem {
+            source_step_char,
+            item: self.item,
+            end_charpos,
+            end_byte_idx,
+        })
+    }
+}
+
+impl BufferTextSourceRenderItem {
+    pub(crate) fn source_step_char(&self) -> BufferTextSourceStepChar {
+        self.source_step_char
+    }
+
+    pub(crate) fn into_item(self) -> DisplayItem {
+        self.item
+    }
+
+    pub(crate) fn end_charpos(&self) -> Option<i64> {
+        self.end_charpos
+    }
+
+    pub(crate) fn end_byte_idx(&self) -> Option<usize> {
+        self.end_byte_idx
     }
 }
 
 impl BufferTextSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self { text_start_byte }
+    }
+
+    pub(crate) fn text_start_byte(&self) -> usize {
+        self.text_start_byte
     }
 
     fn expected_source_pos(position: BufferTextSourcePosition) -> CharPos0 {

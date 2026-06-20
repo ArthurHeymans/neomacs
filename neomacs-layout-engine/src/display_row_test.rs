@@ -2806,17 +2806,15 @@ fn display_row_lisp_chrome_roles_share_wide_and_cluster_builder() {
 
 #[test]
 fn display_row_tab_line_rtl_text_is_logical_order_at_render() {
-    // Slice 5: render produces LOGICAL-order rows; the single bidi finalizer is
-    // the matrix-row install (`end_current_row`). A render-only chrome row keeps
-    // logical order and is not yet flagged reversed. The end-to-end reorder is
-    // verified by install_rendered_display_row_finalizes_bidi_at_install and
-    // (cross-row-kind) display_output_builder rtl_text_and_chrome_rows_reorder_identically.
+    // Complete typed row rendering finalizes bidi before the row reaches output
+    // install. Fragment/current-row append paths stay logical until the
+    // containing row is closed.
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
 
     assert_eq!(row.role, GlyphRowRole::TabLine);
-    assert!(!row.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&row), "אב");
+    assert!(row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&row), "בא");
 }
 
 #[test]
@@ -2863,12 +2861,11 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     assert!(!fragment.reversed_p);
     assert_eq!(row_text_expanding_stretches(&fragment), "אב");
 
-    // Slice 5: the non-fragment step path also defers bidi finalization to row
-    // install now, so it likewise yields logical order here — the matrix-row
-    // install (`end_current_row`) is the sole finalizer for both render entries.
+    // A complete source-row render finalizes bidi immediately; only fragments
+    // are kept logical for later composition into the current row.
     let step_path = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
-    assert!(!step_path.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&step_path), "אב");
+    assert!(step_path.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&step_path), "בא");
 }
 
 #[test]

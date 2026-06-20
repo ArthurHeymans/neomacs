@@ -620,7 +620,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
         .install(builder);
         let mut row = measured.rendered.row.clone();
         apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
-        let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+        crate::glyph_row_writer::finalize_external_row(&mut row);
         row.pixel_y = measured.bounds.y;
         row.height_px = measured.row_height();
         row.ascent_px = measured.row_ascent();

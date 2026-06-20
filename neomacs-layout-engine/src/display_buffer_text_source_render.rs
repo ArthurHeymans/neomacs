@@ -26,11 +26,10 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceItem,
+    BufferTextSourceConsumptionItem, BufferTextSourceItem, BufferTextSourceRenderItem,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
-use crate::display_item::{DisplayItem, DisplaySourcePosition};
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -141,37 +140,23 @@ fn render_source_item_and_apply<B: LayoutBufferView>(
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
     debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
-    let source_item = if source_item.is_multi_char_text_run() {
-        let Some((first, pending)) = source_item.split_text_run_items(context.text_start_byte)
-        else {
-            return BufferTextSourceItemRenderOutcome::Stop;
-        };
-        source_walk.prepend_pending_render_items(pending);
-        first
-    } else {
-        source_item
-    };
-    let Some((source_step_char, source_item)) = source_item.into_render_parts() else {
+    let Some(render_item) = source_item.into_render_item(context.text_start_byte) else {
         return BufferTextSourceItemRenderOutcome::Stop;
     };
-    render_prepared_source_item_and_apply(
-        source_step_char,
-        source_item,
-        context,
-        source_walk,
-        buffer,
-        state,
-    )
+    render_prepared_source_item_and_apply(render_item, context, source_walk, buffer, state)
 }
 
 fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
-    source_step_char: BufferTextSourceStepChar,
-    mut source_item: DisplayItem,
+    render_item: BufferTextSourceRenderItem,
     context: BufferTextSourceItemRenderContext<'_>,
     source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
+    let source_step_char = render_item.source_step_char();
+    let source_end_charpos = render_item.end_charpos();
+    let source_end_byte_idx = render_item.end_byte_idx();
+    let mut source_item = render_item.into_item();
     let BufferTextWindowLoopMutableState {
         append_state,
         invisible_text_checkpoint,
@@ -205,13 +190,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             context.active_face_state,
             &mut source_item,
         );
-    let source_end_charpos = source_item
-        .span
-        .buffer_end_charpos()
-        .map(|char_pos| char_pos.get() as i64);
-    let source_end_byte_idx =
-        display_item_buffer_end_byte_idx(&source_item, context.text_start_byte);
-
     let ch = source_step_char.ch();
     source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 
@@ -449,17 +427,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     }
 
     BufferTextSourceItemRenderOutcome::Rendered
-}
-
-fn display_item_buffer_end_byte_idx(item: &DisplayItem, text_start_byte: usize) -> Option<usize> {
-    let DisplaySourcePosition::Buffer {
-        byte_pos: end_byte_pos,
-        ..
-    } = item.span.end
-    else {
-        return None;
-    };
-    end_byte_pos.get().checked_sub(text_start_byte)
 }
 
 impl<'rows, 'request, 'emit, 'surface, 'face>

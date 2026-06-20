@@ -46,6 +46,21 @@ fn finalizes_matrix_row_with_bidi_reorder() {
 }
 
 #[test]
+fn finalizing_pre_finalized_row_does_not_reorder_again() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    push_text(&mut row, "אב");
+
+    crate::glyph_row_writer::finalize_external_row(&mut row);
+    GlyphRowFinalizationContext::new(1, 0, Rect::new(0.0, 0.0, 80.0, 16.0))
+        .finalize_row(&mut row, 10, None);
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
+    assert!(row.reversed_p);
+}
+
+#[test]
 fn remaps_matching_phys_cursor_after_bidi_reorder() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.cursor_col = Some(0);

@@ -1128,8 +1128,8 @@ fn display_row_builder_groups_arabic_complex_run() {
 #[test]
 fn display_row_builder_produces_logical_order_rows() {
     // Slice 5: DisplayRowBuilder::finish normalizes displays_text but no longer
-    // reorders — bidi finalization moved to the single matrix-row install
-    // (`end_current_row`). A freshly built RTL row is therefore in logical order.
+    // DisplayRowBuilder only normalizes `displays_text`; complete typed row
+    // rendering owns standalone row bidi finalization.
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(text_item("אב"));
 

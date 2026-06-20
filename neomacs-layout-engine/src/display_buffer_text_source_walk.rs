@@ -100,7 +100,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         }
     }
 
-    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
+    fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = BufferTextSourceItem>,
     {
@@ -112,6 +112,19 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
     fn clear_pending_render_items(&mut self) {
         self.pending_render_items.clear();
+    }
+
+    fn prepare_render_source_item(
+        &mut self,
+        source_item: BufferTextSourceItem,
+    ) -> Option<BufferTextSourceItem> {
+        if !source_item.is_multi_char_text_run() {
+            return Some(source_item);
+        }
+        let (first, pending) =
+            source_item.split_text_run_items(self.source_consumption.text_start_byte())?;
+        self.prepend_pending_render_items(pending);
+        Some(first)
     }
 
     fn consume_source_item(
@@ -143,6 +156,12 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 &mut source_context,
                 &mut source_position,
             )
+        };
+        let source_item = match source_item {
+            Some(BufferTextSourceConsumptionItem::DisplayItem(item)) => self
+                .prepare_render_source_item(item)
+                .map(BufferTextSourceConsumptionItem::DisplayItem),
+            other => other,
         };
         BufferTextWindowSourceConsumption {
             source_item,
