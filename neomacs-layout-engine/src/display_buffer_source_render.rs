@@ -5,20 +5,20 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
+use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
+use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
+use crate::display_buffer_source_overflow::{
+    BufferSourceOverflowRenderContext, BufferSourceOverflowRenderRequest,
+    BufferSourceSpecialOverflowRenderContext, BufferSourceSpecialOverflowRenderRequest,
+};
 use crate::display_buffer_source_row_lifecycle::{
     BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
     BufferSourceSelectiveDisplayTailRenderRequest,
 };
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
-use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_overflow::{
-    BufferTextOverflowRenderContext, BufferTextOverflowRenderRequest,
-    BufferTextSpecialOverflowRenderContext, BufferTextSpecialOverflowRenderRequest,
-};
 use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -226,9 +226,9 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
 
     let prepared_append = match prepared_append {
         DisplaySourcePreparedCharAppend::Special(special_prepared_append) => {
-            let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
+            let special_overflow_outcome = BufferSourceSpecialOverflowRenderRequest::new(
                 &special_prepared_append,
-                BufferTextSpecialOverflowRenderContext::new(
+                BufferSourceSpecialOverflowRenderContext::new(
                     context.text,
                     context.text_start_byte,
                     *progress.row.x,
@@ -301,10 +301,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
 
     prepared_append
         .update_cursor_info_for_main_char(cursor_info, source_step_char.start_byte_idx());
-    let overflow_outcome = BufferTextOverflowRenderRequest::new(
+    let overflow_outcome = BufferSourceOverflowRenderRequest::new(
         &prepared_append,
         source_step_char,
-        BufferTextOverflowRenderContext::new(
+        BufferSourceOverflowRenderContext::new(
             ch,
             context.append_surface.right_edge(),
             context.params.wrap_mode,
@@ -447,7 +447,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
         buffer: &B,
     ) -> bool
     where

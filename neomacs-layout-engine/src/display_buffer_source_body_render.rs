@@ -1,5 +1,6 @@
 //! Buffer source body walk setup and render pass driver.
 
+use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render_attempt::{
@@ -12,7 +13,6 @@ use crate::display_buffer_source_tail_render::{
     render_buffer_source_tail_and_decide_retry,
 };
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_cursor::CursorCaptureState;
@@ -293,7 +293,7 @@ impl BufferSourceWalkSetup {
         state: &mut BufferSourceWalkRenderState<'_>,
         row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &WindowParams,
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
@@ -418,7 +418,7 @@ impl BufferSourceWalkSetup {
         state: &mut BufferSourceBodyRenderState<'_>,
         row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
         tail_context: &BufferSourceTailRequestContext<'_>,
         text: &'request [u8],
         params: &'request WindowParams,
@@ -469,7 +469,7 @@ impl BufferSourceWalkSetup {
         active_face_state: &mut DisplayRowActiveFaceState,
         row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
         tail_context: &BufferSourceTailRequestContext<'_>,
         text: &'request [u8],
         params: &'request WindowParams,

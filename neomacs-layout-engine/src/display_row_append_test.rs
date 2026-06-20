@@ -4,16 +4,16 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
+use crate::display_buffer_source_consumption::*;
+use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_item_append::*;
 use crate::display_buffer_source_loop_context::*;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
+use crate::display_buffer_source_overflow::*;
 use crate::display_buffer_source_render::*;
 use crate::display_buffer_source_row_lifecycle::*;
 use crate::display_buffer_source_walk::*;
-use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_source::*;
-use crate::display_buffer_text_source_consumption::*;
 use crate::display_buffer_window_render::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -521,7 +521,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         &face_resolver,
     );
 
-    let resolved = BufferCurrentFaceResolutionContext::new(
+    let resolved = BufferSourceFaceResolutionContext::new(
         &buffer,
         &face_resolver,
         measurement_policy,
@@ -535,7 +535,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         false,
     )
     .resolve_at_checkpoint(
-        &mut BufferCurrentFaceResolutionState::new(
+        &mut BufferSourceFaceResolutionState::new(
             &mut source_render,
             &mut face_scan,
             &mut face_ids,
@@ -600,7 +600,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         &face_resolver,
     );
 
-    let resolved = BufferCurrentFaceResolutionContext::new(
+    let resolved = BufferSourceFaceResolutionContext::new(
         &buffer,
         &face_resolver,
         measurement_policy,
@@ -614,7 +614,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         false,
     )
     .resolve_at_checkpoint(
-        &mut BufferCurrentFaceResolutionState::new(
+        &mut BufferSourceFaceResolutionState::new(
             &mut source_render,
             &mut face_scan,
             &mut face_ids,
@@ -1951,7 +1951,7 @@ fn buffer_text_source_consumption_state_preserves_single_char_source_item() {
     };
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
-    let step = BufferTextSourceConsumptionState::new(text_start_byte)
+    let step = BufferSourceConsumptionState::new(text_start_byte)
         .render_item_from_item(item, &mut position)
         .expect("source step");
 
@@ -1995,7 +1995,7 @@ fn buffer_text_source_consumption_state_can_return_full_text_run_item() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_consumption = BufferTextSourceConsumptionState::new(0);
+    let mut source_consumption = BufferSourceConsumptionState::new(0);
     let position = DisplaySourceTextPosition::new(0, 0);
 
     let typed_item = source_consumption
@@ -2032,7 +2032,7 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_consumption = BufferTextSourceConsumptionState::new(0);
+    let mut source_consumption = BufferSourceConsumptionState::new(0);
     let mut position = DisplaySourceTextPosition::new(0, 0);
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
@@ -2074,7 +2074,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
     let typed_item = DisplaySourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
-    let step = BufferTextSourceConsumptionState::new(0)
+    let step = BufferSourceConsumptionState::new(0)
         .render_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should retain direct source char");
 
@@ -2112,7 +2112,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
     let typed_item = DisplaySourceItem::new_for_test(source_item, 1, 1, Some('b'));
     let mut position = DisplaySourceTextPosition::new(1, 1);
 
-    let step = BufferTextSourceConsumptionState::new(0)
+    let step = BufferSourceConsumptionState::new(0)
         .render_item_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should advance over covered source span");
 
@@ -2181,7 +2181,7 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_consumption = BufferTextSourceConsumptionState::new(0);
+    let mut source_consumption = BufferSourceConsumptionState::new(0);
     let mut position = DisplaySourceTextPosition::new(0, 0);
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
@@ -2256,7 +2256,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
     });
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
-    let step = BufferTextSourceConsumptionState::new(0)
+    let step = BufferSourceConsumptionState::new(0)
         .render_item_from_item(source_item, &mut position)
         .expect("source step");
 
@@ -2286,7 +2286,7 @@ fn buffer_text_source_consumption_state_splits_persistent_text_run() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut source_consumption = BufferTextSourceConsumptionState::new(0);
+    let mut source_consumption = BufferSourceConsumptionState::new(0);
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let item = source_consumption
@@ -2333,7 +2333,7 @@ fn buffer_text_source_consumption_state_rejects_non_buffer_items() {
     );
     let mut position = DisplaySourceTextPosition::new(3, 7);
 
-    let step = BufferTextSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
+    let step = BufferSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, DisplaySourceTextPosition::new(3, 7));
@@ -2365,7 +2365,7 @@ fn buffer_text_source_consumption_state_rejects_replacement_items() {
     );
     let mut position = DisplaySourceTextPosition::new(0, 0);
 
-    let step = BufferTextSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
+    let step = BufferSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
 
     assert!(step.is_none());
     assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
@@ -2975,7 +2975,7 @@ fn buffer_text_truncation_skip_action_consumes_source_step_char_and_reaches_newl
     let text = b"abc\nnext";
     let mut position = DisplaySourceTextPosition::new(1, 1);
 
-    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+    let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut position,
     );
@@ -2994,7 +2994,7 @@ fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
     let text = b"abc";
     let mut position = DisplaySourceTextPosition::new(1, 1);
 
-    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+    let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut position,
     );
@@ -3013,7 +3013,7 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     let text = "a界b\n".as_bytes();
     let mut position = DisplaySourceTextPosition::new("a".len(), 1);
 
-    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+    let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut position,
     );
@@ -3032,7 +3032,7 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let text = b"abc\nnext";
     let mut position = DisplaySourceTextPosition::new(1, 0);
-    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+    let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut position,
     );
@@ -3056,7 +3056,7 @@ fn buffer_text_truncation_skip_action_syncs_after_transition() {
     let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
-    BufferTextTruncationSkipAction::sync_after_row_transition(
+    BufferSourceTruncationSkipAction::sync_after_row_transition(
         14,
         &mut position,
         &mut hit_row_range,
@@ -3068,7 +3068,7 @@ fn buffer_text_truncation_skip_action_syncs_after_transition() {
 
 #[test]
 fn buffer_text_truncation_skip_action_reports_transition_continuation() {
-    let action = BufferTextTruncationSkipAction {
+    let action = BufferSourceTruncationSkipAction {
         charpos: 12,
         reached_line_break: false,
         source_position: DisplaySourceTextPosition::new(0, 12),
@@ -3086,7 +3086,7 @@ fn buffer_text_truncation_skip_action_reports_transition_continuation() {
 
 #[test]
 fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
-    let action = BufferTextTruncationSkipAction {
+    let action = BufferSourceTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
         source_position: DisplaySourceTextPosition::new(0, 12),
@@ -3108,7 +3108,7 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
 
 #[test]
 fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
-    let action = BufferTextTruncationSkipAction {
+    let action = BufferSourceTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
         source_position: DisplaySourceTextPosition::new(0, 12),
@@ -3137,7 +3137,7 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
         3,
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
     );
-    let action = BufferTextWordWrapSourceAction::new(break_candidate);
+    let action = BufferSourceWordWrapAction::new(break_candidate);
     let mut position = DisplaySourceTextPosition::new(20, 30);
     let mut col = 9;
 
@@ -3164,7 +3164,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         3,
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
     );
-    let action = BufferTextWordWrapSourceAction::new(break_candidate);
+    let action = BufferSourceWordWrapAction::new(break_candidate);
     let mut position = DisplaySourceTextPosition::new(20, 30);
     let mut col = 9;
     let mut x = 88.0;
@@ -3250,7 +3250,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
 #[test]
 fn buffer_text_special_wrap_source_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let action = BufferTextSpecialWrapSourceAction::new(21);
+    let action = BufferSourceSpecialWrapAction::new(21);
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
@@ -3348,9 +3348,9 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
-    let outcome = BufferTextSpecialOverflowRenderRequest::new(
+    let outcome = BufferSourceSpecialOverflowRenderRequest::new(
         &prepared_append,
-        BufferTextSpecialOverflowRenderContext::new(
+        BufferSourceSpecialOverflowRenderContext::new(
             text,
             0,
             x,
@@ -3403,7 +3403,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
 
     assert_eq!(
         outcome,
-        BufferTextSpecialOverflowRenderOutcome::AppendPrepared(
+        BufferSourceSpecialOverflowRenderOutcome::AppendPrepared(
             DisplayRowTransitionContinuation::Continue
         )
     );
@@ -3417,7 +3417,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
 
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
-    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let action = BufferSourceCharacterWrapAction::new(13, 21);
     let mut position = DisplaySourceTextPosition::new(17, 22);
 
     action.rewind_source_state(&mut position);
@@ -3432,7 +3432,7 @@ fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_source_step_char() {
     let source_char = DisplaySourceStepChar::new('界', "a".len(), 9);
-    let action = BufferTextCharacterWrapSourceAction::from_source_step_char(source_char);
+    let action = BufferSourceCharacterWrapAction::from_source_step_char(source_char);
     let mut rewind_position = DisplaySourceTextPosition::new("a界".len(), 10);
 
     action.rewind_source_state(&mut rewind_position);
@@ -3446,7 +3446,7 @@ fn buffer_text_character_wrap_source_action_rewinds_source_step_char() {
 #[test]
 fn buffer_text_character_wrap_source_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let action = BufferSourceCharacterWrapAction::new(13, 21);
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
@@ -3485,7 +3485,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
 #[test]
 fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhausted() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let action = BufferSourceCharacterWrapAction::new(13, 21);
     let mut position = DisplaySourceTextPosition::new(17, 22);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -3512,7 +3512,7 @@ fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhauste
 #[test]
 fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
     let geometry = DisplayRowGeometryState::new(0, 64.0, 0.0, 16.0, 12.0);
-    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let action = BufferSourceCharacterWrapAction::new(13, 21);
     let mut position = DisplaySourceTextPosition::new(17, 22);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -3598,10 +3598,10 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
-    let outcome = BufferTextOverflowRenderRequest::new(
+    let outcome = BufferSourceOverflowRenderRequest::new(
         &prepared_append,
         source_step_char,
-        BufferTextOverflowRenderContext::new(
+        BufferSourceOverflowRenderContext::new(
             'a',
             80.0,
             LineWrapMode::Wrap,
@@ -3653,7 +3653,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
 
     assert_eq!(
         outcome,
-        BufferTextOverflowRenderOutcome::Transition(DisplayRowTransitionContinuation::Continue)
+        BufferSourceOverflowRenderOutcome::Transition(DisplayRowTransitionContinuation::Continue)
     );
     assert_eq!(byte_idx, 0);
     assert_eq!(charpos, 21);
@@ -6419,7 +6419,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
-    let face_resolution_context = BufferCurrentFaceResolutionContext::new(
+    let face_resolution_context = BufferSourceFaceResolutionContext::new(
         &snapshot,
         &face_resolver,
         measurement_policy,

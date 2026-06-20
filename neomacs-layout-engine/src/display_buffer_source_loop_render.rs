@@ -1,5 +1,6 @@
 //! Buffer text visible-loop rendering.
 
+use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::BufferSourceRenderRequest;
@@ -9,7 +10,6 @@ use crate::display_buffer_source_row_lifecycle::{
 };
 use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_buffer_source_walk::*;
-use crate::display_buffer_text_face_resolution::*;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
@@ -21,7 +21,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         loop_context: BufferSourceLoopRequestContext,
         source_walk: &mut BufferSourceWalk<'request, B>,
         row_prelude_context: BufferSourceRowPreludeRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &'request WindowParams,
         active_face_state: &mut DisplayRowActiveFaceState,
@@ -177,7 +177,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
 
     fn render_face_checkpoint_for_context<B: LayoutBufferView>(
         &mut self,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         active_face_state: &mut DisplayRowActiveFaceState,
     ) {
         face_resolution_context.resolve_at_checkpoint_with_source_state(

@@ -1,4 +1,4 @@
-//! Buffer text typed source item consumption.
+//! Buffer source typed item consumption.
 
 use std::collections::VecDeque;
 
@@ -11,12 +11,12 @@ use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::CharPos0;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceConsumptionState {
+pub(crate) struct BufferSourceConsumptionState {
     text_start_byte: usize,
     pending_render_items: VecDeque<DisplaySourceItem>,
 }
 
-impl BufferTextSourceConsumptionState {
+impl BufferSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self {
             text_start_byte,
@@ -62,7 +62,7 @@ impl BufferTextSourceConsumptionState {
     ) -> Option<DisplaySourceItem> {
         let DisplaySourcePosition::Buffer { byte_pos, .. } = item.span.start else {
             tracing::error!(
-                "BufferTextSourceConsumptionState: source cursor yielded a non-buffer-span item; \
+                "BufferSourceConsumptionState: source cursor yielded a non-buffer-span item; \
                  a display property escaped the render_next_step checkpoints"
             );
             return None;
@@ -70,7 +70,7 @@ impl BufferTextSourceConsumptionState {
         let start_byte_idx = byte_pos.get().checked_sub(self.text_start_byte)?;
         if start_byte_idx != position.byte_idx() {
             tracing::error!(
-                "BufferTextSourceConsumptionState: source cursor byte position {} did not match \
+                "BufferSourceConsumptionState: source cursor byte position {} did not match \
                  buffer walk byte index {}",
                 start_byte_idx,
                 position.byte_idx()
@@ -83,7 +83,7 @@ impl BufferTextSourceConsumptionState {
         let start_charpos = char_pos.get() as i64;
         if start_charpos != position.charpos() {
             tracing::error!(
-                "BufferTextSourceConsumptionState: source cursor char position {} did not match \
+                "BufferSourceConsumptionState: source cursor char position {} did not match \
                  buffer walk char position {}",
                 start_charpos,
                 position.charpos()
@@ -124,7 +124,7 @@ impl BufferTextSourceConsumptionState {
         if let DisplayItemKind::BufferDisplayPropertyReplacement(replacement) = &item.kind {
             if !self.replacement_matches(position, replacement)? {
                 tracing::error!(
-                    "BufferTextSourceConsumptionState: display replacement did not match \
+                    "BufferSourceConsumptionState: display replacement did not match \
                          buffer walk byte {} charpos {}",
                     position.byte_idx(),
                     position.charpos()

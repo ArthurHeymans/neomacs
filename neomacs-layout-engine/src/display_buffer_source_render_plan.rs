@@ -1,6 +1,7 @@
 //! Buffer source render plan construction and completion.
 
 use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
+use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_attempt::{
     BufferSourceOutputState, BufferSourceRedisplayPublishRequest, BufferSourceRenderAttemptContext,
@@ -9,7 +10,6 @@ use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_tail_render::{
     BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
 };
-use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{
     BufferWindowChromeHeights, BufferWindowGeometry, BufferWindowLocalDisplayPolicy,
@@ -266,7 +266,7 @@ impl BufferSourceOutputSetup {
         let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
 
         let has_overlays = !buffer.layout_overlays().is_empty();
-        let face_resolution = BufferCurrentFaceResolutionContext::new(
+        let face_resolution = BufferSourceFaceResolutionContext::new(
             buffer,
             face_resolver,
             default_face.measurement_policy(),

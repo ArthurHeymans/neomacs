@@ -1,6 +1,6 @@
-//! Buffer text face and source-item layout resolution.
+//! Buffer source face and source-item layout resolution.
 //!
-//! This module resolves buffer text faces at scan checkpoints and prepares
+//! This module resolves buffer source faces at scan checkpoints and prepares
 //! display source items whose layout changes require derived measured faces.
 
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -22,7 +22,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::eval::DisplayHost;
 
-pub(crate) struct BufferCurrentFaceResolutionContext<'a, B: LayoutBufferView> {
+pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     buffer: &'a B,
     face_resolver: &'a FaceResolver,
     measurement_policy: DisplayRowMeasurementPolicy,
@@ -76,15 +76,15 @@ impl<'a> BufferSourceItemLayoutResolutionContext<'a> {
     }
 }
 
-impl<'a, B: LayoutBufferView> Clone for BufferCurrentFaceResolutionContext<'a, B> {
+impl<'a, B: LayoutBufferView> Clone for BufferSourceFaceResolutionContext<'a, B> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, B: LayoutBufferView> Copy for BufferCurrentFaceResolutionContext<'a, B> {}
+impl<'a, B: LayoutBufferView> Copy for BufferSourceFaceResolutionContext<'a, B> {}
 
-impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
+impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         buffer: &'a B,
@@ -116,7 +116,7 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
 
     pub(crate) fn resolve_at_checkpoint(
         &self,
-        state: &mut BufferCurrentFaceResolutionState<'_, '_>,
+        state: &mut BufferSourceFaceResolutionState<'_, '_>,
         charpos: i64,
     ) -> bool {
         if !state.face_scan.should_resolve_at(charpos as usize) {
@@ -244,7 +244,7 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         charpos: i64,
     ) -> bool {
         self.resolve_at_checkpoint(
-            &mut BufferCurrentFaceResolutionState::new(
+            &mut BufferSourceFaceResolutionState::new(
                 source_render,
                 face_scan,
                 face_ids,
@@ -313,7 +313,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
     }
 }
 
-pub(crate) struct BufferCurrentFaceResolutionState<'a, 'source> {
+pub(crate) struct BufferSourceFaceResolutionState<'a, 'source> {
     source_render: &'a mut TextRowSourceRenderState<'source>,
     face_scan: &'a mut FaceScanCheckpoint,
     face_ids: &'a mut FrameFaceIdAllocator,
@@ -324,7 +324,7 @@ pub(crate) struct BufferCurrentFaceResolutionState<'a, 'source> {
     x: f32,
 }
 
-impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
+impl<'a, 'source> BufferSourceFaceResolutionState<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source_render: &'a mut TextRowSourceRenderState<'source>,

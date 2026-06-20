@@ -4,16 +4,16 @@
 //! source cursor driving, pending face installation, and source-position
 //! updates used by row lifecycle renderers.
 
+use crate::display_buffer_source_consumption::BufferSourceConsumptionState;
+use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
+use crate::display_buffer_source_overflow::BufferSourceTruncationSkipAction;
 use crate::display_buffer_source_row_lifecycle::{
     BufferSourceHscrollSkipAction, BufferSourceInvisibleTextScanAction,
     BufferSourceInvisibleTextScanContext, BufferSourceSelectiveDisplayContext,
     BufferSourceSelectiveDisplayHiddenLines, BufferSourceSelectiveDisplayLineTailAction,
     consume_hscroll_skip_from_position,
 };
-use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
-use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_source::BufferTextSourceCursor;
-use crate::display_buffer_text_source_consumption::BufferTextSourceConsumptionState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -34,7 +34,7 @@ use neovm_core::buffer::{BufferId, CharPos0};
 pub(crate) struct BufferSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
-    source_consumption: BufferTextSourceConsumptionState,
+    source_consumption: BufferSourceConsumptionState,
     append_state: DisplaySourceRowAppendState,
 }
 
@@ -42,7 +42,7 @@ impl DisplaySourceWalkConsumption {
     fn apply_to_render_progress<B: LayoutBufferView>(
         self,
         progress: &mut DisplaySourceProgressState<'_>,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<DisplaySourceItem> {
@@ -72,7 +72,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
                 RenderFaceRef::Inherit,
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
-            source_consumption: BufferTextSourceConsumptionState::new(text_start_byte),
+            source_consumption: BufferSourceConsumptionState::new(text_start_byte),
             append_state: DisplaySourceRowAppendState::default(),
         }
     }
@@ -84,7 +84,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     fn consume_source_item(
         &mut self,
         mut source_position: DisplaySourceTextPosition,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplaySourceWalkConsumption {
         let mut pending_faces = Vec::new();
@@ -109,7 +109,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     pub(crate) fn consume_source_item_for_render(
         &mut self,
         progress: &mut DisplaySourceProgressState<'_>,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
@@ -179,10 +179,10 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         &mut self,
         text: &[u8],
         source_position: DisplaySourceTextPosition,
-    ) -> DisplaySourcePositionConsumption<BufferTextTruncationSkipAction> {
+    ) -> DisplaySourcePositionConsumption<BufferSourceTruncationSkipAction> {
         self.source_consumption.clear_pending_render_items();
         let mut source_position = source_position;
-        let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
+        let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
             text,
             &mut source_position,
         );

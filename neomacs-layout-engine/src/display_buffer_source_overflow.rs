@@ -1,6 +1,6 @@
-//! Buffer text overflow rendering.
+//! Buffer source overflow rendering.
 //!
-//! This module owns the buffer-specific overflow lifecycle for main text and
+//! This module owns the buffer source overflow lifecycle for main text and
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
@@ -33,14 +33,14 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::EmacsBytePos;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextOverflowRenderRequest<'a> {
+pub(crate) struct BufferSourceOverflowRenderRequest<'a> {
     prepared_append: &'a DisplaySourceTextCharPreparedAppend,
     source_step_char: DisplaySourceStepChar,
-    context: BufferTextOverflowRenderContext,
+    context: BufferSourceOverflowRenderContext,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextOverflowRenderContext {
+pub(crate) struct BufferSourceOverflowRenderContext {
     ch: char,
     right_edge_px: f32,
     wrap_mode: LineWrapMode,
@@ -54,7 +54,7 @@ pub(crate) struct BufferTextOverflowRenderContext {
     row_limit: DisplayRowLimit,
 }
 
-impl BufferTextOverflowRenderContext {
+impl BufferSourceOverflowRenderContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         ch: char,
@@ -86,12 +86,12 @@ impl BufferTextOverflowRenderContext {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextOverflowRenderOutcome {
+pub(crate) enum BufferSourceOverflowRenderOutcome {
     Fits,
     Transition(DisplayRowTransitionContinuation),
 }
 
-impl BufferTextOverflowRenderOutcome {
+impl BufferSourceOverflowRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(
             self,
@@ -110,11 +110,11 @@ impl BufferTextOverflowRenderOutcome {
     }
 }
 
-impl<'a> BufferTextOverflowRenderRequest<'a> {
+impl<'a> BufferSourceOverflowRenderRequest<'a> {
     pub(crate) fn new(
         prepared_append: &'a DisplaySourceTextCharPreparedAppend,
         source_step_char: DisplaySourceStepChar,
-        context: BufferTextOverflowRenderContext,
+        context: BufferSourceOverflowRenderContext,
     ) -> Self {
         Self {
             prepared_append,
@@ -128,7 +128,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         source_walk: &mut BufferSourceWalk<'_, B>,
         text: &[u8],
         state: BufferSourceLoopMutableState<'_, '_, '_>,
-    ) -> BufferTextOverflowRenderOutcome {
+    ) -> BufferSourceOverflowRenderOutcome {
         let BufferSourceLoopMutableState {
             mut progress,
             source_render,
@@ -155,7 +155,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             context.wrap_mode,
             context.word_wrap,
         ) {
-            DisplaySourceTextCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
+            DisplaySourceTextCharOverflowAction::Fits => BufferSourceOverflowRenderOutcome::Fits,
             DisplaySourceTextCharOverflowAction::Truncate { transition } => {
                 let truncation_skip = source_walk
                     .consume_truncation_skip(text, progress.source_position())
@@ -194,7 +194,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     ),
                     progress.row.col,
                 );
-                BufferTextOverflowRenderOutcome::Transition(
+                BufferSourceOverflowRenderOutcome::Transition(
                     truncation_skip.transition_continuation(row_transition),
                 )
             }
@@ -202,7 +202,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 break_candidate: wrap_break,
                 transition,
             } => {
-                let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
+                let word_wrap_action = BufferSourceWordWrapAction::new(wrap_break);
                 let mut source_position = progress.source_position();
                 word_wrap_action.apply_before_row_transition(
                     source_render.output_emitter(),
@@ -254,13 +254,11 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
-                BufferTextOverflowRenderOutcome::Transition(continuation)
+                BufferSourceOverflowRenderOutcome::Transition(continuation)
             }
             DisplaySourceTextCharOverflowAction::CharacterWrap { transition } => {
                 let character_wrap_action =
-                    BufferTextCharacterWrapSourceAction::from_source_step_char(
-                        self.source_step_char,
-                    );
+                    BufferSourceCharacterWrapAction::from_source_step_char(self.source_step_char);
                 character_wrap_action.apply_before_row_transition(
                     row_extend,
                     progress.row.x,
@@ -306,20 +304,20 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
-                BufferTextOverflowRenderOutcome::Transition(continuation)
+                BufferSourceOverflowRenderOutcome::Transition(continuation)
             }
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextTruncationSkipAction {
+pub(crate) struct BufferSourceTruncationSkipAction {
     pub(crate) charpos: i64,
     pub(crate) reached_line_break: bool,
     pub(crate) source_position: DisplaySourceTextPosition,
 }
 
-impl BufferTextTruncationSkipAction {
+impl BufferSourceTruncationSkipAction {
     pub(crate) fn consume_source_step_char_and_rest_of_line(
         text: &[u8],
         position: &mut DisplaySourceTextPosition,
@@ -395,11 +393,11 @@ impl BufferTextTruncationSkipAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWordWrapSourceAction {
+pub(crate) struct BufferSourceWordWrapAction {
     break_candidate: WordWrapBreakCandidate,
 }
 
-impl BufferTextWordWrapSourceAction {
+impl BufferSourceWordWrapAction {
     pub(crate) fn new(break_candidate: WordWrapBreakCandidate) -> Self {
         Self { break_candidate }
     }
@@ -489,11 +487,11 @@ impl BufferTextWordWrapSourceAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSpecialWrapSourceAction {
+pub(crate) struct BufferSourceSpecialWrapAction {
     charpos: i64,
 }
 
-impl BufferTextSpecialWrapSourceAction {
+impl BufferSourceSpecialWrapAction {
     pub(crate) fn new(charpos: i64) -> Self {
         Self { charpos }
     }
@@ -537,12 +535,12 @@ impl BufferTextSpecialWrapSourceAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextCharacterWrapSourceAction {
+pub(crate) struct BufferSourceCharacterWrapAction {
     ch_start_byte_idx: usize,
     ch_start_charpos: i64,
 }
 
-impl BufferTextCharacterWrapSourceAction {
+impl BufferSourceCharacterWrapAction {
     pub(crate) fn new(ch_start_byte_idx: usize, ch_start_charpos: i64) -> Self {
         Self {
             ch_start_byte_idx,
@@ -604,13 +602,13 @@ impl BufferTextCharacterWrapSourceAction {
     }
 }
 
-pub(crate) struct BufferTextSpecialOverflowRenderRequest<'a> {
+pub(crate) struct BufferSourceSpecialOverflowRenderRequest<'a> {
     prepared_append: &'a DisplaySourceSpecialCharPreparedAppend,
-    context: BufferTextSpecialOverflowRenderContext<'a>,
+    context: BufferSourceSpecialOverflowRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
+pub(crate) struct BufferSourceSpecialOverflowRenderContext<'a> {
     text: &'a [u8],
     text_start_byte: usize,
     x_px: f32,
@@ -625,7 +623,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-impl<'a> BufferTextSpecialOverflowRenderContext<'a> {
+impl<'a> BufferSourceSpecialOverflowRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -659,13 +657,13 @@ impl<'a> BufferTextSpecialOverflowRenderContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSpecialOverflowRenderOutcome {
+pub(crate) enum BufferSourceSpecialOverflowRenderOutcome {
     Fits,
     AppendPrepared(DisplayRowTransitionContinuation),
     ContinueBufferWalk(DisplayRowTransitionContinuation),
 }
 
-impl BufferTextSpecialOverflowRenderOutcome {
+impl BufferSourceSpecialOverflowRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(
             self,
@@ -687,10 +685,10 @@ impl BufferTextSpecialOverflowRenderOutcome {
     }
 }
 
-impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
+impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
     pub(crate) fn new(
         prepared_append: &'a DisplaySourceSpecialCharPreparedAppend,
-        context: BufferTextSpecialOverflowRenderContext<'a>,
+        context: BufferSourceSpecialOverflowRenderContext<'a>,
     ) -> Self {
         Self {
             prepared_append,
@@ -703,7 +701,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
-    ) -> BufferTextSpecialOverflowRenderOutcome {
+    ) -> BufferSourceSpecialOverflowRenderOutcome {
         let BufferSourceLoopMutableState {
             mut progress,
             source_render,
@@ -729,7 +727,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             context.wrap_mode,
         ) {
             None | Some(DisplaySourceSpecialCharOverflowAction::Fits) => {
-                BufferTextSpecialOverflowRenderOutcome::Fits
+                BufferSourceSpecialOverflowRenderOutcome::Fits
             }
             Some(DisplaySourceSpecialCharOverflowAction::Truncate { transition }) => {
                 let truncation_skip = source_walk
@@ -784,11 +782,10 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
-                BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(continuation)
+                BufferSourceSpecialOverflowRenderOutcome::ContinueBufferWalk(continuation)
             }
             Some(DisplaySourceSpecialCharOverflowAction::Wrap { transition }) => {
-                let special_wrap_action =
-                    BufferTextSpecialWrapSourceAction::new(progress.charpos());
+                let special_wrap_action = BufferSourceSpecialWrapAction::new(progress.charpos());
                 special_wrap_action.apply_before_row_transition(
                     row_extend,
                     progress.row.x,
@@ -823,7 +820,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     ),
                     progress.row.col,
                 );
-                BufferTextSpecialOverflowRenderOutcome::AppendPrepared(
+                BufferSourceSpecialOverflowRenderOutcome::AppendPrepared(
                     special_wrap_action.transition_continuation(
                         row_transition,
                         row_geometry,
