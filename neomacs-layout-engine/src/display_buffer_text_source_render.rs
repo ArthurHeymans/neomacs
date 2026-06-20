@@ -51,13 +51,8 @@ pub(crate) enum BufferTextWindowSourceRenderOutcome {
     StopBufferWalk,
 }
 
-pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
-    source_item: BufferTextSourceItem,
-    context: BufferTextSourceItemRenderContext<'a>,
-}
-
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextSourceItemRenderContext<'a> {
+struct BufferTextSourceItemRenderContext<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     text: &'a [u8],
     text_start_byte: usize,
@@ -78,10 +73,6 @@ pub(crate) struct BufferTextSourceItemRenderContext<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextSourceItemRenderRequestState<'rows, 'emit, 'surface> {
-    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextSourceItemRenderOutcome {
     Rendered,
@@ -92,12 +83,6 @@ pub(crate) enum BufferTextSourceItemRenderOutcome {
 impl BufferTextSourceItemRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
-    }
-}
-
-impl<'rows, 'emit, 'surface> BufferTextSourceItemRenderRequestState<'rows, 'emit, 'surface> {
-    pub(crate) fn new(state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>) -> Self {
-        Self { state }
     }
 }
 
@@ -117,7 +102,7 @@ impl BufferTextWindowSourceRenderOutcome {
 
 impl<'a> BufferTextSourceItemRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
         text: &'a [u8],
         text_start_byte: usize,
@@ -160,48 +145,35 @@ impl<'a> BufferTextSourceItemRenderContext<'a> {
     }
 }
 
-impl<'a> BufferTextSourceItemRenderRequest<'a> {
-    pub(crate) fn new(
-        source_item: BufferTextSourceItem,
-        context: BufferTextSourceItemRenderContext<'a>,
-    ) -> Self {
-        debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
-        Self {
-            source_item,
-            context,
-        }
-    }
-
-    pub(crate) fn render_and_apply<B: LayoutBufferView>(
-        self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        buffer: &B,
-        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
-    ) -> BufferTextSourceItemRenderOutcome {
-        let source_item = if self.source_item.is_multi_char_text_run() {
-            let Some((first, pending)) = self
-                .source_item
-                .split_text_run_items(self.context.text_start_byte)
-            else {
-                return BufferTextSourceItemRenderOutcome::Stop;
-            };
-            source_walk.prepend_pending_render_items(pending);
-            first
-        } else {
-            self.source_item
-        };
-        let Some((source_step_char, source_item)) = source_item.into_render_parts() else {
+fn render_source_item_and_apply<B: LayoutBufferView>(
+    source_item: BufferTextSourceItem,
+    context: BufferTextSourceItemRenderContext<'_>,
+    source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+    buffer: &B,
+    state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+) -> BufferTextSourceItemRenderOutcome {
+    debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
+    let source_item = if source_item.is_multi_char_text_run() {
+        let Some((first, pending)) = source_item.split_text_run_items(context.text_start_byte)
+        else {
             return BufferTextSourceItemRenderOutcome::Stop;
         };
-        render_prepared_source_item_and_apply(
-            source_step_char,
-            source_item,
-            self.context,
-            source_walk,
-            buffer,
-            state,
-        )
-    }
+        source_walk.prepend_pending_render_items(pending);
+        first
+    } else {
+        source_item
+    };
+    let Some((source_step_char, source_item)) = source_item.into_render_parts() else {
+        return BufferTextSourceItemRenderOutcome::Stop;
+    };
+    render_prepared_source_item_and_apply(
+        source_step_char,
+        source_item,
+        context,
+        source_walk,
+        buffer,
+        state,
+    )
 }
 
 fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
@@ -210,9 +182,8 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     context: BufferTextSourceItemRenderContext<'_>,
     source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
     buffer: &B,
-    state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
-    let BufferTextSourceItemRenderRequestState { state } = state;
     let BufferTextWindowLoopMutableState {
         append_state,
         invisible_text_checkpoint,
@@ -723,20 +694,31 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     where
         'surface: 'request,
     {
-        let request = self.loop_context.source_item_request(
-            layout_resolution_context,
+        render_source_item_and_apply(
             source_item,
-            self.text,
-            self.state.append_surface,
-            self.state.overlay_context,
-            self.active_face_state,
-            self.params,
-            0.0,
-        );
-        request.render_and_apply(
+            BufferTextSourceItemRenderContext::new(
+                layout_resolution_context,
+                self.text,
+                self.loop_context.text_start_byte(),
+                self.loop_context.buffer_id(),
+                self.state.append_surface,
+                self.state.overlay_context,
+                self.active_face_state,
+                self.params,
+                0.0,
+                self.loop_context.char_height(),
+                self.loop_context.point_charpos(),
+                self.loop_context.row_visibility_limit(),
+                self.loop_context.content_x(),
+                self.loop_context.has_prefix(),
+                self.loop_context.row_geometry_defaults(),
+                self.loop_context.display_text_row_base(),
+                self.loop_context.max_rows(),
+                self.loop_context.row_limit(),
+            ),
             source_walk,
             buffer,
-            BufferTextSourceItemRenderRequestState::new(self.state.reborrow()),
+            self.state.reborrow(),
         )
     }
 

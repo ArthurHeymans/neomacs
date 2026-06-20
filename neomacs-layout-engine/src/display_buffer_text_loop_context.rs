@@ -1,6 +1,5 @@
 //! Buffer text loop request builders.
 
-use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_row_lifecycle::{
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
     BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest,
@@ -9,10 +8,6 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
-use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
-use crate::display_buffer_text_source_render::{
-    BufferTextSourceItemRenderContext, BufferTextSourceItemRenderRequest,
-};
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
@@ -189,42 +184,6 @@ impl BufferTextWindowLoopRequestContext {
         )
     }
 
-    pub(crate) fn source_item_request<'a>(
-        self,
-        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-        source_item: BufferTextSourceItem,
-        text: &'a [u8],
-        append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-    ) -> BufferTextSourceItemRenderRequest<'a> {
-        BufferTextSourceItemRenderRequest::new(
-            source_item,
-            BufferTextSourceItemRenderContext::new(
-                layout_resolution_context,
-                text,
-                self.text_start_byte,
-                self.buffer_id,
-                append_surface,
-                overlay_context,
-                active_face_state,
-                params,
-                glyph_y_offset,
-                self.char_height,
-                self.point_charpos,
-                self.row_visibility_limit,
-                self.content_x,
-                self.has_prefix,
-                self.row_geometry_defaults,
-                self.display_text_row_base,
-                self.max_rows,
-                self.row_limit,
-            ),
-        )
-    }
-
     pub(crate) fn end_of_buffer_tail_request<'a>(
         self,
         byte_idx: usize,
@@ -266,9 +225,24 @@ impl BufferTextWindowLoopRequestContext {
         self.row_visibility_limit
     }
 
-    #[cfg(test)]
-    pub(crate) fn accessible_end(self) -> i64 {
-        self.accessible_end
+    pub(crate) fn has_prefix(self) -> bool {
+        self.has_prefix
+    }
+
+    pub(crate) fn row_geometry_defaults(self) -> DisplayRowGeometryDefaults {
+        self.row_geometry_defaults
+    }
+
+    pub(crate) fn display_text_row_base(self) -> usize {
+        self.display_text_row_base
+    }
+
+    pub(crate) fn max_rows(self) -> usize {
+        self.max_rows
+    }
+
+    pub(crate) fn row_limit(self) -> DisplayRowLimit {
+        self.row_limit
     }
 
     #[cfg(test)]
@@ -282,7 +256,7 @@ impl BufferTextWindowLoopRequestContext {
     }
 
     #[cfg(test)]
-    pub(crate) fn row_limit(self) -> DisplayRowLimit {
-        self.row_limit
+    pub(crate) fn accessible_end(self) -> i64 {
+        self.accessible_end
     }
 }

@@ -16,6 +16,7 @@ use crate::display_buffer_text_append::{
 };
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_item_append::*;
+use crate::display_buffer_text_loop_context::*;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_progress::{
@@ -6343,8 +6344,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let params = test_display_space_window_params();
     let text = b"ab";
-    let mut byte_idx = 1;
-    let source_step_char = BufferTextSourceStepChar::new('a', 0, 0);
+    let mut byte_idx = 0;
     let mut append_state = BufferTextRowAppendState::default();
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
@@ -6363,71 +6363,46 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, charpos, 0);
-    let source_item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::new(
-            DisplaySourcePosition::buffer(
-                buf_id,
-                CharPos0::new(0),
-                neovm_core::buffer::EmacsBytePos::new(0),
-            ),
-            DisplaySourcePosition::buffer(
-                buf_id,
-                CharPos0::new(1),
-                neovm_core::buffer::EmacsBytePos::new(1),
-            ),
-        ),
-        RenderFaceRef::FaceId(active_face.face_id()),
-        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
+    let face_resolution_context = BufferCurrentFaceResolutionContext::new(
+        &snapshot,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        8.0,
+        12.0,
+        16.0,
+        8.0,
+        16.0,
+        12.0,
+        false,
+    );
+    let loop_context = BufferTextWindowLoopRequestContext::new(
+        buf_id,
+        0,
+        2,
+        99,
+        &params,
+        0.0,
+        false,
+        12.0,
+        16.0,
+        8.0,
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        context.defaults,
+        0,
+        4,
+        context.row_limit,
     );
 
-    let outcome = BufferTextSourceItemRenderRequest::new(
-        BufferTextSourceItem::new_for_test(
-            source_item,
-            source_step_char.start_byte_idx(),
-            source_step_char.start_charpos(),
-            Some(source_step_char.ch()),
-        ),
-        BufferTextSourceItemRenderContext::new(
-            BufferCurrentFaceResolutionContext::new(
-                &snapshot,
-                &face_resolver,
-                measurement_policy,
-                &default_face,
-                8.0,
-                12.0,
-                16.0,
-                8.0,
-                16.0,
-                12.0,
-                false,
-            )
-            .source_item_layout_resolution_context(),
-            text,
-            0,
-            buf_id,
-            &surface,
-            overlay_context,
-            &active_face,
-            &params,
-            0.0,
-            16.0,
-            99,
-            DisplayRowVisibilityLimit {
-                max_rows: 4,
-                bottom_y: 64.0,
-            },
-            0.0,
-            false,
-            context.defaults,
-            0,
-            4,
-            context.row_limit,
-        ),
-    )
-    .render_and_apply(
-        &mut source_walk,
-        &snapshot,
-        BufferTextSourceItemRenderRequestState::new(BufferTextWindowLoopMutableState::new(
+    let outcome = BufferTextWindowSourceRenderRequest::new(
+        loop_context,
+        text,
+        &params,
+        &active_face,
+        BufferTextWindowLoopMutableState::new(
             &mut append_state,
             &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
@@ -6455,10 +6430,14 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
             &mut face_ids,
             &surface,
             overlay_context,
-        )),
-    );
+        ),
+    )
+    .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
 
-    assert_eq!(outcome, BufferTextSourceItemRenderOutcome::Rendered);
+    assert_eq!(
+        outcome,
+        BufferTextWindowSourceRenderOutcome::ContinueBufferWalk
+    );
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 8.0);
