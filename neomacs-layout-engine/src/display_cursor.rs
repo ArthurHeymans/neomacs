@@ -9,7 +9,7 @@ use crate::window_output::{
     WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -87,22 +87,42 @@ fn glyph_cell_span(glyph: &Glyph) -> u16 {
 }
 
 #[derive(Clone, Copy)]
+pub(crate) struct CursorVisualColumnRows<'a> {
+    rows: &'a [GlyphRow],
+    ncols: usize,
+}
+
+impl<'a> CursorVisualColumnRows<'a> {
+    pub(crate) fn new(rows: &'a [GlyphRow], ncols: usize) -> Self {
+        Self { rows, ncols }
+    }
+
+    fn row(self, row: usize) -> Option<&'a GlyphRow> {
+        self.rows.get(row)
+    }
+
+    fn ncols(self) -> usize {
+        self.ncols
+    }
+}
+
+#[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnResolutionContext<'a> {
     current_window_id: u64,
     current_pixel_bounds: Rect,
-    matrix: Option<&'a GlyphMatrix>,
+    rows: Option<CursorVisualColumnRows<'a>>,
 }
 
 impl<'a> CursorVisualColumnResolutionContext<'a> {
     pub(crate) fn new(
         current_window_id: u64,
         current_pixel_bounds: Rect,
-        matrix: Option<&'a GlyphMatrix>,
+        rows: Option<CursorVisualColumnRows<'a>>,
     ) -> Self {
         Self {
             current_window_id,
             current_pixel_bounds,
-            matrix,
+            rows,
         }
     }
 }
@@ -159,8 +179,8 @@ impl CursorVisualColumnResolutionRequest {
         if !cursor_window_matches_current(self.window_id, context.current_window_id) {
             return None;
         }
-        let matrix = context.matrix?;
-        let row = matrix.rows.get(self.row)?;
+        let rows = context.rows?;
+        let row = rows.row(self.row)?;
 
         let mut col_acc: u16 = 0;
         for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
@@ -201,9 +221,9 @@ impl CursorVisualColumnResolutionRequest {
         context: CursorVisualColumnResolutionContext<'_>,
     ) -> Option<ResolvedPhysCursorPlacement> {
         let col = self.resolve(context)?;
-        let x = context.matrix.and_then(|matrix| {
-            (matrix.ncols > 0).then(|| {
-                let char_w = context.current_pixel_bounds.width / matrix.ncols as f32;
+        let x = context.rows.and_then(|rows| {
+            (rows.ncols() > 0).then(|| {
+                let char_w = context.current_pixel_bounds.width / rows.ncols() as f32;
                 context.current_pixel_bounds.x + col as f32 * char_w
             })
         });

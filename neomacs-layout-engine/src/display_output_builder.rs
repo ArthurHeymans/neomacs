@@ -6,9 +6,9 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
-use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{CursorVisualColumnResolutionContext, CursorVisualColumnRows};
 #[cfg(test)]
 use crate::display_row::resolved_display_row_face;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
@@ -636,8 +636,8 @@ impl OutputWindowRowGrid {
         self.matrix
     }
 
-    fn as_matrix(&self) -> &GlyphMatrix {
-        &self.matrix
+    fn cursor_rows(&self) -> CursorVisualColumnRows<'_> {
+        CursorVisualColumnRows::new(&self.matrix.rows, self.matrix.ncols)
     }
 
     fn row(&self, row: usize) -> Option<&GlyphRow> {
@@ -1317,7 +1317,7 @@ impl DisplayOutputBuilder {
             self.current_pixel_bounds,
             self.current_row_grid
                 .as_ref()
-                .map(OutputWindowRowGrid::as_matrix),
+                .map(OutputWindowRowGrid::cursor_rows),
         )
     }
 
