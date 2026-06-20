@@ -5,7 +5,7 @@ use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
     BufferTextSourcePosition,
 };
-use crate::display_buffer_text_source_lowering::{
+use crate::display_buffer_text_source_render_item::{
     BufferTextDirectDisplayItemRequest, BufferTextSourceRenderItem, BufferTextSplitTextRunState,
 };
 use crate::display_item::{

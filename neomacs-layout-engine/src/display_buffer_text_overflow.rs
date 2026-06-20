@@ -12,7 +12,7 @@ use crate::display_buffer_text_item_append::{
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
-use crate::display_buffer_text_source_lowering::{
+use crate::display_buffer_text_source_render_item::{
     BufferTextDirectDisplayItem, BufferTextLoweredDisplayItem, BufferTextSourceRenderItem,
     BufferTextSourceRenderItemKind, BufferTextSourceStepChar,
 };
