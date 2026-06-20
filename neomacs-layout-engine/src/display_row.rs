@@ -13,6 +13,7 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
+use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -197,58 +198,6 @@ pub(crate) fn resolved_display_row_face(
     render_face
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayRowCharWidthPolicy {
-    fallback_char_width: f32,
-}
-
-impl DisplayRowCharWidthPolicy {
-    pub(crate) fn new(fallback_char_width: f32) -> Self {
-        Self {
-            fallback_char_width: fallback_char_width.max(1.0),
-        }
-    }
-
-    pub(crate) fn fallback(self) -> f32 {
-        self.fallback_char_width
-    }
-
-    fn face_width(self, face: &DisplayRowFace) -> f32 {
-        positive_row_width(face.font_char_width)
-            .unwrap_or(self.fallback_char_width)
-            .max(self.fallback_char_width)
-    }
-
-    fn has_face_width(self, face: &DisplayRowFace) -> bool {
-        positive_row_width(face.font_char_width).is_some()
-    }
-
-    fn measured_width(self, metrics: FontMetrics) -> f32 {
-        positive_row_width(metrics.char_width)
-            .unwrap_or(self.fallback_char_width)
-            .max(self.fallback_char_width)
-    }
-
-    fn face_or_measured_width(self, face: &DisplayRowFace, metrics: Option<FontMetrics>) -> f32 {
-        positive_row_width(face.font_char_width)
-            .map(|width| width.max(self.fallback_char_width))
-            .or_else(|| metrics.map(|metrics| self.measured_width(metrics)))
-            .unwrap_or(self.fallback_char_width)
-    }
-
-    fn normalize_face_width(self, face: &mut DisplayRowFace) {
-        face.font_char_width = self.face_width(face);
-    }
-
-    fn advance_for_columns(self, columns: u8) -> f32 {
-        self.fallback_char_width * f32::from(columns)
-    }
-}
-
-fn positive_row_width(value: f32) -> Option<f32> {
-    (value.is_finite() && value > 0.0).then_some(value)
-}
-
 pub(crate) struct DisplayRowFaceRealizer<'a> {
     font_metrics: &'a mut Option<FontMetricsService>,
 }
@@ -299,7 +248,10 @@ impl<'a> DisplayRowFaceRealizer<'a> {
     pub(crate) fn char_width(&mut self, face: &DisplayRowFace, fallback_char_width: f32) -> f32 {
         let policy = DisplayRowCharWidthPolicy::new(fallback_char_width);
         let metrics = self.measured_font_metrics_for_face(face);
-        policy.face_or_measured_width(face, metrics)
+        policy.width_or_measured(
+            face.font_char_width,
+            metrics.map(|metrics| metrics.char_width),
+        )
     }
 
     fn measured_font_metrics_for_face(&mut self, face: &DisplayRowFace) -> Option<FontMetrics> {
@@ -329,13 +281,13 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         row_height: f32,
     ) {
         let width_policy = DisplayRowCharWidthPolicy::new(fallback_char_width);
-        let needs_metrics = !width_policy.has_face_width(face)
+        let needs_metrics = !width_policy.has_width(face.font_char_width)
             || face.font_ascent <= 0.0
             || (face.font_ascent + face.font_descent as f32) <= 0.0;
 
         if needs_metrics && let Some(metrics) = self.measured_font_metrics_for_face(face) {
-            if !width_policy.has_face_width(face) {
-                face.font_char_width = width_policy.measured_width(metrics);
+            if !width_policy.has_width(face.font_char_width) {
+                face.font_char_width = width_policy.width(metrics.char_width);
             }
             if face.font_ascent <= 0.0 && metrics.ascent > 0.0 {
                 face.font_ascent = metrics.ascent;
@@ -345,7 +297,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
             }
         }
 
-        width_policy.normalize_face_width(face);
+        face.font_char_width = width_policy.width(face.font_char_width);
         if face.font_ascent <= 0.0 {
             face.font_ascent = fallback_ascent.max(1.0);
         }
@@ -411,7 +363,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
 
         let face = self.face(face_id)?;
         let width_policy = DisplayRowCharWidthPolicy::new(self.fallback_char_width);
-        let face_char_width = width_policy.face_width(face);
+        let face_char_width = width_policy.width(face.font_char_width);
         let min_advance = f32::from(columns) * face_char_width;
         let font_family = face.font_family.clone();
         let font_weight = face.font_weight;
@@ -457,7 +409,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         }
 
         let face_char_width = DisplayRowCharWidthPolicy::new(self.fallback_char_width)
-            .face_width(&face)
+            .width(face.font_char_width)
             .max(DisplayRowCharWidthPolicy::new(fallback_char_width_px).fallback());
         DisplayTextRunMeasurementPlan::from_shaped_glyphs(
             text,
@@ -570,7 +522,7 @@ impl DisplayRowMeasurementPolicy {
         let (char_width, row_height, ascent) = metrics
             .map(|metrics| {
                 (
-                    fallback_width_policy.measured_width(metrics),
+                    fallback_width_policy.width(metrics.char_width),
                     metrics.line_height,
                     metrics.ascent,
                 )

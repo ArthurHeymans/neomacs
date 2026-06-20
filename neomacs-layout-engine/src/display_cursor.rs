@@ -1,6 +1,7 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowTextPosition;
+use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
@@ -683,7 +684,7 @@ pub(crate) fn resolve_cursor_geometry(
     };
     let width = if source.stretch_like && !x_stretch_cursor && !matches!(style, CursorStyle::Bar(_))
     {
-        fallback_char_width.max(1.0)
+        DisplayRowCharWidthPolicy::new(fallback_char_width).fallback()
     } else {
         actual_slot_width
     };

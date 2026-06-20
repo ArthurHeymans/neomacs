@@ -1,3 +1,4 @@
+use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::font_metrics::ShapedGlyph;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::unicode::{decode_utf8, is_cluster_extender};
@@ -289,16 +290,20 @@ impl DisplayTextRunMeasurementPlan {
     ) -> DisplayTextRunMeasurement {
         let cluster_advances =
             DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), glyphs);
-        let face_char_width_px = face_char_width_px.max(fallback_char_width_px).max(1.0);
-        let fallback_char_width_px = fallback_char_width_px.max(face_char_width_px).max(1.0);
+        let width_policy = DisplayRowCharWidthPolicy::new(fallback_char_width_px);
+        let face_char_width_px = width_policy.width(face_char_width_px);
+        let fallback_char_width_px = DisplayRowCharWidthPolicy::new(face_char_width_px).fallback();
         let advances = text
             .char_indices()
             .enumerate()
             .filter_map(|(char_offset, (byte_offset, ch))| {
                 let measured = cluster_advances.advance_at(byte_offset)?;
                 let columns = crate::composition::base_width_cols(ch);
-                let minimum = f32::from(columns.max(1)) * face_char_width_px;
-                let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
+                let columns = columns.max(1);
+                let minimum =
+                    DisplayRowCharWidthPolicy::new(face_char_width_px).advance_for_columns(columns);
+                let fallback = DisplayRowCharWidthPolicy::new(fallback_char_width_px)
+                    .advance_for_columns(columns);
                 Some(DisplayTextRunAdvance::new(
                     char_offset,
                     byte_offset,

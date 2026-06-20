@@ -1,3 +1,4 @@
+use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::ResolvedFace;
 
 pub(crate) struct DisplayHeightFaceBasis<'a> {
@@ -32,9 +33,8 @@ pub(crate) fn height_adjusted_face(
         .or_else(|| positive_f32(basis.fallback_ascent))
         .unwrap_or(canonical_line_height * 0.8)
         .min(canonical_line_height);
-    let canonical_char_width = positive_f32(canonical.font_char_width)
-        .or_else(|| positive_f32(basis.fallback_char_width))
-        .unwrap_or(canonical_font_size * 0.5);
+    let canonical_char_width = DisplayRowCharWidthPolicy::new(canonical_font_size * 0.5)
+        .width_or_measured(canonical.font_char_width, Some(basis.fallback_char_width));
 
     let mut resolved = source.clone();
     resolved.font_size = (canonical_font_size * factor).max(1.0);
