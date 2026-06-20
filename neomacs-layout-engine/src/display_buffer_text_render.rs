@@ -28,9 +28,10 @@ pub(crate) use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::{
-    BufferTextConsumedDisplayItem, BufferTextConsumedSourceCursor, BufferTextConsumedSourceItem,
-    BufferTextSourceCursor, BufferTextSourceItem, BufferTextSourcePosition,
-    BufferTextSourceStepChar, BufferTextWindowSource, BufferTextWindowSourceReadRequest,
+    BufferTextConsumedDisplayItem, BufferTextSourceConsumptionItem,
+    BufferTextSourceConsumptionState, BufferTextSourceCursor, BufferTextSourceItem,
+    BufferTextSourcePosition, BufferTextSourceStepChar, BufferTextWindowSource,
+    BufferTextWindowSourceReadRequest,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
@@ -381,11 +382,11 @@ struct BufferTextWindowBodyPassState<'emit> {
 pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
-    consumed_source: BufferTextConsumedSourceCursor,
+    source_consumption: BufferTextSourceConsumptionState,
 }
 
 struct BufferTextWindowSourceConsumption {
-    source_item: Option<BufferTextConsumedSourceItem>,
+    source_item: Option<BufferTextSourceConsumptionItem>,
     source_position: BufferTextSourcePosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
 }
@@ -400,7 +401,7 @@ impl BufferTextWindowSourceConsumption {
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
     ) -> (
-        Option<BufferTextConsumedSourceItem>,
+        Option<BufferTextSourceConsumptionItem>,
         Vec<PendingDisplaySourceFace>,
     ) {
         progress.apply_source_position(self.source_position);
@@ -1740,7 +1741,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 RenderFaceRef::Inherit,
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
-            consumed_source: BufferTextConsumedSourceCursor::new(text_start_byte),
+            source_consumption: BufferTextSourceConsumptionState::new(text_start_byte),
         }
     }
 
@@ -1760,7 +1761,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            self.consumed_source.next_consumed_source_item(
+            self.source_consumption.next_source_consumption_item(
                 &mut self.source_cursor,
                 &mut source_context,
                 &mut source_position,
@@ -1779,7 +1780,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         mut source_position: BufferTextSourcePosition,
     ) -> BufferTextWindowFallbackSourceConsumption {
         let source_item = self
-            .consumed_source
+            .source_consumption
             .consume_fallback_source_item(source_item, &mut source_position);
         BufferTextWindowFallbackSourceConsumption {
             source_item,
@@ -3055,13 +3056,14 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             }
         }
 
-        let Some(consumed_source) = self.consume_source_item(source_walk, face_resolution_context)
+        let Some(source_consumption) =
+            self.consume_source_item(source_walk, face_resolution_context)
         else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
-        match consumed_source {
-            BufferTextConsumedSourceItem::DisplayItem(source_item) => {
+        match source_consumption {
+            BufferTextSourceConsumptionItem::DisplayItem(source_item) => {
                 return self.render_consumed_display_item_for_context(
                     source_walk,
                     BufferTextWindowConsumedDisplayItemRenderRequest {
@@ -3075,7 +3077,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     buffer,
                 );
             }
-            BufferTextConsumedSourceItem::Replacement(replacement) => {
+            BufferTextSourceConsumptionItem::Replacement(replacement) => {
                 return self.render_replacement_source_item_for_context(
                     replacement,
                     source_walk,
@@ -3314,7 +3316,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         &mut self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
-    ) -> Option<BufferTextConsumedSourceItem> {
+    ) -> Option<BufferTextSourceConsumptionItem> {
         // One persistent typed source cursor feeds the row walk. The source
         // side owns pending text-run splitting so direct single-character
         // items can still stay typed through render.

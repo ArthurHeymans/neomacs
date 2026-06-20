@@ -309,7 +309,7 @@ impl BufferTextSourceAlignmentRequest {
     fn align_display_item(self, item: DisplayItem) -> Option<BufferTextSourceItem> {
         let DisplaySourcePosition::Buffer { byte_pos, .. } = item.span.start else {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: typed cursor yielded a non-buffer-span item; \
+                "BufferTextSourceConsumptionState: source cursor yielded a non-buffer-span item; \
                  a display property escaped the render_next_step checkpoints"
             );
             return None;
@@ -317,7 +317,7 @@ impl BufferTextSourceAlignmentRequest {
         let start_byte_idx = byte_pos.get().checked_sub(self.text_start_byte)?;
         if start_byte_idx != self.position.byte_idx() {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: typed cursor byte position {} did not match \
+                "BufferTextSourceConsumptionState: source cursor byte position {} did not match \
                  buffer walk byte index {}",
                 start_byte_idx,
                 self.position.byte_idx()
@@ -330,7 +330,7 @@ impl BufferTextSourceAlignmentRequest {
         let start_charpos = char_pos.get() as i64;
         if start_charpos != self.position.charpos() {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: typed cursor char position {} did not match \
+                "BufferTextSourceConsumptionState: source cursor char position {} did not match \
                  buffer walk char position {}",
                 start_charpos,
                 self.position.charpos()
@@ -356,7 +356,7 @@ impl BufferTextSourceAlignmentRequest {
         } = &item.span.start
         else {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: split text run yielded a non-buffer-span item"
+                "BufferTextSourceConsumptionState: split text run yielded a non-buffer-span item"
             );
             return None;
         };
@@ -364,7 +364,7 @@ impl BufferTextSourceAlignmentRequest {
         let start_charpos = char_pos.get() as i64;
         if !self.position.matches(start_byte_idx, start_charpos) {
             tracing::debug!(
-                "BufferTextConsumedSourceCursor: split text run at byte {} charpos {} did not \
+                "BufferTextSourceConsumptionState: split text run at byte {} charpos {} did not \
                  match buffer walk byte {} charpos {}",
                 start_byte_idx,
                 start_charpos,
@@ -383,7 +383,7 @@ impl BufferTextSourceAlignmentRequest {
         } = &item.span.end
         else {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: split text run yielded a non-buffer end span"
+                "BufferTextSourceConsumptionState: split text run yielded a non-buffer end span"
             );
             return None;
         };
@@ -537,7 +537,7 @@ impl BufferTextSourceCursorReadRequest {
             BufferTextSourceCursorItem::Replacement(item) => {
                 if !self.replacement_alignment().replacement_matches(&item)? {
                     tracing::error!(
-                        "BufferTextConsumedSourceCursor: display replacement did not match \
+                        "BufferTextSourceConsumptionState: display replacement did not match \
                          buffer walk byte {} charpos {}",
                         self.position.byte_idx(),
                         self.position.charpos()
@@ -551,7 +551,7 @@ impl BufferTextSourceCursorReadRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextConsumedSourceItem {
+pub(crate) enum BufferTextSourceConsumptionItem {
     DisplayItem(BufferTextConsumedDisplayItem),
     Replacement(BufferTextReplacementItem),
 }
@@ -684,12 +684,12 @@ impl BufferTextSourceItem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextConsumedSourceCursor {
+pub(crate) struct BufferTextSourceConsumptionState {
     text_start_byte: usize,
     pending_text_run: Option<DisplayTextRunItemCursor>,
 }
 
-impl BufferTextConsumedSourceCursor {
+impl BufferTextSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self {
             text_start_byte,
@@ -728,7 +728,7 @@ impl BufferTextConsumedSourceCursor {
     ) -> Option<BufferTextSourceItem> {
         if self.pending_text_run.is_some() {
             tracing::debug!(
-                "BufferTextConsumedSourceCursor: requested typed item while a text run is pending"
+                "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
             );
             return None;
         }
@@ -746,19 +746,19 @@ impl BufferTextConsumedSourceCursor {
         }
     }
 
-    pub(crate) fn next_consumed_source_item<B: LayoutBufferView + ?Sized>(
+    pub(crate) fn next_source_consumption_item<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextConsumedSourceItem> {
+    ) -> Option<BufferTextSourceConsumptionItem> {
         if let Some(step) = self.next_pending_display_item(position) {
-            return Some(BufferTextConsumedSourceItem::DisplayItem(step));
+            return Some(BufferTextSourceConsumptionItem::DisplayItem(step));
         }
 
         if self.pending_text_run.is_some() {
             tracing::debug!(
-                "BufferTextConsumedSourceCursor: requested typed item while a text run is pending"
+                "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
             );
             return None;
         }
@@ -770,9 +770,9 @@ impl BufferTextConsumedSourceCursor {
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
                 .consume_aligned_display_item(item, position)
-                .map(BufferTextConsumedSourceItem::DisplayItem),
+                .map(BufferTextSourceConsumptionItem::DisplayItem),
             BufferTextAlignedSourceCursorItem::Replacement(item) => {
-                Some(BufferTextConsumedSourceItem::Replacement(item))
+                Some(BufferTextSourceConsumptionItem::Replacement(item))
             }
         }
     }
@@ -812,7 +812,7 @@ impl BufferTextConsumedSourceCursor {
     ) -> Option<BufferTextConsumedDisplayItem> {
         if !position.matches(item.start_byte_idx(), item.start_charpos()) {
             tracing::error!(
-                "BufferTextConsumedSourceCursor: validated source item at byte {} charpos {} \
+                "BufferTextSourceConsumptionState: validated source item at byte {} charpos {} \
                  did not match buffer walk byte {} charpos {}",
                 item.start_byte_idx(),
                 item.start_charpos(),
@@ -840,7 +840,7 @@ impl BufferTextConsumedSourceCursor {
             }
             Err(_) => {
                 tracing::error!(
-                    "BufferTextConsumedSourceCursor: typed cursor yielded a non-text item kind; \
+                    "BufferTextSourceConsumptionState: source cursor yielded a non-text item kind; \
                      a direct item escaped source-item lowering"
                 );
                 None
@@ -878,7 +878,7 @@ impl BufferTextConsumedSourceCursor {
                 let ch = chars.next()?;
                 if chars.next().is_some() {
                     tracing::error!(
-                        "BufferTextConsumedSourceCursor: split text run yielded multiple chars"
+                        "BufferTextSourceConsumptionState: split text run yielded multiple chars"
                     );
                     return None;
                 }
@@ -886,7 +886,7 @@ impl BufferTextConsumedSourceCursor {
             }
             _ => {
                 tracing::error!(
-                    "BufferTextConsumedSourceCursor: split text run yielded non-text item"
+                    "BufferTextSourceConsumptionState: split text run yielded non-text item"
                 );
                 return None;
             }
@@ -903,7 +903,7 @@ impl BufferTextConsumedSourceCursor {
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. The main buffer walk consumes this cursor through
-/// `BufferTextConsumedSourceCursor`, which preserves typed display items while
+/// `BufferTextSourceConsumptionState`, which preserves typed display items while
 /// splitting text runs only where the remaining buffer walk still needs
 /// per-character wrap/cursor decisions.
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
