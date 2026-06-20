@@ -617,10 +617,6 @@ impl OutputRowLifecycleRequest {
     }
 }
 
-pub(crate) trait OutputRowDecorator {
-    fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
-}
-
 struct OutputWindowRowGrid {
     matrix: GlyphMatrix,
 }
@@ -664,18 +660,20 @@ impl OutputWindowRowGrid {
         self.matrix.rows.get_mut(row)
     }
 
-    fn decorate_row<D: OutputRowDecorator>(&mut self, row: usize, decorator: &mut D) {
+    fn edit_row_with_matrix_cols<R>(
+        &mut self,
+        row: usize,
+        f: impl FnOnce(&mut GlyphRow, usize) -> R,
+    ) -> Option<R> {
         let ncols = self.matrix.ncols;
-        let Some(row) = self.row_mut(row) else {
-            return;
-        };
-        decorator.decorate_row(row, ncols);
+        let row = self.row_mut(row)?;
+        Some(f(row, ncols))
     }
 
-    fn decorate_rows<D: OutputRowDecorator>(&mut self, decorator: &mut D) {
+    fn edit_rows_with_matrix_cols(&mut self, mut f: impl FnMut(&mut GlyphRow, usize)) {
         let ncols = self.matrix.ncols;
         for row in &mut self.matrix.rows {
-            decorator.decorate_row(row, ncols);
+            f(row, ncols);
         }
     }
 
@@ -751,8 +749,8 @@ impl OutputWindowGridEntry {
         }
     }
 
-    fn decorate_rows<D: OutputRowDecorator>(&mut self, decorator: &mut D) {
-        self.grid.decorate_rows(decorator);
+    fn edit_rows_with_matrix_cols(&mut self, f: impl FnMut(&mut GlyphRow, usize)) {
+        self.grid.edit_rows_with_matrix_cols(f);
     }
 
     fn enabled_row_count(&self) -> usize {
@@ -772,44 +770,6 @@ impl OutputWindowGridEntry {
             pixel_bounds: self.pixel_bounds,
             text_pixel_bounds: self.text_pixel_bounds,
             selected: self.selected,
-        }
-    }
-}
-
-pub(crate) enum OutputRowDecorationInstallRequest<D> {
-    CurrentWindowRow { row_idx: usize, decorator: D },
-    LastWindowRows { decorator: D },
-}
-
-impl<D> OutputRowDecorationInstallRequest<D>
-where
-    D: OutputRowDecorator,
-{
-    pub(crate) fn current_window_row(row_idx: usize, decorator: D) -> Self {
-        Self::CurrentWindowRow { row_idx, decorator }
-    }
-
-    pub(crate) fn last_window_rows(decorator: D) -> Self {
-        Self::LastWindowRows { decorator }
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::CurrentWindowRow {
-                row_idx,
-                mut decorator,
-            } => {
-                let Some(grid) = builder.current_row_grid.as_mut() else {
-                    return;
-                };
-                grid.decorate_row(row_idx, &mut decorator);
-            }
-            Self::LastWindowRows { mut decorator } => {
-                let Some(entry) = builder.windows.last_mut() else {
-                    return;
-                };
-                entry.decorate_rows(&mut decorator);
-            }
         }
     }
 }
@@ -1095,13 +1055,23 @@ impl DisplayOutputBuilder {
         ));
     }
 
-    pub(crate) fn install_row_decoration<D>(
+    pub(crate) fn edit_current_window_row_with_matrix_cols<R>(
         &mut self,
-        request: OutputRowDecorationInstallRequest<D>,
-    ) where
-        D: OutputRowDecorator,
-    {
-        request.install(self);
+        row_idx: usize,
+        f: impl FnOnce(&mut GlyphRow, usize) -> R,
+    ) -> Option<R> {
+        self.current_row_grid
+            .as_mut()?
+            .edit_row_with_matrix_cols(row_idx, f)
+    }
+
+    pub(crate) fn edit_last_window_rows_with_matrix_cols(
+        &mut self,
+        f: impl FnMut(&mut GlyphRow, usize),
+    ) {
+        if let Some(entry) = self.windows.last_mut() {
+            entry.edit_rows_with_matrix_cols(f);
+        }
     }
 
     #[cfg(test)]

@@ -2,8 +2,7 @@ use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_output_builder::{
     DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputCurrentRowDecorationRequest,
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
-    OutputMediaInstallRequest, OutputRetryCheckpointRestoreRequest,
-    OutputRowDecorationInstallRequest, OutputRowDecorator, OutputRowLifecycleRequest,
+    OutputMediaInstallRequest, OutputRetryCheckpointRestoreRequest, OutputRowLifecycleRequest,
     OutputTextWindowDisplayRangeInstallRequest, ResolvedOutputMediaInstallTarget,
 };
 #[cfg(test)]
@@ -342,28 +341,19 @@ pub(crate) fn store_text_output_phys_cursor(
     builder.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
 }
 
-pub(crate) fn install_current_text_output_row_decoration<D>(
+pub(crate) fn edit_current_text_output_row<R>(
     builder: &mut DisplayOutputBuilder,
     display_row_index: usize,
-    decorator: D,
-) where
-    D: OutputRowDecorator,
-{
-    builder.install_row_decoration(OutputRowDecorationInstallRequest::current_window_row(
-        display_row_index,
-        decorator,
-    ));
+    f: impl FnOnce(&mut GlyphRow, usize) -> R,
+) -> Option<R> {
+    builder.edit_current_window_row_with_matrix_cols(display_row_index, f)
 }
 
-pub(crate) fn install_last_text_output_rows_decoration<D>(
+pub(crate) fn edit_last_text_output_rows(
     builder: &mut DisplayOutputBuilder,
-    decorator: D,
-) where
-    D: OutputRowDecorator,
-{
-    builder.install_row_decoration(OutputRowDecorationInstallRequest::last_window_rows(
-        decorator,
-    ));
+    f: impl FnMut(&mut GlyphRow, usize),
+) {
+    builder.edit_last_window_rows_with_matrix_cols(f);
 }
 
 pub(crate) fn begin_text_output_row(
