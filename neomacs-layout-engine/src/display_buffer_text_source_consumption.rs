@@ -1,5 +1,7 @@
 //! Buffer text typed source item consumption.
 
+use std::collections::VecDeque;
+
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_source::{
     BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourceCursorItem,
@@ -33,16 +35,10 @@ pub(crate) enum BufferTextSourceConsumptionItem {
     Replacement(BufferTextReplacementItem),
 }
 
-pub(crate) struct BufferTextSourceRenderItem {
-    source_step_char: BufferTextSourceStepChar,
-    item: DisplayItem,
-    end_charpos: Option<i64>,
-    end_byte_idx: Option<usize>,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceConsumptionState {
     text_start_byte: usize,
+    pending_render_items: VecDeque<BufferTextSourceItem>,
 }
 
 impl BufferTextSourceItem {
@@ -214,51 +210,50 @@ impl BufferTextSourceItem {
         Some((source_step_char, self.item))
     }
 
-    pub(crate) fn into_render_item(
-        self,
-        text_start_byte: usize,
-    ) -> Option<BufferTextSourceRenderItem> {
-        let source_step_char = self.source_step_char()?;
-        let end_charpos = self
-            .item
+    pub(crate) fn buffer_end_charpos(&self) -> Option<i64> {
+        self.item
             .span
             .buffer_end_charpos()
-            .map(|char_pos| char_pos.get() as i64);
-        let end_byte_idx = self.end_byte_idx(text_start_byte);
-        Some(BufferTextSourceRenderItem {
-            source_step_char,
-            item: self.item,
-            end_charpos,
-            end_byte_idx,
-        })
-    }
-}
-
-impl BufferTextSourceRenderItem {
-    pub(crate) fn source_step_char(&self) -> BufferTextSourceStepChar {
-        self.source_step_char
+            .map(|char_pos| char_pos.get() as i64)
     }
 
     pub(crate) fn into_item(self) -> DisplayItem {
         self.item
     }
-
-    pub(crate) fn end_charpos(&self) -> Option<i64> {
-        self.end_charpos
-    }
-
-    pub(crate) fn end_byte_idx(&self) -> Option<usize> {
-        self.end_byte_idx
-    }
 }
 
 impl BufferTextSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
-        Self { text_start_byte }
+        Self {
+            text_start_byte,
+            pending_render_items: VecDeque::new(),
+        }
     }
 
-    pub(crate) fn text_start_byte(&self) -> usize {
-        self.text_start_byte
+    pub(crate) fn clear_pending_render_items(&mut self) {
+        self.pending_render_items.clear();
+    }
+
+    fn prepend_pending_render_items<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = BufferTextSourceItem>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        for item in items.into_iter().rev() {
+            self.pending_render_items.push_front(item);
+        }
+    }
+
+    fn prepare_render_source_item(
+        &mut self,
+        source_item: BufferTextSourceItem,
+    ) -> Option<BufferTextSourceItem> {
+        if !source_item.is_multi_char_text_run() {
+            return Some(source_item);
+        }
+        let (first, pending) = source_item.split_text_run_items(self.text_start_byte)?;
+        self.prepend_pending_render_items(pending);
+        Some(first)
     }
 
     fn expected_source_pos(position: BufferTextSourcePosition) -> CharPos0 {
@@ -388,15 +383,21 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceConsumptionItem> {
+        if let Some(source_item) = self.pending_render_items.pop_front() {
+            return Some(BufferTextSourceConsumptionItem::DisplayItem(source_item));
+        }
+
         match self.read_source_cursor(
             source,
             context,
             *position,
             BufferTextDisplayReplacementMode::TypedReplacementItem,
         )? {
-            BufferTextAlignedSourceCursorItem::Item(item) => self
-                .consume_aligned_display_item(item, position)
-                .map(BufferTextSourceConsumptionItem::DisplayItem),
+            BufferTextAlignedSourceCursorItem::Item(item) => {
+                let item = self.consume_aligned_display_item(item, position)?;
+                self.prepare_render_source_item(item)
+                    .map(BufferTextSourceConsumptionItem::DisplayItem)
+            }
             BufferTextAlignedSourceCursorItem::Replacement(item) => {
                 Some(BufferTextSourceConsumptionItem::Replacement(item))
             }

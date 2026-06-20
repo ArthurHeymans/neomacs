@@ -26,7 +26,7 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceItem, BufferTextSourceRenderItem,
+    BufferTextSourceConsumptionItem, BufferTextSourceItem,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -140,23 +140,35 @@ fn render_source_item_and_apply<B: LayoutBufferView>(
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
     debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
-    let Some(render_item) = source_item.into_render_item(context.text_start_byte) else {
+    let Some(source_step_char) = source_item.source_step_char() else {
         return BufferTextSourceItemRenderOutcome::Stop;
     };
-    render_prepared_source_item_and_apply(render_item, context, source_walk, buffer, state)
+    let source_end_charpos = source_item.buffer_end_charpos();
+    let source_end_byte_idx = source_item.end_byte_idx(context.text_start_byte);
+    let source_item = source_item.into_item();
+    render_prepared_source_item_and_apply(
+        source_step_char,
+        source_end_charpos,
+        source_end_byte_idx,
+        source_item,
+        context,
+        source_walk,
+        buffer,
+        state,
+    )
 }
 
 fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
-    render_item: BufferTextSourceRenderItem,
+    source_step_char: BufferTextSourceStepChar,
+    source_end_charpos: Option<i64>,
+    source_end_byte_idx: Option<usize>,
+    source_item: crate::display_item::DisplayItem,
     context: BufferTextSourceItemRenderContext<'_>,
     source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
     buffer: &B,
     state: BufferTextWindowLoopMutableState<'_, '_, '_>,
 ) -> BufferTextSourceItemRenderOutcome {
-    let source_step_char = render_item.source_step_char();
-    let source_end_charpos = render_item.end_charpos();
-    let source_end_byte_idx = render_item.end_byte_idx();
-    let mut source_item = render_item.into_item();
+    let mut source_item = source_item;
     let BufferTextWindowLoopMutableState {
         append_state,
         invisible_text_checkpoint,

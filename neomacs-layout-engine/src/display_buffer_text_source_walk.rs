@@ -4,8 +4,6 @@
 //! source cursor driving, pending face installation, and source-position
 //! updates used by row lifecycle renderers.
 
-use std::collections::VecDeque;
-
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
@@ -16,7 +14,7 @@ use crate::display_buffer_text_row_lifecycle::{
 };
 use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
 use crate::display_buffer_text_source_consumption::{
-    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState, BufferTextSourceItem,
+    BufferTextSourceConsumptionItem, BufferTextSourceConsumptionState,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
@@ -36,7 +34,6 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_consumption: BufferTextSourceConsumptionState,
-    pending_render_items: VecDeque<BufferTextSourceItem>,
 }
 
 struct BufferTextWindowSourceConsumption {
@@ -96,35 +93,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
             source_consumption: BufferTextSourceConsumptionState::new(text_start_byte),
-            pending_render_items: VecDeque::new(),
         }
-    }
-
-    fn prepend_pending_render_items<I>(&mut self, items: I)
-    where
-        I: IntoIterator<Item = BufferTextSourceItem>,
-    {
-        let items: Vec<_> = items.into_iter().collect();
-        for item in items.into_iter().rev() {
-            self.pending_render_items.push_front(item);
-        }
-    }
-
-    fn clear_pending_render_items(&mut self) {
-        self.pending_render_items.clear();
-    }
-
-    fn prepare_render_source_item(
-        &mut self,
-        source_item: BufferTextSourceItem,
-    ) -> Option<BufferTextSourceItem> {
-        if !source_item.is_multi_char_text_run() {
-            return Some(source_item);
-        }
-        let (first, pending) =
-            source_item.split_text_run_items(self.source_consumption.text_start_byte())?;
-        self.prepend_pending_render_items(pending);
-        Some(first)
     }
 
     fn consume_source_item(
@@ -133,14 +102,6 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferTextWindowSourceConsumption {
-        if let Some(source_item) = self.pending_render_items.pop_front() {
-            return BufferTextWindowSourceConsumption {
-                source_item: Some(BufferTextSourceConsumptionItem::DisplayItem(source_item)),
-                source_position,
-                pending_faces: Vec::new(),
-            };
-        }
-
         let mut pending_faces = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
@@ -156,12 +117,6 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 &mut source_context,
                 &mut source_position,
             )
-        };
-        let source_item = match source_item {
-            Some(BufferTextSourceConsumptionItem::DisplayItem(item)) => self
-                .prepare_render_source_item(item)
-                .map(BufferTextSourceConsumptionItem::DisplayItem),
-            other => other,
         };
         BufferTextWindowSourceConsumption {
             source_item,
@@ -244,7 +199,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         text: &[u8],
         source_position: BufferTextSourcePosition,
     ) -> BufferTextWindowSourcePositionConsumption<BufferTextTruncationSkipAction> {
-        self.clear_pending_render_items();
+        self.source_consumption.clear_pending_render_items();
         let mut source_position = source_position;
         let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
             text,
