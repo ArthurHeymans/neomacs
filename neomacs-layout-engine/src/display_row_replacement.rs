@@ -235,6 +235,13 @@ pub(crate) struct DisplayReplacementItemAppendRequest {
     position: DisplayRowPosition,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayReplacementItemAppendPlan {
+    item: DisplayItem,
+    frame: DisplayReplacementItemAppendFrame,
+    position: DisplayRowPosition,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DisplayReplacementItemAppendFrame {
     ActiveFace,
@@ -242,7 +249,7 @@ enum DisplayReplacementItemAppendFrame {
 }
 
 impl DisplayReplacementItemAppendRequest {
-    fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
+    pub(crate) fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
         Self {
             kind,
             frame: DisplayReplacementItemAppendFrame::ActiveFace,
@@ -250,7 +257,7 @@ impl DisplayReplacementItemAppendRequest {
         }
     }
 
-    fn display_box(
+    pub(crate) fn display_box(
         kind: DisplayItemKind,
         height_px: f32,
         ascent_px: f32,
@@ -263,6 +270,18 @@ impl DisplayReplacementItemAppendRequest {
                 ascent_px,
             },
             position,
+        }
+    }
+
+    pub(crate) fn into_plan(
+        self,
+        replacement_source: BufferDisplayReplacementSource,
+        face_id: u32,
+    ) -> DisplayReplacementItemAppendPlan {
+        DisplayReplacementItemAppendPlan {
+            item: replacement_source.display_item(face_id, self.kind),
+            frame: self.frame,
+            position: self.position,
         }
     }
 }
@@ -698,12 +717,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         face_id: u32,
         base_face: &'a ResolvedFace,
     ) -> DisplayReplacementAppendContext<'a> {
-        DisplayReplacementAppendContext::new(
-            self.replacement_source,
-            face_id,
-            base_face,
-            self.active_face_frame(),
-        )
+        DisplayReplacementAppendContext::new(face_id, base_face, self.active_face_frame())
     }
 
     fn full_text_width_active_face(
@@ -712,7 +726,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         base_face: &'a ResolvedFace,
     ) -> DisplayReplacementAppendContext<'a> {
         DisplayReplacementAppendContext::new(
-            self.replacement_source,
             face_id,
             base_face,
             self.full_text_width_active_face_frame(),
@@ -727,7 +740,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         ascent_px: f32,
     ) -> DisplayReplacementAppendContext<'a> {
         DisplayReplacementAppendContext::new(
-            self.replacement_source,
             face_id,
             base_face,
             self.display_box_frame(height_px, ascent_px),
@@ -739,12 +751,8 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<DisplayRowAppendProgress> {
-        let DisplayReplacementItemAppendRequest {
-            kind,
-            frame,
-            position,
-        } = request;
-        let append_context = match frame {
+        let plan = request.into_plan(self.replacement_source, self.active_face.face_id());
+        let append_context = match plan.frame {
             DisplayReplacementItemAppendFrame::ActiveFace => {
                 self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
             }
@@ -758,13 +766,12 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 ascent_px,
             ),
         };
-        append_context.append_replacement_item_to_text_row_and_emit(state, kind, position)
+        append_context.append_replacement_item_plan_to_text_row_and_emit(state, plan)
     }
 }
 
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementAppendContext<'a> {
-    replacement_source: BufferDisplayReplacementSource,
     face_id: u32,
     base_face: &'a ResolvedFace,
     frame: DisplayRowAppendFrame,
@@ -772,33 +779,29 @@ pub(crate) struct DisplayReplacementAppendContext<'a> {
 
 impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn new(
-        replacement_source: BufferDisplayReplacementSource,
         face_id: u32,
         base_face: &'a ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {
         Self {
-            replacement_source,
             face_id,
             base_face,
             frame,
         }
     }
 
-    pub(crate) fn append_replacement_item_to_text_row_and_emit(
+    pub(crate) fn append_replacement_item_plan_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        kind: DisplayItemKind,
-        position: DisplayRowPosition,
+        plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        let item = self.replacement_source.display_item(self.face_id, kind);
         render_single_display_item_naturally(
             state,
             self.base_face,
             self.face_id,
             &self.frame,
-            item,
-            position,
+            plan.item,
+            plan.position,
             DisplayRowAppendKind::DisplayReplacement,
         )
     }

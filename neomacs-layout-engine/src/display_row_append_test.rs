@@ -9356,8 +9356,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
         ),
     );
 
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
     let end = request.render_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -9424,11 +9423,10 @@ fn display_replacement_append_context_uses_face_fallback() {
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
 
     let progress = append_context
-        .append_replacement_item_to_text_row_and_emit(
+        .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
@@ -9436,12 +9434,15 @@ fn display_replacement_append_context_uses_face_fallback() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayItemKind::Stretch(DisplayStretch {
-                width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
-                height: Some(DisplayLength::Pixels(16.0)),
-                ascent: Some(DisplayLength::Pixels(12.0)),
-            }),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayReplacementItemAppendRequest::active_face(
+                DisplayItemKind::Stretch(DisplayStretch {
+                    width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
+                    height: Some(DisplayLength::Pixels(16.0)),
+                    ascent: Some(DisplayLength::Pixels(12.0)),
+                }),
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+            )
+            .into_plan(replacement_source, 7),
         )
         .expect("append progress");
     let end = progress.end;
@@ -9916,10 +9917,9 @@ fn display_replacement_append_context_installs_image_replacements() {
         active_face.metrics().ascent,
         false,
     );
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
     let progress = append_context
-        .append_replacement_item_to_text_row_and_emit(
+        .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
@@ -9927,8 +9927,11 @@ fn display_replacement_append_context_installs_image_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayItemKind::MediaReplacement(media_item.media()),
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayReplacementItemAppendRequest::active_face(
+                DisplayItemKind::MediaReplacement(media_item.media()),
+                DisplayRowPosition { x_px: 16.0, col: 2 },
+            )
+            .into_plan(replacement_source, 3),
         )
         .expect("append progress");
     let end = progress.end;
@@ -10053,10 +10056,9 @@ fn display_replacement_append_context_installs_video_replacements() {
         active_face.metrics().ascent,
         false,
     );
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
     let progress = append_context
-        .append_replacement_item_to_text_row_and_emit(
+        .append_replacement_item_plan_to_text_row_and_emit(
             &mut text_row_source_render_state(
                 &mut builder,
                 &mut output_emitter,
@@ -10064,8 +10066,11 @@ fn display_replacement_append_context_installs_video_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayItemKind::MediaReplacement(media_item.media()),
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayReplacementItemAppendRequest::active_face(
+                DisplayItemKind::MediaReplacement(media_item.media()),
+                DisplayRowPosition { x_px: 16.0, col: 2 },
+            )
+            .into_plan(replacement_source, 3),
         )
         .expect("append progress");
     let end = progress.end;
