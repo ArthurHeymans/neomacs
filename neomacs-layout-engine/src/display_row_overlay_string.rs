@@ -10,7 +10,9 @@ use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowRenderStop};
+use crate::display_row::{
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowRenderStop,
+};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
@@ -86,9 +88,7 @@ impl OverlayStringRenderSource {
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayStringRenderRowContext<'a> {
     pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) face_char_w: f32,
-    pub(crate) char_h: f32,
-    pub(crate) default_row_ascent: f32,
+    pub(crate) metrics: DisplayRowFallbackMetrics,
     text_y: f32,
     pub(crate) row_base: usize,
     pub(crate) max_rows: usize,
@@ -97,18 +97,14 @@ pub(crate) struct OverlayStringRenderRowContext<'a> {
 impl<'a> OverlayStringRenderRowContext<'a> {
     pub(crate) fn new(
         append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &DisplayRowActiveFaceState,
-        char_h: f32,
-        default_row_ascent: f32,
+        metrics: DisplayRowFallbackMetrics,
         text_y: f32,
         row_base: usize,
         max_rows: usize,
     ) -> Self {
         Self {
             append_surface,
-            face_char_w: active_face_state.metrics().char_width,
-            char_h,
-            default_row_ascent,
+            metrics,
             text_y,
             row_base,
             max_rows,
@@ -124,7 +120,11 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     }
 
     pub(crate) fn geometry_defaults(self) -> DisplayRowGeometryDefaults {
-        DisplayRowGeometryDefaults::new(self.text_y, self.char_h, self.default_row_ascent)
+        DisplayRowGeometryDefaults::new(
+            self.text_y,
+            self.metrics.row_height(),
+            self.metrics.ascent(),
+        )
     }
 
     pub(crate) fn row_limit(self) -> DisplayRowLimit {
@@ -135,9 +135,9 @@ impl<'a> OverlayStringRenderRowContext<'a> {
 
     pub(crate) fn cursor_visual_state(self, base_face: &ResolvedFace) -> CapturedCursorVisualState {
         CapturedCursorVisualState {
-            face_width: self.face_char_w,
-            face_height: self.char_h,
-            face_ascent: self.default_row_ascent,
+            face_width: self.metrics.char_width(),
+            face_height: self.metrics.row_height(),
+            face_ascent: self.metrics.ascent(),
             background: neomacs_display_protocol::types::Color::from_pixel(base_face.bg),
         }
     }
@@ -187,8 +187,7 @@ pub(crate) struct BufferOverlayStringTextRowRenderContext<'a> {
     enabled: bool,
     window_id: u64,
     append_surface: &'a DisplayRowAppendSurface,
-    char_h: f32,
-    default_row_ascent: f32,
+    metrics: DisplayRowFallbackMetrics,
     text_y: f32,
     row_base: usize,
     max_rows: usize,
@@ -200,8 +199,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         enabled: bool,
         window_id: u64,
         append_surface: &'a DisplayRowAppendSurface,
-        char_h: f32,
-        default_row_ascent: f32,
+        metrics: DisplayRowFallbackMetrics,
         text_y: f32,
         row_base: usize,
         max_rows: usize,
@@ -210,23 +208,17 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             enabled,
             window_id,
             append_surface,
-            char_h,
-            default_row_ascent,
+            metrics,
             text_y,
             row_base,
             max_rows,
         }
     }
 
-    fn row_context(
-        self,
-        active_face_state: &DisplayRowActiveFaceState,
-    ) -> OverlayStringRenderRowContext<'a> {
+    fn row_context(self) -> OverlayStringRenderRowContext<'a> {
         OverlayStringRenderRowContext::new(
             self.append_surface,
-            active_face_state,
-            self.char_h,
-            self.default_row_ascent,
+            self.metrics,
             self.text_y,
             self.row_base,
             self.max_rows,
@@ -237,14 +229,14 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         self,
         buffer: &B,
         anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
+        _active_face_state: &DisplayRowActiveFaceState,
         state: &mut OverlayStringRenderState<'_>,
     ) {
         if !self.enabled {
             return;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        let row_context = self.row_context(active_face_state);
+        let row_context = self.row_context();
         for overlay_string in text_props.overlay_strings_at(anchor_charpos) {
             let kind = if overlay_string.after_string_p {
                 OverlayStringKind::After
@@ -359,10 +351,10 @@ pub(crate) fn render_overlay_string<B: LayoutBufferView>(
         session_request,
         row_context.append_surface,
         0.0,
-        row_context.char_h,
-        row_context.default_row_ascent,
-        row_context.face_char_w,
-        row_context.char_h,
+        row_context.metrics.row_height(),
+        row_context.metrics.ascent(),
+        row_context.metrics.char_width(),
+        row_context.metrics.row_height(),
     ) else {
         return;
     };

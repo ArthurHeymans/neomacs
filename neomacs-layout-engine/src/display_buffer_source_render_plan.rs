@@ -281,8 +281,11 @@ impl BufferSourceOutputSetup {
             has_overlays,
             output_window_id,
             append_surface,
-            geometry.char_height,
-            default_face.ascent(),
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                default_face.metrics().char_width(),
+                geometry.char_height,
+                default_face.ascent(),
+            ),
             geometry.text_y,
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,

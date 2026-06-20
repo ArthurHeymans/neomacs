@@ -1133,8 +1133,15 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut font_metrics = None;
     let row_limit = context.row_limit;
     let buf_id = context
@@ -1699,8 +1706,15 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
         },
         DisplayTabPolicy::every(8),
     );
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
     let mut byte_idx = 0;
     let mut charpos = 0;
@@ -2715,8 +2729,15 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         },
         DisplayTabPolicy::every(8),
     );
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
@@ -2889,8 +2910,15 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut font_metrics = None;
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
@@ -3335,8 +3363,15 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let surface = test_advance_resolution_surface();
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let outcome = BufferSourceSpecialOverflowRenderRequest::new(
@@ -3584,8 +3619,15 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let surface = test_advance_resolution_surface();
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
@@ -4740,8 +4782,15 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
         DisplayTabPolicy::every(8),
     );
     let active_face = test_active_face_state(7, 8.0);
-    let render_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let render_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
@@ -4793,9 +4842,13 @@ fn overlay_string_row_break_context_finishes_current_row() {
         },
         DisplayTabPolicy::every(8),
     );
-    let active_face = test_active_face_state(7, 8.0);
-    let row_context =
-        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
+    let row_context = OverlayStringRenderRowContext::new(
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
@@ -6441,8 +6494,15 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         },
         DisplayTabPolicy::every(8),
     );
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let params = test_display_space_window_params();
     let text = b"ab";
     let mut byte_idx = 0;
@@ -6692,10 +6752,24 @@ fn buffer_overlay_string_context_reports_render_gate() {
     );
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
     let past_limit = DisplayRowGeometryState::new(4, 64.0, 0.0, 16.0, 12.0);
-    let enabled =
-        BufferOverlayStringTextRowRenderContext::new(true, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
-    let disabled =
-        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let enabled = BufferOverlayStringTextRowRenderContext::new(
+        true,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
+    let disabled = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
 
     assert!(enabled.should_render(&geometry));
     assert!(!enabled.should_render(&past_limit));
@@ -6749,8 +6823,15 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
         },
         DisplayTabPolicy::every(8),
     );
-    let overlay_context =
-        BufferOverlayStringTextRowRenderContext::new(true, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        true,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
     let mut x = 24.0;
     let mut col = 3;
     let mut cursor_info = CursorCaptureState::new();
