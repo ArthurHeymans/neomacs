@@ -81,13 +81,13 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::*;
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, BufferTextSourceRenderPlanRequest,
-    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
+    BufferDisplayReplacementStringRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
     DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
     DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    DisplayReplacementStringSourceItem, DisplaySourceRenderPlanRequest,
+    DisplaySourceSpecialDisplay,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -208,7 +208,7 @@ fn buffer_source_mapped_display_item(
 }
 
 fn buffer_special_request_display_item(
-    request: &BufferTextSpecialSourceCharRequest,
+    request: &DisplaySpecialSourceCharRequest,
 ) -> crate::display_item::DisplayItem {
     let source_item = request.source_item_request();
     let range = source_item.range();
@@ -3284,11 +3284,11 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let prepared_append = BufferTextSpecialSourceCharPreparedAppend {
-        kind: BufferTextSourceSpecialDisplayKind::Control,
+        kind: DisplaySourceSpecialDisplayKind::Control,
         append_plan: BufferTextSpecialSourceCharAppendPlan {
-            source_item: BufferTextSourceItemRequest::new(
-                BufferTextSourceRange::single_char(CharPos0::new(21)),
-                BufferTextSourceAppendItem::ControlChar { ch: '\n' },
+            source_item: DisplaySourceItemRequest::new(
+                DisplaySourceTextRange::single_char(CharPos0::new(21)),
+                DisplaySourceAppendItem::ControlChar { ch: '\n' },
             ),
             position: DisplayRowPosition {
                 x_px: 80.0,
@@ -3536,8 +3536,8 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let source_step_char = DisplaySourceStepChar::new('a', 0, 21);
     let prepared_append = BufferTextSourceCharPreparedAppend {
         plan: BufferTextSourceCharAppendPlan {
-            source_text: BufferTextSourceTextRequest::new(
-                BufferTextSourceRange::single_char(CharPos0::new(21)),
+            source_text: DisplaySourceTextRequest::new(
+                DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 'a',
                 DisplaySourceAppendRenderPlan::resolved_advance(8.0),
             ),
@@ -3846,7 +3846,7 @@ fn fallback_display_source_natural_measurement_uses_frame_tab_policy() {
     let mut font_metrics = None;
 
     let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-        BufferTextSourceClusterState::for_char('\t', None),
+        DisplaySourceClusterState::for_char('\t', None),
     )
     .resolve_to_text_row(
         &mut font_metrics,
@@ -3866,7 +3866,7 @@ fn fallback_display_source_natural_measurement_zeroes_cluster_continuation() {
     let mut font_metrics = None;
 
     let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-        BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
+        DisplaySourceClusterState::for_char('\u{301}', Some(('e', false))),
     )
     .resolve_to_text_row(
         &mut font_metrics,
@@ -3886,7 +3886,7 @@ fn fallback_display_source_natural_measurement_uses_face_columns() {
     let mut font_metrics = None;
 
     let advance = DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-        BufferTextSourceClusterState::for_char('中', None),
+        DisplaySourceClusterState::for_char('中', None),
     )
     .resolve_to_text_row(
         &mut font_metrics,
@@ -3902,27 +3902,28 @@ fn fallback_display_source_natural_measurement_uses_face_columns() {
 #[test]
 fn display_row_text_natural_advance_kind_names_width_policy() {
     assert_eq!(
-        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-            BufferTextSourceClusterState::for_char('\t', None),
-        ),
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(DisplaySourceClusterState::for_char(
+            '\t', None
+        ),),
         DisplayRowTextNaturalAdvanceKind::Tab
     );
     assert_eq!(
-        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-            BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
-        ),
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(DisplaySourceClusterState::for_char(
+            '\u{301}',
+            Some(('e', false))
+        ),),
         DisplayRowTextNaturalAdvanceKind::ClusterContinuation
     );
     assert_eq!(
-        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-            BufferTextSourceClusterState::for_char('x', None),
-        ),
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(DisplaySourceClusterState::for_char(
+            'x', None
+        ),),
         DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 1 }
     );
     assert_eq!(
-        DisplayRowTextNaturalAdvanceKind::for_cluster_state(
-            BufferTextSourceClusterState::for_char('中', None),
-        ),
+        DisplayRowTextNaturalAdvanceKind::for_cluster_state(DisplaySourceClusterState::for_char(
+            '中', None
+        ),),
         DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 2 }
     );
 }
@@ -3930,14 +3931,14 @@ fn display_row_text_natural_advance_kind_names_width_policy() {
 #[test]
 fn display_source_natural_measurement_request_names_source_and_fallback() {
     let request = DisplaySourceNaturalMeasurementRequest::for_range_and_cluster(
-        BufferTextSourceRange::new(CharPos0::new(2), CharPos0::new(3)),
-        BufferTextSourceClusterState::for_char('中', None),
+        DisplaySourceTextRange::new(CharPos0::new(2), CharPos0::new(3)),
+        DisplaySourceClusterState::for_char('中', None),
     );
 
     assert_eq!(
         request.source_item(),
-        BufferTextSourceTextItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(2), CharPos0::new(3)),
+        DisplaySourceTextItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(2), CharPos0::new(3)),
             '中'
         )
     );
@@ -3991,8 +3992,8 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
 
     let tab_request = buffer_text_source_text_item_append_request(
-        BufferTextSourceTextItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+        DisplaySourceTextItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
             '\t',
         ),
         buf_id,
@@ -4013,9 +4014,9 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
     ));
 
     let mapped_request = buffer_text_source_item_append_request(
-        BufferTextSourceItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
-            BufferTextSourceAppendItem::SourceMappedText { text: "x".into() },
+        DisplaySourceItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2)),
+            DisplaySourceAppendItem::SourceMappedText { text: "x".into() },
         ),
         buf_id,
         &snapshot,
@@ -4052,8 +4053,8 @@ fn buffer_text_source_text_request_uses_source_step_char_payload() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
 
-    let request = BufferTextSourceTextRequest::new(
-        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+    let request = DisplaySourceTextRequest::new(
+        DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
         'z',
         DisplaySourceAppendRenderPlan::natural(8.0),
     )
@@ -4104,11 +4105,11 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &face_resolver,
         ),
         DisplaySourceTextPositionedRenderPlanRequest::new(
-            BufferTextSourceRenderPlanRequest::new(
+            DisplaySourceRenderPlanRequest::new(
                 b"x",
                 0,
-                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-                BufferTextSourceClusterState::for_char('x', None),
+                DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
+                DisplaySourceClusterState::for_char('x', None),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
             &source_item,
@@ -4151,11 +4152,11 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &face_resolver,
         ),
         DisplaySourceTextPositionedRenderPlanRequest::new(
-            BufferTextSourceRenderPlanRequest::new(
+            DisplaySourceRenderPlanRequest::new(
                 "\u{0633}".as_bytes(),
                 0,
-                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-                BufferTextSourceClusterState::for_char('\u{0633}', None),
+                DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
+                DisplaySourceClusterState::for_char('\u{0633}', None),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
             &source_item,
@@ -6190,7 +6191,7 @@ fn buffer_text_source_append_context_appends_source_char() {
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
     let mut append_state = BufferTextRowAppendState::default();
@@ -6537,7 +6538,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
     let mut append_state = BufferTextRowAppendState::default();
@@ -7402,7 +7403,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
-    let source_range = BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2));
+    let source_range = DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2));
     let source_item =
         buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
 
@@ -7420,11 +7421,11 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                 &face_resolver,
             ),
             DisplaySourceTextPositionedRenderPlanRequest::new(
-                BufferTextSourceRenderPlanRequest::new(
+                DisplaySourceRenderPlanRequest::new(
                     b"b",
                     0,
                     source_range,
-                    BufferTextSourceClusterState::for_char('b', None),
+                    DisplaySourceClusterState::for_char('b', None),
                 ),
                 position,
                 &source_item,
@@ -7450,7 +7451,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                 &mut font_metrics,
                 &face_resolver,
             ),
-            BufferTextSourceTextRequest::new(
+            DisplaySourceTextRequest::new(
                 source_range,
                 'b',
                 DisplaySourceAppendRenderPlan::natural(measured_width),
@@ -7515,8 +7516,8 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            BufferTextSourceTextRequest::new(
-                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            DisplaySourceTextRequest::new(
+                DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
                 'a',
                 DisplaySourceAppendRenderPlan::resolved_advance(13.0),
             ),
@@ -7588,8 +7589,8 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            BufferTextSourceTextRequest::new(
-                BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+            DisplaySourceTextRequest::new(
+                DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2)),
                 '\u{301}',
                 DisplaySourceAppendRenderPlan::natural(0.0),
             ),
@@ -7650,9 +7651,9 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let item = BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' };
-    let source_item = BufferTextSourceItemRequest::new(
-        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+    let item = DisplaySourceAppendItem::ControlChar { ch: '\u{0001}' };
+    let source_item = DisplaySourceItemRequest::new(
+        DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
         item.clone(),
     );
 
@@ -7680,8 +7681,8 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextSourceItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
+        DisplaySourceItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(0)),
             item.clone(),
         ),
         DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -7739,58 +7740,58 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 #[test]
 fn buffer_text_source_append_item_names_nobreak_display_policy() {
     assert_eq!(
-        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 1),
-        Some(BufferTextSourceAppendItem::SourceMappedText { text: " ".into() })
+        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 1),
+        Some(DisplaySourceAppendItem::SourceMappedText { text: " ".into() })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::nobreak_display('\u{00AD}', 1),
-        Some(BufferTextSourceAppendItem::SourceMappedText { text: "-".into() })
+        DisplaySourceAppendItem::nobreak_display('\u{00AD}', 1),
+        Some(DisplaySourceAppendItem::SourceMappedText { text: "-".into() })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 2),
-        Some(BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() })
+        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 2),
+        Some(DisplaySourceAppendItem::SourceMappedText { text: "\\ ".into() })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::nobreak_display('\u{00AD}', 2),
-        Some(BufferTextSourceAppendItem::SourceMappedText { text: "\\-".into() })
+        DisplaySourceAppendItem::nobreak_display('\u{00AD}', 2),
+        Some(DisplaySourceAppendItem::SourceMappedText { text: "\\-".into() })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 0),
+        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 0),
         None
     );
-    assert_eq!(BufferTextSourceAppendItem::nobreak_display('x', 2), None);
+    assert_eq!(DisplaySourceAppendItem::nobreak_display('x', 2), None);
 }
 
 #[test]
 fn buffer_text_source_special_display_names_precluster_policy() {
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('\u{0001}', 2),
-        Some(BufferTextSourceSpecialDisplay::Control(
-            BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }
+        DisplaySourceSpecialDisplay::for_precluster_char('\u{0001}', 2),
+        Some(DisplaySourceSpecialDisplay::Control(
+            DisplaySourceAppendItem::ControlChar { ch: '\u{0001}' }
         ))
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('\u{007F}', 2),
-        Some(BufferTextSourceSpecialDisplay::Control(
-            BufferTextSourceAppendItem::ControlChar { ch: '\u{007F}' }
+        DisplaySourceSpecialDisplay::for_precluster_char('\u{007F}', 2),
+        Some(DisplaySourceSpecialDisplay::Control(
+            DisplaySourceAppendItem::ControlChar { ch: '\u{007F}' }
         ))
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('\u{00A0}', 2),
-        Some(BufferTextSourceSpecialDisplay::Nobreak(
-            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
+        DisplaySourceSpecialDisplay::for_precluster_char('\u{00A0}', 2),
+        Some(DisplaySourceSpecialDisplay::Nobreak(
+            DisplaySourceAppendItem::SourceMappedText { text: "\\ ".into() }
         ))
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('\n', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char('\n', 2),
         None
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('\t', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char('\t', 2),
         None
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_precluster_char('x', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char('x', 2),
         None
     );
 }
@@ -7798,26 +7799,26 @@ fn buffer_text_source_special_display_names_precluster_policy() {
 #[test]
 fn buffer_text_source_special_display_names_cluster_policy() {
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+        DisplaySourceSpecialDisplay::for_cluster_state(DisplaySourceClusterState::for_char(
             '\u{200E}',
             Some(('a', false)),
         )),
-        Some(BufferTextSourceSpecialDisplay::Glyphless(
-            BufferTextSourceAppendItem::Glyphless {
+        Some(DisplaySourceSpecialDisplay::Glyphless(
+            DisplaySourceAppendItem::Glyphless {
                 ch: '\u{200E}',
                 method: GlyphlessMethod::ZeroWidth,
             }
         ))
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+        DisplaySourceSpecialDisplay::for_cluster_state(DisplaySourceClusterState::for_char(
             '\u{FE0F}',
             Some(('\u{2764}', false)),
         )),
         None
     );
     assert_eq!(
-        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+        DisplaySourceSpecialDisplay::for_cluster_state(DisplaySourceClusterState::for_char(
             'x', None,
         )),
         None
@@ -7826,25 +7827,25 @@ fn buffer_text_source_special_display_names_cluster_policy() {
 
 #[test]
 fn buffer_text_source_char_names_range_and_precluster_policy() {
-    let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(4), 2);
+    let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(4), 2);
     let request = source_char
         .nobreak_special_request()
         .expect("nobreak source char should produce source request");
 
     assert_eq!(
         source_char.range(),
-        BufferTextSourceRange::new(CharPos0::new(4), CharPos0::new(5))
+        DisplaySourceTextRange::new(CharPos0::new(4), CharPos0::new(5))
     );
     assert!(source_char.control_special_request().is_none());
     assert_eq!(
         source_char
             .special_request(None)
             .map(|request| request.kind()),
-        Some(BufferTextSourceSpecialDisplayKind::Nobreak)
+        Some(DisplaySourceSpecialDisplayKind::Nobreak)
     );
-    let expected_request = BufferTextSpecialSourceCharRequest::new(
+    let expected_request = DisplaySpecialSourceCharRequest::new(
         &source_char,
-        BufferTextSourceSpecialDisplay::Nobreak(BufferTextSourceAppendItem::SourceMappedText {
+        DisplaySourceSpecialDisplay::Nobreak(DisplaySourceAppendItem::SourceMappedText {
             text: "\\ ".into(),
         }),
     );
@@ -7862,16 +7863,16 @@ fn buffer_text_source_char_names_range_and_precluster_policy() {
 
 #[test]
 fn buffer_text_source_char_names_cluster_policy() {
-    let source_char = BufferTextSourceChar::new('\u{FE0F}', CharPos0::new(1), 2);
+    let source_char = DisplaySourceTextChar::new('\u{FE0F}', CharPos0::new(1), 2);
     let cluster_tail = Some(('\u{2764}', false));
 
     assert_eq!(
         source_char.cluster_state(cluster_tail),
-        BufferTextSourceClusterState::for_char('\u{FE0F}', cluster_tail)
+        DisplaySourceClusterState::for_char('\u{FE0F}', cluster_tail)
     );
     assert_eq!(source_char.cluster_special_request(cluster_tail), None);
 
-    let standalone_joiner = BufferTextSourceChar::new('\u{200D}', CharPos0::new(2), 2);
+    let standalone_joiner = DisplaySourceTextChar::new('\u{200D}', CharPos0::new(2), 2);
     assert_eq!(
         standalone_joiner
             .special_request(None)
@@ -7879,11 +7880,11 @@ fn buffer_text_source_char_names_cluster_policy() {
                 DisplayRowPosition { x_px: 0.0, col: 0 },
                 buffer_special_request_display_item(&request),
             )),
-        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+        DisplaySourceSpecialDisplay::for_cluster_state(DisplaySourceClusterState::for_char(
             '\u{200D}', None
         ))
         .map(|display| {
-            let request = BufferTextSpecialSourceCharRequest::new(&standalone_joiner, display);
+            let request = DisplaySpecialSourceCharRequest::new(&standalone_joiner, display);
             request.append_plan_at(
                 DisplayRowPosition { x_px: 0.0, col: 0 },
                 buffer_special_request_display_item(&request),
@@ -7894,21 +7895,21 @@ fn buffer_text_source_char_names_cluster_policy() {
 
 #[test]
 fn buffer_text_source_append_item_names_fallback_widths() {
-    let empty_source_mapped = BufferTextSourceAppendItem::SourceMappedText { text: "".into() };
-    let glyphless = BufferTextSourceAppendItem::Glyphless {
+    let empty_source_mapped = DisplaySourceAppendItem::SourceMappedText { text: "".into() };
+    let glyphless = DisplaySourceAppendItem::Glyphless {
         ch: '\u{200E}',
         method: GlyphlessMethod::ZeroWidth,
     };
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     assert_eq!(
-        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }
+        DisplaySourceAppendItem::ControlChar { ch: '\u{0001}' }
             .fallback_width()
             .column_count(),
         2
     );
     assert_eq!(
-        BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
+        DisplaySourceAppendItem::SourceMappedText { text: "\\ ".into() }
             .fallback_width()
             .column_count(),
         2
@@ -7923,8 +7924,8 @@ fn buffer_text_source_append_item_names_fallback_widths() {
     );
     assert_eq!(glyphless.fallback_width().resolve_to_text_row(&frame), 8.0);
     assert_eq!(
-        BufferTextSourceItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
+        DisplaySourceItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(0)),
             empty_source_mapped,
         )
         .fallback_width()
@@ -7932,8 +7933,8 @@ fn buffer_text_source_append_item_names_fallback_widths() {
         1
     );
     assert_eq!(
-        BufferTextSourceItemRequest::new(
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+        DisplaySourceItemRequest::new(
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
             glyphless,
         )
         .fallback_width()
@@ -7945,45 +7946,43 @@ fn buffer_text_source_append_item_names_fallback_widths() {
 #[test]
 fn buffer_text_source_append_item_names_glyphless_display_policy() {
     let variation_selector_state =
-        BufferTextSourceClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)));
+        DisplaySourceClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)));
     assert!(variation_selector_state.is_cluster_continuation());
 
     assert_eq!(
-        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
+        DisplaySourceAppendItem::glyphless_display(DisplaySourceClusterState::for_char(
             '\u{0080}', None,
         )),
-        Some(BufferTextSourceAppendItem::Glyphless {
+        Some(DisplaySourceAppendItem::Glyphless {
             ch: '\u{0080}',
             method: GlyphlessMethod::HexCode,
         })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
+        DisplaySourceAppendItem::glyphless_display(DisplaySourceClusterState::for_char(
             '\u{FE0F}', None,
         )),
-        Some(BufferTextSourceAppendItem::Glyphless {
+        Some(DisplaySourceAppendItem::Glyphless {
             ch: '\u{FE0F}',
             method: GlyphlessMethod::ZeroWidth,
         })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::glyphless_display(variation_selector_state),
+        DisplaySourceAppendItem::glyphless_display(variation_selector_state),
         None
     );
     assert_eq!(
-        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
+        DisplaySourceAppendItem::glyphless_display(DisplaySourceClusterState::for_char(
             '\u{200E}',
             Some(('a', false)),
         )),
-        Some(BufferTextSourceAppendItem::Glyphless {
+        Some(DisplaySourceAppendItem::Glyphless {
             ch: '\u{200E}',
             method: GlyphlessMethod::ZeroWidth,
         })
     );
     assert_eq!(
-        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
-            'x', None,
-        )),
+        DisplaySourceAppendItem::glyphless_display(DisplaySourceClusterState::for_char('x', None,)),
         None
     );
 }
@@ -8032,7 +8031,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("nobreak source char should map to a display item");
@@ -8058,7 +8057,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     );
     assert_eq!(
         prepared_append.kind(),
-        BufferTextSourceSpecialDisplayKind::Nobreak
+        DisplaySourceSpecialDisplayKind::Nobreak
     );
     assert_eq!(
         prepared_append.overflow_decision(0.0, 80.0, LineWrapMode::Wrap),
@@ -8144,7 +8143,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
     builder.begin_row(0, GlyphRowRole::Text);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let source_char = BufferTextSourceChar::new('\u{0007}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('\u{0007}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("control source char should map to a display item");
@@ -8180,7 +8179,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
 
     assert_eq!(
         prepared_append.kind(),
-        BufferTextSourceSpecialDisplayKind::Control
+        DisplaySourceSpecialDisplayKind::Control
     );
     let direct_item = prepared_append.append_plan.display_item.clone();
     assert!(matches!(
@@ -8230,7 +8229,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let source_char = BufferTextSourceChar::new('\u{fff0}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('\u{fff0}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("glyphless source char should map to a display item");
@@ -8256,7 +8255,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     );
     assert_eq!(
         prepared_append.kind(),
-        BufferTextSourceSpecialDisplayKind::Glyphless
+        DisplaySourceSpecialDisplayKind::Glyphless
     );
     assert_eq!(
         prepared_append.overflow_decision(0.0, 80.0, LineWrapMode::Wrap),

@@ -183,12 +183,12 @@ impl BufferTextItemSource {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct BufferTextSourceRange {
+pub(crate) struct DisplaySourceTextRange {
     start: CharPos0,
     end: CharPos0,
 }
 
-impl BufferTextSourceRange {
+impl DisplaySourceTextRange {
     pub(crate) fn new(start: CharPos0, end: CharPos0) -> Self {
         Self { start, end }
     }
@@ -332,12 +332,12 @@ impl DisplaySourceStepChar {
         self.start_charpos
     }
 
-    pub(crate) fn source_range(self) -> BufferTextSourceRange {
-        BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
+    pub(crate) fn source_range(self) -> DisplaySourceTextRange {
+        DisplaySourceTextRange::single_char(CharPos0::new(self.start_charpos as usize))
     }
 
-    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
-        BufferTextSourceChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> DisplaySourceTextChar {
+        DisplaySourceTextChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
     }
 }
 
@@ -588,36 +588,33 @@ fn direct_text_run_char_item(
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceAppendItem {
+pub(crate) enum DisplaySourceAppendItem {
     ControlChar { ch: char },
     SourceMappedText { text: Box<str> },
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceSpecialDisplay {
-    Control(BufferTextSourceAppendItem),
-    Nobreak(BufferTextSourceAppendItem),
-    Glyphless(BufferTextSourceAppendItem),
+pub(crate) enum DisplaySourceSpecialDisplay {
+    Control(DisplaySourceAppendItem),
+    Nobreak(DisplaySourceAppendItem),
+    Glyphless(DisplaySourceAppendItem),
 }
 
-impl BufferTextSourceSpecialDisplay {
+impl DisplaySourceSpecialDisplay {
     pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
         if Self::is_control_char(ch) {
-            Some(Self::Control(BufferTextSourceAppendItem::ControlChar {
-                ch,
-            }))
+            Some(Self::Control(DisplaySourceAppendItem::ControlChar { ch }))
         } else {
-            BufferTextSourceAppendItem::nobreak_display(ch, nobreak_display_policy)
-                .map(Self::Nobreak)
+            DisplaySourceAppendItem::nobreak_display(ch, nobreak_display_policy).map(Self::Nobreak)
         }
     }
 
-    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Option<Self> {
-        BufferTextSourceAppendItem::glyphless_display(cluster).map(Self::Glyphless)
+    pub(crate) fn for_cluster_state(cluster: DisplaySourceClusterState) -> Option<Self> {
+        DisplaySourceAppendItem::glyphless_display(cluster).map(Self::Glyphless)
     }
 
-    pub(crate) fn into_append_item(self) -> BufferTextSourceAppendItem {
+    pub(crate) fn into_append_item(self) -> DisplaySourceAppendItem {
         match self {
             Self::Control(item) | Self::Nobreak(item) | Self::Glyphless(item) => item,
         }
@@ -636,75 +633,75 @@ impl BufferTextSourceSpecialDisplay {
         (ch < ' ' && ch != '\n' && ch != '\t') || ch == '\x7F'
     }
 
-    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+    pub(crate) fn kind(&self) -> DisplaySourceSpecialDisplayKind {
         match self {
-            Self::Control(_) => BufferTextSourceSpecialDisplayKind::Control,
-            Self::Nobreak(_) => BufferTextSourceSpecialDisplayKind::Nobreak,
-            Self::Glyphless(_) => BufferTextSourceSpecialDisplayKind::Glyphless,
+            Self::Control(_) => DisplaySourceSpecialDisplayKind::Control,
+            Self::Nobreak(_) => DisplaySourceSpecialDisplayKind::Nobreak,
+            Self::Glyphless(_) => DisplaySourceSpecialDisplayKind::Glyphless,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceSpecialDisplayKind {
+pub(crate) enum DisplaySourceSpecialDisplayKind {
     Control,
     Nobreak,
     Glyphless,
 }
 
-impl BufferTextSourceSpecialDisplayKind {
+impl DisplaySourceSpecialDisplayKind {
     pub(crate) fn invalidates_face_after_append(self) -> bool {
         matches!(self, Self::Control | Self::Nobreak)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceChar {
+pub(crate) struct DisplaySourceTextChar {
     ch: char,
-    range: BufferTextSourceRange,
-    precluster_special_display: Option<BufferTextSourceSpecialDisplay>,
+    range: DisplaySourceTextRange,
+    precluster_special_display: Option<DisplaySourceSpecialDisplay>,
 }
 
-impl BufferTextSourceChar {
+impl DisplaySourceTextChar {
     pub(crate) fn new(ch: char, start: CharPos0, nobreak_display_policy: i32) -> Self {
         Self {
             ch,
-            range: BufferTextSourceRange::single_char(start),
-            precluster_special_display: BufferTextSourceSpecialDisplay::for_precluster_char(
+            range: DisplaySourceTextRange::single_char(start),
+            precluster_special_display: DisplaySourceSpecialDisplay::for_precluster_char(
                 ch,
                 nobreak_display_policy,
             ),
         }
     }
 
-    pub(crate) fn range(&self) -> BufferTextSourceRange {
+    pub(crate) fn range(&self) -> DisplaySourceTextRange {
         self.range
     }
 
-    pub(crate) fn precluster_special_display(&self) -> Option<&BufferTextSourceSpecialDisplay> {
+    pub(crate) fn precluster_special_display(&self) -> Option<&DisplaySourceSpecialDisplay> {
         self.precluster_special_display.as_ref()
     }
 
-    pub(crate) fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
-        BufferTextSourceClusterState::for_char(self.ch, tail)
+    pub(crate) fn cluster_state(&self, tail: Option<(char, bool)>) -> DisplaySourceClusterState {
+        DisplaySourceClusterState::for_char(self.ch, tail)
     }
 
     pub(crate) fn cluster_special_display(
         &self,
         tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSourceSpecialDisplay> {
-        BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
+    ) -> Option<DisplaySourceSpecialDisplay> {
+        DisplaySourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
     }
 
     fn special_request_for_display(
         &self,
-        display: BufferTextSourceSpecialDisplay,
-    ) -> BufferTextSpecialSourceCharRequest {
-        BufferTextSpecialSourceCharRequest::new(self, display)
+        display: DisplaySourceSpecialDisplay,
+    ) -> DisplaySpecialSourceCharRequest {
+        DisplaySpecialSourceCharRequest::new(self, display)
     }
 
     #[cfg(test)]
-    pub(crate) fn control_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+    pub(crate) fn control_special_request(&self) -> Option<DisplaySpecialSourceCharRequest> {
         self.precluster_special_display()
             .filter(|display| display.is_control())
             .cloned()
@@ -712,7 +709,7 @@ impl BufferTextSourceChar {
     }
 
     #[cfg(test)]
-    pub(crate) fn nobreak_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+    pub(crate) fn nobreak_special_request(&self) -> Option<DisplaySpecialSourceCharRequest> {
         self.precluster_special_display()
             .filter(|display| display.is_nobreak())
             .cloned()
@@ -722,7 +719,7 @@ impl BufferTextSourceChar {
     pub(crate) fn cluster_special_request(
         &self,
         tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSpecialSourceCharRequest> {
+    ) -> Option<DisplaySpecialSourceCharRequest> {
         self.cluster_special_display(tail)
             .map(|display| self.special_request_for_display(display))
     }
@@ -730,7 +727,7 @@ impl BufferTextSourceChar {
     pub(crate) fn special_request(
         &self,
         tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSpecialSourceCharRequest> {
+    ) -> Option<DisplaySpecialSourceCharRequest> {
         self.precluster_special_display()
             .cloned()
             .map(|display| self.special_request_for_display(display))
@@ -742,26 +739,21 @@ impl BufferTextSourceChar {
         text: &'text [u8],
         byte_idx: usize,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourceRenderPlanRequest<'text> {
-        BufferTextSourceRenderPlanRequest::new(
-            text,
-            byte_idx,
-            self.range(),
-            self.cluster_state(tail),
-        )
+    ) -> DisplaySourceRenderPlanRequest<'text> {
+        DisplaySourceRenderPlanRequest::new(text, byte_idx, self.range(), self.cluster_state(tail))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharRequest {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
+pub(crate) struct DisplaySpecialSourceCharRequest {
+    range: DisplaySourceTextRange,
+    special_display: DisplaySourceSpecialDisplay,
 }
 
-impl BufferTextSpecialSourceCharRequest {
+impl DisplaySpecialSourceCharRequest {
     pub(crate) fn new(
-        source_char: &BufferTextSourceChar,
-        special_display: BufferTextSourceSpecialDisplay,
+        source_char: &DisplaySourceTextChar,
+        special_display: DisplaySourceSpecialDisplay,
     ) -> Self {
         Self {
             range: source_char.range(),
@@ -769,7 +761,7 @@ impl BufferTextSpecialSourceCharRequest {
         }
     }
 
-    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+    pub(crate) fn kind(&self) -> DisplaySourceSpecialDisplayKind {
         self.special_display.kind()
     }
 
@@ -777,41 +769,38 @@ impl BufferTextSpecialSourceCharRequest {
         self.special_display.is_control()
     }
 
-    pub(crate) fn source_item_request(&self) -> BufferTextSourceItemRequest {
-        BufferTextSourceItemRequest::new(
-            self.range,
-            self.special_display.clone().into_append_item(),
-        )
+    pub(crate) fn source_item_request(&self) -> DisplaySourceItemRequest {
+        DisplaySourceItemRequest::new(self.range, self.special_display.clone().into_append_item())
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceTextItemRequest {
-    range: BufferTextSourceRange,
+pub(crate) struct DisplaySourceTextItemRequest {
+    range: DisplaySourceTextRange,
     ch: char,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceTextRequest {
-    source_item: BufferTextSourceTextItemRequest,
+pub(crate) struct DisplaySourceTextRequest {
+    source_item: DisplaySourceTextItemRequest,
     render_plan: DisplaySourceAppendRenderPlan,
 }
 
-impl BufferTextSourceTextRequest {
+impl DisplaySourceTextRequest {
     #[cfg(test)]
     pub(crate) fn new(
-        range: BufferTextSourceRange,
+        range: DisplaySourceTextRange,
         source_char: char,
         render_plan: DisplaySourceAppendRenderPlan,
     ) -> Self {
         Self {
-            source_item: BufferTextSourceTextItemRequest::new(range, source_char),
+            source_item: DisplaySourceTextItemRequest::new(range, source_char),
             render_plan,
         }
     }
 
     pub(crate) fn from_source_item(
-        source_item: BufferTextSourceTextItemRequest,
+        source_item: DisplaySourceTextItemRequest,
         render_plan: DisplaySourceAppendRenderPlan,
     ) -> Self {
         Self {
@@ -820,7 +809,7 @@ impl BufferTextSourceTextRequest {
         }
     }
 
-    pub(crate) fn source_item(self) -> BufferTextSourceTextItemRequest {
+    pub(crate) fn source_item(self) -> DisplaySourceTextItemRequest {
         self.source_item
     }
 
@@ -833,20 +822,20 @@ impl BufferTextSourceTextRequest {
     }
 }
 
-impl BufferTextSourceTextItemRequest {
-    pub(crate) fn new(range: BufferTextSourceRange, ch: char) -> Self {
+impl DisplaySourceTextItemRequest {
+    pub(crate) fn new(range: DisplaySourceTextRange, ch: char) -> Self {
         Self { range, ch }
     }
 
     pub(crate) fn for_range_and_cluster(
-        range: BufferTextSourceRange,
-        cluster: BufferTextSourceClusterState,
+        range: DisplaySourceTextRange,
+        cluster: DisplaySourceClusterState,
     ) -> Self {
         Self::new(range, cluster.ch())
     }
 
     #[cfg(test)]
-    pub(crate) fn range(self) -> BufferTextSourceRange {
+    pub(crate) fn range(self) -> DisplaySourceTextRange {
         self.range
     }
 
@@ -886,21 +875,21 @@ impl BufferTextSourceTextItemRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceItemRequest {
-    range: BufferTextSourceRange,
-    item: BufferTextSourceAppendItem,
+pub(crate) struct DisplaySourceItemRequest {
+    range: DisplaySourceTextRange,
+    item: DisplaySourceAppendItem,
 }
 
-impl BufferTextSourceItemRequest {
-    pub(crate) fn new(range: BufferTextSourceRange, item: BufferTextSourceAppendItem) -> Self {
+impl DisplaySourceItemRequest {
+    pub(crate) fn new(range: DisplaySourceTextRange, item: DisplaySourceAppendItem) -> Self {
         Self { range, item }
     }
 
-    pub(crate) fn range(&self) -> BufferTextSourceRange {
+    pub(crate) fn range(&self) -> DisplaySourceTextRange {
         self.range
     }
 
-    pub(crate) fn item(&self) -> &BufferTextSourceAppendItem {
+    pub(crate) fn item(&self) -> &DisplaySourceAppendItem {
         &self.item
     }
 
@@ -939,13 +928,13 @@ impl BufferTextSourceItemRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSourceClusterState {
+pub(crate) struct DisplaySourceClusterState {
     ch: char,
     tail: Option<(char, bool)>,
     is_cluster_continuation: bool,
 }
 
-impl BufferTextSourceClusterState {
+impl DisplaySourceClusterState {
     pub(crate) fn for_char(ch: char, tail: Option<(char, bool)>) -> Self {
         Self {
             ch,
@@ -972,19 +961,19 @@ impl BufferTextSourceClusterState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceRenderPlanRequest<'text> {
+pub(crate) struct DisplaySourceRenderPlanRequest<'text> {
     text: &'text [u8],
     byte_idx: usize,
-    range: BufferTextSourceRange,
-    cluster: BufferTextSourceClusterState,
+    range: DisplaySourceTextRange,
+    cluster: DisplaySourceClusterState,
 }
 
-impl<'text> BufferTextSourceRenderPlanRequest<'text> {
+impl<'text> DisplaySourceRenderPlanRequest<'text> {
     pub(crate) fn new(
         text: &'text [u8],
         byte_idx: usize,
-        range: BufferTextSourceRange,
-        cluster: BufferTextSourceClusterState,
+        range: DisplaySourceTextRange,
+        cluster: DisplaySourceClusterState,
     ) -> Self {
         Self {
             text,
@@ -1002,11 +991,11 @@ impl<'text> BufferTextSourceRenderPlanRequest<'text> {
         self.byte_idx
     }
 
-    pub(crate) fn range(self) -> BufferTextSourceRange {
+    pub(crate) fn range(self) -> DisplaySourceTextRange {
         self.range
     }
 
-    pub(crate) fn cluster(self) -> BufferTextSourceClusterState {
+    pub(crate) fn cluster(self) -> DisplaySourceClusterState {
         self.cluster
     }
 
@@ -1017,9 +1006,9 @@ impl<'text> BufferTextSourceRenderPlanRequest<'text> {
     pub(crate) fn into_text_request(
         self,
         render_plan: DisplaySourceAppendRenderPlan,
-    ) -> BufferTextSourceTextRequest {
-        BufferTextSourceTextRequest::from_source_item(
-            BufferTextSourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
+    ) -> DisplaySourceTextRequest {
+        DisplaySourceTextRequest::from_source_item(
+            DisplaySourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
             render_plan,
         )
     }
@@ -1027,28 +1016,28 @@ impl<'text> BufferTextSourceRenderPlanRequest<'text> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplaySourceNaturalMeasurementRequest {
-    source_item: BufferTextSourceTextItemRequest,
+    source_item: DisplaySourceTextItemRequest,
     fallback: DisplayRowTextNaturalAdvanceKind,
 }
 
 impl DisplayRowTextNaturalAdvanceKind {
-    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
+    pub(crate) fn for_cluster_state(cluster: DisplaySourceClusterState) -> Self {
         Self::for_source_char(cluster.ch(), cluster.is_cluster_continuation())
     }
 }
 
 impl DisplaySourceNaturalMeasurementRequest {
     pub(crate) fn for_range_and_cluster(
-        range: BufferTextSourceRange,
-        cluster: BufferTextSourceClusterState,
+        range: DisplaySourceTextRange,
+        cluster: DisplaySourceClusterState,
     ) -> Self {
         Self {
-            source_item: BufferTextSourceTextItemRequest::for_range_and_cluster(range, cluster),
+            source_item: DisplaySourceTextItemRequest::for_range_and_cluster(range, cluster),
             fallback: DisplayRowTextNaturalAdvanceKind::for_cluster_state(cluster),
         }
     }
 
-    pub(crate) fn source_item(self) -> BufferTextSourceTextItemRequest {
+    pub(crate) fn source_item(self) -> DisplaySourceTextItemRequest {
         self.source_item
     }
 
@@ -1057,7 +1046,7 @@ impl DisplaySourceNaturalMeasurementRequest {
     }
 }
 
-impl BufferTextSourceAppendItem {
+impl DisplaySourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         let text = match (display_policy, ch) {
             (1, '\u{00A0}') => " ",
@@ -1069,7 +1058,7 @@ impl BufferTextSourceAppendItem {
         Some(Self::SourceMappedText { text: text.into() })
     }
 
-    pub(crate) fn glyphless_display(cluster: BufferTextSourceClusterState) -> Option<Self> {
+    pub(crate) fn glyphless_display(cluster: DisplaySourceClusterState) -> Option<Self> {
         let ch = cluster.ch();
         if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
             return None;
