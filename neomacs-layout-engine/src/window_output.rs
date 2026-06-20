@@ -28,10 +28,11 @@ use crate::display_row_output_install::{
     TextWindowRowDecorationRequest, begin_text_output_row, begin_text_output_window,
     end_text_output_window, finalize_text_output_row, finish_text_output_row,
     install_current_text_output_row_decoration, install_last_text_output_rows_decoration,
-    install_text_output_cursor_artifact, install_text_output_cursor_effects,
-    install_text_output_display_range, install_text_output_row_cursor,
-    install_text_output_row_decoration, install_text_output_row_metrics,
-    restore_text_output_retry_checkpoint, store_text_output_phys_cursor,
+    install_output_resolved_face, install_text_output_cursor_artifact,
+    install_text_output_cursor_effects, install_text_output_display_range,
+    install_text_output_row_cursor, install_text_output_row_decoration,
+    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
+    store_text_output_phys_cursor,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -917,7 +918,7 @@ pub(crate) fn install_text_window_terminal_right_border(
     // `frame_face_id_counter` by the decoration render, engine.rs) rather than
     // a separate `FaceResolver` counter that could collide with it.
     let border_face_id = render_services.face_ids().allocate();
-    output_builder.install_output_resolved_display_row_face(border_face_id, &border_face, None);
+    install_output_resolved_face(output_builder, border_face_id, &border_face, None);
     install_last_window_right_border(
         output_builder,
         render_services.reborrow(),

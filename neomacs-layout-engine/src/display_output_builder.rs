@@ -9,9 +9,12 @@
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
+#[cfg(test)]
 use crate::display_row::resolved_display_row_face;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
+#[cfg(test)]
 use crate::font_metrics::FontMetrics;
+#[cfg(test)]
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
@@ -1153,6 +1156,7 @@ impl DisplayOutputBuilder {
         self.install_output_frame_state(OutputFrameStateInstallRequest::face(id, face));
     }
 
+    #[cfg(test)]
     pub(crate) fn install_output_resolved_display_row_face(
         &mut self,
         face_id: u32,

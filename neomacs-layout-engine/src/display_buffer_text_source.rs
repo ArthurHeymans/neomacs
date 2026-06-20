@@ -709,7 +709,7 @@ impl BufferTextConsumedItemAdapter {
         }
 
         let item = self.next_item_from_source(source, context, position)?;
-        self.consumed_display_item_from_source_item(item, position)
+        self.consume_aligned_display_item(item, position)
     }
 
     fn next_pending_display_item(
@@ -769,12 +769,20 @@ impl BufferTextConsumedItemAdapter {
             BufferTextDisplayReplacementMode::ConsumedSourceItem,
         )? {
             BufferTextAlignedSourceCursorItem::Item(item) => self
-                .consumed_display_item_from_source_item(item, position)
+                .consume_aligned_display_item(item, position)
                 .map(BufferTextConsumedSourceItem::DisplayItem),
             BufferTextAlignedSourceCursorItem::Replacement(item) => {
                 Some(BufferTextConsumedSourceItem::Replacement(item))
             }
         }
+    }
+
+    pub(crate) fn consume_fallback_source_item(
+        &mut self,
+        item: BufferTextSourceItem,
+        position: &mut BufferTextSourcePosition,
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        self.consume_aligned_display_item(item, position)
     }
 
     #[cfg(test)]
@@ -785,10 +793,19 @@ impl BufferTextConsumedItemAdapter {
     ) -> Option<BufferTextConsumedDisplayItem> {
         let item = BufferTextSourceAlignmentRequest::for_position(self.text_start_byte, *position)
             .align_display_item(item)?;
-        self.consumed_display_item_from_source_item(item, position)
+        self.consume_aligned_display_item(item, position)
     }
 
+    #[cfg(test)]
     pub(crate) fn consumed_display_item_from_source_item(
+        &mut self,
+        item: BufferTextSourceItem,
+        position: &mut BufferTextSourcePosition,
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        self.consume_aligned_display_item(item, position)
+    }
+
+    fn consume_aligned_display_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,

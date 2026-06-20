@@ -15,6 +15,8 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
+#[cfg(test)]
+use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::LispStringSourceCursor;
@@ -578,7 +580,7 @@ pub(crate) fn apply_pending_display_source_faces(
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
-        builder.install_output_resolved_display_row_face(pending.face_id, &pending.resolved, None);
+        install_output_resolved_face(builder, pending.face_id, &pending.resolved, None);
     }
 }
 

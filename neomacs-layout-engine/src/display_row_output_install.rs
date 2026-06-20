@@ -11,12 +11,15 @@ use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
     DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
     RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
+    resolved_display_row_face,
 };
 use crate::display_row_builder::apply_display_row_source_slot_bounds;
 #[cfg(test)]
 use crate::display_row_builder::{
     DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
 };
+use crate::font_metrics::FontMetrics;
+use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -434,6 +437,19 @@ pub(crate) fn install_rendered_display_row_fragment_assets(
 ) {
     RenderedDisplayRowAssetsInstall::fragment(role, display_row_index, faces, media)
         .install(builder);
+}
+
+pub(crate) fn install_output_resolved_face(
+    builder: &mut DisplayOutputBuilder,
+    face_id: u32,
+    face: &ResolvedFace,
+    metrics: Option<FontMetrics>,
+) {
+    let render_face = resolved_display_row_face(face_id, face, metrics);
+    builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
+        render_face.face_id,
+        render_face.render_face(),
+    ));
 }
 
 struct DisplayRowCurrentRowInstaller<'builder> {

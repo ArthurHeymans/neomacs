@@ -1,5 +1,6 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_row_output_install::install_output_resolved_face;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
@@ -200,7 +201,7 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
         state.set_output_background_color(self.background_color);
         state.set_output_font_pixel_size(self.font_pixel_size);
-        state.install_output_resolved_display_row_face(0, self.default_face, self.default_metrics);
+        install_output_resolved_face(state, 0, self.default_face, self.default_metrics);
     }
 }
 

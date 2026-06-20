@@ -20,7 +20,7 @@ use crate::display_row::{
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_output_install::{
     DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
-    install_rendered_display_row_fragment_assets,
+    install_output_resolved_face, install_rendered_display_row_fragment_assets,
 };
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
@@ -386,17 +386,16 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        self.output_builder
-            .install_output_resolved_display_row_face(face_id, face, None);
+        install_output_resolved_face(self.output_builder, face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        self.output_builder
-            .install_output_resolved_display_row_face(
-                face.face_id(),
-                face.resolved_face(),
-                face.font_metrics(),
-            );
+        install_output_resolved_face(
+            self.output_builder,
+            face.face_id(),
+            face.resolved_face(),
+            face.font_metrics(),
+        );
     }
 
     fn display_host(&self) -> Option<&dyn DisplayHost> {

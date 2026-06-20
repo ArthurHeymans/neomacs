@@ -1769,7 +1769,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     ) -> BufferTextWindowFallbackSourceConsumption {
         let source_item = self
             .source_adapter
-            .consumed_display_item_from_source_item(source_item, &mut source_position);
+            .consume_fallback_source_item(source_item, &mut source_position);
         BufferTextWindowFallbackSourceConsumption {
             source_item,
             source_position,
