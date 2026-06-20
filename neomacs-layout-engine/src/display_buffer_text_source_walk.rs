@@ -647,19 +647,19 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_consumption: BufferTextSourceConsumptionState,
 }
 
-pub(crate) struct BufferTextWindowSourceConsumption {
+struct BufferTextWindowSourceConsumption {
     source_item: Option<BufferTextSourceConsumptionItem>,
     source_position: BufferTextSourcePosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
-pub(crate) struct BufferTextWindowFallbackSourceConsumption {
+struct BufferTextWindowFallbackSourceConsumption {
     source_item: Option<BufferTextConsumedDisplayItem>,
     source_position: BufferTextSourcePosition,
 }
 
 impl BufferTextWindowSourceConsumption {
-    pub(crate) fn apply_to_progress(
+    fn apply_to_progress(
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
     ) -> (
@@ -670,7 +670,7 @@ impl BufferTextWindowSourceConsumption {
         (self.source_item, self.pending_faces)
     }
 
-    pub(crate) fn apply_to_render_progress<B: LayoutBufferView>(
+    fn apply_to_render_progress<B: LayoutBufferView>(
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
@@ -688,7 +688,7 @@ impl BufferTextWindowSourceConsumption {
 }
 
 impl BufferTextWindowFallbackSourceConsumption {
-    pub(crate) fn apply_to_progress(
+    fn apply_to_progress(
         self,
         progress: &mut BufferTextWindowProgressState<'_>,
     ) -> Option<BufferTextConsumedDisplayItem> {
@@ -717,7 +717,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         }
     }
 
-    pub(crate) fn consume_source_item(
+    fn consume_source_item(
         &mut self,
         mut source_position: BufferTextSourcePosition,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
@@ -767,7 +767,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         )
     }
 
-    pub(crate) fn consume_fallback_source_item(
+    fn consume_fallback_source_item(
         &mut self,
         source_item: BufferTextSourceItem,
         mut source_position: BufferTextSourcePosition,
@@ -779,6 +779,15 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             source_item,
             source_position,
         }
+    }
+
+    pub(crate) fn consume_fallback_source_item_for_render(
+        &mut self,
+        source_item: BufferTextSourceItem,
+        progress: &mut BufferTextWindowProgressState<'_>,
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        self.consume_fallback_source_item(source_item, progress.source_position())
+            .apply_to_progress(progress)
     }
 
     pub(crate) fn consume_hscroll_skip(
@@ -853,11 +862,20 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         BufferTextWindowSourcePositionConsumption::new((), source_position)
     }
 
-    pub(crate) fn commit_display_property_replacement(
+    fn commit_display_property_replacement(
         &mut self,
         update: BufferDisplayPropertyTextReplacementWalkUpdate,
     ) -> BufferTextWindowSourcePositionConsumption<()> {
         self.source_position_update(update.source_position())
+    }
+
+    pub(crate) fn commit_display_property_replacement_for_render(
+        &mut self,
+        update: BufferDisplayPropertyTextReplacementWalkUpdate,
+        progress: &mut BufferTextWindowProgressState<'_>,
+    ) {
+        self.commit_display_property_replacement(update)
+            .apply_to_progress(progress);
     }
 }
 

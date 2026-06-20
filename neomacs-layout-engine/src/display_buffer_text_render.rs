@@ -2254,14 +2254,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     ),
                 );
                 source_walk
-                    .commit_display_property_replacement(update)
-                    .apply_to_progress(&mut self.progress);
+                    .commit_display_property_replacement_for_render(update, &mut self.progress);
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
                 let Some(source_step) = source_walk
-                    .consume_fallback_source_item(source_item, self.progress.source_position())
-                    .apply_to_progress(&mut self.progress)
+                    .consume_fallback_source_item_for_render(source_item, &mut self.progress)
                 else {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 };
