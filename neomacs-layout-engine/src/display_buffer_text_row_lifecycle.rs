@@ -20,10 +20,9 @@ use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
-    DisplayRowLimit, DisplayRowScopedValue, DisplayRowYPositions,
+    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
+    DisplayRowScopedValue, DisplayRowYPositions,
 };
-use crate::display_row_lisp_string::DisplayRowPrefixRequest;
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
@@ -37,7 +36,7 @@ use crate::display_row_transition::{
 };
 use crate::display_row_walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
-    LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
+    LineNumberRenderState, TrailingWhitespaceRenderState,
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
@@ -45,23 +44,6 @@ use crate::unicode::is_wide_char;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
-
-pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
-    progress: BufferTextWindowProgressState<'emit>,
-    hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    source_render: TextRowSourceRenderState<'emit>,
-    prefix_request: &'emit mut DisplayRowPrefixRequest,
-    line_numbers: &'emit mut LineNumberRenderState,
-    word_wrap: &'emit mut WordWrapRenderState,
-    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    row_flags: &'emit mut DisplayRowFlags,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    cursor_info: &'emit mut CursorCaptureState,
-    row_y_positions: &'a mut DisplayRowYPositions,
-}
 
 pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
     context: BufferEndOfBufferTailRenderContext<'a>,
@@ -86,43 +68,6 @@ pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
     hit_row_range: &'emit mut HitRowRangeTracker,
     row_y_positions: &'emit mut DisplayRowYPositions,
     face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-impl<'a, 'emit> BufferHscrollSkipRenderState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        progress: BufferTextWindowProgressState<'emit>,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        source_render: TextRowSourceRenderState<'emit>,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        line_numbers: &'emit mut LineNumberRenderState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        cursor_info: &'emit mut CursorCaptureState,
-        row_y_positions: &'a mut DisplayRowYPositions,
-    ) -> Self {
-        Self {
-            progress,
-            hscroll_skip,
-            row_extend,
-            source_render,
-            prefix_request,
-            line_numbers,
-            word_wrap,
-            trailing_whitespace,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            cursor_info,
-            row_y_positions,
-        }
-    }
 }
 
 impl<'emit> BufferEndOfBufferTailRenderState<'emit> {
@@ -603,9 +548,9 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        state: BufferHscrollSkipRenderState<'_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {
-        let BufferHscrollSkipRenderState {
+        let BufferTextWindowLoopMutableState {
             progress,
             hscroll_skip,
             row_extend,
@@ -620,6 +565,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             hit_row_range,
             cursor_info,
             row_y_positions,
+            ..
         } = state;
         let mut progress = progress;
         let mut source_render = source_render;

@@ -6,7 +6,7 @@ use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderOutcome,
+    BufferHscrollSkipRenderRequest, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
@@ -252,25 +252,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
-        request.render_next_and_apply(
-            source_walk,
-            BufferHscrollSkipRenderState::new(
-                self.state.progress.reborrow(),
-                self.state.hscroll_skip,
-                self.state.row_extend,
-                self.state.source_render.reborrow(),
-                self.state.prefix_request,
-                self.state.line_numbers,
-                self.state.word_wrap,
-                self.state.trailing_whitespace,
-                self.state.row_geometry,
-                self.state.row_flags,
-                self.state.hit_rows,
-                self.state.hit_row_range,
-                self.state.cursor_info,
-                self.state.row_y_positions,
-            ),
-        )
+        request.render_next_and_apply(source_walk, self.state.reborrow())
     }
 
     fn render_face_checkpoint_for_context<B: LayoutBufferView>(

@@ -1139,8 +1139,15 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut append_state = BufferTextRowAppendState::default();
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let mut font_metrics = None;
     let row_limit = context.row_limit;
     let buf_id = context
@@ -1170,10 +1177,10 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     ))
     .render_next_and_apply(
         &mut source_walk,
-        BufferHscrollSkipRenderState::new(
+        BufferTextWindowLoopMutableState::new(
+            &mut append_state,
+            &mut invisible_text_checkpoint,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-            &mut hscroll_skip,
-            &mut row_extend,
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -1181,16 +1188,23 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            &mut prefix_request,
+            &mut row_extend,
+            &mut box_face,
             &mut line_numbers,
-            &mut word_wrap,
-            &mut trailing_whitespace,
             &mut context.geometry,
             &mut context.row_flags,
             &mut context.hit_rows,
             &mut hit_row_range,
-            &mut cursor_info,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
             &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
         ),
     );
 
