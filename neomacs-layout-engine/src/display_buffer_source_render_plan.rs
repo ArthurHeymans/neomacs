@@ -10,10 +10,10 @@ use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_tail_render::{
     BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
 };
-use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{
     BufferWindowChromeHeights, BufferWindowGeometry, BufferWindowLocalDisplayPolicy,
 };
+use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,

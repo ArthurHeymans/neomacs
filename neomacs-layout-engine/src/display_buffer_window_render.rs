@@ -8,11 +8,11 @@ pub(crate) use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_render_plan::{
     BufferSourceDefaultFacePlan, BufferSourceOutputSetup,
 };
-use crate::display_buffer_text_source::BufferWindowSourceReadRequest;
 use crate::display_buffer_window_geometry::{
     BufferWindowChromeHeights, BufferWindowGeometryPlan, BufferWindowGeometryRequest,
     BufferWindowLocalDisplayPolicy,
 };
+use crate::display_buffer_window_source::BufferWindowSourceReadRequest;
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
 };

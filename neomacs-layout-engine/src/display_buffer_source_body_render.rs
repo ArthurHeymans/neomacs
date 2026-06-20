@@ -13,8 +13,8 @@ use crate::display_buffer_source_tail_render::{
     render_buffer_source_tail_and_decide_retry,
 };
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_source::BufferWindowSource;
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
+use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;

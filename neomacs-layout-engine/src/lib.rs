@@ -28,6 +28,7 @@ pub(crate) mod display_buffer_source_walk;
 pub(crate) mod display_buffer_text_source;
 pub(crate) mod display_buffer_window_geometry;
 pub(crate) mod display_buffer_window_render;
+pub(crate) mod display_buffer_window_source;
 pub(crate) mod display_cursor;
 pub(crate) mod display_face_id;
 pub(crate) mod display_face_layout;
