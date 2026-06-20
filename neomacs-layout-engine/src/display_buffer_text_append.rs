@@ -11,6 +11,10 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_source_render::TextRowOutputRenderState;
+use crate::display_row_special_glyphs::{
+    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
+    install_text_window_terminal_right_border,
+};
 use crate::display_row_walk_state::{
     HitRowRangeTracker, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
@@ -22,10 +26,9 @@ use crate::types::WindowParams;
 use crate::window_output::{
     DisplayTextRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowOutputTarget, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
-    begin_text_window_output_and_row, close_text_window_output, finish_pending_text_window_row,
-    install_text_window_body_output, install_text_window_cursor_effects,
-    install_text_window_terminal_right_border,
+    WindowOutputEmitter, begin_text_window_output_and_row, close_text_window_output,
+    finish_pending_text_window_row, install_text_window_body_output,
+    install_text_window_cursor_effects,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -151,11 +154,11 @@ impl BufferTextWindowTerminalRightBorderRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        output: TextWindowOutputTarget<'_>,
+        mut output: TextWindowOutputTarget<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
         install_text_window_terminal_right_border(
-            output,
+            output.builder(),
             TextWindowTerminalRightBorder {
                 ch: self.ch,
                 face_name: self.face_name,

@@ -3,22 +3,88 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_output_builder::OutputRowDecorator;
+use crate::display_output_builder::{DisplayOutputBuilder, OutputRowDecorator};
 use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
     trim_display_row_text_to_total_glyph_count,
 };
-use crate::display_row_geometry::DisplayRowFlagKind;
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
+use crate::display_row_output_install::{
+    install_current_text_output_row_decoration, install_last_text_output_rows_decoration,
+    install_output_resolved_face,
+};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::neovm_bridge::ResolvedFace;
-use crate::window_output::{TextWindowRightBorder, TextWindowRightEdgeMarkers};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 
 const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
 const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextWindowRightEdgeMarkerColumn {
+    LastColumn,
+    BeforeRightBorder,
+}
+
+pub(crate) struct TextWindowRightEdgeMarkers<'a> {
+    pub(crate) display_text_row_base: usize,
+    pub(crate) output_cols: usize,
+    pub(crate) column: TextWindowRightEdgeMarkerColumn,
+    pub(crate) row_flags: &'a DisplayRowFlags,
+    pub(crate) face_id: u32,
+    pub(crate) char_width: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowRightBorder {
+    pub(crate) ch: char,
+    pub(crate) face_id: u32,
+    pub(crate) char_width: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowTerminalRightBorder {
+    pub(crate) ch: char,
+    pub(crate) face_name: &'static str,
+    pub(crate) char_width: f32,
+}
+
+impl TextWindowRightEdgeMarkerColumn {
+    pub(crate) fn target_col(self, output_cols: usize) -> usize {
+        match self {
+            Self::LastColumn => output_cols.saturating_sub(1),
+            Self::BeforeRightBorder => output_cols.saturating_sub(2),
+        }
+    }
+}
+
+impl<'a> TextWindowRightEdgeMarkers<'a> {
+    pub(crate) fn for_reserved_special_column(
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        display_text_row_base: usize,
+        output_cols: usize,
+        row_flags: &'a DisplayRowFlags,
+        face_id: u32,
+        char_width: f32,
+    ) -> Option<Self> {
+        reserve_right_special_col.then_some(Self {
+            display_text_row_base,
+            output_cols,
+            column: if reserve_right_border_col {
+                TextWindowRightEdgeMarkerColumn::BeforeRightBorder
+            } else {
+                TextWindowRightEdgeMarkerColumn::LastColumn
+            },
+            row_flags,
+            face_id,
+            char_width,
+        })
+    }
+}
 
 fn right_border_text_source(
     text: impl Into<Box<str>>,
@@ -384,4 +450,64 @@ impl OutputRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
             self.render_services,
         );
     }
+}
+
+pub(crate) fn install_text_window_right_edge_markers(
+    output_builder: &mut DisplayOutputBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightEdgeMarkers<'_>,
+) {
+    let base_face = render_services.face_resolver().default_face().clone();
+    for decoration in text_window_right_edge_marker_decorations(&request) {
+        install_current_text_output_row_decoration(
+            output_builder,
+            decoration.display_row_index,
+            RightEdgeMarkerRowDecorator::new(
+                decoration,
+                request.face_id,
+                &base_face,
+                request.char_width,
+                &mut render_services,
+            ),
+        );
+    }
+}
+
+pub(crate) fn install_text_window_right_border_rows(
+    output_builder: &mut DisplayOutputBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightBorder,
+    base_face: &ResolvedFace,
+) {
+    install_last_text_output_rows_decoration(
+        output_builder,
+        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+    );
+}
+
+pub(crate) fn install_text_window_terminal_right_border(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowTerminalRightBorder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+) -> u32 {
+    let border_face = render_services
+        .face_resolver()
+        .resolve_named_face(request.face_name);
+    // GNU draws every realized face id from the single per-frame face cache
+    // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
+    // border's id from the frame-scoped allocator rather than a separate
+    // `FaceResolver` counter that could collide with it.
+    let border_face_id = render_services.face_ids().allocate();
+    install_output_resolved_face(output_builder, border_face_id, &border_face, None);
+    install_text_window_right_border_rows(
+        output_builder,
+        render_services.reborrow(),
+        TextWindowRightBorder {
+            ch: request.ch,
+            face_id: border_face_id,
+            char_width: request.char_width,
+        },
+        &border_face,
+    );
+    border_face_id
 }

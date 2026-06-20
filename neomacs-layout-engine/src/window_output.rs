@@ -17,25 +17,21 @@ use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
-use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
-};
+use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_output_install::{
     DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
     DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
     DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest, begin_text_output_row,
     begin_text_output_window, end_text_output_window, finalize_text_output_row,
-    finish_text_output_row, install_current_text_output_row_decoration,
-    install_last_text_output_rows_decoration, install_measured_window_display_row,
-    install_output_resolved_face, install_rendered_display_row_fragment_assets,
-    install_text_output_cursor_artifact, install_text_output_cursor_effects,
-    install_text_output_display_range, install_text_output_row_cursor,
-    install_text_output_row_decoration, install_text_output_row_metrics,
-    restore_text_output_retry_checkpoint, store_text_output_phys_cursor,
+    finish_text_output_row, install_measured_window_display_row, install_output_resolved_face,
+    install_rendered_display_row_fragment_assets, install_text_output_cursor_artifact,
+    install_text_output_cursor_effects, install_text_output_display_range,
+    install_text_output_row_cursor, install_text_output_row_decoration,
+    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
+    store_text_output_phys_cursor,
 };
 use crate::display_row_special_glyphs::{
-    RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
-    text_window_right_edge_marker_decorations,
+    TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::hit_test::HitRow;
@@ -218,55 +214,6 @@ pub(crate) struct TextWindowDisplayRange {
     pub(crate) window_end: LispCharPos1,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TextWindowRightEdgeMarkerColumn {
-    LastColumn,
-    BeforeRightBorder,
-}
-
-impl TextWindowRightEdgeMarkerColumn {
-    pub(crate) fn target_col(self, output_cols: usize) -> usize {
-        match self {
-            Self::LastColumn => output_cols.saturating_sub(1),
-            Self::BeforeRightBorder => output_cols.saturating_sub(2),
-        }
-    }
-}
-
-pub(crate) struct TextWindowRightEdgeMarkers<'a> {
-    pub(crate) display_text_row_base: usize,
-    pub(crate) output_cols: usize,
-    pub(crate) column: TextWindowRightEdgeMarkerColumn,
-    pub(crate) row_flags: &'a DisplayRowFlags,
-    pub(crate) face_id: u32,
-    pub(crate) char_width: f32,
-}
-
-impl<'a> TextWindowRightEdgeMarkers<'a> {
-    pub(crate) fn for_reserved_special_column(
-        reserve_right_special_col: bool,
-        reserve_right_border_col: bool,
-        display_text_row_base: usize,
-        output_cols: usize,
-        row_flags: &'a DisplayRowFlags,
-        face_id: u32,
-        char_width: f32,
-    ) -> Option<Self> {
-        reserve_right_special_col.then_some(Self {
-            display_text_row_base,
-            output_cols,
-            column: if reserve_right_border_col {
-                TextWindowRightEdgeMarkerColumn::BeforeRightBorder
-            } else {
-                TextWindowRightEdgeMarkerColumn::LastColumn
-            },
-            row_flags,
-            face_id,
-            char_width,
-        })
-    }
-}
-
 pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) row_geometry: &'a DisplayRowGeometryState,
     pub(crate) row_limit: DisplayRowLimit,
@@ -293,7 +240,7 @@ impl<'a> TextWindowOutputTarget<'a> {
         }
     }
 
-    fn builder(&mut self) -> &mut DisplayOutputBuilder {
+    pub(crate) fn builder(&mut self) -> &mut DisplayOutputBuilder {
         self.output_builder
     }
 
@@ -602,39 +549,6 @@ fn finish_output_rows(
     }
 }
 
-fn install_right_edge_markers(
-    output_builder: &mut DisplayOutputBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightEdgeMarkers<'_>,
-) {
-    let base_face = render_services.face_resolver().default_face().clone();
-    for decoration in text_window_right_edge_marker_decorations(&request) {
-        install_current_text_output_row_decoration(
-            output_builder,
-            decoration.display_row_index,
-            RightEdgeMarkerRowDecorator::new(
-                decoration,
-                request.face_id,
-                &base_face,
-                request.char_width,
-                &mut render_services,
-            ),
-        );
-    }
-}
-
-fn install_last_window_right_border(
-    output_builder: &mut DisplayOutputBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightBorder,
-    base_face: &ResolvedFace,
-) {
-    install_last_text_output_rows_decoration(
-        output_builder,
-        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
-    );
-}
-
 pub(crate) struct TextWindowBodyOutputInstall<'a> {
     pub(crate) window_id: u64,
     pub(crate) window_start: i64,
@@ -649,20 +563,6 @@ pub(crate) struct TextWindowRedisplayPositions {
     pub(crate) window_end: LispCharPos1,
     pub(crate) window_end_byte: EmacsBytePos,
     pub(crate) window_end_vpos: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextWindowRightBorder {
-    pub(crate) ch: char,
-    pub(crate) face_id: u32,
-    pub(crate) char_width: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextWindowTerminalRightBorder {
-    pub(crate) ch: char,
-    pub(crate) face_name: &'static str,
-    pub(crate) char_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -890,34 +790,6 @@ fn install_text_window_row_cursor(
     install_text_output_row_cursor(output_builder, row, row_col, style);
 }
 
-pub(crate) fn install_text_window_terminal_right_border(
-    mut output: TextWindowOutputTarget<'_>,
-    request: TextWindowTerminalRightBorder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-) -> u32 {
-    let border_face = render_services
-        .face_resolver()
-        .resolve_named_face(request.face_name);
-    // GNU draws every realized face id from the single per-frame face cache
-    // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
-    // border's id from the frame-scoped allocator (reconciled into
-    // `frame_face_id_counter` by the decoration render, engine.rs) rather than
-    // a separate `FaceResolver` counter that could collide with it.
-    let border_face_id = render_services.face_ids().allocate();
-    install_output_resolved_face(output.builder(), border_face_id, &border_face, None);
-    install_last_window_right_border(
-        output.builder(),
-        render_services.reborrow(),
-        TextWindowRightBorder {
-            ch: request.ch,
-            face_id: border_face_id,
-            char_width: request.char_width,
-        },
-        &border_face,
-    );
-    border_face_id
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
     cursor_artifact: Option<TextWindowCursorArtifact>,
@@ -1037,7 +909,7 @@ pub(crate) fn install_text_window_body_output(
     if let Some(markers) = request.right_edge_markers {
         let render_services =
             render_services.expect("right-edge markers require chrome render services");
-        install_right_edge_markers(output.builder(), render_services, markers);
+        install_text_window_right_edge_markers(output.builder(), render_services, markers);
     }
     redisplay_positions
 }
