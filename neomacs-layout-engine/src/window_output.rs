@@ -16,6 +16,7 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
@@ -25,14 +26,15 @@ use crate::display_row_geometry::{
 use crate::display_row_output_install::{
     DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
     DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
-    TextWindowRowDecorationRequest, begin_text_output_row, begin_text_output_window,
-    end_text_output_window, finalize_text_output_row, finish_text_output_row,
-    install_current_text_output_row_decoration, install_last_text_output_rows_decoration,
-    install_output_resolved_face, install_text_output_cursor_artifact,
-    install_text_output_cursor_effects, install_text_output_display_range,
-    install_text_output_row_cursor, install_text_output_row_decoration,
-    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
-    store_text_output_phys_cursor,
+    DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest, begin_text_output_row,
+    begin_text_output_window, end_text_output_window, finalize_text_output_row,
+    finish_text_output_row, install_current_text_output_row_decoration,
+    install_last_text_output_rows_decoration, install_measured_window_display_row,
+    install_output_resolved_face, install_rendered_display_row_fragment_assets,
+    install_text_output_cursor_artifact, install_text_output_cursor_effects,
+    install_text_output_display_range, install_text_output_row_cursor,
+    install_text_output_row_decoration, install_text_output_row_metrics,
+    restore_text_output_retry_checkpoint, store_text_output_phys_cursor,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -43,7 +45,10 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
+use neomacs_display_protocol::face::Face;
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -282,8 +287,41 @@ impl<'a> TextWindowOutputTarget<'a> {
         }
     }
 
-    pub(crate) fn builder(&mut self) -> &mut DisplayOutputBuilder {
+    fn builder(&mut self) -> &mut DisplayOutputBuilder {
         self.output_builder
+    }
+
+    pub(crate) fn current_row_output(&mut self) -> DisplayRowCurrentRowOutput<'_> {
+        DisplayRowCurrentRowOutput::from_output_builder(self.builder())
+    }
+
+    pub(crate) fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<crate::font_metrics::FontMetrics>,
+    ) {
+        install_output_resolved_face(self.builder(), face_id, face, metrics);
+    }
+
+    pub(crate) fn install_rendered_fragment_assets(
+        &mut self,
+        role: GlyphRowRole,
+        display_row_index: usize,
+        faces: &[Face],
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        install_rendered_display_row_fragment_assets(
+            self.builder(),
+            role,
+            display_row_index,
+            faces,
+            media,
+        );
+    }
+
+    pub(crate) fn install_measured_window_display_row(&mut self, measured: &MeasuredDisplayRow) {
+        install_measured_window_display_row(self.builder(), measured);
     }
 }
 

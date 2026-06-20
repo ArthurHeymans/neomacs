@@ -27,9 +27,7 @@ use crate::display_row::{
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
-use crate::display_row_output_install::{
-    install_measured_frame_chrome_display_row, install_measured_window_display_row,
-};
+use crate::display_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
@@ -63,6 +61,18 @@ impl<'a> FrameChromeOutputTarget<'a> {
 
     fn builder(&mut self) -> &mut DisplayOutputBuilder {
         self.output_builder
+    }
+
+    fn install_measured_frame_chrome_display_row(
+        &mut self,
+        pending_frame_chrome_rows: &mut Vec<FrameChromeRow>,
+        measured: &MeasuredDisplayRow,
+    ) {
+        install_measured_frame_chrome_display_row(
+            self.builder(),
+            pending_frame_chrome_rows,
+            measured,
+        );
     }
 }
 
@@ -190,11 +200,9 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             rendered,
             DisplayRowBoundsPolicy::MeasureContent,
         );
-        install_measured_frame_chrome_display_row(
-            state.output.builder(),
-            state.pending_frame_chrome_rows,
-            &measured,
-        );
+        state
+            .output
+            .install_measured_frame_chrome_display_row(state.pending_frame_chrome_rows, &measured);
         Some(FrameTabBarDisplayRowRender::Measured(measured))
     }
 }
@@ -728,7 +736,8 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
             )
         });
         if let Some(ref measured_row) = measured_row {
-            install_measured_window_display_row(self.output.builder(), measured_row);
+            self.output
+                .install_measured_window_display_row(measured_row);
             self.output_emitter.emit_chrome_progress(
                 self.evaluator,
                 parts.output,

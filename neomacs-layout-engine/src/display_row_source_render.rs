@@ -19,7 +19,6 @@ use crate::display_row::{
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_output_install::{
     DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
-    install_output_resolved_face, install_rendered_display_row_fragment_assets,
 };
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
@@ -380,12 +379,11 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        install_output_resolved_face(self.output.builder(), face_id, face, None);
+        self.output.install_resolved_face(face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        install_output_resolved_face(
-            self.output.builder(),
+        self.output.install_resolved_face(
             face.face_id(),
             face.resolved_face(),
             face.font_metrics(),
@@ -414,7 +412,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_resolver: &'emit FaceResolver,
     ) -> TextRowSourceMeasureState<'emit> {
         TextRowSourceMeasureState {
-            row_output: DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
+            row_output: self.output.current_row_output(),
             evaluator: self.evaluator,
             font_metrics,
             face_resolver,
@@ -428,7 +426,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
         DisplayRowCurrentTextRenderState::new(
-            DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
+            self.output.current_row_output(),
             self.evaluator,
             font_metrics,
             face_resolver,
@@ -443,7 +441,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
         DisplayRowCurrentSourceFragmentRenderState::new(
-            DisplayRowCurrentRowOutput::from_output_builder(self.output.builder()),
+            self.output.current_row_output(),
             font_metrics,
             face_resolver,
             self.evaluator.display_host.as_deref(),
@@ -463,8 +461,7 @@ impl<'a> TextRowOutputRenderState<'a> {
             row_ascent_px,
         } = result;
         let end = display_row_output_end_position(result.progress);
-        install_rendered_display_row_fragment_assets(
-            self.output.builder(),
+        self.output.install_rendered_fragment_assets(
             role,
             output.row,
             &result.faces,
