@@ -25,8 +25,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_source_append::measure_single_display_item_width_naturally;
 use crate::display_row_source_append::{
-    SingleDisplayItemSourceAppendRequest, SingleDisplayItemSourceMeasureRequest,
-    measure_single_display_item_width_naturally_or_fallback,
+    SingleDisplayItemSourceRequest, measure_single_display_item_width_naturally_or_fallback,
     measure_single_display_item_width_with_policy, render_single_display_item_naturally,
     render_single_display_item_with_policy,
 };
@@ -92,7 +91,7 @@ impl DisplaySourceNaturalMeasurementRequest {
         source_item: &DisplayItem,
     ) -> Option<f32> {
         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        let request = SingleDisplayItemSourceMeasureRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             base_face,
             face_id,
             &frame,
@@ -420,7 +419,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
-        let request = SingleDisplayItemSourceAppendRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.active_face.resolved_face(),
             face_id,
             &frame,
@@ -442,7 +441,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
-        let request = SingleDisplayItemSourceAppendRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.active_face.resolved_face(),
             face_id,
             &frame,
@@ -1144,7 +1143,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<DisplayRowAppendProgress> {
-        let request = SingleDisplayItemSourceAppendRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.base_face,
             self.face_id,
             &self.frame,
@@ -1163,7 +1162,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = self.source_item_fallback_width(&source_item);
-        let request = SingleDisplayItemSourceMeasureRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.base_face,
             self.face_id,
             &self.frame,
@@ -1212,7 +1211,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceAppendRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
@@ -1237,7 +1236,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceMeasureRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
@@ -1265,7 +1264,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         };
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let request = SingleDisplayItemSourceMeasureRequest::new(
+        let request = SingleDisplayItemSourceRequest::new(
             self.item_context.base_face,
             self.item_context.face_id,
             &self.item_context.frame,
