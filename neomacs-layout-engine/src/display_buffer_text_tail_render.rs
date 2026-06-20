@@ -1,5 +1,6 @@
 //! Buffer text post-loop tail rendering and install context.
 
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_text_append::{
     BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
     BufferTextWindowFinishRequest, BufferTextWindowFinishState,
@@ -7,7 +8,6 @@ use crate::display_buffer_text_append::{
     BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
     BufferTextWindowVisibilityRetryRequest,
 };
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -278,7 +278,7 @@ pub(crate) fn render_buffer_text_window_tail_and_decide_retry<
     'buf,
     B: LayoutBufferView,
 >(
-    loop_context: BufferTextWindowLoopRequestContext,
+    loop_context: BufferSourceLoopRequestContext,
     mut source_render: TextRowSourceRenderState<'emit>,
     mut row_progress: DisplaySourceRowProgressState<'emit>,
     row_geometry: &'emit mut DisplayRowGeometryState,

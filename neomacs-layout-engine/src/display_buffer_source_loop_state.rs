@@ -18,7 +18,7 @@ use crate::display_source_progress::DisplaySourceProgressState;
 use crate::hit_test::HitRow;
 use neomacs_display_protocol::types::Color;
 
-pub(crate) struct BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
+pub(crate) struct BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
     pub(crate) progress: DisplaySourceProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
@@ -41,7 +41,7 @@ pub(crate) struct BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
-impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
+impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
@@ -89,8 +89,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
         }
     }
 
-    pub(crate) fn reborrow(&mut self) -> BufferTextWindowLoopMutableState<'_, '_, 'surface> {
-        BufferTextWindowLoopMutableState {
+    pub(crate) fn reborrow(&mut self) -> BufferSourceLoopMutableState<'_, '_, 'surface> {
+        BufferSourceLoopMutableState {
             invisible_text_checkpoint: self.invisible_text_checkpoint,
             progress: self.progress.reborrow(),
             source_render: self.source_render.reborrow(),

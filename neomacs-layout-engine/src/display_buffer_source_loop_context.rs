@@ -18,7 +18,7 @@ use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextWindowLoopRequestContext {
+pub(crate) struct BufferSourceLoopRequestContext {
     buffer_id: BufferId,
     text_start_byte: usize,
     accessible_end: i64,
@@ -38,7 +38,7 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-impl BufferTextWindowLoopRequestContext {
+impl BufferSourceLoopRequestContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         buffer_id: BufferId,

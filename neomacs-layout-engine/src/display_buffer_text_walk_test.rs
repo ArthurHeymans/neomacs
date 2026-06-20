@@ -1,6 +1,6 @@
 use super::*;
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetupRequest;
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_render_plan::BufferTextWindowOutputSetup;
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
@@ -253,7 +253,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         5,
         &walk_setup,
     );
-    let context = BufferTextWindowLoopRequestContext::new(
+    let context = BufferSourceLoopRequestContext::new(
         neovm_core::buffer::BufferId(42),
         11,
         80,

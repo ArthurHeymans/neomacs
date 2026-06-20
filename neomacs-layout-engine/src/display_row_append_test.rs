@@ -5,6 +5,8 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_item_append::*;
+use crate::display_buffer_source_loop_context::*;
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::*;
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_append::{
@@ -17,8 +19,6 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_loop_context::*;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::*;
 use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
@@ -1174,7 +1174,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     ))
     .render_next_and_apply(
         &mut source_walk,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -1736,7 +1736,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     .render_at_checkpoint_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut checkpoints,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -2738,7 +2738,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     .render_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -2913,7 +2913,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     .render_if_needed_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -3359,7 +3359,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     .render_if_needed_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -3609,7 +3609,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     .render_if_needed_and_apply(
         &mut source_walk,
         text,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -6420,7 +6420,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         12.0,
         false,
     );
-    let loop_context = BufferTextWindowLoopRequestContext::new(
+    let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
         0,
         2,
@@ -6446,7 +6446,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         text,
         &params,
         &active_face,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut invisible_text_checkpoint,
             DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(

@@ -4,8 +4,8 @@
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
@@ -127,9 +127,9 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
         text: &[u8],
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferTextOverflowRenderOutcome {
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             mut progress,
             source_render,
             row_extend,
@@ -702,9 +702,9 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferTextSpecialOverflowRenderOutcome {
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             mut progress,
             source_render,
             row_extend,

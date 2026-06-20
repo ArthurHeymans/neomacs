@@ -1,12 +1,12 @@
 //! Buffer text body walk setup and render pass driver.
 
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_render_attempt::{
     BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
 };
@@ -294,7 +294,7 @@ impl BufferTextWindowWalkSetup {
         &mut self,
         state: &mut BufferTextWindowWalkRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &WindowParams,
@@ -308,7 +308,7 @@ impl BufferTextWindowWalkSetup {
             loop_context.text_start_byte(),
         );
 
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             &mut self.invisible_text_checkpoint,
             DisplaySourceProgressState::new(
                 &mut self.byte_idx,
@@ -352,7 +352,7 @@ impl BufferTextWindowWalkSetup {
         &mut self,
         source_render: TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
@@ -419,7 +419,7 @@ impl BufferTextWindowWalkSetup {
         &mut self,
         state: &mut BufferTextWindowBodyRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
@@ -470,7 +470,7 @@ impl BufferTextWindowWalkSetup {
         face_scan: &mut FaceScanCheckpoint,
         active_face_state: &mut DisplayRowActiveFaceState,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],

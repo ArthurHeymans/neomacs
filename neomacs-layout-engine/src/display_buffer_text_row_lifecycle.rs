@@ -4,8 +4,8 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
@@ -515,9 +515,9 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             progress,
             hscroll_skip,
             row_extend,
@@ -826,7 +826,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
         let context = self.context;
         let selective_display = BufferSelectiveDisplayContext::new(
@@ -839,7 +839,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             return BufferSelectiveDisplayTailRenderOutcome::NotHidden;
         };
 
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             mut progress,
             source_render,
             row_extend,
@@ -1080,9 +1080,9 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferInvisibleTextRenderOutcome {
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             invisible_text_checkpoint,
             mut progress,
             source_render,
@@ -1516,9 +1516,9 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> DisplayRowTransitionContinuation {
-        let BufferTextWindowLoopMutableState {
+        let BufferSourceLoopMutableState {
             mut progress,
             cursor_info,
             row_geometry,

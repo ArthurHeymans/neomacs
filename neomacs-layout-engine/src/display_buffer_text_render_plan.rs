@@ -1,11 +1,11 @@
 //! Buffer text render plan construction and completion.
 
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowFinishState,
 };
 use crate::display_buffer_text_body_render::BufferTextWindowWalkSetup;
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_render_attempt::{
     BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
@@ -293,7 +293,7 @@ impl BufferTextWindowOutputSetup {
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         );
-        let loop_context = BufferTextWindowLoopRequestContext::new(
+        let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
             source.accessible_end(),

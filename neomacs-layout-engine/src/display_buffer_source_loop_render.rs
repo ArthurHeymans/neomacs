@@ -1,10 +1,10 @@
 //! Buffer text visible-loop rendering.
 
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::BufferSourceRenderRequest;
 use crate::display_buffer_source_walk::*;
 use crate::display_buffer_text_face_resolution::*;
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipRenderRequest, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest,
@@ -15,10 +15,10 @@ use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
-impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
+impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         source_walk: &mut BufferSourceWalk<'request, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -124,7 +124,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
 
     fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         source_walk: &mut BufferSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -154,7 +154,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
 
     fn render_hscroll_skip_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         source_walk: &mut BufferSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,

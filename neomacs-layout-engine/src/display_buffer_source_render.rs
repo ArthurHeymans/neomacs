@@ -6,11 +6,11 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
+use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
+use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::{
     BufferTextOverflowRenderContext, BufferTextOverflowRenderRequest,
     BufferTextSpecialOverflowRenderContext, BufferTextSpecialOverflowRenderRequest,
@@ -74,11 +74,11 @@ impl BufferSourceItemRenderOutcome {
 }
 
 pub(crate) struct BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face> {
-    loop_context: BufferTextWindowLoopRequestContext,
+    loop_context: BufferSourceLoopRequestContext,
     text: &'request [u8],
     params: &'request WindowParams,
     active_face_state: &'face DisplayRowActiveFaceState,
-    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
+    state: BufferSourceLoopMutableState<'rows, 'emit, 'surface>,
 }
 
 impl<'a> BufferSourceItemRenderContext<'a> {
@@ -131,7 +131,7 @@ fn render_source_item_and_apply<B: LayoutBufferView>(
     context: BufferSourceItemRenderContext<'_>,
     source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
-    state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+    state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
     debug_assert_ne!(source_item.source_step_char().map(|ch| ch.ch()), Some('\n'));
     let Some(source_step_char) = source_item.source_step_char() else {
@@ -160,10 +160,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     context: BufferSourceItemRenderContext<'_>,
     source_walk: &mut BufferSourceWalk<'_, B>,
     buffer: &B,
-    state: BufferTextWindowLoopMutableState<'_, '_, '_>,
+    state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
     let mut source_item = source_item;
-    let BufferTextWindowLoopMutableState {
+    let BufferSourceLoopMutableState {
         invisible_text_checkpoint,
         mut progress,
         source_render,
@@ -246,7 +246,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             .render_if_needed_and_apply(
                 source_walk,
                 buffer,
-                BufferTextWindowLoopMutableState::new(
+                BufferSourceLoopMutableState::new(
                     invisible_text_checkpoint,
                     progress.reborrow(),
                     source_render.reborrow(),
@@ -321,7 +321,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     .render_if_needed_and_apply(
         source_walk,
         context.text,
-        BufferTextWindowLoopMutableState::new(
+        BufferSourceLoopMutableState::new(
             invisible_text_checkpoint,
             progress.reborrow(),
             source_render.reborrow(),
@@ -429,11 +429,11 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face>
 {
     pub(crate) fn new(
-        loop_context: BufferTextWindowLoopRequestContext,
+        loop_context: BufferSourceLoopRequestContext,
         text: &'request [u8],
         params: &'request WindowParams,
         active_face_state: &'face DisplayRowActiveFaceState,
-        state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
+        state: BufferSourceLoopMutableState<'rows, 'emit, 'surface>,
     ) -> Self {
         Self {
             loop_context,
