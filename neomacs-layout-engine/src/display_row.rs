@@ -1411,6 +1411,33 @@ pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     base_face_id: u32,
 }
 
+pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
+    row_request: DisplayRowSourceRenderRequest<'a>,
+    session_request: DisplayRowLispStringSourceSessionRequest,
+}
+
+impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
+    pub(crate) fn from_value(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
+        let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
+            value,
+            row_request.base_face_id(),
+        );
+        Self {
+            row_request,
+            session_request,
+        }
+    }
+
+    fn into_render_parts(
+        self,
+    ) -> (
+        DisplayRowRenderPlan<'a>,
+        DisplayRowLispStringSourceSessionRequest,
+    ) {
+        (self.row_request.into_render_plan(), self.session_request)
+    }
+}
+
 impl<'a> DisplayRowItemSourceRenderRequest<'a> {
     fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
         Self { row_request }
@@ -1618,7 +1645,7 @@ impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    pub(crate) fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
+    fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
         Self {
             source_id: DisplayRowLispStringSourceId::ROOT,
             value,
@@ -2394,16 +2421,13 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         }
     }
 
-    pub(crate) fn render_lisp_string_source_session(
+    pub(crate) fn render_lisp_string_source_request(
         &mut self,
-        row_request: DisplayRowSourceRenderRequest<'_>,
-        session_request: DisplayRowLispStringSourceSessionRequest,
+        request: DisplayRowLispStringSourceRenderRequest<'_>,
     ) -> Option<RenderedDisplayRow> {
-        self.renderer.render_lisp_string_plan_with_context(
-            row_request.into_render_plan(),
-            session_request,
-            &mut self.context,
-        )
+        let (plan, session_request) = request.into_render_parts();
+        self.renderer
+            .render_lisp_string_plan_with_context(plan, session_request, &mut self.context)
     }
 
     pub(crate) fn render_item_source_fragment_into_row<S: DisplayItemSource>(

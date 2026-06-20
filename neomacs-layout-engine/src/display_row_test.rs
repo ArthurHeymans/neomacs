@@ -65,13 +65,9 @@ fn render_lisp_string_row_with_context(
     value: Value,
     context: &mut DisplayRowRenderContext<'_, '_>,
 ) -> Option<RenderedDisplayRow> {
-    let session_request =
-        DisplayRowLispStringSourceSessionRequest::for_base_face_id(value, request.base_face_id());
-    renderer.render_lisp_string_plan_with_context(
-        request.into_render_plan(),
-        session_request,
-        context,
-    )
+    let request = DisplayRowLispStringSourceRenderRequest::from_value(request, value);
+    let (plan, session_request) = request.into_render_parts();
+    renderer.render_lisp_string_plan_with_context(plan, session_request, context)
 }
 
 fn render_lisp_string_row(
@@ -2662,7 +2658,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 }
 
 #[test]
-fn display_row_lisp_string_source_session_uses_render_context() {
+fn display_row_lisp_string_source_request_uses_render_context() {
     let _eval = Context::new();
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
@@ -2699,7 +2695,7 @@ fn display_row_lisp_string_source_session_uses_render_context() {
 }
 
 #[test]
-fn display_row_render_executor_renders_lisp_string_source_session() {
+fn display_row_render_executor_renders_lisp_string_source_request() {
     let _eval = Context::new();
     let mut font_metrics = None;
     let table = FaceTable::new();
@@ -2723,12 +2719,11 @@ fn display_row_render_executor_renders_lisp_string_source_session() {
     let mut executor =
         DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
 
-    let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
-        Value::string("exec"),
-        request.base_face_id(),
-    );
     let rendered = executor
-        .render_lisp_string_source_session(request, session_request)
+        .render_lisp_string_source_request(DisplayRowLispStringSourceRenderRequest::from_value(
+            request,
+            Value::string("exec"),
+        ))
         .expect("executor rendered lisp string row");
 
     assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
