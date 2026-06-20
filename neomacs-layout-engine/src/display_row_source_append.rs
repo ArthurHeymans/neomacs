@@ -11,123 +11,129 @@ use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceR
 use crate::display_source::DisplayItemOnceSource;
 use crate::neovm_bridge::ResolvedFace;
 
-#[derive(Clone)]
-pub(crate) struct DisplayRowSingleItemAppendContext<'face> {
-    base_face: &'face ResolvedFace,
+pub(crate) fn render_single_display_item_with_policy<P: DisplayRowRenderPolicy>(
+    state: &mut TextRowSourceRenderState<'_>,
+    base_face: &ResolvedFace,
     fallback_face_id: u32,
-    frame: DisplayRowAppendFrame,
+    frame: &DisplayRowAppendFrame,
+    item: DisplayItem,
+    position: DisplayRowPosition,
+    fallback_kind: DisplayRowAppendKind,
+    render_policy: &mut P,
+) -> Option<DisplayRowAppendProgress> {
+    let kind = display_item_append_kind(&item, fallback_kind);
+    let face_id = render_face_ref_id(item.face, fallback_face_id);
+    let mut item = item;
+    item.face = RenderFaceRef::FaceId(face_id);
+    let (request, output) = frame.source_render_parts(position, face_id, base_face, kind);
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let mut source = DisplayItemOnceSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let outcome = state.render_display_item_source_into_current_text_row_and_emit(
+        &mut face_ids,
+        &mut source,
+        &mut source_state,
+        request,
+        output,
+        render_policy,
+    )?;
+    Some(outcome.into_append_progress(position))
 }
 
-impl<'face> DisplayRowSingleItemAppendContext<'face> {
-    pub(crate) fn new(
-        base_face: &'face ResolvedFace,
-        fallback_face_id: u32,
-        frame: DisplayRowAppendFrame,
-    ) -> Self {
-        Self {
-            base_face,
-            fallback_face_id,
-            frame,
-        }
-    }
+pub(crate) fn render_single_display_item_naturally(
+    state: &mut TextRowSourceRenderState<'_>,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    frame: &DisplayRowAppendFrame,
+    item: DisplayItem,
+    position: DisplayRowPosition,
+    fallback_kind: DisplayRowAppendKind,
+) -> Option<DisplayRowAppendProgress> {
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    render_single_display_item_with_policy(
+        state,
+        base_face,
+        fallback_face_id,
+        frame,
+        item,
+        position,
+        fallback_kind,
+        &mut render_policy,
+    )
+}
 
-    pub(crate) fn render_item_with_policy<P: DisplayRowRenderPolicy>(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        item: DisplayItem,
-        position: DisplayRowPosition,
-        fallback_kind: DisplayRowAppendKind,
-        render_policy: &mut P,
-    ) -> Option<DisplayRowAppendProgress> {
-        let kind = display_item_append_kind(&item, fallback_kind);
-        let face_id = render_face_ref_id(item.face, self.fallback_face_id);
-        let mut item = item;
-        item.face = RenderFaceRef::FaceId(face_id);
-        let (request, output) =
-            self.frame
-                .source_render_parts(position, face_id, self.base_face, kind);
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-        let mut source = DisplayItemOnceSource::new(item);
-        let mut source_state = DisplayRowSourceState::default();
-        let outcome = state.render_display_item_source_into_current_text_row_and_emit(
-            &mut face_ids,
-            &mut source,
-            &mut source_state,
-            request,
-            output,
-            render_policy,
-        )?;
-        Some(outcome.into_append_progress(position))
-    }
+pub(crate) fn measure_single_display_item_width_with_policy<P: DisplayRowRenderPolicy>(
+    state: &mut TextRowSourceMeasureState<'_>,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    frame: &DisplayRowAppendFrame,
+    item: &DisplayItem,
+    position: DisplayRowPosition,
+    fallback_kind: DisplayRowAppendKind,
+    render_policy: &mut P,
+) -> Option<f32> {
+    let kind = display_item_append_kind(item, fallback_kind);
+    let face_id = render_face_ref_id(item.face, fallback_face_id);
+    let mut item = item.clone();
+    item.face = RenderFaceRef::FaceId(face_id);
+    let request = frame
+        .source_render_request(position, face_id, base_face, kind)
+        .with_render_bounds(DisplayRowRenderBounds::unbounded_from(position));
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let mut source = DisplayItemOnceSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let outcome = state.measure_display_item_source_against_current_text_row(
+        &mut face_ids,
+        &mut source,
+        &mut source_state,
+        request,
+        render_policy,
+    )?;
+    Some(outcome.into_append_progress(position).metrics.width_px)
+}
 
-    pub(crate) fn render_item_naturally(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        item: DisplayItem,
-        position: DisplayRowPosition,
-        fallback_kind: DisplayRowAppendKind,
-    ) -> Option<DisplayRowAppendProgress> {
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        self.render_item_with_policy(state, item, position, fallback_kind, &mut render_policy)
-    }
+pub(crate) fn measure_single_display_item_width_naturally(
+    state: &mut TextRowSourceMeasureState<'_>,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    frame: &DisplayRowAppendFrame,
+    item: &DisplayItem,
+    position: DisplayRowPosition,
+    fallback_kind: DisplayRowAppendKind,
+) -> Option<f32> {
+    let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+    measure_single_display_item_width_with_policy(
+        state,
+        base_face,
+        fallback_face_id,
+        frame,
+        item,
+        position,
+        fallback_kind,
+        &mut render_policy,
+    )
+}
 
-    pub(crate) fn measure_item_width_with_policy<P: DisplayRowRenderPolicy>(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        item: &DisplayItem,
-        position: DisplayRowPosition,
-        fallback_kind: DisplayRowAppendKind,
-        render_policy: &mut P,
-    ) -> Option<f32> {
-        let kind = display_item_append_kind(item, fallback_kind);
-        let face_id = render_face_ref_id(item.face, self.fallback_face_id);
-        let mut item = item.clone();
-        item.face = RenderFaceRef::FaceId(face_id);
-        let request = self
-            .frame
-            .source_render_request(position, face_id, self.base_face, kind)
-            .with_render_bounds(DisplayRowRenderBounds::unbounded_from(position));
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-        let mut source = DisplayItemOnceSource::new(item);
-        let mut source_state = DisplayRowSourceState::default();
-        let outcome = state.measure_display_item_source_against_current_text_row(
-            &mut face_ids,
-            &mut source,
-            &mut source_state,
-            request,
-            render_policy,
-        )?;
-        Some(outcome.into_append_progress(position).metrics.width_px)
-    }
-
-    pub(crate) fn measure_item_width_naturally(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        item: &DisplayItem,
-        position: DisplayRowPosition,
-        fallback_kind: DisplayRowAppendKind,
-    ) -> Option<f32> {
-        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        self.measure_item_width_with_policy(
-            state,
-            item,
-            position,
-            fallback_kind,
-            &mut render_policy,
-        )
-    }
-
-    pub(crate) fn measure_item_width_naturally_or_fallback(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        item: &DisplayItem,
-        position: DisplayRowPosition,
-        fallback_kind: DisplayRowAppendKind,
-        fallback_width_px: f32,
-    ) -> f32 {
-        self.measure_item_width_naturally(state, item, position, fallback_kind)
-            .unwrap_or(fallback_width_px)
-    }
+pub(crate) fn measure_single_display_item_width_naturally_or_fallback(
+    state: &mut TextRowSourceMeasureState<'_>,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    frame: &DisplayRowAppendFrame,
+    item: &DisplayItem,
+    position: DisplayRowPosition,
+    fallback_kind: DisplayRowAppendKind,
+    fallback_width_px: f32,
+) -> f32 {
+    measure_single_display_item_width_naturally(
+        state,
+        base_face,
+        fallback_face_id,
+        frame,
+        item,
+        position,
+        fallback_kind,
+    )
+    .unwrap_or(fallback_width_px)
 }
 
 pub(crate) fn append_synthetic_text_to_display_row(
