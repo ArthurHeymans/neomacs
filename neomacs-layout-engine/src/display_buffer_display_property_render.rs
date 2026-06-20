@@ -12,10 +12,8 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
-use neovm_core::emacs_core::eval::DisplayHost;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
@@ -27,12 +25,6 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
 pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
     row_position: DisplayRowPosition,
     source_position: BufferTextSourcePosition,
-}
-
-enum BufferDisplayPropertyTextReplacementResolveOutcome {
-    Resolved(BufferDisplayPropertyTextReplacementRenderRequest),
-    Fallback(BufferTextSourceItem),
-    Stop,
 }
 
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
@@ -50,11 +42,6 @@ pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> 
     glyph_y_offset: f32,
     default_row_height: f32,
     active_face_state: &'face DisplayRowActiveFaceState,
-}
-
-struct BufferDisplayPropertyTextReplacementRenderRequest {
-    append_request: DisplayPropertyReplacementAppendRequest,
-    skip_to: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
@@ -107,91 +94,17 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         }
     }
 
-    fn resolve(
-        self,
-        font_metrics: &mut Option<FontMetricsService>,
-        display_host: Option<&dyn DisplayHost>,
-        current_x: f32,
-        start_position: DisplayRowPosition,
-    ) -> BufferDisplayPropertyTextReplacementResolveOutcome {
-        let Some(source_text) = self
-            .replacement
-            .source_text(self.text_start_byte, self.text)
-        else {
-            return BufferDisplayPropertyTextReplacementResolveOutcome::Stop;
-        };
-        let descriptor = self.replacement.descriptor();
-        let append_request =
-            DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
-                descriptor,
-                source_text,
-                self.active_face_state,
-                font_metrics,
-                current_x,
-                self.content_x,
-                self.params,
-                display_host,
-                self.glyph_y_offset,
-                self.default_row_height,
-                start_position,
-            );
-        let Some(request) = append_request else {
-            let Some(source_item) = self.replacement.fallback_render_item(
-                self.text_start_byte,
-                self.text,
-                RenderFaceRef::FaceId(self.active_face_state.face_id()),
-            ) else {
-                return BufferDisplayPropertyTextReplacementResolveOutcome::Stop;
-            };
-            return BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item);
-        };
-        BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(
-            BufferDisplayPropertyTextReplacementRenderRequest::new(
-                request,
-                descriptor.skip_to_charpos(),
-            ),
+    fn fallback_render_item(&self) -> Option<BufferTextSourceItem> {
+        self.replacement.fallback_render_item(
+            self.text_start_byte,
+            self.text,
+            RenderFaceRef::FaceId(self.active_face_state.face_id()),
         )
     }
 
-    pub(crate) fn resolve_and_render<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-        current_x: f32,
-        start_position: DisplayRowPosition,
-    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
-        let resolve_outcome =
-            state
-                .source_render
-                .with_font_metrics_and_display_host(|font_metrics, host| {
-                    self.resolve(font_metrics, host, current_x, start_position)
-                });
-        match resolve_outcome {
-            BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
-                BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
-                    request.render(buffer, state),
-                )
-            }
-            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
-                BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item)
-            }
-            BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
-                BufferDisplayPropertyTextReplacementRenderOutcome::Stop
-            }
-        }
-    }
-}
-
-impl BufferDisplayPropertyTextReplacementRenderRequest {
-    fn new(append_request: DisplayPropertyReplacementAppendRequest, skip_to: i64) -> Self {
-        Self {
-            append_request,
-            skip_to,
-        }
-    }
-
-    fn render<B: LayoutBufferView>(
-        self,
+    fn render_append_request<B: LayoutBufferView>(
+        &self,
+        append_request: DisplayPropertyReplacementAppendRequest,
         buffer: &B,
         state: BufferDisplayPropertyTextReplacementRenderState<'_>,
     ) -> BufferDisplayPropertyTextReplacementOutcome {
@@ -202,7 +115,7 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
             row_geometry,
             active_face_state,
         } = state;
-        let outcome = self.append_request.append_to_text_row(
+        let outcome = append_request.append_to_text_row(
             buffer,
             &mut source_render.reborrow(),
             face_ids,
@@ -212,7 +125,52 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
         );
         BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
-            skip_to: self.skip_to,
+            skip_to: self.replacement.descriptor().skip_to_charpos(),
+        }
+    }
+
+    pub(crate) fn resolve_and_render<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+        current_x: f32,
+        start_position: DisplayRowPosition,
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        let Some(source_text) = self
+            .replacement
+            .source_text(self.text_start_byte, self.text)
+        else {
+            return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+        };
+        let descriptor = self.replacement.descriptor();
+        let append_request =
+            state
+                .source_render
+                .with_font_metrics_and_display_host(|font_metrics, host| {
+                    DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+                        descriptor,
+                        source_text,
+                        self.active_face_state,
+                        font_metrics,
+                        current_x,
+                        self.content_x,
+                        self.params,
+                        host,
+                        self.glyph_y_offset,
+                        self.default_row_height,
+                        start_position,
+                    )
+                });
+        match append_request {
+            Some(request) => BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
+                self.render_append_request(request, buffer, state),
+            ),
+            None => {
+                let Some(source_item) = self.fallback_render_item() else {
+                    return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+                };
+                BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item)
+            }
         }
     }
 }
