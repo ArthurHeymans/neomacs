@@ -1,6 +1,5 @@
 //! Shared mutable state for buffer text visible-loop rendering.
 
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -15,12 +14,13 @@ use crate::display_row_walk_state::{
     InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::display_source_progress::DisplaySourceProgressState;
 use crate::hit_test::HitRow;
 use neomacs_display_protocol::types::Color;
 
 pub(crate) struct BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
+    pub(crate) progress: DisplaySourceProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
@@ -45,7 +45,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'sur
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
-        progress: BufferTextWindowProgressState<'emit>,
+        progress: DisplaySourceProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
         row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
         box_face: &'emit mut BoxFaceRowState,

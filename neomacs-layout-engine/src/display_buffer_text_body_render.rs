@@ -6,9 +6,6 @@ use crate::display_buffer_text_append::{
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_progress::{
-    BufferTextWindowProgressState, BufferTextWindowRowProgressState,
-};
 use crate::display_buffer_text_render_attempt::{
     BufferTextWindowOutputState, BufferTextWindowRedisplayPublishRequest,
 };
@@ -39,6 +36,7 @@ use crate::display_row_walk_state::{
     InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
@@ -312,7 +310,7 @@ impl BufferTextWindowWalkSetup {
 
         BufferTextWindowLoopMutableState::new(
             &mut self.invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(
+            DisplaySourceProgressState::new(
                 &mut self.byte_idx,
                 &mut self.charpos,
                 &mut self.x,
@@ -365,7 +363,7 @@ impl BufferTextWindowWalkSetup {
         render_buffer_text_window_tail_and_decide_retry(
             loop_context,
             source_render,
-            BufferTextWindowRowProgressState::new(&mut self.x, &mut self.col),
+            DisplaySourceRowProgressState::new(&mut self.x, &mut self.col),
             &mut self.row_geometry,
             &mut self.cursor_info,
             &mut self.hit_rows,

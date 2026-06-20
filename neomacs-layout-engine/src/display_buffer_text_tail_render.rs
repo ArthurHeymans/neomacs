@@ -8,7 +8,6 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_progress::BufferTextWindowRowProgressState;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -18,6 +17,7 @@ use crate::display_row_geometry::{
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_source_progress::DisplaySourceRowProgressState;
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
@@ -280,7 +280,7 @@ pub(crate) fn render_buffer_text_window_tail_and_decide_retry<
 >(
     loop_context: BufferTextWindowLoopRequestContext,
     mut source_render: TextRowSourceRenderState<'emit>,
-    mut row_progress: BufferTextWindowRowProgressState<'emit>,
+    mut row_progress: DisplaySourceRowProgressState<'emit>,
     row_geometry: &'emit mut DisplayRowGeometryState,
     cursor_info: &'emit mut CursorCaptureState,
     hit_rows: &'emit mut Vec<HitRow>,

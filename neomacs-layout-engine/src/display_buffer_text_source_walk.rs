@@ -7,7 +7,6 @@
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipAction, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
     BufferSelectiveDisplayContext, BufferSelectiveDisplayHiddenLines,
@@ -26,6 +25,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::DisplaySourceContext;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_source_resolver::{
     DisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
 };
@@ -48,7 +48,7 @@ struct BufferTextWindowSourceConsumption {
 impl BufferTextWindowSourceConsumption {
     fn apply_to_progress(
         self,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) -> (Option<BufferTextSourceItem>, Vec<PendingDisplaySourceFace>) {
         if self.source_item.is_none() {
             progress.apply_source_position(self.source_position);
@@ -58,7 +58,7 @@ impl BufferTextWindowSourceConsumption {
 
     fn apply_to_render_progress<B: LayoutBufferView>(
         self,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
@@ -129,7 +129,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
     pub(crate) fn consume_source_item_for_render(
         &mut self,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
         source_render: &mut TextRowSourceRenderState<'_>,
@@ -231,7 +231,7 @@ impl<T> BufferTextWindowSourcePositionConsumption<T> {
         }
     }
 
-    pub(crate) fn apply_to_progress(self, progress: &mut BufferTextWindowProgressState<'_>) -> T {
+    pub(crate) fn apply_to_progress(self, progress: &mut DisplaySourceProgressState<'_>) -> T {
         progress.apply_source_position(self.source_position);
         self.value
     }

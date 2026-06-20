@@ -18,9 +18,6 @@ use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_loop_context::*;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_overflow::*;
-use crate::display_buffer_text_progress::{
-    BufferTextWindowProgressState, BufferTextWindowRowProgressState,
-};
 use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
@@ -96,6 +93,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     NaturalDisplayRowAppendRenderPolicy,
 };
+use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_source_resolver::DisplayPropertyReplacementSourceResolveRequest;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::font_metrics::FontMetricsService;
@@ -1176,7 +1174,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         &mut source_walk,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -1410,7 +1408,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
         BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0),
         &geometry,
         &mut source_render,
-        BufferTextWindowRowProgressState::new(&mut x, &mut col),
+        DisplaySourceRowProgressState::new(&mut x, &mut col),
         0.0,
     );
 
@@ -1738,7 +1736,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
         &snapshot,
         BufferTextWindowLoopMutableState::new(
             &mut checkpoints,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -2558,7 +2556,7 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
     let mut charpos = 4;
     let mut col = 6;
     let mut progress =
-        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
+        DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
 
     action.apply_before_row_transition(
         &geometry,
@@ -2740,7 +2738,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         &snapshot,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -2915,7 +2913,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
         &snapshot,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -3361,7 +3359,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         &snapshot,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -3611,7 +3609,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         text,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -6319,7 +6317,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         &face_resolver,
     );
     let mut progress =
-        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
+        DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
     let continuation = prepared_append.append_to_text_row_and_apply(
         &append_context,
         &geometry,
@@ -6447,7 +6445,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         &active_face,
         BufferTextWindowLoopMutableState::new(
             &mut invisible_text_checkpoint,
-            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
@@ -6718,7 +6716,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextWindowRowProgressState::new(&mut x, &mut col),
+        DisplaySourceRowProgressState::new(&mut x, &mut col),
         &mut context.geometry,
         &mut cursor_info,
         &mut context.hit_rows,
@@ -8088,7 +8086,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         &face_resolver,
     );
     let mut progress =
-        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
+        DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut end_x, &mut end_col);
     let continuation = prepared_append.append_to_text_row_and_apply(
         &append_context,
         &geometry,
@@ -9068,7 +9066,7 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let mut col = 1;
 
     let mut progress =
-        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
+        DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
 
     let update = outcome.walk_update("a界b\n".as_bytes(), progress.source_position());
     progress.row.apply_position(update.row_position());

@@ -2,7 +2,6 @@ use crate::display_buffer_text_overflow::{
     BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
     BufferTextSpecialSourceCharOverflowAction,
 };
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
@@ -34,6 +33,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
     DisplaySourceAppendRenderPolicy,
 };
+use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::{LineWrapMode, WindowParams};
@@ -601,7 +601,7 @@ impl BufferTextSourceCharPreparedAppend {
         source_render: &mut TextRowSourceRenderState<'_>,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
         word_wrap: &mut WordWrapRenderState,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) -> BufferTextSourceAppendContinuation {
         let Some(outcome) = self.append_to_text_row(context, geometry, source_render) else {
             return BufferTextSourceAppendContinuation::Stopped;
@@ -643,7 +643,7 @@ impl BufferTextSourceCharAppendOutcome {
         word_wrap: &mut WordWrapRenderState,
         ch: char,
         geometry: &DisplayRowGeometryState,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) {
         self.apply_to_text_row_state(
             trailing_whitespace,
@@ -869,7 +869,7 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         source_render: &mut TextRowSourceRenderState<'_>,
         face_scan: &mut FaceScanCheckpoint,
         word_wrap: &mut WordWrapRenderState,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) -> BufferTextSourceAppendContinuation {
         let Some(outcome) =
             self.append_to_text_row(context, geometry, params, face_ids, source_render)
@@ -916,7 +916,7 @@ impl BufferTextSpecialSourceCharAppendOutcome {
         &self,
         face_scan: &mut FaceScanCheckpoint,
         word_wrap: &mut WordWrapRenderState,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) {
         self.apply_to_text_row_state(face_scan, progress.row.x, progress.row.col);
         *progress.charpos += 1;

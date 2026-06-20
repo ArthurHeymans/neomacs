@@ -5,9 +5,6 @@
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_progress::{
-    BufferTextWindowProgressState, BufferTextWindowRowProgressState,
-};
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
@@ -38,6 +35,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
@@ -223,7 +221,7 @@ impl BufferHscrollSkipAction {
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
         source_render: &mut TextRowSourceRenderState<'_>,
-        mut row_progress: BufferTextWindowRowProgressState<'_>,
+        mut row_progress: DisplaySourceRowProgressState<'_>,
         content_x: f32,
     ) {
         if !self.should_show_left_truncation() {
@@ -361,7 +359,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         self,
         buffer: &B,
         source_render: TextRowSourceRenderState<'_>,
-        row_progress: BufferTextWindowRowProgressState<'_>,
+        row_progress: DisplaySourceRowProgressState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
         cursor_info: &mut CursorCaptureState,
         hit_rows: &mut Vec<HitRow>,
@@ -369,7 +367,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         row_y_positions: &mut DisplayRowYPositions,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferEndOfBufferTailRenderOutcome {
-        let BufferTextWindowRowProgressState { x, col } = row_progress;
+        let DisplaySourceRowProgressState { x, col } = row_progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -551,8 +549,8 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
-        let BufferTextWindowProgressState {
-            row: BufferTextWindowRowProgressState { x, col },
+        let DisplaySourceProgressState {
+            row: DisplaySourceRowProgressState { x, col },
             ..
         } = progress;
 
@@ -619,7 +617,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             ),
             row_geometry,
             &mut source_render.reborrow(),
-            BufferTextWindowRowProgressState::new(x, col),
+            DisplaySourceRowProgressState::new(x, col),
             context.content_x,
         );
         hscroll_action.capture_text_cursor_if_point(
@@ -1049,7 +1047,7 @@ impl BufferInvisibleTextSkip {
         row_geometry: &'ctx DisplayRowGeometryState,
         cursor_info: &mut CursorCaptureState,
         source_render: &mut TextRowSourceRenderState<'_>,
-        row_progress: &mut BufferTextWindowRowProgressState<'_>,
+        row_progress: &mut DisplaySourceRowProgressState<'_>,
     ) {
         let position = row_progress.row_position();
         self.capture_cursor_if_point(
@@ -1235,7 +1233,7 @@ impl BufferSelectiveDisplayLineTailMarker {
         render_context: BufferSyntheticTextRenderContext<'ctx>,
         row_geometry: &'ctx DisplayRowGeometryState,
         source_render: &mut TextRowSourceRenderState<'_>,
-        mut row_progress: BufferTextWindowRowProgressState<'_>,
+        mut row_progress: DisplaySourceRowProgressState<'_>,
     ) {
         let request = self.ellipsis_append_request(row_progress.row_position());
         append_synthetic_request_to_text_row(
@@ -1713,7 +1711,7 @@ impl BufferTextLineBreakSourceAction {
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
         content_x: f32,
-        progress: &mut BufferTextWindowProgressState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
     ) {
         trailing_whitespace.reset_after_row_transition();
         row_extend.clear();
@@ -1799,7 +1797,7 @@ pub(crate) fn append_synthetic_request_to_text_row<'ctx>(
     render_context: BufferSyntheticTextRenderContext<'ctx>,
     row_geometry: &'ctx DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
-    row_progress: &mut BufferTextWindowRowProgressState<'_>,
+    row_progress: &mut DisplaySourceRowProgressState<'_>,
     request: SyntheticTextAppendRequest,
 ) {
     let Some(progress) =
@@ -1814,7 +1812,7 @@ pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
     render_context: BufferSyntheticTextRenderContext<'ctx>,
     row_geometry: &'ctx DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
-    row_progress: &mut BufferTextWindowRowProgressState<'_>,
+    row_progress: &mut DisplaySourceRowProgressState<'_>,
     content_x: f32,
 ) {
     let request =

@@ -1,12 +1,12 @@
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_source::DisplaySourceTextPosition;
 
-pub(crate) struct BufferTextWindowRowProgressState<'emit> {
+pub(crate) struct DisplaySourceRowProgressState<'emit> {
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
 }
 
-impl<'emit> BufferTextWindowRowProgressState<'emit> {
+impl<'emit> DisplaySourceRowProgressState<'emit> {
     pub(crate) fn new(x: &'emit mut f32, col: &'emit mut usize) -> Self {
         Self { x, col }
     }
@@ -18,8 +18,8 @@ impl<'emit> BufferTextWindowRowProgressState<'emit> {
         }
     }
 
-    pub(crate) fn reborrow(&mut self) -> BufferTextWindowRowProgressState<'_> {
-        BufferTextWindowRowProgressState {
+    pub(crate) fn reborrow(&mut self) -> DisplaySourceRowProgressState<'_> {
+        DisplaySourceRowProgressState {
             x: self.x,
             col: self.col,
         }
@@ -31,13 +31,13 @@ impl<'emit> BufferTextWindowRowProgressState<'emit> {
     }
 }
 
-pub(crate) struct BufferTextWindowProgressState<'emit> {
+pub(crate) struct DisplaySourceProgressState<'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
-    pub(crate) row: BufferTextWindowRowProgressState<'emit>,
+    pub(crate) row: DisplaySourceRowProgressState<'emit>,
 }
 
-impl<'emit> BufferTextWindowProgressState<'emit> {
+impl<'emit> DisplaySourceProgressState<'emit> {
     pub(crate) fn new(
         byte_idx: &'emit mut usize,
         charpos: &'emit mut i64,
@@ -47,7 +47,7 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
         Self {
             byte_idx,
             charpos,
-            row: BufferTextWindowRowProgressState::new(x, col),
+            row: DisplaySourceRowProgressState::new(x, col),
         }
     }
 
@@ -68,8 +68,8 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
         *self.charpos = position.charpos();
     }
 
-    pub(crate) fn reborrow(&mut self) -> BufferTextWindowProgressState<'_> {
-        BufferTextWindowProgressState {
+    pub(crate) fn reborrow(&mut self) -> DisplaySourceProgressState<'_> {
+        DisplaySourceProgressState {
             byte_idx: self.byte_idx,
             charpos: self.charpos,
             row: self.row.reborrow(),
