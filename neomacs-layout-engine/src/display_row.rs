@@ -1,4 +1,5 @@
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
     DisplayMediaReplacementKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
@@ -2515,10 +2516,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 }
             }
             let render_item = DisplayRowRenderItem::from_source_item(item);
-            let item_face_id = match render_item.row_face() {
-                RenderFaceRef::FaceId(face_id) => face_id,
-                RenderFaceRef::Inherit => row_face.face_id,
-            };
+            let item_face_id = render_face_ref_id(render_item.row_face(), row_face.face_id);
             let measurement = policy.measurement_for(
                 render_item.row_item(),
                 item_face_id,

@@ -1,4 +1,5 @@
 use crate::composition::base_width_cols;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
     DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
@@ -1434,13 +1435,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn face_id(&self, face: RenderFaceRef) -> u32 {
-        match face {
-            RenderFaceRef::FaceId(face_id) => face_id,
-            RenderFaceRef::Inherit => match self.layout.base_face {
-                RenderFaceRef::FaceId(face_id) => face_id,
-                RenderFaceRef::Inherit => 0,
-            },
-        }
+        render_face_ref_id(face, render_face_ref_id(self.layout.base_face, 0))
     }
 }
 

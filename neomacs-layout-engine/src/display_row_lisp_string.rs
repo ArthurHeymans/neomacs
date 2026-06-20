@@ -685,14 +685,6 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
 }
 
 #[cfg(test)]
-pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
-    match face {
-        RenderFaceRef::FaceId(face_id) => face_id,
-        RenderFaceRef::Inherit => fallback,
-    }
-}
-
-#[cfg(test)]
 pub(crate) fn apply_pending_display_source_faces(
     builder: &mut DisplayOutputBuilder,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,

@@ -1,6 +1,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
@@ -547,10 +548,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             return face;
         }
 
-        let base_face_id = match face {
-            RenderFaceRef::FaceId(face_id) => face_id,
-            RenderFaceRef::Inherit => face_basis.base_face_id(),
-        };
+        let base_face_id = render_face_ref_id(face, face_basis.base_face_id());
         let key = DisplayHeightFaceKey {
             base_face_id,
             factor_bits: factor.to_bits(),

@@ -1,4 +1,5 @@
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowRenderPolicy,
@@ -844,13 +845,6 @@ fn append_synthetic_text_to_display_row(
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress(start))
-}
-
-fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
-    match face {
-        RenderFaceRef::FaceId(face_id) => face_id,
-        RenderFaceRef::Inherit => fallback,
-    }
 }
 
 fn prepare_single_display_item_source_append(
