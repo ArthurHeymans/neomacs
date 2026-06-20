@@ -1,8 +1,10 @@
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_output_builder::{
-    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRetryCheckpointRestoreRequest,
-    OutputRowDecorationInstallRequest, OutputRowDecorator,
-    OutputTextWindowDisplayRangeInstallRequest,
+    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputCurrentRowDecorationRequest,
+    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
+    OutputMediaInstallRequest, OutputRetryCheckpointRestoreRequest,
+    OutputRowDecorationInstallRequest, OutputRowDecorator, OutputRowLifecycleRequest,
+    OutputTextWindowDisplayRangeInstallRequest, ResolvedOutputMediaInstallTarget,
 };
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
@@ -115,7 +117,12 @@ impl<'a> DisplayRowOutputInstall<'a> {
         row.pixel_y = self.pixel_y - pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
-        builder.install_complete_output_row(self.display_row_index, row.role, row.mode_line, row);
+        builder.install_output_row_lifecycle(OutputRowLifecycleRequest::complete(
+            self.display_row_index,
+            row.role,
+            row.mode_line,
+            row,
+        ));
     }
 }
 
@@ -175,7 +182,7 @@ impl DisplayOutputCursorArtifactInstallRequest {
     }
 
     fn install(self, builder: &mut DisplayOutputBuilder) {
-        builder.add_output_cursor(
+        builder.install_output_cursor(OutputCursorInstallRequest::new(
             self.window_id,
             self.slot_id,
             self.x,
@@ -184,7 +191,7 @@ impl DisplayOutputCursorArtifactInstallRequest {
             self.height,
             self.style,
             self.color,
-        );
+        ));
     }
 }
 
@@ -234,12 +241,12 @@ impl DisplayOutputTextRowMetricsInstallRequest {
 
     fn install(self, builder: &mut DisplayOutputBuilder) -> DisplayOutputRowStoredMetrics {
         let metrics = self.stored_metrics(builder);
-        builder.set_output_row_metrics(
+        builder.install_output_row_lifecycle(OutputRowLifecycleRequest::metrics(
             self.display_row_index,
             metrics.pixel_y,
             metrics.height_px,
             metrics.ascent_px,
-        );
+        ));
         metrics
     }
 }
@@ -285,7 +292,9 @@ pub(crate) fn install_text_output_row_decoration(
 ) {
     match request {
         TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft => {
-            builder.mark_current_output_row_truncated_left();
+            builder.install_output_row_lifecycle(OutputRowLifecycleRequest::current_decoration(
+                OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
+            ));
         }
     }
 }
@@ -295,7 +304,9 @@ pub(crate) fn install_text_output_cursor_effects(
     window_id: i64,
     effects: EffectsConfig,
 ) {
-    builder.set_output_cursor_effects(window_id, effects);
+    builder.install_output_frame_state(OutputFrameStateInstallRequest::cursor_effects(
+        window_id, effects,
+    ));
 }
 
 pub(crate) fn install_text_output_cursor_artifact(
@@ -311,14 +322,18 @@ pub(crate) fn install_text_output_row_cursor(
     col: u16,
     style: CursorStyle,
 ) {
-    builder.set_output_row_cursor(display_row_index, col, style);
+    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
+        display_row_index,
+        col,
+        style,
+    ));
 }
 
 pub(crate) fn store_text_output_phys_cursor(
     builder: &mut DisplayOutputBuilder,
     cursor: PhysCursor,
 ) {
-    builder.store_output_phys_cursor(cursor);
+    builder.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
 }
 
 pub(crate) fn install_current_text_output_row_decoration<D>(
@@ -349,7 +364,11 @@ pub(crate) fn begin_text_output_row(
     builder: &mut DisplayOutputBuilder,
     display_row_index: usize,
 ) -> usize {
-    builder.begin_output_row(display_row_index, GlyphRowRole::Text, false);
+    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::begin(
+        display_row_index,
+        GlyphRowRole::Text,
+        false,
+    ));
     display_row_index
 }
 
@@ -365,7 +384,9 @@ pub(crate) fn finish_text_output_row(
     request: DisplayOutputTextRowMetricsInstallRequest,
 ) -> DisplayOutputRowStoredMetrics {
     let metrics = install_text_output_row_metrics(builder, request);
-    builder.finalize_output_row_index(request.display_row_index());
+    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(
+        request.display_row_index(),
+    ));
     metrics
 }
 
@@ -373,7 +394,7 @@ pub(crate) fn finalize_text_output_row(
     builder: &mut DisplayOutputBuilder,
     display_row_index: usize,
 ) {
-    builder.finalize_output_row_index(display_row_index);
+    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(display_row_index));
 }
 
 pub(crate) fn install_display_row(
@@ -633,7 +654,10 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     fn install(self, builder: &mut DisplayOutputBuilder) {
         for face in self.faces {
-            builder.install_output_face(face.id, face.clone());
+            builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
+                face.id,
+                face.clone(),
+            ));
         }
         for medium in self.media {
             self.install_medium(builder, medium);
@@ -642,30 +666,30 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     fn install_medium(&self, builder: &mut DisplayOutputBuilder, medium: &RenderedDisplayRowMedia) {
         let target = DisplayRowMediaInstallTarget::resolve(builder, medium.col, self.target);
+        let target = ResolvedOutputMediaInstallTarget::new(
+            target.window_id,
+            self.role,
+            target.clip,
+            target.slot_id,
+        );
         match medium.kind {
             RenderedDisplayRowMediaKind::Image { image_id } => {
-                builder.add_output_image_media(
-                    target.window_id,
-                    self.role,
-                    target.clip,
-                    target.slot_id,
+                builder.install_output_media(OutputMediaInstallRequest::image(
+                    target,
                     image_id,
                     medium.x,
                     medium.y,
                     medium.width,
                     medium.height,
-                );
+                ));
             }
             RenderedDisplayRowMediaKind::Video {
                 video_id,
                 loop_count,
                 autoplay,
             } => {
-                builder.add_output_video_media(
-                    target.window_id,
-                    self.role,
-                    target.clip,
-                    target.slot_id,
+                builder.install_output_media(OutputMediaInstallRequest::video(
+                    target,
                     video_id,
                     loop_count,
                     autoplay,
@@ -673,20 +697,17 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
                     medium.y,
                     medium.width,
                     medium.height,
-                );
+                ));
             }
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                builder.add_output_xwidget_media(
-                    target.window_id,
-                    self.role,
-                    target.clip,
-                    target.slot_id,
+                builder.install_output_media(OutputMediaInstallRequest::xwidget(
+                    target,
                     xwidget_id,
                     medium.x,
                     medium.y,
                     medium.width,
                     medium.height,
-                );
+                ));
             }
         }
     }
@@ -752,7 +773,10 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     display_row_index: usize,
 ) -> DisplayRowPosition {
     for face in &rendered.faces {
-        builder.install_output_face(face.id, face.clone());
+        builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
+            face.id,
+            face.clone(),
+        ));
     }
     let end = DisplayRowCurrentRowInstaller::new(builder)
         .append_rendered_fragment(rendered)

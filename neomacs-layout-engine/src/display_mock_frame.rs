@@ -3,7 +3,7 @@ use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_builder::{DisplayOutputBuilder, OutputFrameStateInstallRequest};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
     DisplayRowSourceFragmentFrame, DisplayRowSourceState,
@@ -351,7 +351,7 @@ pub(crate) fn layout_mock_frame_content(
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
         face.font_size = crate::fontconfig::points_to_pixels(face.font_size);
-        builder.install_output_face(face.id, face);
+        builder.install_output_frame_state(OutputFrameStateInstallRequest::face(face.id, face));
     }
 
     let default_face = content.faces.first();
@@ -540,7 +540,10 @@ pub(crate) fn layout_mock_frame_content(
         );
         cb.set_output_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
         for face in &content.faces {
-            cb.install_output_face(face.id, face.clone());
+            cb.install_output_frame_state(OutputFrameStateInstallRequest::face(
+                face.id,
+                face.clone(),
+            ));
         }
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
