@@ -42,10 +42,10 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    LispStringSourceAppendRequest, LispStringSourceAppendSessionRequest, LispStringSourceId,
-    LispStringSourceRowAppendSession, append_lisp_string_to_text_row,
-    apply_pending_display_source_faces, render_face_ref_id,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, LispStringRowAppendContext, LispStringSourceAppendRequest,
+    LispStringSourceAppendSessionRequest, LispStringSourceId, LispStringSourceRowAppendSession,
+    append_lisp_string_to_text_row, apply_pending_display_source_faces, render_face_ref_id,
 };
 use crate::display_row_output_install::DisplayRowCurrentRowOutput;
 use crate::display_row_output_install::append_rendered_display_row_fragment_to_text_row_and_emit;

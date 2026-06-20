@@ -26,7 +26,7 @@ use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::DisplayStringBaseFace;
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
-use crate::neovm_bridge::ResolvedFace;
+use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
@@ -491,6 +491,115 @@ impl DisplayRowPrefixSource {
         position: DisplayRowPosition,
     ) -> LispStringSourceAppendRequest {
         self.source.append_request(position)
+    }
+}
+
+pub(crate) struct BufferLinePrefixRenderContext<'a> {
+    values: DisplayRowPrefixValues,
+    append_surface: &'a DisplayRowAppendSurface,
+    row_geometry: &'a DisplayRowGeometryState,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+}
+
+pub(crate) struct BufferLinePrefixRenderRequest<'a> {
+    context: BufferLinePrefixRenderContext<'a>,
+    position: DisplayRowPosition,
+}
+
+impl<'a> BufferLinePrefixRenderContext<'a> {
+    pub(crate) fn new(
+        values: DisplayRowPrefixValues,
+        append_surface: &'a DisplayRowAppendSurface,
+        row_geometry: &'a DisplayRowGeometryState,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            values,
+            append_surface,
+            row_geometry,
+            active_face_state,
+            glyph_y_offset,
+            default_row_height,
+        }
+    }
+
+    pub(crate) fn render_requested_to_text_row_and_emit<B: LayoutBufferView>(
+        self,
+        request: &mut DisplayRowPrefixRequest,
+        state: &mut TextRowSourceRenderState<'_>,
+        buffer: &B,
+        anchor_charpos: i64,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if !request.is_requested() {
+            return position;
+        }
+
+        let text_props = RustTextPropAccess::new(buffer);
+        let line_property = text_props.get_property(anchor_charpos, Value::symbol("line-prefix"));
+        let wrap_property = text_props.get_property(anchor_charpos, Value::symbol("wrap-prefix"));
+        let source = request.source_from_values(
+            self.values.with_properties(line_property, wrap_property),
+            CharPos0::new(anchor_charpos as usize),
+        );
+        request.clear();
+
+        let Some(prefix_source) = source else {
+            return position;
+        };
+
+        let prefix_base_face =
+            state.default_display_string_base_face(buffer, prefix_source.origin(), face_ids);
+        LispStringRowAppendContext::new(
+            self.append_surface,
+            self.row_geometry,
+            self.active_face_state,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+        .render_prefix_source_to_text_row_and_emit(
+            state,
+            face_ids,
+            &prefix_base_face,
+            prefix_source,
+            position,
+        )
+    }
+}
+
+impl<'a> BufferLinePrefixRenderRequest<'a> {
+    pub(crate) fn new(
+        context: BufferLinePrefixRenderContext<'a>,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self { context, position }
+    }
+
+    pub(crate) fn render_requested_with_source_state_and_apply<B: LayoutBufferView>(
+        self,
+        request: &mut DisplayRowPrefixRequest,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        buffer: &B,
+        anchor_charpos: i64,
+        face_ids: &mut FrameFaceIdAllocator,
+        x: &mut f32,
+        col: &mut usize,
+    ) {
+        let position = self.context.render_requested_to_text_row_and_emit(
+            request,
+            source_render,
+            buffer,
+            anchor_charpos,
+            face_ids,
+            self.position,
+        );
+        *x = position.x_px;
+        *col = position.col;
     }
 }
 
