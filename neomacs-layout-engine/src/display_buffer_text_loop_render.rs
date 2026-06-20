@@ -7,7 +7,7 @@ use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipRenderRequest, BufferInvisibleTextRenderOutcome,
-    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
+    BufferInvisibleTextRenderRequest,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
@@ -213,21 +213,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request: BufferInvisibleTextRenderRequest<'_>,
         buffer: &B,
     ) -> BufferInvisibleTextRenderOutcome {
-        request.render_at_checkpoint_and_apply(
-            source_walk,
-            buffer,
-            BufferInvisibleTextRenderRequestState::new(
-                self.state.invisible_text_checkpoint,
-                self.state.progress.reborrow(),
-                self.state.source_render.reborrow(),
-                self.state.row_geometry,
-                self.state.cursor_info,
-                self.state.hit_rows,
-                self.state.hit_row_range,
-                self.state.row_y_positions,
-                self.state.face_ids,
-            ),
-        )
+        request.render_at_checkpoint_and_apply(source_walk, buffer, self.state.reborrow())
     }
 
     fn render_hscroll_skip_for_context<'request, B: LayoutBufferView>(

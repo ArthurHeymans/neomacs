@@ -710,45 +710,6 @@ pub(crate) struct BufferInvisibleTextRenderContext<'a> {
     char_w: f32,
 }
 
-pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
-    checkpoints: &'emit mut InvisibleTextScanCheckpoint,
-    progress: BufferTextWindowProgressState<'emit>,
-    source_render: TextRowSourceRenderState<'emit>,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    cursor_info: &'emit mut CursorCaptureState,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    row_y_positions: &'a mut DisplayRowYPositions,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
-impl<'a, 'emit> BufferInvisibleTextRenderRequestState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        checkpoints: &'emit mut InvisibleTextScanCheckpoint,
-        progress: BufferTextWindowProgressState<'emit>,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        cursor_info: &'emit mut CursorCaptureState,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        row_y_positions: &'a mut DisplayRowYPositions,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            checkpoints,
-            progress,
-            source_render,
-            row_geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSelectiveDisplayTailRenderOutcome {
     NotHidden,
@@ -1130,10 +1091,10 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,
-        state: BufferInvisibleTextRenderRequestState<'_, '_>,
+        state: BufferTextWindowLoopMutableState<'_, '_, '_>,
     ) -> BufferInvisibleTextRenderOutcome {
-        let BufferInvisibleTextRenderRequestState {
-            checkpoints,
+        let BufferTextWindowLoopMutableState {
+            invisible_text_checkpoint,
             mut progress,
             source_render,
             row_geometry,
@@ -1142,6 +1103,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            ..
         } = state;
         let mut source_render = source_render;
         let context = self.context;
@@ -1155,7 +1117,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
                     context.point_charpos,
                     cursor_info.is_missing(),
                 ),
-                checkpoints,
+                invisible_text_checkpoint,
                 progress.source_position(),
             )
             .apply_to_progress(&mut progress);

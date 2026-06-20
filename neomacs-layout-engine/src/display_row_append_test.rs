@@ -1716,6 +1716,15 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut append_state = BufferTextRowAppendState::default();
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut source_walk = BufferTextWindowSourceWalk::new(buf_id, &snapshot, 0, 0);
 
@@ -1734,7 +1743,8 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     .render_at_checkpoint_and_apply(
         &mut source_walk,
         &snapshot,
-        BufferInvisibleTextRenderRequestState::new(
+        BufferTextWindowLoopMutableState::new(
+            &mut append_state,
             &mut checkpoints,
             BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
             text_row_source_render_state(
@@ -1744,12 +1754,23 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
                 &mut font_metrics,
                 &face_resolver,
             ),
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
             &mut context.geometry,
-            &mut cursor_info,
+            &mut context.row_flags,
             &mut context.hit_rows,
             &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
             &mut context.row_y_positions,
+            &mut cursor_info,
             &mut face_ids,
+            &surface,
+            overlay_context,
         ),
     );
 
