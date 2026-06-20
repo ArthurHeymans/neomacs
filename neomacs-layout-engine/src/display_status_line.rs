@@ -169,7 +169,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         )
     }
 
-    fn render_request(
+    fn lisp_string_render_request(
         &self,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayRowLispStringRenderRequest<'face> {
@@ -182,28 +182,34 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 
     pub(crate) fn render(
         self,
-        state: &mut FrameTabBarDisplayRowRenderState<'_, '_, '_>,
+        state: &mut FrameTabBarDisplayRowRenderState<'_, '_, 'face>,
     ) -> Option<FrameTabBarDisplayRowRender> {
-        let render_request = self.render_request(state.render_services.face_ids());
-        let rendered = state
-            .render_services
-            .render_lisp_string_request(render_request, state.display_host)?;
-        if display_row_text_is_empty(&rendered.row) {
+        let rendered = self
+            .into_chrome_render_request(state.render_services.face_ids())
+            .render_row(&mut state.render_services, state.display_host)?;
+        if rendered.text_is_empty() {
             return Some(FrameTabBarDisplayRowRender::Empty);
         }
-        let measured = MeasuredDisplayRow::new(
-            DisplayRowOwner::FrameChrome {
-                kind: FrameChromeKind::TabBar,
-            },
-            self.row_index,
-            self.bounds(),
-            rendered,
-            DisplayRowBoundsPolicy::MeasureContent,
-        );
+        let measured = rendered.measure();
         state
             .output
             .install_measured_frame_chrome_display_row(state.pending_frame_chrome_rows, &measured);
         Some(FrameTabBarDisplayRowRender::Measured(measured))
+    }
+
+    fn into_chrome_render_request(
+        self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> ChromeDisplayRowRenderRequest<'face> {
+        ChromeDisplayRowRenderRequest {
+            owner: DisplayRowOwner::FrameChrome {
+                kind: FrameChromeKind::TabBar,
+            },
+            display_row_index: self.row_index,
+            bounds: self.bounds(),
+            bounds_policy: DisplayRowBoundsPolicy::MeasureContent,
+            render_request: self.lisp_string_render_request(face_ids),
+        }
     }
 }
 
@@ -649,12 +655,59 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     }
 }
 
-struct WindowChromeDisplayRowRenderRequest<'face> {
-    output: ChromeRowOutput,
+struct ChromeDisplayRowRenderRequest<'face> {
     owner: DisplayRowOwner,
     display_row_index: u32,
     bounds: Rect,
+    bounds_policy: DisplayRowBoundsPolicy,
     render_request: DisplayRowLispStringRenderRequest<'face>,
+}
+
+struct ChromeDisplayRowRenderedRequest {
+    owner: DisplayRowOwner,
+    display_row_index: u32,
+    bounds: Rect,
+    bounds_policy: DisplayRowBoundsPolicy,
+    rendered: RenderedDisplayRow,
+}
+
+impl<'face> ChromeDisplayRowRenderRequest<'face> {
+    fn render_row(
+        self,
+        render_services: &mut ChromeRowRenderServices<'_, 'face>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<ChromeDisplayRowRenderedRequest> {
+        let rendered =
+            render_services.render_lisp_string_request(self.render_request, display_host)?;
+        Some(ChromeDisplayRowRenderedRequest {
+            owner: self.owner,
+            display_row_index: self.display_row_index,
+            bounds: self.bounds,
+            rendered,
+            bounds_policy: self.bounds_policy,
+        })
+    }
+}
+
+impl ChromeDisplayRowRenderedRequest {
+    fn text_is_empty(&self) -> bool {
+        display_row_text_is_empty(&self.rendered.row)
+    }
+
+    fn measure(self) -> MeasuredDisplayRow {
+        MeasuredDisplayRow::new(
+            self.owner,
+            self.display_row_index,
+            self.bounds,
+            self.rendered,
+            self.bounds_policy,
+        )
+    }
+}
+
+struct WindowChromeDisplayRowRenderRequest<'face> {
+    output: ChromeRowOutput,
+    row: ChromeDisplayRowRenderRequest<'face>,
 }
 
 impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
@@ -663,15 +716,10 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
         render_services: &mut ChromeRowRenderServices<'_, 'face>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<WindowChromeDisplayRowRender> {
-        let rendered =
-            render_services.render_lisp_string_request(self.render_request, display_host)?;
-        let measured = MeasuredDisplayRow::new(
-            self.owner,
-            self.display_row_index,
-            self.bounds,
-            rendered,
-            DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
-        );
+        let measured = self
+            .row
+            .render_row(render_services, display_host)?
+            .measure();
         Some(WindowChromeDisplayRowRender {
             output: self.output,
             measured,
@@ -729,15 +777,19 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
             .render_request(face_ids);
-        WindowChromeDisplayRowRenderRequest {
-            output: self.output,
+        let row = ChromeDisplayRowRenderRequest {
             owner: DisplayRowOwner::WindowChrome {
                 window_id: self.window_id,
                 kind: self.kind,
             },
             display_row_index: self.display_row_index.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
+            bounds_policy: DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
             render_request,
+        };
+        WindowChromeDisplayRowRenderRequest {
+            output: self.output,
+            row,
         }
     }
 }
