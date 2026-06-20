@@ -848,21 +848,7 @@ impl BufferTextTruncationSkipAction {
         text: &[u8],
         position: &mut BufferTextSourcePosition,
     ) -> Self {
-        let mut reached_line_break = false;
-        if let Some(source_char) = position.consume_step_char(text)
-            && source_char.ch() == '\n'
-        {
-            reached_line_break = true;
-        }
-        while !reached_line_break && position.byte_idx() < text.len() {
-            let Some(source_char) = position.consume_step_char(text) else {
-                break;
-            };
-            if source_char.ch() == '\n' {
-                reached_line_break = true;
-                break;
-            }
-        }
+        let reached_line_break = position.consume_one_then_until_line_break(text);
         Self {
             charpos: position.charpos(),
             reached_line_break,

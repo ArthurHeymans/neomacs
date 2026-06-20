@@ -315,6 +315,25 @@ impl BufferTextSourcePosition {
             }
         }
     }
+
+    pub(crate) fn consume_until_line_break(&mut self, text: &[u8]) -> bool {
+        while self.byte_idx < text.len() {
+            let Some(source_char) = self.consume_step_char(text) else {
+                break;
+            };
+            if source_char.ch() == '\n' {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub(crate) fn consume_one_then_until_line_break(&mut self, text: &[u8]) -> bool {
+        let Some(source_char) = self.consume_step_char(text) else {
+            return false;
+        };
+        source_char.ch() == '\n' || self.consume_until_line_break(text)
+    }
 }
 
 impl BufferTextSourceStepChar {

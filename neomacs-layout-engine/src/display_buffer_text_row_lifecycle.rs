@@ -1611,15 +1611,10 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
         position: &mut BufferTextSourcePosition,
     ) -> BufferSelectiveDisplayLineTailAction {
         position.advance_charpos_by_one();
-        while position.byte_idx() < self.text.len() {
-            let Some(source_char) = position.consume_step_char(self.text) else {
-                break;
+        if position.consume_until_line_break(self.text) {
+            return BufferSelectiveDisplayLineTailAction::LineBreak {
+                charpos: position.charpos(),
             };
-            if source_char.ch() == '\n' {
-                return BufferSelectiveDisplayLineTailAction::LineBreak {
-                    charpos: position.charpos(),
-                };
-            }
         }
 
         BufferSelectiveDisplayLineTailAction::Exhausted
@@ -1682,15 +1677,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     }
 
     fn skip_line(self, position: &mut BufferTextSourcePosition) -> bool {
-        while position.byte_idx() < self.text.len() {
-            let Some(source_char) = position.consume_step_char(self.text) else {
-                break;
-            };
-            if source_char.ch() == '\n' {
-                return true;
-            }
-        }
-        false
+        position.consume_until_line_break(self.text)
     }
 }
 
