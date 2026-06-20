@@ -630,16 +630,33 @@ impl LayoutEngine {
                                 }
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
-                                // GNU `resize_mini_window` (src/xdisp.c:13399)
-                                // shrinks a grow-only mini-window only when its
-                                // displayed buffer is empty (`BEGV == ZV`).
-                                // Mirror that emptiness test on the buffer the
-                                // mini-window is actually displaying: the swapped
-                                // ` *Echo Area 0*` buffer for an inactive
-                                // mini-window (GNU `with_echo_area_buffer`), or
-                                // the window's own buffer when the minibuffer is
-                                // active. `mini_rows_used < allocated` already
-                                // bounds the genuine (multi-line) message case.
+                                // GNU `resize_mini_window` (src/xdisp.c:13395-
+                                // 13406): with `grow-only`, a mini-window
+                                // shrinks when `height < old_height &&
+                                // (exact_p || BEGV == ZV)`. Two cases shrink:
+                                //
+                                //   * `BEGV == ZV` — its displayed buffer is
+                                //     empty. We test that on the buffer the
+                                //     mini-window is actually displaying: the
+                                //     swapped ` *Echo Area 0*` buffer for an
+                                //     inactive mini-window (GNU
+                                //     `with_echo_area_buffer`), or the window's
+                                //     own buffer when the minibuffer is active.
+                                //
+                                //   * `exact_p` — a post-command exact resize
+                                //     was requested. GNU's
+                                //     `resize_echo_area_exactly` (xdisp.c:13228)
+                                //     runs after every command (keyboard.c:1344)
+                                //     with `exact_p = (minibuf_level == 0)`, so
+                                //     a finished command with no active
+                                //     minibuffer shrinks the echo window to fit
+                                //     even a shorter NON-EMPTY message. We read
+                                //     that request from the evaluator; it is
+                                //     cleared once per redisplay.
+                                //
+                                // `mini_rows_used < allocated` already bounds
+                                // the genuine (multi-line) message case.
+                                let exact = evaluator.echo_area_resize_exact_pending();
                                 let mini_window_id =
                                     neovm_core::window::WindowId(mini_params.window_id as u64);
                                 let buf_id =
@@ -659,7 +676,8 @@ impl LayoutEngine {
                                     .get(buf_id)
                                     .map(|b| b.accessible_emacs_byte_range().is_empty())
                                     .unwrap_or(true);
-                                let should_shrink = resize_mode.should_shrink(visible_region_empty);
+                                let should_shrink =
+                                    resize_mode.should_shrink(exact, visible_region_empty);
 
                                 if should_shrink {
                                     tracing::debug!(

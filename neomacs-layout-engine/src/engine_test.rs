@@ -91,10 +91,21 @@ fn resize_mini_windows_mode_parses_gnu_values() {
 fn grow_only_minibuffer_shrinks_only_when_visible_region_is_empty() {
     assert!(ResizeMiniWindowsMode::GrowOnly.should_grow());
     assert!(!ResizeMiniWindowsMode::Disabled.should_grow());
-    assert!(ResizeMiniWindowsMode::Exact.should_shrink(false));
-    assert!(!ResizeMiniWindowsMode::Disabled.should_shrink(true));
-    assert!(!ResizeMiniWindowsMode::GrowOnly.should_shrink(false));
-    assert!(ResizeMiniWindowsMode::GrowOnly.should_shrink(true));
+    // `t` (Exact) always shrinks, regardless of exact_p / emptiness.
+    assert!(ResizeMiniWindowsMode::Exact.should_shrink(false, false));
+    assert!(ResizeMiniWindowsMode::Exact.should_shrink(true, false));
+    // `nil` (Disabled) never shrinks.
+    assert!(!ResizeMiniWindowsMode::Disabled.should_shrink(false, true));
+    assert!(!ResizeMiniWindowsMode::Disabled.should_shrink(true, true));
+    // `grow-only` shrinks for an empty buffer (GNU `BEGV == ZV`)...
+    assert!(ResizeMiniWindowsMode::GrowOnly.should_shrink(false, true));
+    // ...or when an exact resize is requested (GNU `exact_p`, i.e. the
+    // post-command `resize_echo_area_exactly` with `minibuf_level == 0`),
+    // even for a non-empty shorter message.
+    assert!(ResizeMiniWindowsMode::GrowOnly.should_shrink(true, false));
+    // But never for a non-empty buffer with no exact request (normal
+    // mid-redisplay grow-only behavior keeps the larger size).
+    assert!(!ResizeMiniWindowsMode::GrowOnly.should_shrink(false, false));
 }
 
 #[test]

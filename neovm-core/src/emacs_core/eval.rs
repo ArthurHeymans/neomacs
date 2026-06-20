@@ -1796,6 +1796,15 @@ pub struct Context {
     pub(crate) interactive_minibuffer_read_count: u64,
     /// Current echo-area message text, mirroring GNU `current-message`.
     pub(crate) current_message: Option<crate::heap_types::LispString>,
+    /// Pending request to resize the echo-area mini-window *exactly* to its
+    /// content on the next redisplay, mirroring GNU `resize_echo_area_exactly`
+    /// (src/xdisp.c:13228-13245). GNU's `command_loop_1` (src/keyboard.c:1344)
+    /// runs `resize_echo_area_exactly` after every command when a message is
+    /// displayed, passing `exact_p = (minibuf_level == 0)`. We set this flag at
+    /// the same post-command point and consume it in the redisplay layout pass
+    /// so a `grow-only` echo window shrinks back to fit a shorter (even
+    /// non-empty) message once the command finishes with no active minibuffer.
+    pub(crate) echo_area_resize_exact_pending: bool,
     /// Redirected debugging output stream. Mirrors GNU print.c's
     /// `redirect-debugging-output` redirection target for writes through
     /// `external-debugging-output`.
@@ -4731,6 +4740,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
             minibuffer_selected_window: None,
@@ -4911,6 +4921,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
             minibuffer_selected_window: None,
@@ -6045,6 +6056,20 @@ impl Context {
             // at keyboard.c:1563.
             self.safe_run_hook_if_bound("post-command-hook")?;
 
+            // GNU `command_loop_1` (src/keyboard.c:1342-1345): "If displaying a
+            // message, resize the echo area window to fit that message's size
+            // exactly." It calls `resize_echo_area_exactly` whenever
+            // `echo_area_buffer[0]` is non-nil; that passes
+            // `exact_p = (minibuf_level == 0 ? Qt : Qnil)` (xdisp.c:13235) so
+            // with NO active minibuffer the grow-only echo window shrinks to
+            // fit even a shorter NON-EMPTY message (xdisp.c:13401). We can't
+            // resize the mini-window here (geometry is computed lazily in the
+            // layout engine), so we record the request and the next redisplay's
+            // layout pass consumes it. `minibuf_level == 0` maps to "no active
+            // minibuffer window".
+            self.echo_area_resize_exact_pending =
+                self.current_message.is_some() && self.active_minibuffer_window_id().is_none();
+
             // GNU runs the deactivate-mark / select-active-regions block
             // strictly AFTER post-command-hook: keyboard.c:1597-1648, with
             // `call0 (Qdeactivate_mark)` at 1611. (The earlier
@@ -6620,7 +6645,15 @@ impl Context {
             }
         }
         let before_signature = self.redisplay_signature();
-        if !force && self.last_redisplay_signature.as_ref() == Some(&before_signature) {
+        // A pending exact echo-area resize (GNU `resize_echo_area_exactly`)
+        // must still drive a redisplay even when the visible signature is
+        // otherwise unchanged: the message text can be identical while the
+        // mini-window is still grown from a previous longer message and needs
+        // to shrink back to fit. Don't skip while the request is pending.
+        if !force
+            && !self.echo_area_resize_exact_pending
+            && self.last_redisplay_signature.as_ref() == Some(&before_signature)
+        {
             tracing::debug!("redisplay skipped: visible state unchanged");
             return;
         }
@@ -6629,10 +6662,17 @@ impl Context {
         if let Some(mut f) = self.redisplay_fn.take() {
             let saved = self.buffers.reset_outermost_restrictions();
             f(self);
+            // The layout pass inside `f` consumes any pending exact echo-area
+            // resize (GNU `resize_echo_area_exactly`). Clear it now, once per
+            // redisplay, so a later mid-command redisplay does not keep
+            // shrinking a freshly grown message — GNU only resizes exactly at
+            // the command boundary, not on every `redisplay_window`.
+            self.echo_area_resize_exact_pending = false;
             let _ = super::builtins::run_redisplay_window_change_hooks(self);
             self.buffers.restore_outermost_restrictions(saved);
             self.redisplay_fn = Some(f);
         } else {
+            self.echo_area_resize_exact_pending = false;
             let _ = super::builtins::run_redisplay_window_change_hooks(self);
         }
         self.last_redisplay_signature = Some(self.redisplay_signature());
@@ -7862,6 +7902,17 @@ impl Context {
         self.current_message
             .as_ref()
             .map(|message| Value::heap_string(message.clone()))
+    }
+
+    /// Whether the next redisplay should resize the echo-area mini-window
+    /// exactly to its content (GNU `resize_echo_area_exactly`, the post-command
+    /// `exact_p = minibuf_level == 0` case in src/xdisp.c:13235). Read by the
+    /// layout engine's grow-only mini-window shrink check. The flag is cleared
+    /// once per redisplay in `redisplay_with_force` so a later mid-command
+    /// redisplay does not keep shrinking a freshly grown message (GNU only
+    /// resizes exactly at the command boundary, not on every `redisplay_window`).
+    pub fn echo_area_resize_exact_pending(&self) -> bool {
+        self.echo_area_resize_exact_pending
     }
 
     pub fn set_current_message(&mut self, message: Option<crate::heap_types::LispString>) {

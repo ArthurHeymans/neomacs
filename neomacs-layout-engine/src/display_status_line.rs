@@ -691,10 +691,20 @@ impl ResizeMiniWindowsMode {
         !matches!(self, Self::Disabled)
     }
 
-    pub(crate) fn should_shrink(self, visible_region_empty: bool) -> bool {
+    /// Mirror GNU `resize_mini_window` (src/xdisp.c:13395-13406).
+    ///
+    /// With `resize-mini-windows` = `grow-only`, the mini-window shrinks back
+    /// only when `height < old_height && (exact_p || BEGV == ZV)`
+    /// (xdisp.c:13401): i.e. when its buffer is empty, OR when an exact resize
+    /// was requested. The exact case is GNU's `resize_echo_area_exactly`
+    /// (xdisp.c:13228-13245), which passes `exact_p = (minibuf_level == 0)` and
+    /// is run after every command from `command_loop_1` (keyboard.c:1344) — so
+    /// a finished command with no active minibuffer shrinks even a NON-EMPTY
+    /// shorter message to fit. With `resize-mini-windows` = `t`, always shrink.
+    pub(crate) fn should_shrink(self, exact: bool, visible_region_empty: bool) -> bool {
         match self {
             Self::Disabled => false,
-            Self::GrowOnly => visible_region_empty,
+            Self::GrowOnly => exact || visible_region_empty,
             Self::Exact => true,
         }
     }
