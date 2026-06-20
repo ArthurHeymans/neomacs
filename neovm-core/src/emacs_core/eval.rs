@@ -5803,7 +5803,52 @@ impl Context {
             self.assign("this-original-command", Value::NIL);
 
             // Read a complete key sequence (may be multi-key, e.g. C-x C-f).
-            let (keys, binding) = self.read_key_sequence()?;
+            //
+            // Bind `inhibit-quit` to t around the command-loop read, the way
+            // GNU `command_loop_1` keeps C-g out of the quit machinery while
+            // reading the next key (keyboard.c binds Qinhibit_quit around the
+            // input wait, and `read_char` clears `Vquit_flag` when the
+            // quit_char is returned as a key, keyboard.c:2811-2812). Without
+            // this, neomacs's per-iteration `maybe_quit` in the wait loop
+            // (process/wait.rs) would observe the cross-thread `quit_requested`
+            // atomic an idle C-g raises and signal `quit` DIRECTLY — bypassing
+            // the `keyboard-quit` command the C-g is bound to (so advice and
+            // remaps never run) and leaving the C-g KeyPress queued for a
+            // second quit. With `inhibit-quit` bound, `maybe_quit` returns Ok,
+            // the C-g flows through as an ordinary key, and
+            // `read_key_sequence` returns it bound to `keyboard-quit`.
+            //
+            // This binding is scoped strictly to the command-loop read.
+            // `sleep-for` / `accept-process-output` run as commands (outside
+            // this binding) and bind no `inhibit-quit`, so their waits stay
+            // interruptible by C-g — the sleep-for quit fix is preserved.
+            let read_specpdl_count = self.specpdl.len();
+            self.specbind(intern("inhibit-quit"), Value::T);
+            let read_result = self.read_key_sequence();
+            self.unbind_to(read_specpdl_count);
+
+            // GNU `command_loop_1` keyboard.c:1409-1416: after the read, if a
+            // quit is still pending (a C-g came in but was not consumed as the
+            // returned key — e.g. it arrived during a sub-wait), clear it and
+            // re-deliver it as the next key via `unread-command-events` so it
+            // becomes exactly one `keyboard-quit`, never a direct quit. When
+            // the C-g WAS consumed as a key, `read_key_sequence` already
+            // cleared both `quit-flag` and the `quit_requested` atomic (see
+            // `clear_quit_flag_after_read_key_sequence_event`), so this is a
+            // no-op in the common case.
+            let quit_pending = !self.quit_flag_value().is_nil()
+                || self
+                    .quit_requested
+                    .load(std::sync::atomic::Ordering::Relaxed);
+            if quit_pending {
+                self.set_quit_flag_value(Value::NIL);
+                self.quit_requested
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                let quit_char = Value::fixnum(self.quit_char());
+                self.push_unread_command_event(quit_char);
+            }
+
+            let (keys, binding) = read_result?;
             self.sync_current_buffer_to_selected_window();
 
             if keys.is_empty() && binding.is_nil() {
@@ -7025,19 +7070,40 @@ impl Context {
             return;
         }
 
-        let quit_flag = self.quit_flag_value();
-        if quit_flag.is_nil() {
-            return;
-        }
-
         let throw_on_input = self
             .obarray
             .symbol_value_id_or_nil(self.throw_on_input_symbol);
-        if equal_value(&quit_flag, &throw_on_input, 0) {
-            return;
+
+        let quit_flag = self.quit_flag_value();
+        // while-no-input is active iff `throw-on-input` is non-nil AND the
+        // pending quit equals it; in that case leave BOTH the flag and the
+        // atomic alone so while-no-input can still bail out.
+        let is_while_no_input =
+            !throw_on_input.is_nil() && equal_value(&quit_flag, &throw_on_input, 0);
+
+        // GNU `read_char` keyboard.c:2811-2812: when the quit_char is being
+        // returned as an ordinary key event, `if (!NILP (Vinhibit_quit))
+        // Vquit_flag = Qnil;` — the C-g is consumed as a key, so the pending
+        // quit is dropped rather than fired a second time.
+        if !quit_flag.is_nil() && !is_while_no_input {
+            self.set_quit_flag_value(Value::NIL);
         }
 
-        self.set_quit_flag_value(Value::NIL);
+        // The cross-thread `quit_requested` atomic is the neomacs analogue of
+        // the same pending C-g (the input bridge sets it in lockstep with
+        // queueing the C-g KeyPress, neomacs-bin/src/main.rs:2260/2569). When
+        // that very C-g is now consumed as a key here, the atomic MUST be
+        // cleared too — otherwise the next `maybe_quit` poll (e.g. inside
+        // pre-command-hook or the command dispatch) drains it into `quit-flag`
+        // and signals a SECOND, spurious `quit`, pre-empting the
+        // `keyboard-quit` command this key is bound to (the "double-quit"
+        // bug). This is the root of Finding 3 and lives at the shared
+        // key-consumption helper so every read path (channel or unread queue)
+        // is covered. Skipped under while-no-input so its throw still fires.
+        if !is_while_no_input {
+            self.quit_requested
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 
     pub(crate) fn input_pending_p_filters_events(&self) -> bool {

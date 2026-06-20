@@ -195,3 +195,83 @@ fn unbind_to_suppresses_quit_during_unwind_protect_cleanup() {
         "unwind-protect CLEANUP must run to completion even when BODY quits"
     );
 }
+
+/// Finding 3 — a single idle C-g must yield exactly one `keyboard-quit`,
+/// not a "double quit".
+///
+/// When the input-bridge thread observes a C-g it does TWO things in
+/// lockstep (neomacs-bin/src/main.rs:2260/2569): it raises the
+/// cross-thread `Context::quit_requested` atomic AND queues the C-g
+/// KeyPress on the input channel. `read_key_sequence` reads that C-g as
+/// an ordinary key and returns it bound to `keyboard-quit`. The leftover
+/// `quit_requested` atomic must be cleared the moment that C-g is consumed
+/// as a key — otherwise the very next `maybe_quit` poll (inside
+/// `pre-command-hook`, the command dispatch, etc.) drains the atomic into
+/// `Vquit_flag` and signals a SECOND, spurious `quit`, pre-empting the
+/// `keyboard-quit` command the key is bound to (the "double-quit" bug).
+///
+/// This drives the read path directly with exactly the pair the bridge
+/// produces (C-g queued + `quit_requested` set) and asserts: (a) the read
+/// returns the C-g bound to `keyboard-quit`, (b) the `quit_requested`
+/// atomic is cleared, and (c) a following `maybe_quit` does NOT fire a
+/// spurious quit (no leftover pending quit).
+#[test]
+fn single_keyboard_quit_does_not_leave_pending_quit_request() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    let scratch = ev.buffers.create_buffer("*quit-finding3*");
+    ev.buffers.set_current(scratch);
+    let frame = ev.frames.create_frame("F1", 80, 24, scratch);
+    assert!(ev.frames.select_frame(frame), "need a selected frame");
+
+    // C-g is bound to keyboard-quit in the default global map.
+    assert!(
+        ev.eval_str("(eq (key-binding (kbd \"C-g\")) 'keyboard-quit)")
+            .expect("C-g lookup")
+            .is_truthy(),
+        "C-g must be bound to keyboard-quit"
+    );
+
+    // Exactly what the input bridge does for one C-g: queue the cooked
+    // C-g event (fixnum 7) AND raise the cross-thread quit-request atomic.
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum(7));
+    ev.quit_requested.store(true, Ordering::Relaxed);
+
+    // Read the key sequence: the C-g must come back as an ordinary key
+    // bound to keyboard-quit (NOT short-circuit into a quit signal).
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("reading a queued C-g must return it as a key, not signal quit");
+    assert_eq!(
+        keys,
+        vec![Value::fixnum(7)],
+        "the C-g should be read as an ordinary key"
+    );
+    assert_eq!(
+        binding,
+        Value::symbol("keyboard-quit"),
+        "the C-g key must resolve to its `keyboard-quit' binding"
+    );
+
+    // The atomic must have been cleared by consuming the C-g as a key.
+    assert!(
+        !ev.quit_requested.load(Ordering::Relaxed),
+        "consuming the C-g as a key must clear the quit_requested atomic so \
+         no second, spurious quit is pending (the double-quit bug)"
+    );
+
+    // And a following `maybe_quit` (as runs inside pre-command-hook / the
+    // command dispatch right after the read) must NOT fire a quit, because
+    // the single C-g is now wholly accounted for by its keyboard-quit
+    // binding. Before the fix the leftover atomic made this signal quit.
+    ev.maybe_quit()
+        .expect("no spurious quit should be pending after a single C-g key");
+    assert!(
+        ev.quit_flag_value().is_nil(),
+        "quit-flag must stay nil — the single C-g produced no extra quit"
+    );
+}
