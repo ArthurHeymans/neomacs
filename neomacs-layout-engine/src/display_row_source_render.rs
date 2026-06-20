@@ -17,8 +17,9 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
+use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_output_install::{
-    DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
+    DisplayCurrentRowMutation, DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
     install_rendered_display_row_fragment_assets,
 };
 use crate::display_source::DisplayItemSource;
@@ -76,109 +77,59 @@ struct DisplayRowCurrentTextSourceStepResult {
     row_ascent_px: f32,
 }
 
-trait DisplayRowCurrentRowSourceOutputExt {
-    fn render_source_step_with_policy<S, P>(
-        &mut self,
-        row_request: DisplayRowSourceRenderRequest<'_>,
-        renderer: &mut DisplayRowRenderer<'_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-        render_policy: &mut P,
-    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy;
-
-    fn measure_source_step_with_policy<S, P>(
-        &mut self,
-        row_request: DisplayRowSourceRenderRequest<'_>,
-        renderer: &mut DisplayRowRenderer<'_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-        render_policy: &mut P,
-    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy;
-
-    fn render_natural_source_fragment_step<S>(
-        &mut self,
-        request: DisplayRowSourceFragmentRenderRequest<'_>,
-        render_executor: &mut DisplayRowRenderExecutor<'_, '_, '_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-    ) -> Option<DisplayRowRenderIntoRowResult>
-    where
-        S: DisplayItemSource;
+struct DisplayRowCurrentSourceStepMutation<'a, 'request, 'renderer, 'face, 'host, S, P> {
+    row_request: DisplayRowSourceRenderRequest<'request>,
+    renderer: &'a mut DisplayRowRenderer<'renderer>,
+    source: &'a mut S,
+    source_state: &'a mut DisplayRowSourceState,
+    context: &'a mut DisplayRowRenderContext<'face, 'host>,
+    render_policy: &'a mut P,
 }
 
-impl DisplayRowCurrentRowSourceOutputExt for DisplayRowCurrentRowOutput<'_> {
-    fn render_source_step_with_policy<S, P>(
-        &mut self,
-        row_request: DisplayRowSourceRenderRequest<'_>,
-        renderer: &mut DisplayRowRenderer<'_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-        render_policy: &mut P,
-    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    {
-        self.edit_current_row(|row| {
-            let result = row_request.render_fragment_step_into_row_with_policy(
-                renderer,
-                row,
-                source,
-                source_state,
-                context,
-                render_policy,
-            )?;
-            Some((result, row.height_px, row.ascent_px))
-        })?
-    }
+struct DisplayRowNaturalSourceFragmentMutation<'a, 'request, 'metrics, 'face, 'host, S> {
+    request: DisplayRowSourceFragmentRenderRequest<'request>,
+    render_executor: &'a mut DisplayRowRenderExecutor<'metrics, 'face, 'host>,
+    source: &'a mut S,
+    source_state: &'a mut DisplayRowSourceState,
+}
 
-    fn measure_source_step_with_policy<S, P>(
-        &mut self,
-        row_request: DisplayRowSourceRenderRequest<'_>,
-        renderer: &mut DisplayRowRenderer<'_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-        render_policy: &mut P,
-    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    {
-        let mut scratch_row = self.current_row_snapshot()?;
-        let result = row_request.render_fragment_step_into_row_with_policy(
-            renderer,
-            &mut scratch_row,
-            source,
-            source_state,
-            context,
-            render_policy,
+impl<S, P> DisplayCurrentRowMutation
+    for DisplayRowCurrentSourceStepMutation<'_, '_, '_, '_, '_, S, P>
+where
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+{
+    type Output = Option<(DisplayRowRenderIntoRowResult, f32, f32)>;
+
+    fn apply(self, row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> Self::Output {
+        let result = self.row_request.render_fragment_step_into_row_with_policy(
+            self.renderer,
+            row,
+            self.source,
+            self.source_state,
+            self.context,
+            self.render_policy,
         )?;
-        Some((result, scratch_row.height_px, scratch_row.ascent_px))
+        merge_display_row_source_slot_bounds(row, &result.source_slots);
+        Some((result, row.height_px, row.ascent_px))
     }
+}
 
-    fn render_natural_source_fragment_step<S>(
-        &mut self,
-        request: DisplayRowSourceFragmentRenderRequest<'_>,
-        render_executor: &mut DisplayRowRenderExecutor<'_, '_, '_>,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-    ) -> Option<DisplayRowRenderIntoRowResult>
-    where
-        S: DisplayItemSource,
-    {
-        self.edit_current_row(|row| {
-            render_executor.render_item_source_fragment_into_row(request, row, source, source_state)
-        })?
+impl<S> DisplayCurrentRowMutation for DisplayRowNaturalSourceFragmentMutation<'_, '_, '_, '_, '_, S>
+where
+    S: DisplayItemSource,
+{
+    type Output = Option<DisplayRowRenderIntoRowResult>;
+
+    fn apply(self, row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> Self::Output {
+        let result = self.render_executor.render_item_source_fragment_into_row(
+            self.request,
+            row,
+            self.source,
+            self.source_state,
+        )?;
+        merge_display_row_source_slot_bounds(row, &result.source_slots);
+        Some(result)
     }
 }
 
@@ -218,16 +169,15 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
             self.face_ids,
         );
         let (result, row_height_px, row_ascent_px) =
-            self.row_output.render_source_step_with_policy(
-                row_request,
-                &mut renderer,
-                source,
-                source_state,
-                &mut context,
-                render_policy,
-            )?;
-        self.row_output
-            .merge_source_slot_bounds(&result.source_slots);
+            self.row_output
+                .apply_current_row_mutation(DisplayRowCurrentSourceStepMutation {
+                    row_request,
+                    renderer: &mut renderer,
+                    source,
+                    source_state,
+                    context: &mut context,
+                    render_policy,
+                })??;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -272,15 +222,16 @@ impl<'face, 'emit> DisplayRowCurrentTextMeasureState<'face, 'emit> {
             self.evaluator.display_host.as_deref(),
             self.face_ids,
         );
-        let (result, row_height_px, row_ascent_px) =
-            self.row_output.measure_source_step_with_policy(
+        let (result, row_height_px, row_ascent_px) = self
+            .row_output
+            .apply_current_row_scratch_mutation(DisplayRowCurrentSourceStepMutation {
                 row_request,
-                &mut renderer,
+                renderer: &mut renderer,
                 source,
                 source_state,
-                &mut context,
+                context: &mut context,
                 render_policy,
-            )?;
+            })??;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -319,14 +270,14 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
             self.display_host,
             self.face_ids,
         );
-        let result = self.row_output.render_natural_source_fragment_step(
-            request,
-            &mut render_executor,
-            source,
-            source_state,
-        )?;
-        self.row_output
-            .merge_source_slot_bounds(&result.source_slots);
+        let result = self.row_output.apply_current_row_mutation(
+            DisplayRowNaturalSourceFragmentMutation {
+                request,
+                render_executor: &mut render_executor,
+                source,
+                source_state,
+            },
+        )??;
         Some(result)
     }
 }

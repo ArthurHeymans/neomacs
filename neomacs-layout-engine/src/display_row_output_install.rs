@@ -13,9 +13,10 @@ use crate::display_row::{
     RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
 };
 use crate::display_row_builder::apply_display_row_source_slot_bounds;
-use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_slot_bounds};
 #[cfg(test)]
-use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
+use crate::display_row_builder::{
+    DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
+};
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -443,6 +444,12 @@ pub(crate) struct DisplayRowCurrentRowOutput<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
+pub(crate) trait DisplayCurrentRowMutation {
+    type Output;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output;
+}
+
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
         Self { builder }
@@ -462,10 +469,19 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
         self.builder.current_row_for_render().cloned()
     }
 
-    fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
-        let _ = self.edit_current_row(|row| {
-            merge_display_row_source_slot_bounds(row, slots);
-        });
+    fn apply_current_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        self.edit_current_row(|row| mutation.apply(row))
+    }
+
+    fn apply_current_row_scratch_mutation<M>(&self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        let mut row = self.current_row_snapshot()?;
+        Some(mutation.apply(&mut row))
     }
 
     #[cfg(test)]
@@ -512,22 +528,25 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
         }
     }
 
-    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        self.installer.edit_current_row(f)
+    pub(crate) fn apply_current_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        self.installer.apply_current_row_mutation(mutation)
     }
 
-    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
-        self.installer.current_row_snapshot()
+    pub(crate) fn apply_current_row_scratch_mutation<M>(&self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        self.installer.apply_current_row_scratch_mutation(mutation)
     }
 
     pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
-        self.current_row_snapshot()
+        self.installer
+            .current_row_snapshot()
             .as_ref()
             .and_then(last_text_cluster_tail_in_row)
-    }
-
-    pub(crate) fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
-        self.installer.merge_source_slot_bounds(slots);
     }
 }
 
