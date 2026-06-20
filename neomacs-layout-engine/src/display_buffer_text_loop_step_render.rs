@@ -1,18 +1,13 @@
 //! Buffer text visible-loop single-step rendering.
 
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
-use crate::display_buffer_text_loop_context::{
-    BufferTextWindowLoopRequestContext, BufferTextWindowSourceItemRenderRequest,
-};
+use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_pre_source_render::{
     BufferTextWindowPreSourceOutcome, BufferTextWindowPreSourceRenderState,
 };
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
-use crate::display_buffer_text_source_item_render::BufferTextWindowSourceItemRenderState;
-use crate::display_buffer_text_source_render::{
-    BufferTextWindowSourceRenderOutcome, BufferTextWindowSourceRenderRequest,
-};
+use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::neovm_bridge::LayoutBufferView;
@@ -86,35 +81,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopStepRenderState<'rows, 'emit, '
             active_face_state,
             self.state.reborrow(),
         )
-        .consume_next(source_walk, face_resolution_context.clone(), buffer);
+        .render_next_and_apply(source_walk, face_resolution_context.clone(), buffer);
 
-        if source_outcome.should_continue_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
-        }
         if source_outcome.should_stop_buffer_walk() {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         }
-        let BufferTextWindowSourceRenderOutcome::DisplayItem(source_item) = source_outcome else {
-            unreachable!("source render stop/continue outcomes handled above");
-        };
-        let consumed_outcome =
-            BufferTextWindowSourceItemRenderState::new(self.loop_context, self.state.reborrow())
-                .render_for_context(
-                    source_walk,
-                    BufferTextWindowSourceItemRenderRequest {
-                        layout_resolution_context: face_resolution_context
-                            .source_item_layout_resolution_context(),
-                        source_item,
-                        text,
-                        active_face_state,
-                        params,
-                    },
-                    buffer,
-                );
-        if consumed_outcome.should_stop_buffer_walk() {
-            BufferTextWindowLoopStepOutcome::StopBufferWalk
-        } else {
-            BufferTextWindowLoopStepOutcome::ContinueBufferWalk
-        }
+        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
     }
 }

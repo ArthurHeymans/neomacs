@@ -29,7 +29,6 @@ pub(crate) mod display_buffer_text_row_lifecycle;
 pub(crate) mod display_buffer_text_row_prelude;
 pub(crate) mod display_buffer_text_source;
 pub(crate) mod display_buffer_text_source_consumption;
-pub(crate) mod display_buffer_text_source_item_render;
 pub(crate) mod display_buffer_text_source_render;
 pub(crate) mod display_buffer_text_source_walk;
 pub(crate) mod display_buffer_text_tail_decoration;

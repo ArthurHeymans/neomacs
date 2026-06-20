@@ -220,10 +220,6 @@ impl BufferTextSourceItemRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(self, Self::Stop)
     }
-
-    pub(crate) fn should_continue_buffer_walk(self) -> bool {
-        matches!(self, Self::ContinueBufferWalk)
-    }
 }
 
 impl BufferTextOverflowRenderOutcome {

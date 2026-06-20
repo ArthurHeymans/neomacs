@@ -43,14 +43,6 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowSourceItemRenderRequest<'a> {
-    pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    pub(crate) source_item: BufferTextSourceItem,
-    pub(crate) text: &'a [u8],
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) params: &'a WindowParams,
-}
-
 impl BufferTextWindowLoopRequestContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
