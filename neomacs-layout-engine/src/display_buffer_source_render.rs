@@ -33,7 +33,7 @@ use crate::display_row_overlay_string::{
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_row_walk_state::WordWrapRenderState;
+use crate::display_row_walk_state::{TrailingWhitespaceRenderState, WordWrapRenderState};
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
@@ -136,17 +136,19 @@ fn whole_text_run_can_render<B: LayoutBufferView + ?Sized>(
     source_item: &DisplaySourceStepItem,
     context: &BufferSourceItemRenderContext<'_>,
     word_wrap: WordWrapRenderState,
+    trailing_whitespace: &TrailingWhitespaceRenderState,
     right_edge_px: f32,
     position: DisplayRowPosition,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
     geometry: &DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
 ) -> bool {
-    let Some(_text) = source_item.plain_ascii_text_run() else {
+    let Some(_text) = source_item.ascii_text_run() else {
         return false;
     };
     if context.overlay_context.is_enabled()
         || word_wrap.is_enabled()
+        || trailing_whitespace.is_enabled()
         || source_item.has_point_inside(context.point_charpos)
         || source_item.source_end_charpos().is_none()
         || source_item.source_end_byte_idx().is_none()
@@ -274,6 +276,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &source_item,
         &context,
         *word_wrap,
+        trailing_whitespace,
         context.append_surface.right_edge(),
         append_position,
         &buffer_row_append_context,

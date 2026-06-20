@@ -598,6 +598,10 @@ impl TrailingWhitespaceRenderState {
         self.start_marker = DisplayRowStartMarker::Inactive;
     }
 
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.background.is_some()
+    }
+
     pub(crate) fn track_rendered_char(&mut self, ch: char, start_marker: DisplayRowStartMarker) {
         if self.background.is_none() {
             return;

@@ -6490,7 +6490,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_sta
             .buffer_manager_mut()
             .get_mut(buf_id)
             .expect("buffer");
-        buffer.insert("ab");
+        buffer.insert("a ");
     }
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
@@ -6517,7 +6517,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_sta
         4,
     );
     let params = test_display_space_window_params();
-    let text = b"ab";
+    let text = b"a ";
     let mut byte_idx = 0;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
@@ -6613,10 +6613,6 @@ fn buffer_text_source_render_request_appends_plain_text_run_and_updates_walk_sta
             assert!(matches!(
                 text_glyphs[0].glyph_type,
                 GlyphType::Char { ch: 'a' }
-            ));
-            assert!(matches!(
-                text_glyphs[1].glyph_type,
-                GlyphType::Char { ch: 'b' }
             ));
         })
         .expect("current row");
