@@ -8,6 +8,7 @@ use crate::display_output_install_request::{
 use crate::display_output_row_request::{
     OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
 };
+use crate::display_output_window_request::OutputWindowLifecycleRequest;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -154,14 +155,14 @@ impl DisplayOutputTextWindowBeginInstallRequest {
     }
 
     fn install(self, builder: &mut DisplayOutputBuilder) {
-        builder.begin_output_window(
+        builder.install_output_window_lifecycle(OutputWindowLifecycleRequest::begin(
             self.window_id,
             self.rows,
             self.cols,
             self.bounds,
             self.text_bounds,
             self.selected,
-        );
+        ));
     }
 }
 
@@ -267,7 +268,7 @@ pub(crate) fn begin_text_output_window(
 }
 
 pub(crate) fn end_text_output_window(builder: &mut DisplayOutputBuilder) {
-    builder.end_output_window();
+    builder.install_output_window_lifecycle(OutputWindowLifecycleRequest::end());
 }
 
 pub(crate) fn install_text_output_display_range(

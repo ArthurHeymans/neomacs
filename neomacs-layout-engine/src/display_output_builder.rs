@@ -14,11 +14,11 @@ use crate::display_output_install_request::{
     OutputFrameIdentityInstallRequest, OutputFrameStateInstallRequest, OutputMediaInstallKind,
     OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
 };
-use crate::display_output_row_grid::{OutputWindowGridEntry, OutputWindowRowGrid};
-use crate::display_output_row_request::{
-    OutputCompleteRowInstallRequest, OutputCurrentRowDecorationRequest, OutputRowBeginRequest,
-    OutputRowLifecycleRequest, OutputRowMetricsRequest,
-};
+#[cfg(test)]
+use crate::display_output_row_request::OutputCurrentRowDecorationRequest;
+use crate::display_output_row_request::OutputRowLifecycleRequest;
+use crate::display_output_window_request::OutputWindowLifecycleRequest;
+use crate::display_output_window_state::OutputWindowBuildState;
 #[cfg(test)]
 use crate::display_row::resolved_display_row_face;
 #[cfg(test)]
@@ -40,61 +40,8 @@ use std::collections::HashMap;
 
 pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct OutputWindowBeginRequest {
-    window_id: u64,
-    nrows: usize,
-    ncols: usize,
-    pixel_bounds: Rect,
-    text_pixel_bounds: Rect,
-    selected: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum OutputWindowLifecycleRequest {
-    Begin(OutputWindowBeginRequest),
-    End,
-}
-
-impl OutputWindowLifecycleRequest {
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        match self {
-            Self::Begin(begin) => {
-                builder.current_row_grid = Some(OutputWindowRowGrid::new(begin.nrows, begin.ncols));
-                builder.current_window_id = begin.window_id;
-                builder.current_pixel_bounds = begin.pixel_bounds;
-                builder.current_text_pixel_bounds = begin.text_pixel_bounds;
-                builder.current_selected = begin.selected;
-                builder.current_row = 0;
-            }
-            Self::End => {
-                if let Some(grid) = builder.current_row_grid.take() {
-                    builder.windows.push(OutputWindowGridEntry::new(
-                        builder.current_window_id,
-                        grid,
-                        builder.current_pixel_bounds,
-                        builder.current_text_pixel_bounds,
-                        builder.current_selected,
-                    ));
-                }
-            }
-        }
-    }
-}
-
 pub(crate) struct DisplayOutputBuilder {
-    windows: Vec<OutputWindowGridEntry>,
-    current_row_grid: Option<OutputWindowRowGrid>,
-    current_window_id: u64,
-    current_pixel_bounds: Rect,
-    current_text_pixel_bounds: Rect,
-    /// Whether the window currently open in the builder is the
-    /// selected window. Copied into the protocol window entry
-    /// by `end_window`. Mirrors GNU's per-frame
-    /// `w == XWINDOW (selected_window)` check in
-    /// `src/xdisp.c::update_window`.
-    current_selected: bool,
-    current_row: usize,
+    window_state: OutputWindowBuildState,
 
     // Non-grid items
     backgrounds: Vec<BackgroundItem>,
@@ -128,13 +75,7 @@ pub(crate) struct DisplayOutputBuilder {
 impl DisplayOutputBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            windows: Vec::new(),
-            current_row_grid: None,
-            current_window_id: 0,
-            current_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
-            current_text_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
-            current_selected: false,
-            current_row: 0,
+            window_state: OutputWindowBuildState::new(),
             backgrounds: Vec::new(),
             borders: Vec::new(),
             cursors: Vec::new(),
@@ -175,11 +116,7 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn reset(&mut self) {
-        self.windows.clear();
-        self.current_row_grid = None;
-        self.current_window_id = 0;
-        self.current_selected = false;
-        self.current_row = 0;
+        self.window_state.reset();
         self.backgrounds.clear();
         self.borders.clear();
         self.cursors.clear();
@@ -262,10 +199,14 @@ impl DisplayOutputBuilder {
         self.end_output_window();
     }
 
-    fn install_window_lifecycle(&mut self, request: OutputWindowLifecycleRequest) {
-        request.install(self);
+    pub(crate) fn install_output_window_lifecycle(
+        &mut self,
+        request: OutputWindowLifecycleRequest,
+    ) {
+        self.window_state.install_window_lifecycle(request);
     }
 
+    #[cfg(test)]
     pub(crate) fn begin_output_window(
         &mut self,
         window_id: u64,
@@ -275,20 +216,19 @@ impl DisplayOutputBuilder {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.install_window_lifecycle(OutputWindowLifecycleRequest::Begin(
-            OutputWindowBeginRequest {
-                window_id,
-                nrows,
-                ncols,
-                pixel_bounds,
-                text_pixel_bounds,
-                selected,
-            },
+        self.install_output_window_lifecycle(OutputWindowLifecycleRequest::begin(
+            window_id,
+            nrows,
+            ncols,
+            pixel_bounds,
+            text_pixel_bounds,
+            selected,
         ));
     }
 
+    #[cfg(test)]
     pub(crate) fn end_output_window(&mut self) {
-        self.install_window_lifecycle(OutputWindowLifecycleRequest::End);
+        self.install_output_window_lifecycle(OutputWindowLifecycleRequest::end());
     }
 
     pub(crate) fn install_window_metadata(
@@ -317,20 +257,8 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn install_output_row_lifecycle(&mut self, request: OutputRowLifecycleRequest) {
-        match request {
-            OutputRowLifecycleRequest::Begin(begin) => self.begin_current_row(begin),
-            OutputRowLifecycleRequest::Complete(complete) => self.install_complete_row(complete),
-            OutputRowLifecycleRequest::Metrics { row, metrics } => {
-                self.write_row_metrics_at(row, metrics);
-            }
-            OutputRowLifecycleRequest::Finalize { row } => self.finalize_output_row(row),
-            OutputRowLifecycleRequest::Cursor { row, col, style } => {
-                self.write_row_cursor(row, col, style);
-            }
-            OutputRowLifecycleRequest::CurrentDecoration(decoration) => {
-                self.decorate_current_row(decoration);
-            }
-        }
+        self.window_state
+            .install_row_lifecycle(request, self.phys_cursor.as_mut());
     }
 
     #[cfg(test)]
@@ -355,7 +283,7 @@ impl DisplayOutputBuilder {
         &mut self,
         f: impl FnOnce(&mut GlyphRow) -> R,
     ) -> Option<R> {
-        self.with_current_row_mut(f)
+        self.window_state.edit_current_row(f)
     }
 
     #[cfg(test)]
@@ -393,18 +321,15 @@ impl DisplayOutputBuilder {
         row_idx: usize,
         f: impl FnOnce(&mut GlyphRow, usize) -> R,
     ) -> Option<R> {
-        self.current_row_grid
-            .as_mut()?
-            .edit_row_with_matrix_cols(row_idx, f)
+        self.window_state
+            .edit_current_window_row_with_matrix_cols(row_idx, f)
     }
 
     pub(crate) fn edit_last_window_rows_with_matrix_cols(
         &mut self,
         f: impl FnMut(&mut GlyphRow, usize),
     ) {
-        if let Some(entry) = self.windows.last_mut() {
-            entry.edit_rows_with_matrix_cols(f);
-        }
+        self.window_state.edit_last_window_rows_with_matrix_cols(f);
     }
 
     #[cfg(test)]
@@ -414,21 +339,15 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn end_row(&mut self) {
-        let current_row = self.current_row;
+        let current_row = self.window_state.current_row_index();
         self.finalize_output_row_index(current_row);
     }
 
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        let current_row = self.current_row;
+        let current_row = self.window_state.current_row_index();
         self.set_output_row_metrics(current_row, pixel_y, height_px, ascent_px);
-    }
-
-    fn with_current_row_mut<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        let grid = self.current_row_grid.as_mut()?;
-        let row = grid.row_mut(self.current_row)?;
-        Some(f(row))
     }
 
     #[cfg(test)]
@@ -436,48 +355,16 @@ impl DisplayOutputBuilder {
         &mut self,
         f: impl FnOnce(&mut GlyphRow) -> R,
     ) -> Option<R> {
-        self.with_current_row_mut(f)
-    }
-
-    fn decorate_current_row(&mut self, decoration: OutputCurrentRowDecorationRequest) {
-        let _ = self.with_current_row_mut(|row| match decoration {
-            OutputCurrentRowDecorationRequest::MarkTruncatedLeft => {
-                row.truncated_left = true;
-            }
-        });
+        self.window_state.edit_current_row(f)
     }
 
     pub(crate) fn current_row_for_render(&self) -> Option<&GlyphRow> {
-        self.current_row_grid.as_ref()?.row(self.current_row)
+        self.window_state.current_row_for_render()
     }
 
     #[cfg(test)]
     pub(crate) fn current_row_for_test(&self) -> Option<&GlyphRow> {
         self.current_row_for_render()
-    }
-
-    fn write_row_metrics_at(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.write_row_metrics(row, metrics);
-        }
-    }
-
-    fn write_row_cursor(
-        &mut self,
-        row: usize,
-        col: u16,
-        style: neomacs_display_protocol::frame_glyphs::CursorStyle,
-    ) {
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.write_row_cursor(row, col, style);
-        }
-    }
-
-    fn replace_current_row(&mut self, source: GlyphRow) {
-        let current_row = self.current_row;
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.replace_row(current_row, source);
-        }
     }
 
     #[cfg(test)]
@@ -486,34 +373,6 @@ impl DisplayOutputBuilder {
         let mut row = source.clone();
         row.pixel_y -= pixel_bounds.y;
         self.install_complete_output_row(row_index, row.role, row.mode_line, row);
-    }
-
-    fn begin_current_row(&mut self, begin: OutputRowBeginRequest) {
-        self.current_row = begin.row;
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.begin_row(begin);
-        }
-    }
-
-    fn install_complete_row(&mut self, request: OutputCompleteRowInstallRequest) {
-        self.begin_current_row(OutputRowBeginRequest::new(
-            request.row,
-            request.role,
-            request.mode_line,
-        ));
-        self.replace_current_row(request.glyph_row);
-        self.finalize_output_row(request.row);
-    }
-
-    fn finalize_output_row(&mut self, row: usize) {
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.finalize_row(
-                self.current_window_id,
-                row,
-                self.current_pixel_bounds,
-                self.phys_cursor.as_mut(),
-            );
-        }
     }
 
     #[cfg(test)]
@@ -732,25 +591,19 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn current_window_id_i64(&self) -> i64 {
-        self.current_window_id as i64
+        self.window_state.current_window_id_i64()
     }
 
     pub(crate) fn current_window_pixel_bounds(&self) -> Rect {
-        self.current_pixel_bounds
+        self.window_state.current_window_pixel_bounds()
     }
 
     pub(crate) fn current_window_text_pixel_bounds(&self) -> Rect {
-        self.current_text_pixel_bounds
+        self.window_state.current_window_text_pixel_bounds()
     }
 
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
-        CursorVisualColumnResolutionContext::new(
-            self.current_window_id,
-            self.current_pixel_bounds,
-            self.current_row_grid
-                .as_ref()
-                .map(OutputWindowRowGrid::cursor_rows),
-        )
+        self.window_state.cursor_visual_column_context()
     }
 
     #[cfg(test)]
@@ -763,10 +616,9 @@ impl DisplayOutputBuilder {
             placement.apply_to(&mut cursor);
         }
 
-        if let Some(placement) = placement
-            && let Some(grid) = self.current_row_grid.as_mut()
-        {
-            grid.write_row_cursor(cursor.row, placement.col(), cursor.style);
+        if let Some(placement) = placement {
+            self.window_state
+                .write_row_cursor(cursor.row, placement.col(), cursor.style);
         }
 
         // The selected window is represented solely by the phys cursor: the
@@ -778,9 +630,8 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {
-        if let Some(grid) = self.current_row_grid.as_mut() {
-            grid.write_row_cursor(cursor.row, cursor.col, cursor.style);
-        }
+        self.window_state
+            .write_row_cursor(cursor.row, cursor.col, cursor.style);
 
         self.phys_cursor = Some(cursor);
     }
@@ -811,21 +662,17 @@ impl DisplayOutputBuilder {
     }
 
     pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        self.windows
-            .last()
-            .map(OutputWindowGridEntry::enabled_row_count)
+        self.window_state.latest_window_enabled_rows()
     }
 
     #[cfg(test)]
     pub(crate) fn completed_window_count(&self) -> usize {
-        self.windows.len()
+        self.window_state.completed_window_count()
     }
 
     #[cfg(test)]
     pub(crate) fn completed_window_id(&self, index: usize) -> Option<u64> {
-        self.windows
-            .get(index)
-            .map(OutputWindowGridEntry::window_id)
+        self.window_state.completed_window_id(index)
     }
 
     pub(crate) fn window_infos(&self) -> &[WindowInfo] {
@@ -865,11 +712,7 @@ impl DisplayOutputBuilder {
         char_height: f32,
     ) -> FrameDisplayState {
         let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
-        state.window_matrices = self
-            .windows
-            .into_iter()
-            .map(OutputWindowGridEntry::into_window_matrix_entry)
-            .collect();
+        state.window_matrices = self.window_state.into_window_matrix_entries();
         state.backgrounds = self.backgrounds;
         state.borders = self.borders;
         state.cursors = self.cursors;
