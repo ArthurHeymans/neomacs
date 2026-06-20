@@ -2,14 +2,14 @@
 
 use std::collections::VecDeque;
 
-use crate::display_buffer_text_source::{
-    BufferTextDisplayReplacementMode, BufferTextSourceCursor, BufferTextSourcePosition,
-};
+use crate::display_buffer_text_source::{BufferTextDisplayReplacementMode, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, DisplayItem, DisplayItemKind, DisplayRowBreakReason,
     DisplaySourcePosition, RenderFaceRef, SourceSpan,
 };
-use crate::display_source::{DisplaySourceContext, DisplaySourceStepChar};
+use crate::display_source::{
+    DisplaySourceContext, DisplaySourceStepChar, DisplaySourceTextPosition,
+};
 use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
@@ -86,7 +86,7 @@ impl BufferTextSourceItem {
 
     pub(crate) fn consume_for_render(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Result<Self, Self> {
         if !position.matches(self.start_byte_idx(), self.start_charpos()) {
             tracing::error!(
@@ -258,13 +258,13 @@ impl BufferTextSourceConsumptionState {
         Some(first)
     }
 
-    fn expected_source_pos(position: BufferTextSourcePosition) -> CharPos0 {
+    fn expected_source_pos(position: DisplaySourceTextPosition) -> CharPos0 {
         CharPos0::new(position.charpos().max(0) as usize)
     }
 
     fn align_display_item(
         &self,
-        position: BufferTextSourcePosition,
+        position: DisplaySourceTextPosition,
         source_char: Option<char>,
         item: DisplayItem,
     ) -> Option<BufferTextSourceItem> {
@@ -308,7 +308,7 @@ impl BufferTextSourceConsumptionState {
 
     fn replacement_matches(
         &self,
-        position: BufferTextSourcePosition,
+        position: DisplaySourceTextPosition,
         item: &BufferDisplayPropertyReplacementItem,
     ) -> Option<bool> {
         let anchor = item.source_anchor(self.text_start_byte)?;
@@ -319,7 +319,7 @@ impl BufferTextSourceConsumptionState {
         &self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
-        position: BufferTextSourcePosition,
+        position: DisplaySourceTextPosition,
         replacement_mode: BufferTextDisplayReplacementMode,
     ) -> Option<BufferTextSourceItem> {
         let expected_source_pos = Self::expected_source_pos(position);
@@ -348,7 +348,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         let item = self.next_item_from_source(source, context, position)?;
         self.consume_aligned_display_item(item, position)
@@ -359,7 +359,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
-        position: &BufferTextSourcePosition,
+        position: &DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         let item = self.read_source_cursor(
             source,
@@ -378,7 +378,7 @@ impl BufferTextSourceConsumptionState {
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         if let Some(source_item) = self.pending_render_items.pop_front() {
             return Some(source_item);
@@ -401,7 +401,7 @@ impl BufferTextSourceConsumptionState {
     pub(crate) fn render_item_from_item(
         &mut self,
         item: DisplayItem,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         let item = self.align_display_item(*position, None, item)?;
         self.consume_aligned_display_item(item, position)
@@ -411,7 +411,7 @@ impl BufferTextSourceConsumptionState {
     pub(crate) fn render_item_from_source_item(
         &mut self,
         item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         self.consume_aligned_display_item(item, position)
     }
@@ -419,7 +419,7 @@ impl BufferTextSourceConsumptionState {
     fn consume_aligned_display_item(
         &mut self,
         item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferTextSourceItem> {
         item.consume_for_render(position).ok()
     }

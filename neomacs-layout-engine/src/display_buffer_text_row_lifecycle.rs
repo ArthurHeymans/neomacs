@@ -8,7 +8,6 @@ use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
-use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
@@ -38,6 +37,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState,
 };
 use crate::display_source::DisplaySourceStepChar;
+use crate::display_source::DisplaySourceTextPosition;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
@@ -458,7 +458,7 @@ pub(crate) struct BufferHscrollSkipRenderContext<'a> {
 
 pub(crate) fn consume_hscroll_skip_from_position(
     text: &[u8],
-    position: &mut BufferTextSourcePosition,
+    position: &mut DisplaySourceTextPosition,
     hscroll_skip: &mut HorizontalScrollSkipState,
     tab_width: i32,
 ) -> Option<BufferHscrollSkipAction> {
@@ -1180,7 +1180,7 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         &self,
         buffer: &B,
         checkpoints: &mut InvisibleTextScanCheckpoint,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> BufferInvisibleTextScanAction {
         if !checkpoints.should_check(position.charpos()) {
             return BufferInvisibleTextScanAction::Unchecked;
@@ -1270,7 +1270,7 @@ impl BufferSelectiveDisplayLineTailAction {
 
     pub(crate) fn sync_after_hidden_line_break_transition(
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
         *position = position.with_charpos(synced_charpos);
@@ -1281,7 +1281,7 @@ impl BufferSelectiveDisplayLineTailAction {
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) -> DisplayRowTransitionContinuation {
         if row_transition.is_exhausted() {
@@ -1358,7 +1358,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn skip_rest_of_line_after_carriage_return(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> BufferSelectiveDisplayLineTailAction {
         position.advance_charpos_by_one();
         if position.consume_until_line_break(self.text) {
@@ -1372,7 +1372,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn skip_hidden_indented_lines_after_line_break(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> BufferSelectiveDisplayHiddenLines {
         let mut hidden_line_count = 0;
         while position.byte_idx() < self.text.len() {
@@ -1393,7 +1393,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn apply_hidden_indented_lines_after_line_break(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         line_numbers: &mut LineNumberRenderState,
     ) -> BufferSelectiveDisplayHiddenLines {
         if !self.hides_indented_lines_after_line_break(position.byte_idx()) {
@@ -1426,7 +1426,7 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
         Some(indent)
     }
 
-    fn skip_line(self, position: &mut BufferTextSourcePosition) -> bool {
+    fn skip_line(self, position: &mut DisplaySourceTextPosition) -> bool {
         position.consume_until_line_break(self.text)
     }
 }
@@ -1736,7 +1736,7 @@ impl BufferTextLineBreakSourceAction {
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         row_geometry: &DisplayRowGeometryState,
         box_face: &mut BoxFaceRowState,
@@ -1752,7 +1752,7 @@ impl BufferTextLineBreakSourceAction {
 
     pub(crate) fn sync_after_row_transition(
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
         *position = position.with_charpos(synced_charpos);

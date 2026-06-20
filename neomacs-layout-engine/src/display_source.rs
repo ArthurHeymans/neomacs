@@ -16,6 +16,7 @@ use crate::display_source_append_plan::{
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
+use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
 };
@@ -211,6 +212,95 @@ impl BufferTextSourceRange {
 
     pub(crate) fn is_empty_or_reversed(self) -> bool {
         self.end <= self.start
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplaySourceTextPosition {
+    byte_idx: usize,
+    charpos: i64,
+}
+
+impl DisplaySourceTextPosition {
+    pub(crate) const fn new(byte_idx: usize, charpos: i64) -> Self {
+        Self { byte_idx, charpos }
+    }
+
+    pub(crate) const fn byte_idx(self) -> usize {
+        self.byte_idx
+    }
+
+    pub(crate) const fn charpos(self) -> i64 {
+        self.charpos
+    }
+
+    pub(crate) const fn with_charpos(self, charpos: i64) -> Self {
+        Self {
+            byte_idx: self.byte_idx,
+            charpos,
+        }
+    }
+
+    pub(crate) fn advance_byte_idx_to(&mut self, byte_idx: usize) {
+        self.byte_idx = byte_idx;
+    }
+
+    pub(crate) fn advance_charpos_by_one(&mut self) {
+        self.charpos = self.charpos.saturating_add(1);
+    }
+
+    pub(crate) fn advance_one_char(&mut self, ch_len: usize) {
+        self.byte_idx = self.byte_idx.saturating_add(ch_len);
+        self.charpos = self.charpos.saturating_add(1);
+    }
+
+    pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
+        self.byte_idx == byte_idx && self.charpos == charpos
+    }
+
+    pub(crate) fn consume_step_char(&mut self, text: &[u8]) -> Option<DisplaySourceStepChar> {
+        if self.byte_idx >= text.len() {
+            return None;
+        }
+        let start_byte_idx = self.byte_idx;
+        let start_charpos = self.charpos;
+        let (ch, ch_len) = decode_utf8(&text[start_byte_idx..]);
+        if ch_len == 0 {
+            return None;
+        }
+        self.advance_one_char(ch_len);
+        Some(DisplaySourceStepChar::new(
+            ch,
+            start_byte_idx,
+            start_charpos,
+        ))
+    }
+
+    pub(crate) fn skip_chars_until(&mut self, text: &[u8], charpos: i64) {
+        while self.charpos < charpos && self.byte_idx < text.len() {
+            if self.consume_step_char(text).is_none() {
+                break;
+            }
+        }
+    }
+
+    pub(crate) fn consume_until_line_break(&mut self, text: &[u8]) -> bool {
+        while self.byte_idx < text.len() {
+            let Some(source_char) = self.consume_step_char(text) else {
+                break;
+            };
+            if source_char.ch() == '\n' {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub(crate) fn consume_one_then_until_line_break(&mut self, text: &[u8]) -> bool {
+        let Some(source_char) = self.consume_step_char(text) else {
+            return false;
+        };
+        source_char.ch() == '\n' || self.consume_until_line_break(text)
     }
 }
 

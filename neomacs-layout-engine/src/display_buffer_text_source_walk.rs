@@ -13,7 +13,7 @@ use crate::display_buffer_text_row_lifecycle::{
     BufferSelectiveDisplayContext, BufferSelectiveDisplayHiddenLines,
     BufferSelectiveDisplayLineTailAction, consume_hscroll_skip_from_position,
 };
-use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
+use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_buffer_text_source_consumption::{
     BufferTextSourceConsumptionState, BufferTextSourceItem,
 };
@@ -25,6 +25,7 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
 };
 use crate::display_source::DisplaySourceContext;
+use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_resolver::{
     DisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
 };
@@ -40,7 +41,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
 
 struct BufferTextWindowSourceConsumption {
     source_item: Option<BufferTextSourceItem>,
-    source_position: BufferTextSourcePosition,
+    source_position: DisplaySourceTextPosition,
     pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
@@ -99,7 +100,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
     fn consume_source_item(
         &mut self,
-        mut source_position: BufferTextSourcePosition,
+        mut source_position: DisplaySourceTextPosition,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferTextWindowSourceConsumption {
@@ -150,7 +151,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     pub(crate) fn consume_hscroll_skip(
         &mut self,
         text: &[u8],
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
     ) -> BufferTextWindowSourcePositionConsumption<Option<BufferHscrollSkipAction>> {
@@ -165,7 +166,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         buffer: &B,
         context: BufferInvisibleTextScanContext<'_>,
         checkpoints: &mut InvisibleTextScanCheckpoint,
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
     ) -> BufferTextWindowSourcePositionConsumption<BufferInvisibleTextScanAction> {
         let mut source_position = source_position;
         let action = context.consume_at_checkpoint(buffer, checkpoints, &mut source_position);
@@ -175,7 +176,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     pub(crate) fn consume_selective_display_tail(
         &mut self,
         selective_display: BufferSelectiveDisplayContext<'_>,
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
     ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayLineTailAction> {
         let mut source_position = source_position;
         let action =
@@ -186,7 +187,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     pub(crate) fn consume_hidden_indented_lines_after_line_break(
         &mut self,
         selective_display: BufferSelectiveDisplayContext<'_>,
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
         line_numbers: &mut LineNumberRenderState,
     ) -> BufferTextWindowSourcePositionConsumption<BufferSelectiveDisplayHiddenLines> {
         let mut source_position = source_position;
@@ -198,7 +199,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     pub(crate) fn consume_truncation_skip(
         &mut self,
         text: &[u8],
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
     ) -> BufferTextWindowSourcePositionConsumption<BufferTextTruncationSkipAction> {
         self.source_consumption.clear_pending_render_items();
         let mut source_position = source_position;
@@ -211,7 +212,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
     pub(crate) fn source_position_update(
         &mut self,
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
     ) -> BufferTextWindowSourcePositionConsumption<()> {
         BufferTextWindowSourcePositionConsumption::new((), source_position)
     }
@@ -219,11 +220,11 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
 
 pub(crate) struct BufferTextWindowSourcePositionConsumption<T> {
     value: T,
-    source_position: BufferTextSourcePosition,
+    source_position: DisplaySourceTextPosition,
 }
 
 impl<T> BufferTextWindowSourcePositionConsumption<T> {
-    fn new(value: T, source_position: BufferTextSourcePosition) -> Self {
+    fn new(value: T, source_position: DisplaySourceTextPosition) -> Self {
         Self {
             value,
             source_position,

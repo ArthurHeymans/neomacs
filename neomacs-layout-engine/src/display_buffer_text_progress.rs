@@ -1,5 +1,5 @@
-use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_row_builder::DisplayRowPosition;
+use crate::display_source::DisplaySourceTextPosition;
 
 pub(crate) struct BufferTextWindowRowProgressState<'emit> {
     pub(crate) x: &'emit mut f32,
@@ -59,11 +59,11 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
         *self.charpos
     }
 
-    pub(crate) fn source_position(&self) -> BufferTextSourcePosition {
-        BufferTextSourcePosition::new(*self.byte_idx, *self.charpos)
+    pub(crate) fn source_position(&self) -> DisplaySourceTextPosition {
+        DisplaySourceTextPosition::new(*self.byte_idx, *self.charpos)
     }
 
-    pub(crate) fn apply_source_position(&mut self, position: BufferTextSourcePosition) {
+    pub(crate) fn apply_source_position(&mut self, position: DisplaySourceTextPosition) {
         *self.byte_idx = position.byte_idx();
         *self.charpos = position.charpos();
     }

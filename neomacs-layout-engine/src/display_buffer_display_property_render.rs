@@ -1,4 +1,3 @@
-use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -11,6 +10,7 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
@@ -23,7 +23,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
     row_position: DisplayRowPosition,
-    source_position: BufferTextSourcePosition,
+    source_position: DisplaySourceTextPosition,
 }
 
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
@@ -197,7 +197,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) fn skip_covered_buffer_text(
         self,
         text: &[u8],
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) {
         position.skip_chars_until(text, self.skip_to);
     }
@@ -226,7 +226,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) fn walk_update(
         self,
         text: &[u8],
-        mut source_position: BufferTextSourcePosition,
+        mut source_position: DisplaySourceTextPosition,
     ) -> BufferDisplayPropertyTextReplacementWalkUpdate {
         self.skip_covered_buffer_text(text, &mut source_position);
         BufferDisplayPropertyTextReplacementWalkUpdate::new(self.end_position(), source_position)
@@ -249,7 +249,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
 impl BufferDisplayPropertyTextReplacementWalkUpdate {
     pub(crate) fn new(
         row_position: DisplayRowPosition,
-        source_position: BufferTextSourcePosition,
+        source_position: DisplaySourceTextPosition,
     ) -> Self {
         Self {
             row_position,
@@ -261,7 +261,7 @@ impl BufferDisplayPropertyTextReplacementWalkUpdate {
         self.row_position
     }
 
-    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
+    pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
         self.source_position
     }
 }

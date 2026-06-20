@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourcePosition};
+use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_buffer_text_source_consumption::BufferTextSourceConsumptionState;
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
@@ -9,6 +9,7 @@ use crate::display_item::{
     RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayReplacementProperty;
+use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
@@ -870,7 +871,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     );
     let mut context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let Some(first) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
@@ -880,7 +881,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     let end_charpos = first.end_charpos();
     let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
-    position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
+    position = DisplaySourceTextPosition::new(position.byte_idx(), end_charpos);
 
     let Some(replacement_item) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
@@ -936,7 +937,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     );
     let mut context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let Some(first) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)
@@ -946,7 +947,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     let end_charpos = first.end_charpos();
     let (_, first_item) = first.into_render_parts().expect("render parts");
     assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
-    position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
+    position = DisplaySourceTextPosition::new(position.byte_idx(), end_charpos);
 
     let Some(replacement_item) =
         source_consumption.next_source_consumption_item(&mut source, &mut context, &mut position)

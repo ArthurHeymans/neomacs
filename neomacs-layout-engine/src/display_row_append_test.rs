@@ -1034,7 +1034,7 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 
 #[test]
 fn buffer_hscroll_skip_preserves_line_break_action() {
-    let mut position = BufferTextSourcePosition::new(0, 10);
+    let mut position = DisplaySourceTextPosition::new(0, 10);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
     let action = consume_hscroll_skip_from_position(b"\nnext", &mut position, &mut hscroll_skip, 8)
@@ -1047,13 +1047,13 @@ fn buffer_hscroll_skip_preserves_line_break_action() {
             charpos: 11
         }
     );
-    assert_eq!(position, BufferTextSourcePosition::new(1, 11));
+    assert_eq!(position, DisplaySourceTextPosition::new(1, 11));
     assert!(hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
     let action = consume_hscroll_skip_from_position(b"\tabc", &mut position, &mut hscroll_skip, 8)
@@ -1067,13 +1067,13 @@ fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
             show_left_truncation: true
         }
     );
-    assert_eq!(position, BufferTextSourcePosition::new(1, 1));
+    assert_eq!(position, DisplaySourceTextPosition::new(1, 1));
     assert!(!hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_consumes_wide_char_columns() {
-    let mut position = BufferTextSourcePosition::new(0, 3);
+    let mut position = DisplaySourceTextPosition::new(0, 3);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
 
     let action =
@@ -1088,13 +1088,13 @@ fn buffer_hscroll_skip_consumes_wide_char_columns() {
             show_left_truncation: true
         }
     );
-    assert_eq!(position, BufferTextSourcePosition::new("界".len(), 4));
+    assert_eq!(position, DisplaySourceTextPosition::new("界".len(), 4));
     assert!(!hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
 
     let action = consume_hscroll_skip_from_position(b"abc", &mut position, &mut hscroll_skip, 8)
@@ -1108,7 +1108,7 @@ fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
             show_left_truncation: false
         }
     );
-    assert_eq!(position, BufferTextSourcePosition::new(1, 1));
+    assert_eq!(position, DisplaySourceTextPosition::new(1, 1));
     assert!(hscroll_skip.should_skip());
 }
 
@@ -1430,7 +1430,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
 fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let buffer_text = b"visible";
     let mut checkpoints = InvisibleTextScanCheckpoint::new(5);
-    let mut position = BufferTextSourcePosition::new(2, 2);
+    let mut position = DisplaySourceTextPosition::new(2, 2);
     let eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1443,7 +1443,7 @@ fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
         .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
 
     assert_eq!(action, BufferInvisibleTextScanAction::Unchecked);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 2));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 2));
 }
 
 #[test]
@@ -1468,7 +1468,7 @@ fn buffer_invisible_text_scan_context_records_visible_boundary() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let action = BufferInvisibleTextScanContext::new("visible hidden".as_bytes(), 14, 0, true)
         .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
@@ -1477,7 +1477,7 @@ fn buffer_invisible_text_scan_context_records_visible_boundary() {
         action,
         BufferInvisibleTextScanAction::Visible { next_visible: 8 }
     );
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
     assert!(!checkpoints.should_check(7));
     assert!(checkpoints.should_check(8));
 }
@@ -1504,7 +1504,7 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(8);
-    let mut position = BufferTextSourcePosition::new(8, 8);
+    let mut position = DisplaySourceTextPosition::new(8, 8);
 
     let action =
         BufferInvisibleTextScanContext::new("visible hidden visible".as_bytes(), 22, 10, true)
@@ -1519,7 +1519,7 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
     assert_eq!(hidden.next_visible(), 14);
     assert!(hidden.point_in_hidden_region());
     assert!(!hidden.ellipsis());
-    assert_eq!(position, BufferTextSourcePosition::new(14, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(14, 14));
     assert!(!checkpoints.should_check(13));
     assert!(checkpoints.should_check(14));
 }
@@ -1550,7 +1550,7 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let action = BufferInvisibleTextScanContext::new("folded rest".as_bytes(), 11, 9, true)
         .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
@@ -1561,7 +1561,7 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
     assert_eq!(hidden.skip_to(), 6);
     assert!(!hidden.point_in_hidden_region());
     assert!(hidden.ellipsis());
-    assert_eq!(position, BufferTextSourcePosition::new(6, 6));
+    assert_eq!(position, DisplaySourceTextPosition::new(6, 6));
 }
 
 #[test]
@@ -1586,7 +1586,7 @@ fn buffer_invisible_text_scan_context_advances_multibyte_source_position() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(1);
-    let mut position = BufferTextSourcePosition::new(1, 1);
+    let mut position = DisplaySourceTextPosition::new(1, 1);
 
     let action = BufferInvisibleTextScanContext::new("a中b".as_bytes(), 3, 1, true)
         .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
@@ -1597,7 +1597,7 @@ fn buffer_invisible_text_scan_context_advances_multibyte_source_position() {
     assert_eq!(hidden.start_byte_idx(), 1);
     assert_eq!(hidden.start_charpos(), 1);
     assert_eq!(hidden.skip_to(), 2);
-    assert_eq!(position, BufferTextSourcePosition::new("a中".len(), 2));
+    assert_eq!(position, DisplaySourceTextPosition::new("a中".len(), 2));
 }
 
 #[test]
@@ -1791,7 +1791,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
 fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
     let text = b"a\rb\nc";
     let context = BufferSelectiveDisplayContext::new(text, 1, 8);
-    let mut position = BufferTextSourcePosition::new(2, 1);
+    let mut position = DisplaySourceTextPosition::new(2, 1);
 
     assert!(context.hides_carriage_return_tail('\r'));
     let action = context.skip_rest_of_line_after_carriage_return(&mut position);
@@ -1802,7 +1802,7 @@ fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
     );
     assert!(action.is_line_break());
     assert_eq!(action.charpos(), Some(4));
-    assert_eq!(position, BufferTextSourcePosition::new(4, 4));
+    assert_eq!(position, DisplaySourceTextPosition::new(4, 4));
 }
 
 #[test]
@@ -1834,21 +1834,21 @@ fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
 fn buffer_selective_display_context_reports_exhausted_carriage_return_tail() {
     let text = b"a\rhidden";
     let context = BufferSelectiveDisplayContext::new(text, 1, 8);
-    let mut position = BufferTextSourcePosition::new(2, 1);
+    let mut position = DisplaySourceTextPosition::new(2, 1);
 
     let action = context.skip_rest_of_line_after_carriage_return(&mut position);
 
     assert_eq!(action, BufferSelectiveDisplayLineTailAction::Exhausted);
     assert!(!action.is_line_break());
     assert_eq!(action.charpos(), None);
-    assert_eq!(position, BufferTextSourcePosition::new(text.len(), 8));
+    assert_eq!(position, DisplaySourceTextPosition::new(text.len(), 8));
 }
 
 #[test]
 fn buffer_selective_display_context_skips_hidden_indented_lines() {
     let text = b"  hidden\n\talso\n visible\n";
     let context = BufferSelectiveDisplayContext::new(text, 1, 4);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
 
     assert!(context.hides_indented_lines_after_line_break(position.byte_idx()));
@@ -1858,7 +1858,7 @@ fn buffer_selective_display_context_skips_hidden_indented_lines() {
     assert_eq!(hidden_lines.hidden_line_count(), 2);
     assert_eq!(
         position,
-        BufferTextSourcePosition::new(
+        DisplaySourceTextPosition::new(
             b"  hidden\n\talso\n".len(),
             b"  hidden\n\talso\n".len() as i64
         )
@@ -1870,7 +1870,7 @@ fn buffer_selective_display_context_skips_hidden_indented_lines() {
 fn buffer_selective_display_context_applies_hidden_indented_lines_after_line_break() {
     let text = b"  hidden\n\talso\n visible\n";
     let context = BufferSelectiveDisplayContext::new(text, 1, 4);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
 
     let hidden_lines =
@@ -1879,7 +1879,7 @@ fn buffer_selective_display_context_applies_hidden_indented_lines_after_line_bre
     assert_eq!(hidden_lines.hidden_line_count(), 2);
     assert_eq!(
         position,
-        BufferTextSourcePosition::new(
+        DisplaySourceTextPosition::new(
             b"  hidden\n\talso\n".len(),
             b"  hidden\n\talso\n".len() as i64
         )
@@ -1891,7 +1891,7 @@ fn buffer_selective_display_context_applies_hidden_indented_lines_after_line_bre
 fn buffer_selective_display_context_apply_hidden_indented_lines_noops_when_disabled() {
     let text = b"  visible\n";
     let context = BufferSelectiveDisplayContext::new(text, 0, 4);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
 
     let hidden_lines =
@@ -1899,19 +1899,19 @@ fn buffer_selective_display_context_apply_hidden_indented_lines_noops_when_disab
 
     assert_eq!(hidden_lines.hidden_line_count(), 0);
     assert_eq!(line_numbers.current_line(), 7);
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
 }
 
 #[test]
 fn buffer_selective_display_context_keeps_visible_indented_line() {
     let text = b" visible\n";
     let context = BufferSelectiveDisplayContext::new(text, 1, 4);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let hidden_lines = context.skip_hidden_indented_lines_after_line_break(&mut position);
 
     assert_eq!(hidden_lines.hidden_line_count(), 0);
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
 }
 
 #[test]
@@ -1941,7 +1941,7 @@ fn buffer_text_source_consumption_state_preserves_single_char_source_item() {
         DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos.get(),
         other => panic!("expected buffer source, got {other:?}"),
     };
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(text_start_byte)
         .render_item_from_item(item, &mut position)
@@ -1988,7 +1988,7 @@ fn buffer_text_source_consumption_state_can_return_full_text_run_item() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let position = BufferTextSourcePosition::new(0, 0);
+    let position = DisplaySourceTextPosition::new(0, 0);
 
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
@@ -2025,7 +2025,7 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
@@ -2064,7 +2064,7 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
         .render_item_from_source_item(typed_item, &mut position)
@@ -2102,7 +2102,7 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("YZ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 1, 1, Some('b'));
-    let mut position = BufferTextSourcePosition::new(1, 1);
+    let mut position = DisplaySourceTextPosition::new(1, 1);
 
     let step = BufferTextSourceConsumptionState::new(0)
         .render_item_from_source_item(typed_item, &mut position)
@@ -2138,7 +2138,7 @@ fn buffer_text_source_item_without_source_char_rejects_source_mapped_without_sou
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, None);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     assert!(typed_item.direct_source_char().is_none());
     match &typed_item.item().kind {
@@ -2148,7 +2148,7 @@ fn buffer_text_source_item_without_source_char_rejects_source_mapped_without_sou
 
     let step = typed_item.consume_for_render(&mut position);
 
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
     assert!(step.is_err());
 }
 
@@ -2174,7 +2174,7 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
@@ -2189,7 +2189,7 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         .ok()
         .expect("multi-char text run remains a typed source item");
     assert_eq!(step.source_step_char().expect("source step char").ch(), 'a');
-    assert_eq!(position, BufferTextSourcePosition::new(2, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 0));
 
     let direct = step;
     let (first, pending) = direct
@@ -2213,11 +2213,11 @@ fn buffer_text_source_item_builds_direct_multi_char_runs() {
         other => panic!("expected direct split text run, got {other:?}"),
     }
 
-    let position = BufferTextSourcePosition::new(0, 0);
+    let position = DisplaySourceTextPosition::new(0, 0);
     let typed_item = source_consumption
         .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item after cursor reset");
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
     match &typed_item.item().kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
         other => panic!("expected full text run, got {other:?}"),
@@ -2246,7 +2246,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
         raise: Some(0.25),
         height: Some(1.5),
     });
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0)
         .render_item_from_item(source_item, &mut position)
@@ -2279,7 +2279,7 @@ fn buffer_text_source_consumption_state_splits_persistent_text_run() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut source_consumption = BufferTextSourceConsumptionState::new(0);
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let item = source_consumption
         .next_display_item_from_source(&mut cursor, &mut source_context, &mut position)
@@ -2323,12 +2323,12 @@ fn buffer_text_source_consumption_state_rejects_non_buffer_items() {
         RenderFaceRef::Inherit,
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
     );
-    let mut position = BufferTextSourcePosition::new(3, 7);
+    let mut position = DisplaySourceTextPosition::new(3, 7);
 
     let step = BufferTextSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
 
     assert!(step.is_none());
-    assert_eq!(position, BufferTextSourcePosition::new(3, 7));
+    assert_eq!(position, DisplaySourceTextPosition::new(3, 7));
 }
 
 #[test]
@@ -2355,17 +2355,17 @@ fn buffer_text_source_consumption_state_rejects_replacement_items() {
             ascent: None,
         }),
     );
-    let mut position = BufferTextSourcePosition::new(0, 0);
+    let mut position = DisplaySourceTextPosition::new(0, 0);
 
     let step = BufferTextSourceConsumptionState::new(0).render_item_from_item(item, &mut position);
 
     assert!(step.is_none());
-    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
+    assert_eq!(position, DisplaySourceTextPosition::new(0, 0));
 }
 
 #[test]
 fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
-    let mut position = BufferTextSourcePosition::new("a".len(), 4);
+    let mut position = DisplaySourceTextPosition::new("a".len(), 4);
 
     let source_char = position
         .consume_step_char("a界b".as_bytes())
@@ -2582,7 +2582,7 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
 
 #[test]
 fn buffer_text_line_break_source_action_syncs_after_transition() {
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     BufferTextLineBreakSourceAction::sync_after_row_transition(
@@ -2591,7 +2591,7 @@ fn buffer_text_line_break_source_action_syncs_after_transition() {
         &mut hit_row_range,
     );
 
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -2608,7 +2608,7 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
@@ -2622,7 +2622,7 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
     assert_eq!(box_face.row(), geometry.current_row_marker());
     assert_eq!(box_face.start_x(), Some(2.0));
@@ -2640,7 +2640,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut box_face = BoxFaceRowState::inactive();
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
@@ -2654,7 +2654,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 3);
     assert_eq!(box_face.start_x(), None);
 }
@@ -2787,7 +2787,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
 
 #[test]
 fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     BufferSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
@@ -2796,14 +2796,14 @@ fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_trans
         &mut hit_row_range,
     );
 
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]
 fn buffer_selective_display_line_tail_action_applies_after_hidden_line_break_transition() {
     let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
@@ -2814,14 +2814,14 @@ fn buffer_selective_display_line_tail_action_applies_after_hidden_line_break_tra
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]
 fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_exhausted() {
     let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
@@ -2832,7 +2832,7 @@ fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_e
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 3);
 }
 
@@ -2961,7 +2961,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
 #[test]
 fn buffer_text_truncation_skip_action_consumes_source_step_char_and_reaches_newline() {
     let text = b"abc\nnext";
-    let mut position = BufferTextSourcePosition::new(1, 1);
+    let mut position = DisplaySourceTextPosition::new(1, 1);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
@@ -2970,17 +2970,17 @@ fn buffer_text_truncation_skip_action_consumes_source_step_char_and_reaches_newl
 
     assert!(action.reached_line_break());
     assert_eq!(action.charpos(), 4);
-    assert_eq!(position, BufferTextSourcePosition::new(4, 4));
+    assert_eq!(position, DisplaySourceTextPosition::new(4, 4));
     assert_eq!(
         action.source_position(),
-        BufferTextSourcePosition::new(4, 4)
+        DisplaySourceTextPosition::new(4, 4)
     );
 }
 
 #[test]
 fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
     let text = b"abc";
-    let mut position = BufferTextSourcePosition::new(1, 1);
+    let mut position = DisplaySourceTextPosition::new(1, 1);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
@@ -2989,17 +2989,17 @@ fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
 
     assert!(!action.reached_line_break());
     assert_eq!(action.charpos(), 3);
-    assert_eq!(position, BufferTextSourcePosition::new(3, 3));
+    assert_eq!(position, DisplaySourceTextPosition::new(3, 3));
     assert_eq!(
         action.source_position(),
-        BufferTextSourcePosition::new(3, 3)
+        DisplaySourceTextPosition::new(3, 3)
     );
 }
 
 #[test]
 fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     let text = "a界b\n".as_bytes();
-    let mut position = BufferTextSourcePosition::new("a".len(), 1);
+    let mut position = DisplaySourceTextPosition::new("a".len(), 1);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
@@ -3008,10 +3008,10 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
 
     assert!(action.reached_line_break());
     assert_eq!(action.charpos(), 4);
-    assert_eq!(position, BufferTextSourcePosition::new(text.len(), 4));
+    assert_eq!(position, DisplaySourceTextPosition::new(text.len(), 4));
     assert_eq!(
         action.source_position(),
-        BufferTextSourcePosition::new(text.len(), 4)
+        DisplaySourceTextPosition::new(text.len(), 4)
     );
 }
 
@@ -3019,7 +3019,7 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
 fn buffer_text_truncation_skip_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let text = b"abc\nnext";
-    let mut position = BufferTextSourcePosition::new(1, 0);
+    let mut position = DisplaySourceTextPosition::new(1, 0);
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut position,
@@ -3041,7 +3041,7 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
 
 #[test]
 fn buffer_text_truncation_skip_action_syncs_after_transition() {
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     BufferTextTruncationSkipAction::sync_after_row_transition(
@@ -3050,7 +3050,7 @@ fn buffer_text_truncation_skip_action_syncs_after_transition() {
         &mut hit_row_range,
     );
 
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -3059,7 +3059,7 @@ fn buffer_text_truncation_skip_action_reports_transition_continuation() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: false,
-        source_position: BufferTextSourcePosition::new(0, 12),
+        source_position: DisplaySourceTextPosition::new(0, 12),
     };
 
     assert_eq!(
@@ -3077,9 +3077,9 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
-        source_position: BufferTextSourcePosition::new(0, 12),
+        source_position: DisplaySourceTextPosition::new(0, 12),
     };
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
@@ -3090,7 +3090,7 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -3099,9 +3099,9 @@ fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
-        source_position: BufferTextSourcePosition::new(0, 12),
+        source_position: DisplaySourceTextPosition::new(0, 12),
     };
-    let mut position = BufferTextSourcePosition::new(2, 9);
+    let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
@@ -3112,7 +3112,7 @@ fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
+    assert_eq!(position, DisplaySourceTextPosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 2);
 }
 
@@ -3126,7 +3126,7 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
     );
     let action = BufferTextWordWrapSourceAction::new(break_candidate);
-    let mut position = BufferTextSourcePosition::new(20, 30);
+    let mut position = DisplaySourceTextPosition::new(20, 30);
     let mut col = 9;
 
     action.rewind_source_state(&mut position, &mut col);
@@ -3135,9 +3135,9 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
     assert_eq!(action.charpos(), 12);
     assert_eq!(
         action.source_position(),
-        BufferTextSourcePosition::new(7, 12)
+        DisplaySourceTextPosition::new(7, 12)
     );
-    assert_eq!(position, BufferTextSourcePosition::new(7, 12));
+    assert_eq!(position, DisplaySourceTextPosition::new(7, 12));
     assert_eq!(col, 0);
 }
 
@@ -3153,7 +3153,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
     );
     let action = BufferTextWordWrapSourceAction::new(break_candidate);
-    let mut position = BufferTextSourcePosition::new(20, 30);
+    let mut position = DisplaySourceTextPosition::new(20, 30);
     let mut col = 9;
     let mut x = 88.0;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -3171,7 +3171,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         2.0,
     );
 
-    assert_eq!(position, BufferTextSourcePosition::new(7, 12));
+    assert_eq!(position, DisplaySourceTextPosition::new(7, 12));
     assert_eq!(col, 0);
     assert_eq!(x, 2.0);
     assert_eq!(row_extend.value_on(&geometry), None);
@@ -3179,7 +3179,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let mut hit_row_range = HitRowRangeTracker::new(4);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
-    let mut final_position = BufferTextSourcePosition::new(20, 30);
+    let mut final_position = DisplaySourceTextPosition::new(20, 30);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
@@ -3224,7 +3224,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(final_position, BufferTextSourcePosition::new(7, 12));
+    assert_eq!(final_position, DisplaySourceTextPosition::new(7, 12));
     assert_eq!(hit_row_range.start(), 12);
     assert!(face_scan.should_resolve_at(0));
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Wrap);
@@ -3406,26 +3406,29 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
-    let mut position = BufferTextSourcePosition::new(17, 22);
+    let mut position = DisplaySourceTextPosition::new(17, 22);
 
     action.rewind_source_state(&mut position);
 
     assert_eq!(
         action.source_position(),
-        BufferTextSourcePosition::new(13, 21)
+        DisplaySourceTextPosition::new(13, 21)
     );
-    assert_eq!(position, BufferTextSourcePosition::new(13, 21));
+    assert_eq!(position, DisplaySourceTextPosition::new(13, 21));
 }
 
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_source_step_char() {
     let source_char = DisplaySourceStepChar::new('界', "a".len(), 9);
     let action = BufferTextCharacterWrapSourceAction::from_source_step_char(source_char);
-    let mut rewind_position = BufferTextSourcePosition::new("a界".len(), 10);
+    let mut rewind_position = DisplaySourceTextPosition::new("a界".len(), 10);
 
     action.rewind_source_state(&mut rewind_position);
 
-    assert_eq!(rewind_position, BufferTextSourcePosition::new("a".len(), 9));
+    assert_eq!(
+        rewind_position,
+        DisplaySourceTextPosition::new("a".len(), 9)
+    );
 }
 
 #[test]
@@ -3444,7 +3447,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     assert_eq!(x, 3.0);
     assert_eq!(row_extend.value_on(&geometry), None);
 
-    let mut position = BufferTextSourcePosition::new(17, 22);
+    let mut position = DisplaySourceTextPosition::new(17, 22);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
@@ -3462,7 +3465,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(position, BufferTextSourcePosition::new(13, 21));
+    assert_eq!(position, DisplaySourceTextPosition::new(13, 21));
     assert_eq!(hit_row_range.start(), 21);
     assert!(face_scan.should_resolve_at(0));
 }
@@ -3471,7 +3474,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
 fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhausted() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
-    let mut position = BufferTextSourcePosition::new(17, 22);
+    let mut position = DisplaySourceTextPosition::new(17, 22);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
@@ -3489,7 +3492,7 @@ fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhauste
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(position, BufferTextSourcePosition::new(17, 22));
+    assert_eq!(position, DisplaySourceTextPosition::new(17, 22));
     assert_eq!(hit_row_range.start(), 6);
     assert!(!face_scan.should_resolve_at(0));
 }
@@ -3498,7 +3501,7 @@ fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhauste
 fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
     let geometry = DisplayRowGeometryState::new(0, 64.0, 0.0, 16.0, 12.0);
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
-    let mut position = BufferTextSourcePosition::new(17, 22);
+    let mut position = DisplaySourceTextPosition::new(17, 22);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
@@ -3516,7 +3519,7 @@ fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Hidden);
-    assert_eq!(position, BufferTextSourcePosition::new(13, 21));
+    assert_eq!(position, DisplaySourceTextPosition::new(13, 21));
     assert_eq!(hit_row_range.start(), 21);
     assert!(face_scan.should_resolve_at(0));
 }
@@ -4102,7 +4105,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextSourcePositionedRenderPlanRequest::new(
+        DisplaySourceTextPositionedRenderPlanRequest::new(
             BufferTextSourceRenderPlanRequest::new(
                 b"x",
                 0,
@@ -4149,7 +4152,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &mut font_metrics,
             &face_resolver,
         ),
-        BufferTextSourcePositionedRenderPlanRequest::new(
+        DisplaySourceTextPositionedRenderPlanRequest::new(
             BufferTextSourceRenderPlanRequest::new(
                 "\u{0633}".as_bytes(),
                 0,
@@ -7418,7 +7421,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                 &mut font_metrics,
                 &face_resolver,
             ),
-            BufferTextSourcePositionedRenderPlanRequest::new(
+            DisplaySourceTextPositionedRenderPlanRequest::new(
                 BufferTextSourceRenderPlanRequest::new(
                     b"b",
                     0,
@@ -9317,7 +9320,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         panic!("expected rendered display replacement");
     };
     outcome.capture_cursor_info_if_point(&mut cursor_info, &active_face, &geometry, 3, 3, byte_idx);
-    let walk_update = outcome.walk_update(b"x", BufferTextSourcePosition::new(byte_idx, charpos));
+    let walk_update = outcome.walk_update(b"x", DisplaySourceTextPosition::new(byte_idx, charpos));
     x = walk_update.row_position().x_px;
     col = walk_update.row_position().col;
     byte_idx = walk_update.source_position().byte_idx();

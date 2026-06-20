@@ -281,7 +281,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
+        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
     ) -> DisplaySourceAppendRenderPlan {
         let frame = self.active_face_context(geometry).active_face_frame();
         append_state
@@ -299,7 +299,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
+        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
     ) -> BufferTextSourceCharAppendPlan {
         let render_plan = self.resolve_source_render_plan_request_to_text_row(
             geometry,
@@ -663,7 +663,7 @@ impl DisplaySourceAppendRenderPlanResolver {
         state: &mut TextRowSourceMeasureState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        request: BufferTextSourcePositionedRenderPlanRequest<'_, '_>,
+        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
     ) -> DisplaySourceAppendRenderPlan {
         let ch = request.cluster().ch();
         match request.measurement_kind() {
@@ -739,8 +739,8 @@ impl BufferTextSourceChar {
         position: DisplayRowPosition,
         source_item: &'item DisplayItem,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
-        BufferTextSourcePositionedRenderPlanRequest::new(
+    ) -> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
+        DisplaySourceTextPositionedRenderPlanRequest::new(
             self.advance_request(text, byte_idx, tail),
             position,
             source_item,
@@ -963,13 +963,13 @@ impl BufferTextSourceCharAppendPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
+pub(crate) struct DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
     source: BufferTextSourceRenderPlanRequest<'text>,
     position: DisplayRowPosition,
     source_item: &'item DisplayItem,
 }
 
-impl<'text, 'item> BufferTextSourcePositionedRenderPlanRequest<'text, 'item> {
+impl<'text, 'item> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
     pub(crate) fn new(
         source: BufferTextSourceRenderPlanRequest<'text>,
         position: DisplayRowPosition,

@@ -6,9 +6,8 @@ use crate::display_item::{
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
     DisplayItemSource, DisplayPropertySourceCursorAction, DisplayPropertySourcePlan,
-    DisplaySourceContext, DisplaySourceStepChar, LispStringSourceStack,
-    TextSourceCharClassification, classify_text_source_char,
-    display_item_kind_for_text_source_char,
+    DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
+    classify_text_source_char, display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -236,95 +235,6 @@ fn visible_cols_for_window_params(params: &WindowParams) -> i64 {
     (params.text_bounds.width.max(1.0) / char_width)
         .floor()
         .max(1.0) as i64
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSourcePosition {
-    byte_idx: usize,
-    charpos: i64,
-}
-
-impl BufferTextSourcePosition {
-    pub(crate) const fn new(byte_idx: usize, charpos: i64) -> Self {
-        Self { byte_idx, charpos }
-    }
-
-    pub(crate) const fn byte_idx(self) -> usize {
-        self.byte_idx
-    }
-
-    pub(crate) const fn charpos(self) -> i64 {
-        self.charpos
-    }
-
-    pub(crate) const fn with_charpos(self, charpos: i64) -> Self {
-        Self {
-            byte_idx: self.byte_idx,
-            charpos,
-        }
-    }
-
-    pub(crate) fn advance_byte_idx_to(&mut self, byte_idx: usize) {
-        self.byte_idx = byte_idx;
-    }
-
-    pub(crate) fn advance_charpos_by_one(&mut self) {
-        self.charpos = self.charpos.saturating_add(1);
-    }
-
-    pub(crate) fn advance_one_char(&mut self, ch_len: usize) {
-        self.byte_idx = self.byte_idx.saturating_add(ch_len);
-        self.charpos = self.charpos.saturating_add(1);
-    }
-
-    pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
-        self.byte_idx == byte_idx && self.charpos == charpos
-    }
-
-    pub(crate) fn consume_step_char(&mut self, text: &[u8]) -> Option<DisplaySourceStepChar> {
-        if self.byte_idx >= text.len() {
-            return None;
-        }
-        let start_byte_idx = self.byte_idx;
-        let start_charpos = self.charpos;
-        let (ch, ch_len) = decode_utf8(&text[start_byte_idx..]);
-        if ch_len == 0 {
-            return None;
-        }
-        self.advance_one_char(ch_len);
-        Some(DisplaySourceStepChar::new(
-            ch,
-            start_byte_idx,
-            start_charpos,
-        ))
-    }
-
-    pub(crate) fn skip_chars_until(&mut self, text: &[u8], charpos: i64) {
-        while self.charpos < charpos && self.byte_idx < text.len() {
-            if self.consume_step_char(text).is_none() {
-                break;
-            }
-        }
-    }
-
-    pub(crate) fn consume_until_line_break(&mut self, text: &[u8]) -> bool {
-        while self.byte_idx < text.len() {
-            let Some(source_char) = self.consume_step_char(text) else {
-                break;
-            };
-            if source_char.ch() == '\n' {
-                return true;
-            }
-        }
-        false
-    }
-
-    pub(crate) fn consume_one_then_until_line_break(&mut self, text: &[u8]) -> bool {
-        let Some(source_char) = self.consume_step_char(text) else {
-            return false;
-        };
-        source_char.ch() == '\n' || self.consume_until_line_break(text)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

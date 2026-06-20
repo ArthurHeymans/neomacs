@@ -8,7 +8,6 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -24,7 +23,7 @@ use crate::display_row_walk_state::{
     SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, WordWrapBreakCandidate,
     WordWrapRenderState,
 };
-use crate::display_source::DisplaySourceStepChar;
+use crate::display_source::{DisplaySourceStepChar, DisplaySourceTextPosition};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
@@ -366,13 +365,13 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
 pub(crate) struct BufferTextTruncationSkipAction {
     pub(crate) charpos: i64,
     pub(crate) reached_line_break: bool,
-    pub(crate) source_position: BufferTextSourcePosition,
+    pub(crate) source_position: DisplaySourceTextPosition,
 }
 
 impl BufferTextTruncationSkipAction {
     pub(crate) fn consume_source_step_char_and_rest_of_line(
         text: &[u8],
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
     ) -> Self {
         let reached_line_break = position.consume_one_then_until_line_break(text);
         Self {
@@ -387,7 +386,7 @@ impl BufferTextTruncationSkipAction {
         self.charpos
     }
 
-    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
+    pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
         self.source_position
     }
 
@@ -411,7 +410,7 @@ impl BufferTextTruncationSkipAction {
 
     pub(crate) fn sync_after_row_transition(
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
         *position = position.with_charpos(synced_charpos);
@@ -433,7 +432,7 @@ impl BufferTextTruncationSkipAction {
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) -> DisplayRowTransitionContinuation {
         if row_transition.is_exhausted() {
@@ -462,8 +461,8 @@ impl BufferTextWordWrapSourceAction {
             .restore_current_row_display_positions(row_first_display_pos, row_last_display_pos);
     }
 
-    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
-        BufferTextSourcePosition::new(
+    pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
+        DisplaySourceTextPosition::new(
             self.break_candidate.byte_idx(),
             self.break_candidate.charpos(),
         )
@@ -471,7 +470,7 @@ impl BufferTextWordWrapSourceAction {
 
     pub(crate) fn rewind_source_state(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         col: &mut usize,
     ) {
         *position = self.source_position();
@@ -481,7 +480,7 @@ impl BufferTextWordWrapSourceAction {
     pub(crate) fn apply_before_row_transition(
         self,
         output_emitter: &mut WindowOutputEmitter,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         col: &mut usize,
         row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
         x: &mut f32,
@@ -495,7 +494,7 @@ impl BufferTextWordWrapSourceAction {
 
     pub(crate) fn apply_after_row_transition(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
     ) {
@@ -508,7 +507,7 @@ impl BufferTextWordWrapSourceAction {
         self,
         row_transition: DisplayTextRowTransition,
         transition: DisplayRowOverflowTransitionPlan,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
         row_geometry: &DisplayRowGeometryState,
@@ -604,11 +603,11 @@ impl BufferTextCharacterWrapSourceAction {
         Self::new(source_char.start_byte_idx(), source_char.start_charpos())
     }
 
-    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
-        BufferTextSourcePosition::new(self.ch_start_byte_idx, self.ch_start_charpos)
+    pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
+        DisplaySourceTextPosition::new(self.ch_start_byte_idx, self.ch_start_charpos)
     }
 
-    pub(crate) fn rewind_source_state(self, position: &mut BufferTextSourcePosition) {
+    pub(crate) fn rewind_source_state(self, position: &mut DisplaySourceTextPosition) {
         *position = self.source_position();
     }
 
@@ -624,7 +623,7 @@ impl BufferTextCharacterWrapSourceAction {
 
     pub(crate) fn apply_after_row_transition(
         self,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
     ) {
@@ -636,7 +635,7 @@ impl BufferTextCharacterWrapSourceAction {
     pub(crate) fn apply_after_visible_row_transition(
         self,
         row_transition: DisplayTextRowTransition,
-        position: &mut BufferTextSourcePosition,
+        position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
         row_geometry: &DisplayRowGeometryState,
