@@ -3,7 +3,6 @@
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
-use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_row_lifecycle::{
     BufferHscrollSkipRenderRequest, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest,
@@ -11,86 +10,15 @@ use crate::display_buffer_text_row_lifecycle::{
 use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source_render::BufferTextWindowSourceRenderRequest;
 use crate::display_buffer_text_source_walk::*;
-use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
-use crate::display_row_append_context::DisplayRowAppendSurface;
-use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryState, DisplayRowScopedValue, DisplayRowYPositions,
-};
-use crate::display_row_lisp_string::DisplayRowPrefixRequest;
-use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_row_walk_state::{
-    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
-    InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
-};
-use crate::hit_test::HitRow;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
-use neomacs_display_protocol::types::Color;
 
-pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
-    loop_context: BufferTextWindowLoopRequestContext,
-    state: BufferTextWindowLoopMutableState<'rows, 'emit, 'surface>,
-}
-
-impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        loop_context: BufferTextWindowLoopRequestContext,
-        invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
-        progress: BufferTextWindowProgressState<'emit>,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-        box_face: &'emit mut BoxFaceRowState,
-        line_numbers: &'emit mut LineNumberRenderState,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        row_flags: &'emit mut DisplayRowFlags,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        prefix_request: &'emit mut DisplayRowPrefixRequest,
-        hscroll_skip: &'emit mut HorizontalScrollSkipState,
-        word_wrap: &'emit mut WordWrapRenderState,
-        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        row_y_positions: &'rows mut DisplayRowYPositions,
-        cursor_info: &'emit mut CursorCaptureState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-        append_surface: &'surface DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
-    ) -> Self {
-        Self {
-            loop_context,
-            state: BufferTextWindowLoopMutableState::new(
-                invisible_text_checkpoint,
-                progress,
-                source_render,
-                row_extend,
-                box_face,
-                line_numbers,
-                row_geometry,
-                row_flags,
-                hit_rows,
-                hit_row_range,
-                prefix_request,
-                hscroll_skip,
-                word_wrap,
-                trailing_whitespace,
-                face_scan,
-                row_y_positions,
-                cursor_info,
-                face_ids,
-                append_surface,
-                overlay_context,
-            ),
-        }
-    }
-
+impl<'rows, 'emit, 'surface> BufferTextWindowLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
         source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -101,24 +29,34 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) where
         'surface: 'request,
     {
-        while *self.state.progress.byte_idx < text.len()
+        while *self.progress.byte_idx < text.len()
             && self
-                .state
                 .row_geometry
-                .current_row_is_visible(self.loop_context.row_visibility_limit())
+                .current_row_is_visible(loop_context.row_visibility_limit())
         {
             self.render_row_prelude(row_prelude_context, active_face_state, buffer);
 
             if self
-                .render_invisible_text_for_context(source_walk, text, active_face_state, buffer)
+                .render_invisible_text_for_context(
+                    loop_context,
+                    source_walk,
+                    text,
+                    active_face_state,
+                    buffer,
+                )
                 .should_continue_buffer_walk()
             {
                 continue;
             }
 
-            if self.state.hscroll_skip.should_skip() {
+            if self.hscroll_skip.should_skip() {
                 if self
-                    .render_hscroll_skip_for_context(source_walk, text, active_face_state)
+                    .render_hscroll_skip_for_context(
+                        loop_context,
+                        source_walk,
+                        text,
+                        active_face_state,
+                    )
                     .should_break()
                 {
                     break;
@@ -132,11 +70,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             );
 
             if !BufferTextWindowSourceRenderRequest::new(
-                self.loop_context,
+                loop_context,
                 text,
                 params,
                 active_face_state,
-                self.state.reborrow(),
+                self.reborrow(),
             )
             .render_next_and_apply(
                 source_walk,
@@ -157,35 +95,36 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         context
             .line_number_margin_request()
             .render_pending_with_source_state(
-                self.state.line_numbers,
-                &mut self.state.source_render,
-                self.state.face_ids,
-                self.state.row_geometry,
-                self.state.face_scan,
+                self.line_numbers,
+                &mut self.source_render,
+                self.face_ids,
+                self.row_geometry,
+                self.face_scan,
                 context.char_width(),
             );
 
         context
             .line_prefix_request(
-                self.state.append_surface,
-                self.state.row_geometry,
+                self.append_surface,
+                self.row_geometry,
                 active_face_state,
                 0.0,
-                self.state.progress.row_position(),
+                self.progress.row_position(),
             )
             .render_requested_with_source_state_and_apply(
-                self.state.prefix_request,
-                &mut self.state.source_render,
+                self.prefix_request,
+                &mut self.source_render,
                 buffer,
-                self.state.progress.charpos(),
-                self.state.face_ids,
-                self.state.progress.row.x,
-                self.state.progress.row.col,
+                self.progress.charpos(),
+                self.face_ids,
+                self.progress.row.x,
+                self.progress.row.col,
             );
     }
 
     fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -194,10 +133,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     where
         'surface: 'request,
     {
-        let request = self.loop_context.invisible_text_request(
+        let request = loop_context.invisible_text_request(
             text,
-            self.state.append_surface,
-            self.state.overlay_context,
+            self.append_surface,
+            self.overlay_context,
             active_face_state,
             0.0,
         );
@@ -210,11 +149,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request: BufferInvisibleTextRenderRequest<'_>,
         buffer: &B,
     ) -> BufferInvisibleTextRenderOutcome {
-        request.render_at_checkpoint_and_apply(source_walk, buffer, self.state.reborrow())
+        request.render_at_checkpoint_and_apply(source_walk, buffer, self.reborrow())
     }
 
     fn render_hscroll_skip_for_context<'request, B: LayoutBufferView>(
         &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -222,11 +162,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     where
         'surface: 'request,
     {
-        let request = self.loop_context.hscroll_skip_request(
-            text,
-            self.state.append_surface,
-            active_face_state,
-        );
+        let request =
+            loop_context.hscroll_skip_request(text, self.append_surface, active_face_state);
         self.render_hscroll_skip(source_walk, request)
     }
 
@@ -235,7 +172,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
-        request.render_next_and_apply(source_walk, self.state.reborrow())
+        request.render_next_and_apply(source_walk, self.reborrow())
     }
 
     fn render_face_checkpoint_for_context<B: LayoutBufferView>(
@@ -244,15 +181,15 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         active_face_state: &mut DisplayRowActiveFaceState,
     ) {
         face_resolution_context.resolve_at_checkpoint_with_source_state(
-            &mut self.state.source_render.reborrow(),
-            self.state.face_scan,
-            self.state.face_ids,
+            &mut self.source_render.reborrow(),
+            self.face_scan,
+            self.face_ids,
             active_face_state,
-            self.state.row_geometry,
-            self.state.row_extend,
-            self.state.box_face,
-            *self.state.progress.row.x,
-            self.state.progress.charpos(),
+            self.row_geometry,
+            self.row_extend,
+            self.box_face,
+            *self.progress.row.x,
+            self.progress.charpos(),
         );
     }
 }

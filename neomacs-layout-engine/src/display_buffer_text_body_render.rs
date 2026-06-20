@@ -5,7 +5,7 @@ use crate::display_buffer_text_append::{
 };
 use crate::display_buffer_text_face_resolution::*;
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
-use crate::display_buffer_text_loop_render::BufferTextWindowLoopRenderState;
+use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
@@ -17,8 +17,8 @@ use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestCon
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_buffer_text_tail_render::{
-    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowPostLoopState,
-    BufferTextWindowTailRequestContext,
+    BufferTextWindowPostLoopRenderOutcome, BufferTextWindowTailRequestContext,
+    render_buffer_text_window_tail_and_decide_retry,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowGeometry, BufferTextWindowLocalDisplayPolicy,
@@ -310,8 +310,7 @@ impl BufferTextWindowWalkSetup {
             loop_context.text_start_byte(),
         );
 
-        BufferTextWindowLoopRenderState::new(
-            loop_context,
+        BufferTextWindowLoopMutableState::new(
             &mut self.invisible_text_checkpoint,
             BufferTextWindowProgressState::new(
                 &mut self.byte_idx,
@@ -339,6 +338,7 @@ impl BufferTextWindowWalkSetup {
             overlay_text_row_context,
         )
         .render_visible_steps(
+            loop_context,
             &mut source_walk,
             row_prelude_context,
             face_resolution_context,
@@ -362,7 +362,7 @@ impl BufferTextWindowWalkSetup {
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
-        BufferTextWindowPostLoopState::new(
+        render_buffer_text_window_tail_and_decide_retry(
             loop_context,
             source_render,
             BufferTextWindowRowProgressState::new(&mut self.x, &mut self.col),
@@ -373,8 +373,6 @@ impl BufferTextWindowWalkSetup {
             &mut self.row_y_positions,
             face_ids,
             overlay_context,
-        )
-        .render_tail_and_decide_retry(
             tail_context,
             text,
             self.byte_idx,

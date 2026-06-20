@@ -3,9 +3,9 @@
 use crate::display_buffer_text_append::{
     BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
     BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
+    BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_loop_context::BufferTextWindowLoopRequestContext;
 use crate::display_buffer_text_progress::BufferTextWindowRowProgressState;
@@ -58,19 +58,6 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     mode_line_height: f32,
     header_line_height: f32,
     tab_line_height: f32,
-}
-
-pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
-    loop_context: BufferTextWindowLoopRequestContext,
-    source_render: TextRowSourceRenderState<'emit>,
-    row_progress: BufferTextWindowRowProgressState<'emit>,
-    row_geometry: &'emit mut DisplayRowGeometryState,
-    cursor_info: &'emit mut CursorCaptureState,
-    hit_rows: &'emit mut Vec<HitRow>,
-    hit_row_range: &'emit mut HitRowRangeTracker,
-    row_y_positions: &'rows mut DisplayRowYPositions,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,128 +269,76 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     }
 }
 
-impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        loop_context: BufferTextWindowLoopRequestContext,
-        source_render: TextRowSourceRenderState<'emit>,
-        row_progress: BufferTextWindowRowProgressState<'emit>,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        cursor_info: &'emit mut CursorCaptureState,
-        hit_rows: &'emit mut Vec<HitRow>,
-        hit_row_range: &'emit mut HitRowRangeTracker,
-        row_y_positions: &'rows mut DisplayRowYPositions,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
-    ) -> Self {
-        Self {
-            loop_context,
-            source_render,
-            row_progress,
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_buffer_text_window_tail_and_decide_retry<
+    'request,
+    'rows,
+    'emit,
+    'surface,
+    'buf,
+    B: LayoutBufferView,
+>(
+    loop_context: BufferTextWindowLoopRequestContext,
+    mut source_render: TextRowSourceRenderState<'emit>,
+    mut row_progress: BufferTextWindowRowProgressState<'emit>,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+    tail_context: &BufferTextWindowTailRequestContext<'_>,
+    text: &'request [u8],
+    byte_idx: usize,
+    charpos: i64,
+    active_face_state: &'request DisplayRowActiveFaceState,
+    buffer: &B,
+    buf_access: &'rows RustBufferAccess<'buf, B>,
+) -> BufferTextWindowPostLoopRenderOutcome
+where
+    'surface: 'request,
+{
+    let point_is_visible_eob = loop_context
+        .end_of_buffer_tail_request(byte_idx, charpos, overlay_context, active_face_state)
+        .render_and_apply(
+            buffer,
+            source_render.reborrow(),
+            row_progress.reborrow(),
             row_geometry,
             cursor_info,
             hit_rows,
             hit_row_range,
             row_y_positions,
             face_ids,
-            overlay_context,
-        }
-    }
+        )
+        .point_is_visible_eob();
 
-    pub(crate) fn render_end_of_buffer_tail<'request, B: LayoutBufferView>(
-        &mut self,
-        byte_idx: usize,
-        charpos: i64,
-        active_face_state: &'request DisplayRowActiveFaceState,
-        buffer: &B,
-    ) -> bool
-    where
-        'surface: 'request,
-    {
-        self.loop_context
-            .end_of_buffer_tail_request(byte_idx, charpos, self.overlay_context, active_face_state)
-            .render_and_apply(
-                buffer,
-                self.source_render.reborrow(),
-                self.row_progress.reborrow(),
-                self.row_geometry,
-                self.cursor_info,
-                self.hit_rows,
-                self.hit_row_range,
-                self.row_y_positions,
-                self.face_ids,
-            )
-            .point_is_visible_eob()
-    }
+    tail_context
+        .tail_finalize_request(text, charpos, point_is_visible_eob)
+        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+            cursor_info,
+            row_geometry,
+            row_y_positions,
+            hit_row_range,
+            hit_rows,
+            source_render.output_render(),
+        ));
 
-    pub(crate) fn finalize_tail(
-        &mut self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text: &[u8],
-        charpos: i64,
-        point_is_visible_eob: bool,
-    ) -> BufferTextWindowTailFinalizeOutcome {
-        tail_context
-            .tail_finalize_request(text, charpos, point_is_visible_eob)
-            .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
-                self.cursor_info,
-                self.row_geometry,
-                self.row_y_positions,
-                self.hit_row_range,
-                self.hit_rows,
-                self.source_render.output_render(),
-            ))
-    }
-
-    pub(crate) fn decide_visibility_retry<'buf, B: LayoutBufferView>(
-        &self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        charpos: i64,
-        point_is_visible_eob: bool,
-        buf_access: &'rows RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowVisibilityRetryOutcome {
-        tail_context
-            .visibility_retry_request(
-                self.source_render.output_rows(),
-                charpos,
-                point_is_visible_eob,
-                buf_access,
-            )
-            .decide()
-    }
-
-    pub(crate) fn rendered_rows_len(&self) -> usize {
-        self.source_render.output_rows_len()
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
-        &mut self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text: &'request [u8],
-        byte_idx: usize,
-        charpos: i64,
-        active_face_state: &'request DisplayRowActiveFaceState,
-        buffer: &B,
-        buf_access: &'rows RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowPostLoopRenderOutcome
-    where
-        'surface: 'request,
-    {
-        let point_is_visible_eob =
-            self.render_end_of_buffer_tail(byte_idx, charpos, active_face_state, buffer);
-
-        self.finalize_tail(tail_context, text, charpos, point_is_visible_eob);
-
-        // GNU redisplay keeps iterating until point visibility converges or no
-        // further progress can be made. Advance by actual rendered row spans
-        // from this pass, since wrapped and variable-height lines are exactly
-        // where newline-based retry selection goes wrong.
-        let retry =
-            self.decide_visibility_retry(tail_context, charpos, point_is_visible_eob, buf_access);
-        BufferTextWindowPostLoopRenderOutcome {
-            retry,
-            rendered_rows_len: self.rendered_rows_len(),
-        }
+    // GNU redisplay keeps iterating until point visibility converges or no
+    // further progress can be made. Advance by actual rendered row spans
+    // from this pass, since wrapped and variable-height lines are exactly
+    // where newline-based retry selection goes wrong.
+    let retry = tail_context
+        .visibility_retry_request(
+            source_render.output_rows(),
+            charpos,
+            point_is_visible_eob,
+            buf_access,
+        )
+        .decide();
+    BufferTextWindowPostLoopRenderOutcome {
+        retry,
+        rendered_rows_len: source_render.output_rows_len(),
     }
 }
