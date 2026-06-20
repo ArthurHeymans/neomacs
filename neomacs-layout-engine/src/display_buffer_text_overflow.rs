@@ -13,7 +13,7 @@ use crate::display_buffer_text_item_append::{
 use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_lowering::{
-    BufferTextSourceRenderItem, BufferTextSourceStepChar,
+    BufferTextSourceRenderItem, BufferTextSourceRenderItemKind, BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
@@ -303,6 +303,40 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
     }
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextSourceItemRenderOutcome {
+        match self.source_item.kind() {
+            BufferTextSourceRenderItemKind::Direct => {
+                self.render_direct_and_apply(source_walk, buffer, state)
+            }
+            BufferTextSourceRenderItemKind::Lowered => {
+                self.render_lowered_and_apply(source_walk, buffer, state)
+            }
+        }
+    }
+
+    fn render_direct_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextSourceItemRenderOutcome {
+        self.render_source_item_and_apply(source_walk, buffer, state)
+    }
+
+    fn render_lowered_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
+    ) -> BufferTextSourceItemRenderOutcome {
+        self.render_source_item_and_apply(source_walk, buffer, state)
+    }
+
+    fn render_source_item_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         buffer: &B,

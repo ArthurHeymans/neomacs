@@ -1,4 +1,4 @@
-//! Buffer text lowered-item lifecycle rendering.
+//! Buffer text source-item lifecycle rendering.
 
 use crate::display_buffer_text_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_text_loop_context::{

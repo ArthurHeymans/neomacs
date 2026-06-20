@@ -2026,6 +2026,7 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
 
     assert_eq!(position.byte_idx(), 1);
     assert_eq!(position.charpos(), 0);
+    assert_eq!(step.kind(), BufferTextSourceRenderItemKind::Direct);
     assert_eq!(step.source_char().ch(), 'a');
     let (_, source_item) = step.into_parts();
     match &source_item.kind {
@@ -2173,6 +2174,7 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
     let first_step = BufferTextSourceLoweringState::new(0)
         .consume_text_run_item(typed_item, &mut position)
         .expect("multi-char text run lowers through compatibility lowerer");
+    assert_eq!(first_step.kind(), BufferTextSourceRenderItemKind::Lowered);
     assert_eq!(first_step.source_char().ch(), 'a');
     let (_, first_item) = first_step.into_parts();
     match &first_item.kind {

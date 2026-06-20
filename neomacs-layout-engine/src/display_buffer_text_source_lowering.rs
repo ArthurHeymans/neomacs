@@ -38,6 +38,12 @@ pub(crate) enum BufferTextSourceRenderItem {
     Lowered(BufferTextLoweredDisplayItem),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceRenderItemKind {
+    Direct,
+    Lowered,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceLoweringState {
     text_start_byte: usize,
@@ -124,6 +130,13 @@ impl BufferTextDirectDisplayItem {
 }
 
 impl BufferTextSourceRenderItem {
+    pub(crate) fn kind(&self) -> BufferTextSourceRenderItemKind {
+        match self {
+            Self::Direct(_) => BufferTextSourceRenderItemKind::Direct,
+            Self::Lowered(_) => BufferTextSourceRenderItemKind::Lowered,
+        }
+    }
+
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
         match self {
             Self::Direct(item) => item.source_char,
