@@ -1894,8 +1894,34 @@ fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
     fb.seal_block(cont);
 }
 
+/// True if `v` is a compile-time fixnum constant — an `iconst` whose immediate
+/// already carries the fixnum tag bits. A runtime fixnum guard on such a value
+/// is provably unnecessary (it is the same fixnum on every path), so
+/// [`guard_fixnum`] can skip it. This is the safe, dataflow-free subset of
+/// redundant-guard elimination: constant operands of arithmetic/comparison are
+/// pervasive (`(+ i 1)`, `(< i n)`, `(1+ i)`), and a fixnum `iconst` dominates
+/// every use, so eliding its guard cannot change any result or deopt.
+fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
+    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) {
+        if let InstructionData::UnaryImm {
+            opcode: Opcode::Iconst,
+            imm,
+        } = fb.func.dfg.insts[inst]
+        {
+            return (imm.bits() & FIXNUM_CHECK_MASK as i64) == FIXNUM_CHECK_VALUE as i64;
+        }
+    }
+    false
+}
+
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
 fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue) {
+    // Redundant-guard elimination: a compile-time fixnum constant is provably a
+    // fixnum, so no runtime guard (and no deopt edge) is needed for it.
+    if is_fixnum_const(fb, v) {
+        return;
+    }
     let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
     let is_fix = fb
         .ins()
@@ -4975,6 +5001,28 @@ mod tests {
         let c = Value::make_int(42);
         let leaf = lower_nullary_leaf(&[Op::Constant(0), Op::Return], &[c]).unwrap();
         assert_eq!(leaf.call_for_test(&[]), Some(c.bits()));
+    }
+
+    #[test]
+    fn is_fixnum_const_detects_fixnum_constants_for_guard_elision() {
+        // Redundant-guard elimination: a fixnum `iconst` is provably a fixnum, so
+        // guard_fixnum elides its runtime guard; a symbol (nil) constant and a
+        // computed value are NOT fixnum constants and keep their guards.
+        let mut func = Function::with_name_signature(
+            UserFuncName::user(0, 0),
+            Signature::new(cranelift_codegen::isa::CallConv::SystemV),
+        );
+        let mut fbctx = FunctionBuilderContext::new();
+        let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
+        let block = fb.create_block();
+        fb.switch_to_block(block);
+        fb.seal_block(block);
+        let fixnum = fb.ins().iconst(types::I64, Value::make_int(7).bits() as i64);
+        let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+        let sum = fb.ins().iadd(fixnum, fixnum);
+        assert!(is_fixnum_const(&fb, fixnum), "a fixnum iconst is a fixnum constant");
+        assert!(!is_fixnum_const(&fb, nil), "nil (symbol tag) is not a fixnum");
+        assert!(!is_fixnum_const(&fb, sum), "an iadd result is not a constant");
     }
 
     #[test]
