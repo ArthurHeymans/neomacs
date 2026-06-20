@@ -673,7 +673,6 @@ struct BufferTextWindowRenderContexts<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
-    pub(crate) has_overlays: bool,
     pub(crate) face_resolution: BufferCurrentFaceResolutionContext<'a, B>,
     pub(crate) overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
 }
@@ -933,7 +932,6 @@ impl BufferTextWindowLoopRequestContext {
         self,
         byte_idx: usize,
         charpos: i64,
-        has_overlays: bool,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferEndOfBufferTailRenderRequest<'a> {
@@ -942,10 +940,8 @@ impl BufferTextWindowLoopRequestContext {
             charpos,
             self.accessible_end,
             self.point_charpos,
-            has_overlays,
             overlay_context,
             active_face_state,
-            self.row_limit,
         ))
     }
 
@@ -2107,7 +2103,6 @@ impl BufferTextWindowWalkSetup {
         loop_context: BufferTextWindowLoopRequestContext,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
-        has_overlays: bool,
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
@@ -2134,7 +2129,6 @@ impl BufferTextWindowWalkSetup {
             text,
             self.byte_idx,
             self.charpos,
-            has_overlays,
             active_face_state,
             buffer,
             buf_access,
@@ -2187,7 +2181,6 @@ impl BufferTextWindowWalkSetup {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
         params: &'request WindowParams,
-        has_overlays: bool,
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
@@ -2217,7 +2210,6 @@ impl BufferTextWindowWalkSetup {
             loop_context,
             tail_context,
             text,
-            has_overlays,
             overlay_text_row_context,
             state.active_face_state,
             buffer,
@@ -2239,7 +2231,6 @@ impl BufferTextWindowWalkSetup {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
         params: &'request WindowParams,
-        has_overlays: bool,
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
@@ -2259,7 +2250,6 @@ impl BufferTextWindowWalkSetup {
             tail_context,
             text,
             params,
-            has_overlays,
             overlay_text_row_context,
             buffer,
             buf_access,
@@ -2627,7 +2617,6 @@ where
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowRenderedBody<'a> {
         let BufferTextWindowRenderContexts {
-            has_overlays,
             face_resolution,
             overlay_text_row,
         } = self.render_contexts;
@@ -2655,7 +2644,6 @@ where
             &self.tail_context,
             text,
             params,
-            has_overlays,
             overlay_text_row,
             buffer,
             buf_access,
@@ -2806,7 +2794,6 @@ where
     pub(crate) fn into_contexts(self) -> BufferTextWindowRenderContexts<'a, 'surface, B> {
         let has_overlays = !self.buffer.layout_overlays().is_empty();
         BufferTextWindowRenderContexts {
-            has_overlays,
             face_resolution: BufferCurrentFaceResolutionContext::new(
                 self.buffer,
                 self.face_resolver,
@@ -3806,7 +3793,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
         &mut self,
         byte_idx: usize,
         charpos: i64,
-        has_overlays: bool,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
     ) -> bool
@@ -3814,13 +3800,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
         'surface: 'request,
     {
         self.loop_context
-            .end_of_buffer_tail_request(
-                byte_idx,
-                charpos,
-                has_overlays,
-                self.overlay_context,
-                active_face_state,
-            )
+            .end_of_buffer_tail_request(byte_idx, charpos, self.overlay_context, active_face_state)
             .render_and_apply(
                 buffer,
                 BufferEndOfBufferTailRenderState::new(
@@ -3901,7 +3881,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
         text: &'request [u8],
         byte_idx: usize,
         charpos: i64,
-        has_overlays: bool,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
         buf_access: &'rows RustBufferAccess<'buf, B>,
@@ -3909,13 +3888,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
     where
         'surface: 'request,
     {
-        let point_is_visible_eob = self.render_end_of_buffer_tail(
-            byte_idx,
-            charpos,
-            has_overlays,
-            active_face_state,
-            buffer,
-        );
+        let point_is_visible_eob =
+            self.render_end_of_buffer_tail(byte_idx, charpos, active_face_state, buffer);
 
         self.apply_tail_decorations(tail_context);
         self.finalize_tail(tail_context, text, charpos, point_is_visible_eob);
@@ -3960,10 +3934,8 @@ pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
     charpos: i64,
     accessible_end: i64,
     point_charpos: i64,
-    has_overlays: bool,
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
-    row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
@@ -4278,7 +4250,6 @@ impl BufferEndOfBufferCursorAction {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferEndOfBufferTailAction {
     cursor: BufferEndOfBufferCursorAction,
-    has_overlays: bool,
 }
 
 impl BufferEndOfBufferTailAction {
@@ -4287,7 +4258,6 @@ impl BufferEndOfBufferTailAction {
         charpos: i64,
         accessible_end: i64,
         point_charpos: i64,
-        has_overlays: bool,
     ) -> Self {
         Self {
             cursor: BufferEndOfBufferCursorAction::new(
@@ -4296,7 +4266,6 @@ impl BufferEndOfBufferTailAction {
                 accessible_end,
                 point_charpos,
             ),
-            has_overlays,
         }
     }
 
@@ -4316,15 +4285,7 @@ impl BufferEndOfBufferTailAction {
             .capture_cursor_if_point(target, active_face_state, row_geometry, x, col);
     }
 
-    pub(crate) fn should_render_overlay_strings(
-        self,
-        row_geometry: &DisplayRowGeometryState,
-        row_limit: DisplayRowLimit,
-    ) -> bool {
-        self.has_overlays && row_geometry.is_within_row_limit(row_limit)
-    }
-
-    pub(crate) fn render_overlay_strings_at_eob<B: LayoutBufferView>(
+    pub(crate) fn render_overlay_strings<B: LayoutBufferView>(
         self,
         buffer: &B,
         render_context: BufferOverlayStringTextRowRenderContext<'_>,
@@ -4364,7 +4325,6 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             context.charpos,
             context.accessible_end,
             context.point_charpos,
-            context.has_overlays,
         );
         let point_is_visible_eob = tail.point_is_visible_eob();
         tail.capture_cursor_if_point(
@@ -4375,7 +4335,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             *col,
         );
 
-        if tail.should_render_overlay_strings(row_geometry, context.row_limit) {
+        if context.overlay_context.should_render(row_geometry) {
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
                 x,
@@ -4387,7 +4347,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
                 row_y_positions,
                 face_ids,
             );
-            tail.render_overlay_strings_at_eob(
+            tail.render_overlay_strings(
                 buffer,
                 context.overlay_context,
                 context.active_face_state,
@@ -4402,26 +4362,21 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
 }
 
 impl<'a> BufferEndOfBufferTailRenderContext<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         byte_idx: usize,
         charpos: i64,
         accessible_end: i64,
         point_charpos: i64,
-        has_overlays: bool,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
-        row_limit: DisplayRowLimit,
     ) -> Self {
         Self {
             byte_idx,
             charpos,
             accessible_end,
             point_charpos,
-            has_overlays,
             overlay_context,
             active_face_state,
-            row_limit,
         }
     }
 }

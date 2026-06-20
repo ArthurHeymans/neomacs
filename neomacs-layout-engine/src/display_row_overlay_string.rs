@@ -262,6 +262,16 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             );
         }
     }
+
+    pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {
+        self.enabled && row_geometry.is_within_row_limit(self.row_context_row_limit())
+    }
+
+    fn row_context_row_limit(self) -> DisplayRowLimit {
+        DisplayRowLimit {
+            max_rows: self.max_rows,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]

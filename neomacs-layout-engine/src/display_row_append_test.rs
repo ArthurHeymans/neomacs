@@ -6414,23 +6414,41 @@ fn buffer_end_of_buffer_cursor_action_keeps_cursor_missing_when_point_differs() 
 }
 
 #[test]
-fn buffer_end_of_buffer_tail_action_reports_cursor_and_overlay_state() {
+fn buffer_end_of_buffer_tail_action_reports_cursor_state() {
     let active_face = test_active_face_state(9, 8.0);
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
-    let row_limit = DisplayRowLimit { max_rows: 4 };
-    let action = BufferEndOfBufferTailAction::new(5, 9, 9, 9, true);
+    let action = BufferEndOfBufferTailAction::new(5, 9, 9, 9);
     let mut cursor = CursorCaptureState::new();
 
     assert!(action.point_is_visible_eob());
-    assert!(action.should_render_overlay_strings(&geometry, row_limit));
     action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 48.0, 6);
 
     let captured = cursor.as_ref().expect("cursor captured");
     assert_eq!(captured.x, 48.0);
     assert_eq!(captured.display_row_offset, 2);
+}
 
-    let overlays_disabled = BufferEndOfBufferTailAction::new(5, 9, 9, 9, false);
-    assert!(!overlays_disabled.should_render_overlay_strings(&geometry, row_limit));
+#[test]
+fn buffer_overlay_string_context_reports_render_gate() {
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
+    let past_limit = DisplayRowGeometryState::new(4, 64.0, 0.0, 16.0, 12.0);
+    let enabled =
+        BufferOverlayStringTextRowRenderContext::new(true, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let disabled =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+
+    assert!(enabled.should_render(&geometry));
+    assert!(!enabled.should_render(&past_limit));
+    assert!(!disabled.should_render(&geometry));
 }
 
 #[test]
@@ -6494,10 +6512,8 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
         3,
         3,
         3,
-        true,
         overlay_context,
         &active_face,
-        context.row_limit,
     ))
     .render_and_apply(
         &snapshot,
