@@ -1,4 +1,4 @@
-//! Buffer text overflow and split-text-run fallback rendering.
+//! Buffer text overflow and source-item rendering.
 //!
 //! This module owns the buffer-specific overflow lifecycle for main text and
 //! special display items while delegating actual item appends to the shared row
@@ -14,10 +14,11 @@ use crate::display_buffer_text_loop_state::BufferTextWindowLoopMutableState;
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_render_item::{
     BufferTextDirectDisplayItem, BufferTextSourceRenderItem, BufferTextSourceRenderItemKind,
-    BufferTextSourceStepChar, BufferTextSplitTextRunDisplayItem,
+    BufferTextSourceStepChar,
 };
 use crate::display_buffer_text_source_walk::BufferTextWindowSourceWalk;
 use crate::display_cursor::capture_cursor_info;
+use crate::display_item::{DisplayItem, DisplaySourcePosition};
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -61,14 +62,9 @@ struct BufferTextDirectSourceItemRenderRequest<'a> {
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
-struct BufferTextSplitTextRunSourceItemRenderRequest<'a> {
-    source_item: BufferTextSplitTextRunDisplayItem,
-    context: BufferTextSourceItemRenderContext<'a>,
-}
-
 struct BufferTextPreparedSourceItemRenderRequest<'a> {
     source_step_char: BufferTextSourceStepChar,
-    source_item: crate::display_item::DisplayItem,
+    source_item: DisplayItem,
     context: BufferTextSourceItemRenderContext<'a>,
 }
 
@@ -329,9 +325,6 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
             BufferTextSourceRenderItemKind::Direct => {
                 self.render_direct_and_apply(source_walk, buffer, state)
             }
-            BufferTextSourceRenderItemKind::SplitTextRun => {
-                self.render_split_text_run_and_apply(source_walk, buffer, state)
-            }
         }
     }
 
@@ -354,26 +347,6 @@ impl<'a> BufferTextSourceItemRenderRequest<'a> {
         }
         .render_and_apply(source_walk, buffer, state)
     }
-
-    fn render_split_text_run_and_apply<B: LayoutBufferView>(
-        self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        buffer: &B,
-        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
-    ) -> BufferTextSourceItemRenderOutcome {
-        let Ok(source_item) = self.source_item.into_split_text_run() else {
-            debug_assert!(
-                false,
-                "direct buffer source item entered split-text-run render branch"
-            );
-            return BufferTextSourceItemRenderOutcome::Stop;
-        };
-        BufferTextSplitTextRunSourceItemRenderRequest {
-            source_item,
-            context: self.context,
-        }
-        .render_and_apply(source_walk, buffer, state)
-    }
 }
 
 impl<'a> BufferTextDirectSourceItemRenderRequest<'a> {
@@ -383,24 +356,19 @@ impl<'a> BufferTextDirectSourceItemRenderRequest<'a> {
         buffer: &B,
         state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
     ) -> BufferTextSourceItemRenderOutcome {
-        let (source_step_char, source_item) = self.source_item.into_parts();
-        BufferTextPreparedSourceItemRenderRequest {
-            source_step_char,
-            source_item,
-            context: self.context,
-        }
-        .render_and_apply(source_walk, buffer, state)
-    }
-}
-
-impl<'a> BufferTextSplitTextRunSourceItemRenderRequest<'a> {
-    fn render_and_apply<B: LayoutBufferView>(
-        self,
-        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
-        buffer: &B,
-        state: BufferTextSourceItemRenderRequestState<'_, '_, '_>,
-    ) -> BufferTextSourceItemRenderOutcome {
-        let (source_step_char, source_item) = self.source_item.into_parts();
+        let source_item = if self.source_item.is_multi_char_text_run() {
+            let Some((first, pending)) = self
+                .source_item
+                .split_text_run_items(self.context.text_start_byte)
+            else {
+                return BufferTextSourceItemRenderOutcome::Stop;
+            };
+            source_walk.prepend_pending_render_items(pending);
+            first
+        } else {
+            self.source_item
+        };
+        let (source_step_char, source_item) = source_item.into_parts();
         BufferTextPreparedSourceItemRenderRequest {
             source_step_char,
             source_item,
@@ -458,6 +426,8 @@ impl<'a> BufferTextPreparedSourceItemRenderRequest<'a> {
             .span
             .buffer_end_charpos()
             .map(|char_pos| char_pos.get() as i64);
+        let source_end_byte_idx =
+            display_item_buffer_end_byte_idx(&source_item, context.text_start_byte);
 
         let ch = source_step_char.ch();
         source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
@@ -564,6 +534,9 @@ impl<'a> BufferTextPreparedSourceItemRenderRequest<'a> {
                     .should_break()
                 {
                     return BufferTextSourceItemRenderOutcome::Stop;
+                }
+                if let Some(end_byte_idx) = source_end_byte_idx {
+                    *progress.byte_idx = end_byte_idx;
                 }
                 return BufferTextSourceItemRenderOutcome::ContinueBufferWalk;
             }
@@ -690,9 +663,23 @@ impl<'a> BufferTextPreparedSourceItemRenderRequest<'a> {
         if let Some(end_charpos) = source_end_charpos {
             *progress.charpos = (*progress.charpos).max(end_charpos);
         }
+        if let Some(end_byte_idx) = source_end_byte_idx {
+            *progress.byte_idx = end_byte_idx;
+        }
 
         BufferTextSourceItemRenderOutcome::Rendered
     }
+}
+
+fn display_item_buffer_end_byte_idx(item: &DisplayItem, text_start_byte: usize) -> Option<usize> {
+    let DisplaySourcePosition::Buffer {
+        byte_pos: end_byte_pos,
+        ..
+    } = item.span.end
+    else {
+        return None;
+    };
+    end_byte_pos.get().checked_sub(text_start_byte)
 }
 
 impl<'a> BufferTextOverflowRenderRequest<'a> {
@@ -910,9 +897,13 @@ impl BufferTextTruncationSkipAction {
         text: &[u8],
         position: &mut BufferTextSourcePosition,
     ) -> Self {
-        position.advance_charpos_by_one();
         let mut reached_line_break = false;
-        while position.byte_idx() < text.len() {
+        if let Some(source_char) = BufferTextSourceStepChar::consume_from_position(text, position)
+            && source_char.ch() == '\n'
+        {
+            reached_line_break = true;
+        }
+        while !reached_line_break && position.byte_idx() < text.len() {
             let Some(source_char) = BufferTextSourceStepChar::consume_from_position(text, position)
             else {
                 break;

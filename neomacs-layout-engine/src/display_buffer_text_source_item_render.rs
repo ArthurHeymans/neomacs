@@ -81,9 +81,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
         }
 
         let is_explicit_line_break = source_item.is_explicit_line_break();
-        let end_charpos = source_item.end_charpos();
+        let end_byte_idx = source_item.end_byte_idx(self.loop_context.text_start_byte());
         let source_char = source_item.source_char();
         if is_explicit_line_break {
+            if let Some(end_byte_idx) = end_byte_idx {
+                *self.state.progress.byte_idx = end_byte_idx;
+            }
             if self
                 .render_line_break_for_context(
                     source_walk,
@@ -112,7 +115,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowSourceItemRenderState<'rows, 'emit,
             if char_render_outcome.should_continue_buffer_walk() {
                 return BufferTextWindowSourceItemRenderOutcome::ContinueBufferWalk;
             }
-            *self.state.progress.charpos = (*self.state.progress.charpos).max(end_charpos);
         }
 
         BufferTextWindowSourceItemRenderOutcome::ContinueBufferWalk

@@ -6,7 +6,7 @@ use crate::display_buffer_text_source::{
     BufferTextSourcePosition,
 };
 use crate::display_buffer_text_source_render_item::{
-    BufferTextDirectDisplayItemRequest, BufferTextSourceRenderItem, BufferTextSplitTextRunState,
+    BufferTextDirectDisplayItemRequest, BufferTextSourceRenderItem,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
@@ -51,7 +51,6 @@ pub(crate) enum BufferTextSourceConsumptionItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceConsumptionState {
     text_start_byte: usize,
-    split_text_run: BufferTextSplitTextRunState,
 }
 
 impl BufferTextSourceAlignmentRequest {
@@ -196,11 +195,7 @@ impl BufferTextSourceItem {
 
     pub(crate) fn direct_source_char(&self) -> Option<char> {
         match &self.item.kind {
-            DisplayItemKind::TextRun(run) => {
-                let mut chars = run.text.chars();
-                let ch = chars.next()?;
-                chars.next().is_none().then_some(ch)
-            }
+            DisplayItemKind::TextRun(run) => run.text.chars().next(),
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
             {
@@ -237,10 +232,7 @@ impl BufferTextSourceItem {
 
 impl BufferTextSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
-        Self {
-            text_start_byte,
-            split_text_run: BufferTextSplitTextRunState::new(text_start_byte),
-        }
+        Self { text_start_byte }
     }
 
     #[cfg(test)]
@@ -250,10 +242,6 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceRenderItem> {
-        if let Some(step) = self.split_text_run.next_pending_display_item(position) {
-            return Some(step);
-        }
-
         let item = self.next_item_from_source(source, context, position)?;
         self.consume_aligned_display_item(item, position)
     }
@@ -265,13 +253,6 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &BufferTextSourcePosition,
     ) -> Option<BufferTextSourceItem> {
-        if self.split_text_run.has_pending_text_run() {
-            tracing::debug!(
-                "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
-            );
-            return None;
-        }
-
         match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
             source,
             context,
@@ -291,17 +272,6 @@ impl BufferTextSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceConsumptionItem> {
-        if let Some(step) = self.split_text_run.next_pending_display_item(position) {
-            return Some(BufferTextSourceConsumptionItem::DisplayItem(step));
-        }
-
-        if self.split_text_run.has_pending_text_run() {
-            tracing::debug!(
-                "BufferTextSourceConsumptionState: requested typed item while a text run is pending"
-            );
-            return None;
-        }
-
         match BufferTextSourceCursorReadRequest::new(self.text_start_byte, *position).read(
             source,
             context,
@@ -325,7 +295,7 @@ impl BufferTextSourceConsumptionState {
     }
 
     #[cfg(test)]
-    pub(crate) fn split_text_run_display_item_from_item(
+    pub(crate) fn render_item_from_item(
         &mut self,
         item: DisplayItem,
         position: &mut BufferTextSourcePosition,
@@ -336,7 +306,7 @@ impl BufferTextSourceConsumptionState {
     }
 
     #[cfg(test)]
-    pub(crate) fn split_text_run_display_item_from_source_item(
+    pub(crate) fn render_item_from_source_item(
         &mut self,
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
@@ -349,9 +319,8 @@ impl BufferTextSourceConsumptionState {
         item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceRenderItem> {
-        match BufferTextDirectDisplayItemRequest::new(item).consume(position) {
-            Ok(item) => Some(item),
-            Err(item) => self.split_text_run.consume_text_run_item(item, position),
-        }
+        BufferTextDirectDisplayItemRequest::new(item)
+            .consume(position)
+            .ok()
     }
 }

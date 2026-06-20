@@ -4,6 +4,8 @@
 //! source cursor driving, pending face installation, and source-position
 //! updates used by row lifecycle renderers.
 
+use std::collections::VecDeque;
+
 use crate::display_buffer_text_face_resolution::BufferCurrentFaceResolutionContext;
 use crate::display_buffer_text_overflow::BufferTextTruncationSkipAction;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
@@ -35,6 +37,7 @@ pub(crate) struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
     source_consumption: BufferTextSourceConsumptionState,
+    pending_render_items: VecDeque<BufferTextSourceRenderItem>,
 }
 
 struct BufferTextWindowSourceConsumption {
@@ -56,7 +59,12 @@ impl BufferTextWindowSourceConsumption {
         Option<BufferTextSourceConsumptionItem>,
         Vec<PendingDisplaySourceFace>,
     ) {
-        progress.apply_source_position(self.source_position);
+        if !matches!(
+            self.source_item,
+            Some(BufferTextSourceConsumptionItem::DisplayItem(_))
+        ) {
+            progress.apply_source_position(self.source_position);
+        }
         (self.source_item, self.pending_faces)
     }
 
@@ -104,7 +112,22 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
             source_consumption: BufferTextSourceConsumptionState::new(text_start_byte),
+            pending_render_items: VecDeque::new(),
         }
+    }
+
+    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = BufferTextSourceRenderItem>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        for item in items.into_iter().rev() {
+            self.pending_render_items.push_front(item);
+        }
+    }
+
+    fn clear_pending_render_items(&mut self) {
+        self.pending_render_items.clear();
     }
 
     fn consume_source_item(
@@ -113,6 +136,14 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferTextWindowSourceConsumption {
+        if let Some(source_item) = self.pending_render_items.pop_front() {
+            return BufferTextWindowSourceConsumption {
+                source_item: Some(BufferTextSourceConsumptionItem::DisplayItem(source_item)),
+                source_position,
+                pending_faces: Vec::new(),
+            };
+        }
+
         let mut pending_faces = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
@@ -237,6 +268,7 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
         text: &[u8],
         source_position: BufferTextSourcePosition,
     ) -> BufferTextWindowSourcePositionConsumption<BufferTextTruncationSkipAction> {
+        self.clear_pending_render_items();
         let mut source_position = source_position;
         let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
             text,

@@ -1,13 +1,13 @@
-//! Buffer text compatibility split-run rendering from typed source items to row-walk items.
+//! Buffer text render items produced by the typed buffer source.
 
 use crate::display_buffer_text_source::BufferTextSourcePosition;
 use crate::display_buffer_text_source_consumption::BufferTextSourceItem;
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
-    DisplayTextRunItemCursor,
+    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, RenderFaceRef,
+    SourceSpan,
 };
 use crate::unicode::decode_utf8;
-use neovm_core::buffer::CharPos0;
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 /// A single source character aligned with the current buffer byte and char
 /// positions for the row walk.
@@ -16,14 +16,6 @@ pub(crate) struct BufferTextSourceStepChar {
     ch: char,
     start_byte_idx: usize,
     start_charpos: i64,
-}
-
-/// A typed display item consumed by the buffer text row walk after it has been
-/// aligned with the current buffer byte/char cursor.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSplitTextRunDisplayItem {
-    source_char: BufferTextSourceStepChar,
-    item: DisplayItem,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -35,30 +27,16 @@ pub(crate) struct BufferTextDirectDisplayItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceRenderItem {
     Direct(BufferTextDirectDisplayItem),
-    SplitTextRun(BufferTextSplitTextRunDisplayItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextSourceRenderItemKind {
     Direct,
-    SplitTextRun,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSplitTextRunState {
-    text_start_byte: usize,
-    pending_text_run: Option<DisplayTextRunItemCursor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextDirectDisplayItemRequest {
     item: BufferTextSourceItem,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct BufferTextSplitItemAlignment {
-    text_start_byte: usize,
-    position: BufferTextSourcePosition,
 }
 
 impl BufferTextSourceStepChar {
@@ -117,29 +95,76 @@ impl BufferTextSourceStepChar {
     }
 }
 
-impl BufferTextSplitTextRunDisplayItem {
-    pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
-        Self { source_char, item }
-    }
-
-    pub(crate) fn end_charpos(&self) -> i64 {
-        display_item_buffer_end_charpos(&self.item)
-            .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
-    }
-
-    pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
-        (self.source_char, self.item)
-    }
-}
-
 impl BufferTextDirectDisplayItem {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
     }
 
+    #[cfg(test)]
     pub(crate) fn end_charpos(&self) -> i64 {
         display_item_buffer_end_charpos(&self.item)
             .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
+    }
+
+    pub(crate) fn end_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
+        display_item_buffer_end_byte_idx(&self.item, text_start_byte)
+    }
+
+    pub(crate) fn is_multi_char_text_run(&self) -> bool {
+        let DisplayItemKind::TextRun(run) = &self.item.kind else {
+            return false;
+        };
+        let mut chars = run.text.chars();
+        chars.next().is_some() && chars.next().is_some()
+    }
+
+    pub(crate) fn split_text_run_items(
+        self,
+        text_start_byte: usize,
+    ) -> Option<(Self, Vec<BufferTextSourceRenderItem>)> {
+        if !self.is_multi_char_text_run() {
+            return None;
+        }
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+        } = self.item;
+        let DisplayItemKind::TextRun(run) = kind else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer { buffer_id, .. } = span.start else {
+            return None;
+        };
+        let mut byte_idx = self.source_char.start_byte_idx();
+        let mut charpos = self.source_char.start_charpos();
+        let mut items = Vec::new();
+        for ch in run.text.chars() {
+            let ch_len = ch.len_utf8();
+            let item = direct_text_run_char_item(
+                buffer_id,
+                face,
+                layout,
+                text_start_byte,
+                byte_idx,
+                charpos,
+                ch,
+            );
+            items.push(BufferTextDirectDisplayItem::new(
+                BufferTextSourceStepChar::new(ch, byte_idx, charpos),
+                item,
+            ));
+            byte_idx = byte_idx.saturating_add(ch_len);
+            charpos = charpos.saturating_add(1);
+        }
+        if items.len() <= 1 {
+            return None;
+        }
+        let mut iter = items.into_iter();
+        let first = iter.next()?;
+        let pending = iter.map(BufferTextSourceRenderItem::Direct).collect();
+        Some((first, pending))
     }
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
@@ -151,21 +176,18 @@ impl BufferTextSourceRenderItem {
     pub(crate) fn kind(&self) -> BufferTextSourceRenderItemKind {
         match self {
             Self::Direct(_) => BufferTextSourceRenderItemKind::Direct,
-            Self::SplitTextRun(_) => BufferTextSourceRenderItemKind::SplitTextRun,
         }
     }
 
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
         match self {
             Self::Direct(item) => item.source_char,
-            Self::SplitTextRun(item) => item.source_char,
         }
     }
 
     pub(crate) fn is_explicit_line_break(&self) -> bool {
         let item = match self {
             Self::Direct(item) => &item.item,
-            Self::SplitTextRun(item) => &item.item,
         };
         matches!(
             item.kind,
@@ -174,24 +196,22 @@ impl BufferTextSourceRenderItem {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn end_charpos(&self) -> i64 {
         match self {
             Self::Direct(item) => item.end_charpos(),
-            Self::SplitTextRun(item) => item.end_charpos(),
+        }
+    }
+
+    pub(crate) fn end_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
+        match self {
+            Self::Direct(item) => item.end_byte_idx(text_start_byte),
         }
     }
 
     pub(crate) fn into_direct(self) -> Result<BufferTextDirectDisplayItem, Self> {
         match self {
             Self::Direct(item) => Ok(item),
-            Self::SplitTextRun(item) => Err(Self::SplitTextRun(item)),
-        }
-    }
-
-    pub(crate) fn into_split_text_run(self) -> Result<BufferTextSplitTextRunDisplayItem, Self> {
-        match self {
-            Self::SplitTextRun(item) => Ok(item),
-            Self::Direct(item) => Err(Self::Direct(item)),
         }
     }
 
@@ -199,57 +219,7 @@ impl BufferTextSourceRenderItem {
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         match self {
             Self::Direct(item) => item.into_parts(),
-            Self::SplitTextRun(item) => item.into_parts(),
         }
-    }
-}
-
-impl BufferTextSplitTextRunState {
-    pub(crate) fn new(text_start_byte: usize) -> Self {
-        Self {
-            text_start_byte,
-            pending_text_run: None,
-        }
-    }
-
-    pub(crate) fn has_pending_text_run(&self) -> bool {
-        self.pending_text_run.is_some()
-    }
-
-    pub(crate) fn next_pending_display_item(
-        &mut self,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
-        let text_start_byte = self.text_start_byte;
-        let pending = self.pending_text_run.as_mut()?;
-        let item = pending.next_item();
-        let finished = pending.is_finished();
-        let step = item.and_then(|item| {
-            Self::split_text_run_display_item_from_split_text_item(text_start_byte, item, position)
-        });
-        if finished || step.is_none() {
-            self.pending_text_run = None;
-        }
-        step.map(BufferTextSourceRenderItem::SplitTextRun)
-    }
-
-    pub(crate) fn consume_text_run_item(
-        &mut self,
-        item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
-        if !position.matches(item.start_byte_idx(), item.start_charpos()) {
-            tracing::error!(
-                "BufferTextSplitTextRunState: validated source item at byte {} charpos {} \
-                 did not match buffer walk byte {} charpos {}",
-                item.start_byte_idx(),
-                item.start_charpos(),
-                position.byte_idx(),
-                position.charpos()
-            );
-            return None;
-        }
-        self.split_text_run_item(item, position)
     }
 }
 
@@ -295,113 +265,50 @@ impl BufferTextDirectDisplayItemRequest {
     }
 }
 
-impl BufferTextSplitTextRunState {
-    fn split_text_run_item(
-        &mut self,
-        item: BufferTextSourceItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceRenderItem> {
-        match DisplayTextRunItemCursor::from_item(item.into_item()) {
-            Ok(cursor) => {
-                self.pending_text_run = Some(cursor);
-                self.next_pending_display_item(position)
-            }
-            Err(_) => {
-                tracing::error!(
-                    "BufferTextSplitTextRunState: source cursor yielded a non-text item kind; \
-                     a direct item escaped source-item split-run fallback"
-                );
-                None
-            }
-        }
-    }
-
-    fn split_text_run_display_item_from_split_text_item(
-        text_start_byte: usize,
-        item: DisplayItem,
-        position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSplitTextRunDisplayItem> {
-        let alignment = BufferTextSplitItemAlignment::for_position(text_start_byte, *position);
-        let (start_byte_idx, start_charpos) = alignment.split_text_item_start(&item)?;
-        let ch = match &item.kind {
-            DisplayItemKind::TextRun(run) => {
-                let mut chars = run.text.chars();
-                let ch = chars.next()?;
-                if chars.next().is_some() {
-                    tracing::error!(
-                        "BufferTextSplitTextRunState: split text run yielded multiple chars"
-                    );
-                    return None;
-                }
-                ch
-            }
-            _ => {
-                tracing::error!(
-                    "BufferTextSplitTextRunState: split text run yielded non-text item"
-                );
-                return None;
-            }
-        };
-        let end_byte_idx = alignment.split_text_item_end_byte_idx(&item)?;
-        position.advance_byte_idx_to(end_byte_idx);
-        Some(BufferTextSplitTextRunDisplayItem::new(
-            BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
-            item,
-        ))
-    }
+fn direct_text_run_char_item(
+    buffer_id: BufferId,
+    face: RenderFaceRef,
+    layout: crate::display_item::DisplayItemLayout,
+    text_start_byte: usize,
+    start_byte_idx: usize,
+    start_charpos: i64,
+    ch: char,
+) -> DisplayItem {
+    let end_byte_idx = start_byte_idx.saturating_add(ch.len_utf8());
+    let end_charpos = start_charpos.saturating_add(1);
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                buffer_id,
+                CharPos0::new(start_charpos.max(0) as usize),
+                EmacsBytePos::new(text_start_byte.saturating_add(start_byte_idx)),
+            ),
+            DisplaySourcePosition::buffer(
+                buffer_id,
+                CharPos0::new(end_charpos.max(0) as usize),
+                EmacsBytePos::new(text_start_byte.saturating_add(end_byte_idx)),
+            ),
+        ),
+        face,
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new(ch.to_string())),
+    )
+    .with_layout(layout)
 }
 
-impl BufferTextSplitItemAlignment {
-    fn for_position(text_start_byte: usize, position: BufferTextSourcePosition) -> Self {
-        Self {
-            text_start_byte,
-            position,
-        }
-    }
-
-    fn split_text_item_start(self, item: &DisplayItem) -> Option<(usize, i64)> {
-        let DisplaySourcePosition::Buffer {
-            char_pos, byte_pos, ..
-        } = &item.span.start
-        else {
-            tracing::error!(
-                "BufferTextSplitTextRunState: split text run yielded a non-buffer-span item"
-            );
-            return None;
-        };
-        let start_byte_idx = byte_pos.get().checked_sub(self.text_start_byte)?;
-        let start_charpos = char_pos.get() as i64;
-        if !self.position.matches(start_byte_idx, start_charpos) {
-            tracing::debug!(
-                "BufferTextSplitTextRunState: split text run at byte {} charpos {} did not \
-                 match buffer walk byte {} charpos {}",
-                start_byte_idx,
-                start_charpos,
-                self.position.byte_idx(),
-                self.position.charpos()
-            );
-            return None;
-        }
-        Some((start_byte_idx, start_charpos))
-    }
-
-    fn split_text_item_end_byte_idx(self, item: &DisplayItem) -> Option<usize> {
-        let DisplaySourcePosition::Buffer {
-            byte_pos: end_byte_pos,
-            ..
-        } = &item.span.end
-        else {
-            tracing::error!(
-                "BufferTextSplitTextRunState: split text run yielded a non-buffer end span"
-            );
-            return None;
-        };
-        end_byte_pos.get().checked_sub(self.text_start_byte)
-    }
-}
-
+#[cfg(test)]
 fn display_item_buffer_end_charpos(item: &DisplayItem) -> Option<i64> {
     item.span
         .buffer_end_charpos()
         .map(|char_pos| char_pos.get() as i64)
+}
+
+fn display_item_buffer_end_byte_idx(item: &DisplayItem, text_start_byte: usize) -> Option<usize> {
+    let DisplaySourcePosition::Buffer {
+        byte_pos: end_byte_pos,
+        ..
+    } = item.span.end
+    else {
+        return None;
+    };
+    end_byte_pos.get().checked_sub(text_start_byte)
 }

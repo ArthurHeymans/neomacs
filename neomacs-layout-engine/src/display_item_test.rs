@@ -35,66 +35,6 @@ fn display_item_text_run_keeps_source_span_and_face_ref() {
 }
 
 #[test]
-fn display_text_run_item_cursor_splits_buffer_text_run_by_source_char() {
-    let item = DisplayItem::new(
-        SourceSpan::new(
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(10)),
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(5), EmacsBytePos::new(14)),
-        ),
-        RenderFaceRef::FaceId(12),
-        DisplayItemKind::TextRun(DisplayTextRun::new("a界")),
-    )
-    .with_layout(DisplayItemLayout {
-        raise: Some(0.25),
-        height: Some(1.5),
-    });
-    let mut cursor = DisplayTextRunItemCursor::from_item(item).expect("text cursor");
-
-    let first = cursor.next_item().expect("first char");
-    assert_eq!(
-        first.span,
-        SourceSpan::new(
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(10)),
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(4), EmacsBytePos::new(11)),
-        )
-    );
-    assert_eq!(first.face, RenderFaceRef::FaceId(12));
-    assert_eq!(first.layout.raise, Some(0.25));
-    assert!(matches!(&first.kind, DisplayItemKind::TextRun(run) if run.text.as_ref() == "a"));
-
-    let second = cursor.next_item().expect("second char");
-    assert_eq!(
-        second.span,
-        SourceSpan::new(
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(4), EmacsBytePos::new(11)),
-            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(5), EmacsBytePos::new(14)),
-        )
-    );
-    assert!(matches!(&second.kind, DisplayItemKind::TextRun(run) if run.text.as_ref() == "界"));
-    assert!(cursor.is_finished());
-    assert_eq!(cursor.next_item(), None);
-}
-
-#[test]
-fn display_text_run_item_cursor_splits_lisp_string_text_run_by_source_char() {
-    let item = DisplayItem::new(
-        SourceSpan::lisp_string(4, 2, 4, 8, 11),
-        RenderFaceRef::Inherit,
-        DisplayItemKind::TextRun(DisplayTextRun::new("éx")),
-    );
-    let mut cursor = DisplayTextRunItemCursor::from_item(item).expect("text cursor");
-
-    let first = cursor.next_item().expect("first char");
-    assert_eq!(first.span, SourceSpan::lisp_string(4, 2, 3, 8, 10));
-    assert!(matches!(&first.kind, DisplayItemKind::TextRun(run) if run.text.as_ref() == "é"));
-
-    let second = cursor.next_item().expect("second char");
-    assert_eq!(second.span, SourceSpan::lisp_string(4, 3, 4, 10, 11));
-    assert!(matches!(&second.kind, DisplayItemKind::TextRun(run) if run.text.as_ref() == "x"));
-    assert!(cursor.is_finished());
-}
-
-#[test]
 fn display_item_stretch_uses_typed_lengths() {
     let item = DisplayItem::new(
         SourceSpan::synthetic(1, 0, 1),
