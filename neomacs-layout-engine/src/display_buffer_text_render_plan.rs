@@ -11,7 +11,6 @@ use crate::display_buffer_text_render_attempt::{
     BufferTextWindowRenderAttemptContext, BufferTextWindowRenderAttemptOutcome,
     BufferTextWindowRetryPlan,
 };
-use crate::display_buffer_text_row_prelude::BufferTextWindowRowPreludeRequestContext;
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_tail_render::{
     BufferTextWindowBodyInstallContext, BufferTextWindowPostLoopRenderOutcome,
@@ -64,24 +63,6 @@ struct BufferTextWindowRenderedBody<'a> {
     tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 
-pub(crate) struct BufferTextWindowBodyPlan<'a, 'surface, B>
-where
-    B: LayoutBufferView,
-{
-    begin_request: BufferTextWindowBeginRequest,
-    retry_bounds: BufferTextWindowRetryBounds,
-    publish_request: BufferTextWindowRedisplayPublishRequest,
-    local_display_policy: BufferTextWindowLocalDisplayPolicy,
-    measurement_policy: DisplayRowMeasurementPolicy,
-    default_resolved: &'a ResolvedFace,
-    default_face_char_width: f32,
-    fallback_metrics: DisplayRowFallbackMetrics,
-    row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-    loop_context: BufferTextWindowLoopRequestContext,
-    face_resolution: BufferCurrentFaceResolutionContext<'a, B>,
-    overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
-    tail_context: BufferTextWindowTailRequestContext<'a>,
-}
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -262,9 +243,12 @@ impl BufferTextWindowDefaultFacePlan {
 
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn into_body_plan<'a, 'surface, B>(
+    pub(crate) fn render_body_attempt<'a, 'surface, 'buf, B>(
         self,
-        walk_setup: &BufferTextWindowWalkSetup,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        state: BufferTextWindowRenderAttemptContext<'_, '_>,
+        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
+        remaining_visibility_retries: usize,
         local_display_policy: BufferTextWindowLocalDisplayPolicy,
         line_number_cols: i32,
         geometry: &BufferTextWindowGeometry,
@@ -273,7 +257,6 @@ impl BufferTextWindowOutputSetup {
         buffer_id: BufferId,
         source: BufferTextWindowSource,
         params: &'a WindowParams,
-        face_resolver: &'a FaceResolver,
         default_face: &'a BufferTextWindowDefaultFacePlan,
         font_ascent: f32,
         window_system: bool,
@@ -281,10 +264,23 @@ impl BufferTextWindowOutputSetup {
         append_surface: &'surface DisplayRowAppendSurface,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
-    ) -> BufferTextWindowBodyPlan<'a, 'surface, B>
+        text: &'a [u8],
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowRenderAttemptOutcome
     where
         B: LayoutBufferView,
     {
+        let BufferTextWindowRenderAttemptContext {
+            mut output,
+            font_metrics,
+            face_resolver,
+            frame_face_id_counter,
+            hit_data,
+            display_snapshots,
+        } = state;
+        let retry_checkpoint = output.capture_retry_checkpoint();
+        let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
+
         let has_overlays = !buffer.layout_overlays().is_empty();
         let face_resolution = BufferCurrentFaceResolutionContext::new(
             buffer,
@@ -366,61 +362,49 @@ impl BufferTextWindowOutputSetup {
             source.accessible_end_emacs_byte(),
         );
 
-        BufferTextWindowBodyPlan {
-            begin_request: self.begin_request,
-            retry_bounds: self.retry_bounds,
-            publish_request,
-            local_display_policy,
-            measurement_policy: default_face.measurement_policy(),
-            default_resolved: default_face.face(),
-            default_face_char_width: default_face.char_width(),
+        let mut line_numbers = local_display_policy.initial_line_numbers(
+            buf_access,
+            tail_context.window_start,
+            loop_context.point_charpos(),
+        );
+        let mut face_scan = FaceScanCheckpoint::initial();
+        let default_measured_face = default_face.measurement_policy().measured_face(
+            neomacs_display_protocol::face::BasicFaceId::Default.into(),
+            default_face.face(),
+            None,
+            default_face.char_width(),
             fallback_metrics,
-            row_prelude_context,
-            loop_context,
-            face_resolution,
-            overlay_text_row,
-            tail_context,
-        }
-    }
-}
-
-impl<'a, 'surface, B> BufferTextWindowBodyPlan<'a, 'surface, B>
-where
-    B: LayoutBufferView,
-{
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_attempt<'buf>(
-        self,
-        walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderAttemptContext<'_, '_>,
-        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
-        remaining_visibility_retries: usize,
-        text: &'a [u8],
-        params: &'a WindowParams,
-        buffer: &B,
-        buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowRenderAttemptOutcome {
-        let BufferTextWindowRenderAttemptContext {
-            mut output,
             font_metrics,
-            face_resolver,
-            frame_face_id_counter,
-            hit_data,
-            display_snapshots,
-        } = state;
-        let retry_checkpoint = output.capture_retry_checkpoint();
-        let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
-        let rendered_body = self.begin_render_body_and_tail(
-            walk_setup,
+        );
+        let mut active_face_state =
+            DisplayRowActiveFaceState::new(default_face.face().clone(), default_measured_face);
+        let (output_emitter, post_loop) = walk_setup.begin_render_body_and_tail(
+            self.begin_request,
             &mut output,
             font_metrics,
             face_resolver,
             &mut face_ids,
+            &mut line_numbers,
+            &mut face_scan,
+            &mut active_face_state,
+            row_prelude_context,
+            loop_context,
+            face_resolution,
+            &tail_context,
             text,
             params,
+            overlay_text_row,
             buffer,
             buf_access,
         );
+
+        let rendered_body = BufferTextWindowRenderedBody {
+            output_emitter,
+            post_loop,
+            retry_bounds: self.retry_bounds,
+            publish_request,
+            tail_context,
+        };
         rendered_body.finish_or_prepare_retry(
             walk_setup,
             chrome_request,
@@ -434,63 +418,6 @@ where
             frame_face_id_counter,
             remaining_visibility_retries,
         )
-    }
-
-    fn begin_render_body_and_tail<'buf>(
-        self,
-        walk_setup: &mut BufferTextWindowWalkSetup,
-        output: &mut BufferTextWindowOutputState<'_>,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        text: &'a [u8],
-        params: &'a WindowParams,
-        buffer: &B,
-        buf_access: &RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowRenderedBody<'a> {
-        let mut line_numbers = self.local_display_policy.initial_line_numbers(
-            buf_access,
-            self.tail_context.window_start,
-            self.loop_context.point_charpos(),
-        );
-        let mut face_scan = FaceScanCheckpoint::initial();
-        let default_measured_face = self.measurement_policy.measured_face(
-            neomacs_display_protocol::face::BasicFaceId::Default.into(),
-            self.default_resolved,
-            None,
-            self.default_face_char_width,
-            self.fallback_metrics,
-            font_metrics,
-        );
-        let mut active_face_state =
-            DisplayRowActiveFaceState::new(self.default_resolved.clone(), default_measured_face);
-        let (output_emitter, post_loop) = walk_setup.begin_render_body_and_tail(
-            self.begin_request,
-            output,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            &mut line_numbers,
-            &mut face_scan,
-            &mut active_face_state,
-            self.row_prelude_context,
-            self.loop_context,
-            self.face_resolution,
-            &self.tail_context,
-            text,
-            params,
-            self.overlay_text_row,
-            buffer,
-            buf_access,
-        );
-
-        BufferTextWindowRenderedBody {
-            output_emitter,
-            post_loop,
-            retry_bounds: self.retry_bounds,
-            publish_request: self.publish_request,
-            tail_context: self.tail_context,
-        }
     }
 }
 

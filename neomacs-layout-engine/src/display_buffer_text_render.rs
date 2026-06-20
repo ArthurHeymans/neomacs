@@ -189,26 +189,7 @@ where
             &walk_setup,
         );
 
-        let body_plan = output_setup.into_body_plan(
-            &walk_setup,
-            local_display_policy,
-            line_number_columns,
-            &geometry,
-            chrome_heights,
-            buffer,
-            buffer_id,
-            text_source,
-            params,
-            state.face_resolver,
-            &default_face,
-            font_ascent,
-            frame_params.window_system,
-            params.window_id as u64,
-            &text_append_surface,
-            reserve_right_special_col,
-            reserve_right_border_col,
-        );
-        body_plan.render_attempt(
+        output_setup.render_body_attempt(
             &mut walk_setup,
             state,
             chrome_plan.render_request(
@@ -220,9 +201,22 @@ where
                 &buffer_name,
             ),
             remaining_visibility_retries,
-            text,
-            params,
+            local_display_policy,
+            line_number_columns,
+            &geometry,
+            chrome_heights,
             buffer,
+            buffer_id,
+            text_source,
+            params,
+            &default_face,
+            font_ascent,
+            frame_params.window_system,
+            params.window_id as u64,
+            &text_append_surface,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            text,
             &buf_access,
         )
     }
