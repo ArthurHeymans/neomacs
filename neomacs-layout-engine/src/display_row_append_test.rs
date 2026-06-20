@@ -8840,10 +8840,11 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let mut progress =
         BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
 
-    outcome.apply_to_walk_state("a界b\n".as_bytes(), &mut progress);
+    let update = outcome.walk_update("a界b\n".as_bytes(), progress.source_position());
+    progress.row.apply_position(update.row_position());
 
-    assert_eq!(byte_idx, "a界b\n".len());
-    assert_eq!(charpos, 4);
+    assert_eq!(update.source_position().byte_idx(), "a界b\n".len());
+    assert_eq!(update.source_position().charpos(), 4);
     assert_eq!(x, 12.0);
     assert_eq!(col, 2);
     assert_eq!(outcome.skip_to(), 4);

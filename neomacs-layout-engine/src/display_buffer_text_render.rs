@@ -7,6 +7,7 @@ pub(crate) use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveOutcome,
     BufferDisplayPropertyTextReplacementResolveRequest,
+    BufferDisplayPropertyTextReplacementWalkUpdate,
 };
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_append::{
@@ -1847,6 +1848,13 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     ) -> BufferTextWindowSourcePositionConsumption<()> {
         BufferTextWindowSourcePositionConsumption::new((), source_position)
     }
+
+    fn commit_display_property_replacement(
+        &mut self,
+        update: BufferDisplayPropertyTextReplacementWalkUpdate,
+    ) -> BufferTextWindowSourcePositionConsumption<()> {
+        self.source_position_update(update.source_position())
+    }
 }
 
 pub(crate) struct BufferTextWindowSourcePositionConsumption<T> {
@@ -3223,7 +3231,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 });
         match resolve_outcome {
             BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
-                request.render_and_apply(
+                let update = request.render_and_apply(
                     buffer,
                     BufferDisplayPropertyTextReplacementRenderState::new(
                         text,
@@ -3236,6 +3244,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                         self.progress.reborrow(),
                     ),
                 );
+                source_walk
+                    .commit_display_property_replacement(update)
+                    .apply_to_progress(&mut self.progress);
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
