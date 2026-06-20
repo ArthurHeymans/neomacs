@@ -10,6 +10,7 @@ use crate::display_buffer_text_append::{
 };
 use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_render::*;
+use crate::display_buffer_text_row_lifecycle::*;
 use crate::display_buffer_text_source::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
