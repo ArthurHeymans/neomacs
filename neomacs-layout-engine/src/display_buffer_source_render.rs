@@ -2,9 +2,9 @@
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_display_property_render::{
-    BufferDisplayPropertyTextReplacementOutcome, BufferDisplayPropertyTextReplacementRenderOutcome,
+    BufferDisplayPropertyTextReplacementRenderOutcome,
+    BufferDisplayPropertyTextReplacementRenderRequest,
     BufferDisplayPropertyTextReplacementRenderState,
-    BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
 use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
@@ -869,7 +869,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     {
         let start_charpos = replacement.start_charpos();
         let active_face_metrics = self.active_face_state.metrics();
-        let request = BufferDisplayPropertyTextReplacementResolveRequest::new(
+        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
             replacement,
             self.loop_context.text_start_byte(),
             self.text,
@@ -885,7 +885,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         );
         let current_x = *self.state.progress.row.x;
         let start_position = self.state.progress.row_position();
-        match request.resolve_and_render(
+        match request.render(
             buffer,
             BufferDisplayPropertyTextReplacementRenderState::new(
                 self.state.source_render.reborrow(),
@@ -898,7 +898,15 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             start_position,
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
-                self.apply_replacement_outcome(outcome, start_charpos);
+                outcome.apply_to_progress_and_cursor(
+                    self.text,
+                    &mut self.state.progress,
+                    self.state.cursor_info,
+                    self.active_face_state,
+                    self.state.row_geometry,
+                    self.loop_context.point_charpos(),
+                    start_charpos,
+                );
                 true
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
@@ -911,29 +919,6 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Stop => false,
         }
-    }
-
-    fn apply_replacement_outcome(
-        &mut self,
-        outcome: BufferDisplayPropertyTextReplacementOutcome,
-        start_charpos: i64,
-    ) {
-        outcome.capture_cursor_info_if_point(
-            self.state.cursor_info,
-            self.active_face_state,
-            self.state.row_geometry,
-            self.loop_context.point_charpos(),
-            start_charpos,
-            *self.state.progress.byte_idx,
-        );
-        let walk_update = outcome.walk_update(self.text, self.state.progress.source_position());
-        self.state
-            .progress
-            .row
-            .apply_position(walk_update.row_position());
-        self.state
-            .progress
-            .apply_source_position(walk_update.source_position());
     }
 
     fn render_source_item<B: LayoutBufferView>(

@@ -11,6 +11,7 @@ use crate::display_row_replacement::{
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source_progress::DisplaySourceProgressState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
@@ -32,7 +33,7 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Stop,
 }
 
-pub(crate) struct BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
+pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
     replacement: BufferDisplayPropertyReplacementItem,
     text_start_byte: usize,
     text: &'a [u8],
@@ -69,7 +70,7 @@ impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
     }
 }
 
-impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
+impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         replacement: BufferDisplayPropertyReplacementItem,
@@ -135,7 +136,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
         }
     }
 
-    pub(crate) fn resolve_and_render<B: LayoutBufferView>(
+    pub(crate) fn render<B: LayoutBufferView>(
         self,
         buffer: &B,
         mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
@@ -182,27 +183,23 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementResolveRequest<'a, 'face> {
 }
 
 impl BufferDisplayPropertyTextReplacementOutcome {
-    pub(crate) fn point_in_replacement(self, point_charpos: i64, start_charpos: i64) -> bool {
+    fn point_in_replacement(self, point_charpos: i64, start_charpos: i64) -> bool {
         point_charpos >= start_charpos && point_charpos < self.skip_to
     }
 
-    pub(crate) fn start_position(self) -> DisplayRowPosition {
+    fn start_position(self) -> DisplayRowPosition {
         self.replacement.start_position()
     }
 
-    pub(crate) fn end_position(self) -> DisplayRowPosition {
+    fn end_position(self) -> DisplayRowPosition {
         self.replacement.end_position()
     }
 
-    pub(crate) fn skip_covered_buffer_text(
-        self,
-        text: &[u8],
-        position: &mut DisplaySourceTextPosition,
-    ) {
+    fn skip_covered_buffer_text(self, text: &[u8], position: &mut DisplaySourceTextPosition) {
         position.skip_chars_until(text, self.skip_to);
     }
 
-    pub(crate) fn capture_cursor_info_if_point(
+    fn capture_cursor_info_if_point(
         self,
         cursor_info: &mut CursorCaptureState,
         active_face_state: &DisplayRowActiveFaceState,
@@ -223,7 +220,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         }
     }
 
-    pub(crate) fn walk_update(
+    fn walk_update(
         self,
         text: &[u8],
         mut source_position: DisplaySourceTextPosition,
@@ -243,6 +240,29 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         position: DisplayRowTextPosition,
     ) -> CapturedCursorInfo {
         self.replacement.cursor_info(active_face_state, position)
+    }
+
+    pub(crate) fn apply_to_progress_and_cursor(
+        self,
+        text: &[u8],
+        progress: &mut DisplaySourceProgressState<'_>,
+        cursor_info: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        start_charpos: i64,
+    ) {
+        self.capture_cursor_info_if_point(
+            cursor_info,
+            active_face_state,
+            row_geometry,
+            point_charpos,
+            start_charpos,
+            *progress.byte_idx,
+        );
+        let walk_update = self.walk_update(text, progress.source_position());
+        progress.row.apply_position(walk_update.row_position());
+        progress.apply_source_position(walk_update.source_position());
     }
 }
 

@@ -1,8 +1,8 @@
 use super::*;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
+    BufferDisplayPropertyTextReplacementRenderRequest,
     BufferDisplayPropertyTextReplacementRenderState,
-    BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_source_consumption::*;
 use crate::display_buffer_source_face_resolution::*;
@@ -9701,30 +9701,28 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let mut charpos = 1;
     let mut x = 4.0;
     let mut col = 1;
-
-    let mut progress =
-        DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
-
-    let update = outcome.walk_update("a界b\n".as_bytes(), progress.source_position());
-    progress.row.apply_position(update.row_position());
-
-    assert_eq!(update.source_position().byte_idx(), "a界b\n".len());
-    assert_eq!(update.source_position().charpos(), 4);
-    assert_eq!(x, 12.0);
-    assert_eq!(col, 2);
-    assert_eq!(outcome.skip_to(), 4);
-
     let active_face = test_active_face_state(7, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut cursor_info = CursorCaptureState::new();
-    outcome.capture_cursor_info_if_point(
-        &mut cursor_info,
-        &active_face,
-        &geometry,
-        2,
-        1,
-        "a".len(),
-    );
+    {
+        let mut progress =
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
+        outcome.apply_to_progress_and_cursor(
+            "a界b\n".as_bytes(),
+            &mut progress,
+            &mut cursor_info,
+            &active_face,
+            &geometry,
+            2,
+            1,
+        );
+    }
+
+    assert_eq!(byte_idx, "a界b\n".len());
+    assert_eq!(charpos, 4);
+    assert_eq!(x, 12.0);
+    assert_eq!(col, 2);
+    assert_eq!(outcome.skip_to(), 4);
     let cursor = cursor_info.captured().expect("captured replacement cursor");
     assert_eq!(cursor.x, 4.0);
     assert_eq!(cursor.byte_idx, "a".len());
@@ -9923,7 +9921,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
     let mut x = 24.0;
     let mut col = 4usize;
 
-    let outcome = BufferDisplayPropertyTextReplacementResolveRequest::new(
+    let outcome = BufferDisplayPropertyTextReplacementRenderRequest::new(
         replacement,
         12,
         b"x",
@@ -9933,7 +9931,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         &active_face,
     )
-    .resolve_and_render(
+    .render(
         &buffer,
         BufferDisplayPropertyTextReplacementRenderState::new(
             text_row_source_render_state(
@@ -9954,12 +9952,19 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
     let BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) = outcome else {
         panic!("expected rendered display replacement");
     };
-    outcome.capture_cursor_info_if_point(&mut cursor_info, &active_face, &geometry, 3, 3, byte_idx);
-    let walk_update = outcome.walk_update(b"x", DisplaySourceTextPosition::new(byte_idx, charpos));
-    x = walk_update.row_position().x_px;
-    col = walk_update.row_position().col;
-    byte_idx = walk_update.source_position().byte_idx();
-    charpos = walk_update.source_position().charpos();
+    {
+        let mut progress =
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
+        outcome.apply_to_progress_and_cursor(
+            b"x",
+            &mut progress,
+            &mut cursor_info,
+            &active_face,
+            &geometry,
+            3,
+            3,
+        );
+    }
 
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 4);
