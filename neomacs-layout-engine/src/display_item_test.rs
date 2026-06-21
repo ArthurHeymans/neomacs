@@ -119,30 +119,15 @@ fn display_item_inline_media_slots_are_source_neutral() {
 }
 
 #[test]
-fn display_item_row_break_cursor_and_hit_test_are_typed_items() {
+fn display_item_row_break_is_a_typed_item() {
     let source_pos = DisplaySourcePosition::lisp_string(5, 4, 4);
-    let span = SourceSpan::new(source_pos.clone(), source_pos.clone());
+    let span = SourceSpan::new(source_pos.clone(), source_pos);
 
     let row_break = DisplayItem::new(
-        span.clone(),
+        span,
         RenderFaceRef::Inherit,
         DisplayItemKind::RowBreak(DisplayRowBreak {
             reason: DisplayRowBreakReason::ExplicitNewline,
-        }),
-    );
-    let cursor = DisplayItem::new(
-        span.clone(),
-        RenderFaceRef::Inherit,
-        DisplayItemKind::CursorAnchor(CursorAnchor {
-            kind: CursorAnchorKind::Point,
-            position: source_pos.clone(),
-        }),
-    );
-    let hit_test = DisplayItem::new(
-        span,
-        RenderFaceRef::Inherit,
-        DisplayItemKind::HitTestAnchor(DisplayHitTestAnchor {
-            position: source_pos,
         }),
     );
 
@@ -151,17 +136,6 @@ fn display_item_row_break_cursor_and_hit_test_are_typed_items() {
         DisplayItemKind::RowBreak(DisplayRowBreak {
             reason: DisplayRowBreakReason::ExplicitNewline
         })
-    ));
-    assert!(matches!(
-        cursor.kind,
-        DisplayItemKind::CursorAnchor(CursorAnchor {
-            kind: CursorAnchorKind::Point,
-            ..
-        })
-    ));
-    assert!(matches!(
-        hit_test.kind,
-        DisplayItemKind::HitTestAnchor(DisplayHitTestAnchor { .. })
     ));
 }
 

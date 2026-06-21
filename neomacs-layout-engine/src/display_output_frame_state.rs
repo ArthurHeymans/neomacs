@@ -7,7 +7,7 @@ use crate::display_output_install_request::{
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    PhysCursor, StipplePattern, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FrameDisplayState, ImageItem, ScrollBarItem, VideoItem,
@@ -27,7 +27,6 @@ pub(crate) struct OutputFrameBuildState {
     phys_cursor: Option<PhysCursor>,
     cursor_effects_by_window: HashMap<i64, EffectsConfig>,
     faces: HashMap<u32, Face>,
-    stipple_patterns: HashMap<i32, StipplePattern>,
     window_infos: Vec<WindowInfo>,
     transition_hints: Vec<WindowTransitionHint>,
     effect_hints: Vec<WindowEffectHint>,
@@ -58,7 +57,6 @@ impl OutputFrameBuildState {
             phys_cursor: None,
             cursor_effects_by_window: HashMap::new(),
             faces: HashMap::new(),
-            stipple_patterns: HashMap::new(),
             window_infos: Vec::new(),
             transition_hints: Vec::new(),
             effect_hints: Vec::new(),
@@ -98,7 +96,6 @@ impl OutputFrameBuildState {
         self.phys_cursor = None;
         self.cursor_effects_by_window.clear();
         self.faces.clear();
-        self.stipple_patterns.clear();
         self.window_infos.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();
@@ -296,7 +293,6 @@ impl OutputFrameBuildState {
         state.phys_cursor = self.phys_cursor;
         state.cursor_effects_by_window = self.cursor_effects_by_window;
         state.faces = self.faces;
-        state.stipple_patterns = self.stipple_patterns;
         state.window_infos = self.window_infos;
         state.transition_hints = self.transition_hints;
         state.effect_hints = self.effect_hints;

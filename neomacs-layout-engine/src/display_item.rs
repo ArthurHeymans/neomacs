@@ -181,10 +181,6 @@ pub(crate) enum DisplayItemKind {
     Stretch(DisplayStretch),
     MediaReplacement(DisplayMediaReplacement),
     RowBreak(DisplayRowBreak),
-    #[allow(dead_code)]
-    CursorAnchor(CursorAnchor),
-    #[allow(dead_code)]
-    HitTestAnchor(DisplayHitTestAnchor),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -676,27 +672,6 @@ pub(crate) enum DisplayRowBreakReason {
     Truncate,
     #[allow(dead_code)]
     EndOfSource,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CursorAnchor {
-    pub(crate) kind: CursorAnchorKind,
-    pub(crate) position: DisplaySourcePosition,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CursorAnchorKind {
-    #[allow(dead_code)]
-    Point,
-    #[allow(dead_code)]
-    WindowStart,
-    #[allow(dead_code)]
-    SourceBoundary,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DisplayHitTestAnchor {
-    pub(crate) position: DisplaySourcePosition,
 }
 
 #[cfg(test)]

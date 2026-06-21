@@ -1212,9 +1212,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::Glyphless(glyphless) => {
                 self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
             }
-            DisplayItemKind::RowBreak(_)
-            | DisplayItemKind::CursorAnchor(_)
-            | DisplayItemKind::HitTestAnchor(_) => {}
+            DisplayItemKind::RowBreak(_) => {}
         }
         self.apply_item_layout_since(before_len, item_layout);
         DisplayRowWriteMetrics::from_glyphs(
