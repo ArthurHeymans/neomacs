@@ -160,6 +160,47 @@ macro_rules! cjk_roundtrip_test {
 cjk_roundtrip_test!(div_utf8_euc_kr_roundtrip, "euc-kr", "\"안녕하세요\"");
 cjk_roundtrip_test!(div_utf8_gb2312_roundtrip, "gb2312", "\"中文测试\"");
 cjk_roundtrip_test!(div_utf8_gb18030_roundtrip, "gb18030", "\"中文测试😀\"");
+// GB18030 covers all of Unicode through its 2-byte (GBK subset), 4-byte BMP,
+// and 4-byte SMP ranges.  Exercise each structural form: pure ASCII (1-byte),
+// pure GBK (2-byte), a BMP code point absent from GBK that needs the 4-byte BMP
+// table (U+00A4 CURRENCY SIGN), an astral SMP code point (😀 U+1F600), and the
+// maximum SMP code point (U+10FFFF), all of which GNU encodes via its
+// `:charset-list` charset codec.
+cjk_roundtrip_test!(
+    div_utf8_gb18030_ascii_roundtrip,
+    "gb18030",
+    "\"Hello, world!\""
+);
+cjk_roundtrip_test!(div_utf8_gb18030_gbk_roundtrip, "gb18030", "\"中文测试\"");
+cjk_roundtrip_test!(div_utf8_gb18030_bmp_gap_roundtrip, "gb18030", "\"¤£¡¿\"");
+cjk_roundtrip_test!(
+    div_utf8_gb18030_smp_max_roundtrip,
+    "gb18030",
+    "(string #x10FFFF)"
+);
+cjk_roundtrip_test!(div_utf8_gb18030_mixed_roundtrip, "gb18030", "\"AB中¤文😀\"");
+
+// GB18030 attaches `(charset gb18030-2-byte)` / `(charset gb18030-4-byte-bmp)`
+// / `(charset gb18030-4-byte-smp)` text properties when decoding, identifying
+// which structural form each character came from.  Verify the decoded property
+// runs match GNU byte-for-byte.
+#[test]
+fn div_utf8_gb18030_decode_charset_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(let* ((s "A中¤😀")
+       (e (encode-coding-string s 'gb18030))
+       (d (decode-coding-string e 'gb18030))
+       (props nil))
+  (let ((i 0) (n (length d)))
+    (while (< i n)
+      (push (list i (get-text-property i 'charset d)) props)
+      (setq i (1+ i))))
+  (list (append e nil) (equal s d) (nreverse props)))
+"#,
+    );
+}
 cjk_roundtrip_test!(
     div_utf8_iso2022_jp_roundtrip,
     "iso-2022-jp",

@@ -1636,28 +1636,72 @@ fn encode_via_charset_list(
 /// coding system): at each position, consume the bytes of the first charset in
 /// the list that yields an assigned code point and emit that character; a byte
 /// that no charset can decode becomes an eight-bit raw character, matching GNU.
-/// The result is Emacs internal multibyte bytes.
-fn decode_via_charset_list(bytes: &[u8], charset_list: &[SymId]) -> Vec<u8> {
+/// The result is Emacs internal multibyte bytes plus the `(charset NAME)`
+/// text-property runs GNU's `decode_coding_charset` attaches: each maximal run
+/// of consecutive characters decoded by the *same* non-ASCII charset gets one
+/// `charset` property naming that charset (`decode_coding_charset` /
+/// `produce_charset`, src/coding.c).  ASCII characters and eight-bit raw bytes
+/// carry no `charset` property (GNU keeps `last_id == charset_ascii` for them).
+fn decode_via_charset_list(
+    bytes: &[u8],
+    charset_list: &[SymId],
+) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
     let mut out = Vec::with_capacity(bytes.len());
     let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
     let mut pos = 0usize;
+    let mut char_index = 0usize;
+    let mut runs: Vec<StringTextPropertyRun> = Vec::new();
+    // The charset of the run currently being accumulated, with its start char
+    // index. `None` means we are inside an ASCII / eight-bit stretch that takes
+    // no `charset` property.
+    let mut run: Option<(SymId, usize)> = None;
+    let flush = |run: &mut Option<(SymId, usize)>, end: usize, runs: &mut Vec<_>| {
+        if let Some((charset, start)) = run.take() {
+            runs.push(StringTextPropertyRun {
+                start,
+                end,
+                plist: Value::list(vec![
+                    Value::symbol("charset"),
+                    Value::symbol(resolve_sym(charset)),
+                ]),
+            });
+        }
+    };
     while pos < bytes.len() {
         let decoded = charset_list.iter().find_map(|&charset| {
             crate::emacs_core::charset::charset_decode_char_from_bytes(charset, &bytes[pos..])
+                .map(|(ch, consumed)| (charset, ch, consumed))
         });
-        let (code, consumed) = match decoded {
-            Some((ch, consumed)) => (ch as u32, consumed),
-            // A byte no charset can decode becomes an eight-bit raw character.
+        let (code, consumed, annotation) = match decoded {
+            // GNU annotates a run with the charset that decoded it, but ASCII
+            // characters (`charset->id == charset_ascii`) carry no property.
+            Some((charset, ch, consumed)) => {
+                let annotation = if ch < 0x80 { None } else { Some(charset) };
+                (ch as u32, consumed, annotation)
+            }
+            // A byte no charset can decode becomes an eight-bit raw character
+            // with no `charset` annotation (GNU's `invalid_code` path).
             None => (
                 crate::emacs_core::emacs_char::unibyte_to_char(bytes[pos]),
                 1,
+                None,
             ),
         };
+        match annotation {
+            Some(charset) if run.map(|(c, _)| c) == Some(charset) => {}
+            Some(charset) => {
+                flush(&mut run, char_index, &mut runs);
+                run = Some((charset, char_index));
+            }
+            None => flush(&mut run, char_index, &mut runs),
+        }
         let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..n]);
         pos += consumed;
+        char_index += 1;
     }
-    out
+    flush(&mut run, char_index, &mut runs);
+    (out, runs)
 }
 
 /// If `coding` is an EUC-profile ISO-2022 coding system, return its designation
@@ -3164,8 +3208,14 @@ fn builtin_coding_string_in_context(
     } else if let Some(charset_list) = &charset_coding {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
-        let bytes = decode_via_charset_list(&source_bytes, charset_list);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+        let (bytes, runs) = decode_via_charset_list(&source_bytes, charset_list);
+        let value = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
+        if !runs.is_empty() {
+            // GNU's charset-type decoder annotates each run with the source
+            // charset (`decode_coding_charset` / `produce_charset`).
+            crate::emacs_core::value::set_string_text_properties_for_value(value, runs);
+        }
+        value
     } else {
         builtin_decode_coding_string_with_known(args, |_| true)?
     };

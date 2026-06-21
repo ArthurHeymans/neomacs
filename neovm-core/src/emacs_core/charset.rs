@@ -21,10 +21,25 @@ const RAW_BYTE_SENTINEL_MAX: u32 = 0xE0FF;
 const UNIBYTE_BYTE_SENTINEL_MIN: u32 = 0xE300;
 const UNIBYTE_BYTE_SENTINEL_MAX: u32 = 0xE3FF;
 
-static CHARSET_MAP_CACHE: OnceLock<RwLock<HashMap<String, Option<Arc<CharsetMapData>>>>> =
-    OnceLock::new();
+/// Cache key for a parsed charset `.map` file.  GNU's `load_charset_map`
+/// converts every code point in the map to a *linear index* via
+/// `CODE_POINT_TO_INDEX` (which depends on the owning charset's code-space and
+/// minimum code), so the same `.map` file parsed for two charsets with
+/// different code-spaces yields different code↔char tables.  The cache must
+/// therefore key on the code-space identity, not just the file name.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct CharsetMapCacheKey {
+    map_name: String,
+    code_space: [i64; 8],
+    min_code: i64,
+}
 
-fn charset_map_cache() -> &'static RwLock<HashMap<String, Option<Arc<CharsetMapData>>>> {
+static CHARSET_MAP_CACHE: OnceLock<
+    RwLock<HashMap<CharsetMapCacheKey, Option<Arc<CharsetMapData>>>>,
+> = OnceLock::new();
+
+fn charset_map_cache() -> &'static RwLock<HashMap<CharsetMapCacheKey, Option<Arc<CharsetMapData>>>>
+{
     CHARSET_MAP_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
@@ -46,7 +61,7 @@ fn parse_hex_range(value: &str) -> Option<(i64, i64)> {
     }
 }
 
-fn parse_charset_map_file(path: &Path) -> Option<CharsetMapData> {
+fn parse_charset_map_file(path: &Path, info: &CharsetInfo) -> Option<CharsetMapData> {
     let text = std::fs::read_to_string(path).ok()?;
     let mut code_to_char = HashMap::new();
     let mut char_to_code = HashMap::new();
@@ -60,9 +75,32 @@ fn parse_charset_map_file(path: &Path) -> Option<CharsetMapData> {
         let source = fields.next()?;
         let target = fields.next()?;
         let (from, to) = parse_hex_range(source)?;
-        let target_base = parse_hex_i64(target)?;
-        for (index, code) in (from..=to).enumerate() {
-            let ch = target_base + index as i64;
+        let from_char = parse_hex_i64(target)?;
+        // GNU `load_charset_map` (src/charset.c): a map entry "FROM-TO C" maps
+        // the *code-point* range [FROM, TO] to consecutive characters starting
+        // at C, but the stepping follows the charset's code-space — i.e. it is
+        // linear in the CODE INDEX, not in the raw 32-bit code point.  For a
+        // multi-dimensional code-space (e.g. the gb18030 4-byte charsets, whose
+        // valid bytes are 0x30-0x39 / 0x81-0xFE) most raw integers between FROM
+        // and TO are NOT valid code points.  So convert both ends to indices,
+        // then walk index by index, materializing each real code point via
+        // INDEX_TO_CODE_POINT.  (The old code iterated raw integers, which
+        // produced bogus code↔char pairs for every 4-byte charset.)
+        let from_index = charset_code_point_to_index(info, from)?;
+        let to_index = if from == to {
+            from_index
+        } else {
+            charset_code_point_to_index(info, to)?
+        };
+        if from_index < 0 || to_index < 0 || to_index < from_index {
+            continue;
+        }
+        for offset in 0..=(to_index - from_index) {
+            let index = from_index + offset;
+            let Some(code) = charset_index_to_code_point(info, index) else {
+                continue;
+            };
+            let ch = from_char + offset;
             code_to_char.insert(code, ch);
             char_to_code.entry(ch).or_insert(code);
         }
@@ -74,16 +112,23 @@ fn parse_charset_map_file(path: &Path) -> Option<CharsetMapData> {
     })
 }
 
-fn load_charset_map(map_name: &str) -> Option<Arc<CharsetMapData>> {
-    let key = map_name.to_string();
+/// Load (and cache) the code↔char tables of a charset `.map` file.  The owning
+/// `info` supplies the code-space used to convert the map's code points to
+/// linear indices (GNU `CODE_POINT_TO_INDEX`), so it is part of the cache key.
+fn load_charset_map(map_name: &str, info: &CharsetInfo) -> Option<Arc<CharsetMapData>> {
+    let key = CharsetMapCacheKey {
+        map_name: map_name.to_string(),
+        code_space: info.code_space,
+        min_code: info.min_code,
+    };
     if let Ok(cache) = charset_map_cache().read()
         && let Some(cached) = cache.get(&key)
     {
         return cached.clone();
     }
 
-    let loaded =
-        parse_charset_map_file(&charset_map_dir().join(format!("{map_name}.map"))).map(Arc::new);
+    let loaded = parse_charset_map_file(&charset_map_dir().join(format!("{map_name}.map")), info)
+        .map(Arc::new);
     if let Ok(mut cache) = charset_map_cache().write() {
         cache.insert(key, loaded.clone());
     }
@@ -676,7 +721,7 @@ impl CharsetRegistry {
         }
         if info.unified_p
             && let Some(unify_map) = charset_value_text(&info.unify_map)
-            && let Some(decoded) = load_charset_map(&unify_map)
+            && let Some(decoded) = load_charset_map(&unify_map, info)
                 .and_then(|map| map.code_to_char.get(&code_point).copied())
         {
             return Some(decoded);
@@ -685,7 +730,7 @@ impl CharsetRegistry {
             CharsetMethod::Offset(offset) => {
                 charset_code_point_to_index(info, code_point).map(|index| index + offset)
             }
-            CharsetMethod::Map(map_name) => load_charset_map(map_name)
+            CharsetMethod::Map(map_name) => load_charset_map(map_name, info)
                 .and_then(|map| map.code_to_char.get(&code_point).copied()),
             CharsetMethod::Subset(subset) => {
                 let parent_code = code_point - subset.offset;
@@ -712,8 +757,8 @@ impl CharsetRegistry {
         let info = self.charsets.get(&self.resolve_name(name))?;
         if info.unified_p
             && let Some(unify_map) = charset_value_text(&info.unify_map)
-            && let Some(encoded) =
-                load_charset_map(&unify_map).and_then(|map| map.char_to_code.get(&ch).copied())
+            && let Some(encoded) = load_charset_map(&unify_map, info)
+                .and_then(|map| map.char_to_code.get(&ch).copied())
         {
             return Some(encoded);
         }
@@ -730,7 +775,7 @@ impl CharsetRegistry {
                 }
             }
             CharsetMethod::Map(map_name) => {
-                load_charset_map(map_name).and_then(|map| map.char_to_code.get(&ch).copied())
+                load_charset_map(map_name, info).and_then(|map| map.char_to_code.get(&ch).copied())
             }
             CharsetMethod::Subset(subset) => {
                 let parent_code = self.encode_char(subset.parent, ch)?;
@@ -850,7 +895,7 @@ pub(crate) fn charset_target_ranges(name: &str) -> Option<Vec<(u32, u32)>> {
                 offset_charset_char_ranges(info, offset, info.min_code, info.max_code)
             }
             CharsetMethod::Map(ref map_name) => {
-                let values = load_charset_map(map_name)?
+                let values = load_charset_map(map_name, info)?
                     .code_to_char
                     .values()
                     .filter_map(|ch| u32::try_from(*ch).ok())
@@ -898,7 +943,7 @@ fn offset_unified_ranges(info: &CharsetInfo, from_code: i64, to_code: i64) -> Ve
     let Some(unify_map) = charset_value_text(&info.unify_map) else {
         return Vec::new();
     };
-    let Some(map) = load_charset_map(&unify_map) else {
+    let Some(map) = load_charset_map(&unify_map, info) else {
         return Vec::new();
     };
 
@@ -962,7 +1007,7 @@ pub(crate) fn map_charset_char_ranges(
         match &info.method {
             CharsetMethod::Offset(offset) => offset_charset_char_ranges(info, *offset, from, to),
             CharsetMethod::Map(map_name) => {
-                let values = load_charset_map(map_name)?
+                let values = load_charset_map(map_name, info)?
                     .code_to_char
                     .iter()
                     .filter_map(|(code, ch)| {
