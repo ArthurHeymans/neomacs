@@ -404,11 +404,11 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendMetrics {
-    pub(crate) height: f32,
-    pub(crate) ascent: f32,
-    pub(crate) char_width: f32,
-    pub(crate) space_width: f32,
-    pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
+    height: f32,
+    ascent: f32,
+    char_width: f32,
+    space_width: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 impl DisplayRowAppendMetrics {
@@ -426,6 +426,26 @@ impl DisplayRowAppendMetrics {
             space_width,
             fallback_metrics,
         }
+    }
+
+    pub(crate) fn height(self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn ascent(self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn char_width(self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn space_width(self) -> f32 {
+        self.space_width
+    }
+
+    pub(crate) fn fallback_metrics(self) -> DisplayRowFallbackMetrics {
+        self.fallback_metrics
     }
 
     pub(crate) fn text_row(
@@ -483,9 +503,9 @@ impl DisplayRowAppendMetrics {
             append_surface,
             geometry,
             glyph_y_offset,
-            self.fallback_metrics,
+            self.fallback_metrics(),
         )
-        .text_row_frame(self.height, self.ascent, self.char_width)
+        .text_row_frame(self.height(), self.ascent(), self.char_width())
     }
 }
 
@@ -586,16 +606,16 @@ impl DisplayRowAppendFrame {
             geometry: DisplayRowGeometry::new(
                 placement.y,
                 area.width,
-                metrics.height,
-                metrics.char_width,
-                metrics.ascent,
+                metrics.height(),
+                metrics.char_width(),
+                metrics.ascent(),
                 tab_policy,
             ),
-            default_row_height: metrics.fallback_metrics.row_height(),
+            default_row_height: metrics.fallback_metrics().row_height(),
             content_x: area.content_x,
             text_width: area.text_width,
             line_number_width: area.line_number_width,
-            face_space_width: metrics.space_width,
+            face_space_width: metrics.space_width(),
         }
     }
 
