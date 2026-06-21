@@ -2670,9 +2670,9 @@ impl Context {
         self.condition_stack.iter().rev().any(|frame| match frame {
             ConditionFrame::ConditionCase { conditions, .. }
             | ConditionFrame::HandlerBind { conditions, .. } => {
-                crate::emacs_core::errors::signal_matches_condition_value(
+                crate::emacs_core::errors::signal_matches_condition_value_sym(
                     &self.obarray,
-                    sig.symbol_name(),
+                    sig.symbol,
                     conditions,
                 )
             }
@@ -2729,9 +2729,9 @@ impl Context {
                 }
                 ConditionFrame::ConditionCase { conditions, resume } => {
                     seen_condition_entries += 1;
-                    if crate::emacs_core::errors::signal_matches_condition_value(
+                    if crate::emacs_core::errors::signal_matches_condition_value_sym(
                         &self.obarray,
-                        sig.symbol_name(),
+                        sig.symbol,
                         &conditions,
                     ) {
                         self.maybe_call_debugger_for_signal(&sig, Some(&conditions))?;
@@ -2746,9 +2746,9 @@ impl Context {
                     mute_span,
                 } => {
                     seen_condition_entries += 1;
-                    if !crate::emacs_core::errors::signal_matches_condition_value(
+                    if !crate::emacs_core::errors::signal_matches_condition_value_sym(
                         &self.obarray,
-                        sig.symbol_name(),
+                        sig.symbol,
                         &conditions,
                     ) {
                         continue;
@@ -2826,9 +2826,16 @@ impl Context {
         if sym_name == "error" || sym_name == "quit" {
             return sig;
         }
+        // GNU `signal_or_quit` reads `error-conditions` directly from the
+        // signalled symbol object (`Fget (real_error_symbol, Qerror_conditions)`,
+        // src/eval.c:1959), so an *uninterned* error symbol created via
+        // `make-symbol` and given conditions by `define-error` is honoured.
+        // Looking the property up by name (which interns) would resolve to a
+        // *different*, interned symbol with no conditions and spuriously
+        // canonicalize to "Invalid error symbol".  Use identity instead.
         if self
             .obarray
-            .get_property(sym_name, "error-conditions")
+            .get_property_id(sig.symbol, intern("error-conditions"))
             .is_some()
         {
             return sig;
@@ -2898,8 +2905,13 @@ impl Context {
     }
 
     fn signal_conditions_value(&self, sig: &SignalData) -> Value {
+        // Read `error-conditions' by identity so an uninterned error symbol
+        // (created via `make-symbol' + `define-error') yields its real
+        // condition list for `condition-case' clause matching, instead of the
+        // empty/`(SYMBOL)' fallback a name-based lookup of a different interned
+        // symbol would give.
         self.obarray
-            .get_property(sig.symbol_name(), "error-conditions")
+            .get_property_id(sig.symbol, intern("error-conditions"))
             .unwrap_or_else(|| Value::list(vec![Value::from_sym_id(sig.symbol)]))
     }
 

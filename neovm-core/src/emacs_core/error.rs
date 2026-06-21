@@ -99,8 +99,23 @@ fn signal_internal(
     raw_data: Option<Value>,
     suppress_signal_hook: bool,
 ) -> Flow {
+    signal_internal_id(intern(symbol), data, raw_data, suppress_signal_hook)
+}
+
+/// Like `signal_internal` but takes the error symbol by identity.  GNU's
+/// `Fsignal`/`signal_or_quit` operate on the actual symbol object, so an
+/// *uninterned* error symbol (created by `make-symbol` and given conditions by
+/// `define-error') keeps its identity all the way to condition matching.
+/// Re-interning by name would resolve to a different symbol with no
+/// `error-conditions' and wrongly canonicalize to "Invalid error symbol".
+pub(crate) fn signal_internal_id(
+    symbol: SymId,
+    data: Vec<Value>,
+    raw_data: Option<Value>,
+    suppress_signal_hook: bool,
+) -> Flow {
     Flow::Signal(Box::new(SignalData {
-        symbol: intern(symbol),
+        symbol,
         data,
         raw_data,
         suppress_signal_hook,
@@ -124,6 +139,17 @@ pub(crate) fn signal_with_data_suppressed(symbol: &str, data: Value) -> Flow {
 fn signal_with_data_internal(symbol: &str, data: Value, suppress_signal_hook: bool) -> Flow {
     let normalized = super::value::list_to_vec(&data).unwrap_or_else(|| vec![data]);
     signal_internal(symbol, normalized, Some(data), suppress_signal_hook)
+}
+
+/// Identity-preserving signal flow (see `signal_internal_id`).
+pub(crate) fn signal_id(symbol: SymId, data: Vec<Value>) -> Flow {
+    signal_internal_id(symbol, data, None, false)
+}
+
+/// Identity-preserving signal flow with a raw cdr payload.
+pub(crate) fn signal_with_data_id(symbol: SymId, data: Value) -> Flow {
+    let normalized = super::value::list_to_vec(&data).unwrap_or_else(|| vec![data]);
+    signal_internal_id(symbol, normalized, Some(data), false)
 }
 
 /// Convert internal flow to public EvalError.

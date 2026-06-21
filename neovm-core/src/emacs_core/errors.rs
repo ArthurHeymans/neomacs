@@ -17,7 +17,8 @@
 //! symbol.
 
 use super::error::{
-    EvalResult, Flow, signal, signal_suppressed, signal_with_data, signal_with_data_suppressed,
+    EvalResult, Flow, signal, signal_id, signal_suppressed, signal_with_data, signal_with_data_id,
+    signal_with_data_suppressed,
 };
 use super::intern::{SymId, intern, resolve_sym};
 use super::symbol::Obarray;
@@ -141,6 +142,69 @@ pub fn signal_matches_condition_value(
             }
         }
     }
+}
+
+/// Identity-aware variant of `signal_matches_condition_value`.
+///
+/// GNU matches a `condition-case' clause by testing whether the clause's
+/// condition is a member of the *signalled symbol's* `error-conditions' list
+/// (`src/eval.c:wants_debugger`/`find_handler_clause`).  The signal symbol must
+/// be looked up by identity: an uninterned error symbol (from `make-symbol' +
+/// `define-error') carries its conditions on that specific symbol object, so a
+/// name-based lookup would resolve to a different, condition-less interned
+/// symbol and the clause would never match.
+pub fn signal_matches_condition_value_sym(
+    obarray: &Obarray,
+    signal_sym: SymId,
+    pattern: &Value,
+) -> bool {
+    // The signal's own conditions, read by identity (falling back to just the
+    // symbol itself, matching `signal_matches_hierarchical`'s exact-match rule).
+    let conditions = obarray.get_property_id(signal_sym, intern("error-conditions"));
+    signal_matches_pattern_against_conditions(signal_sym, conditions.as_ref(), pattern)
+}
+
+fn signal_matches_pattern_against_conditions(
+    signal_sym: SymId,
+    conditions: Option<&Value>,
+    pattern: &Value,
+) -> bool {
+    match pattern.kind() {
+        ValueKind::T => true,
+        ValueKind::Nil => false,
+        ValueKind::Cons => list_to_vec(pattern).is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| signal_matches_pattern_against_conditions(signal_sym, conditions, item))
+        }),
+        _ => {
+            let Some(cond_id) = super::builtins::symbols::symbol_id(pattern) else {
+                return false;
+            };
+            if pattern_is_catch_all(cond_id) {
+                return true;
+            }
+            // Exact identity match.
+            if cond_id == signal_sym {
+                return true;
+            }
+            // Membership in the signal's error-conditions (compared by identity).
+            if let Some(conds) = conditions {
+                let mut tail = *conds;
+                while tail.is_cons() {
+                    if tail.cons_car().as_symbol_id() == Some(cond_id) {
+                        return true;
+                    }
+                    tail = tail.cons_cdr();
+                }
+            }
+            false
+        }
+    }
+}
+
+fn pattern_is_catch_all(cond_id: SymId) -> bool {
+    resolve_sym(cond_id) == "t"
 }
 
 // ---------------------------------------------------------------------------
@@ -497,17 +561,6 @@ fn build_signal_flow(symbol_name: &str, data: Value) -> Flow {
     }
 }
 
-fn build_signal_flow_suppressed(symbol_name: &str, data: Value) -> Flow {
-    match data.kind() {
-        ValueKind::Nil => signal_suppressed(symbol_name, vec![]),
-        ValueKind::Cons => match list_to_vec(&data) {
-            Some(data) => signal_suppressed(symbol_name, data),
-            None => signal_with_data_suppressed(symbol_name, data),
-        },
-        _ => signal_with_data_suppressed(symbol_name, data),
-    }
-}
-
 fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) -> Flow {
     if !error_object.is_cons() {
         unreachable!("peculiar signal error object must be a cons");
@@ -517,24 +570,46 @@ fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) 
     let error_symbol = pair_car;
     let data = pair_cdr;
 
-    let Some(sym_name) = error_symbol.as_symbol_name() else {
+    let Some(symbol_id) = error_symbol.as_symbol_id() else {
         return signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), error_symbol],
         );
     };
+    let sym_name = resolve_sym(symbol_id);
 
+    // Read `error-conditions' by identity so an uninterned error symbol is
+    // honoured (see `builtin_signal`).
     if sym_name != "error"
         && sym_name != "quit"
         && eval
             .obarray
-            .get_property(sym_name, "error-conditions")
+            .get_property_id(symbol_id, intern("error-conditions"))
             .is_none()
     {
         return signal_suppressed("error", vec![Value::string("Invalid error symbol")]);
     }
 
-    build_signal_flow_suppressed(sym_name, data)
+    build_signal_flow_id_suppressed(symbol_id, data)
+}
+
+/// Identity-preserving, signal-hook-suppressed variant of `build_signal_flow`.
+fn build_signal_flow_id_suppressed(symbol: SymId, data: Value) -> Flow {
+    use super::error::signal_internal_id;
+    match data.kind() {
+        ValueKind::Nil => signal_internal_id(symbol, vec![], None, true),
+        ValueKind::Cons => match list_to_vec(&data) {
+            Some(items) => signal_internal_id(symbol, items, None, true),
+            None => {
+                let normalized = list_to_vec(&data).unwrap_or_else(|| vec![data]);
+                signal_internal_id(symbol, normalized, Some(data), true)
+            }
+        },
+        _ => {
+            let normalized = list_to_vec(&data).unwrap_or_else(|| vec![data]);
+            signal_internal_id(symbol, normalized, Some(data), true)
+        }
+    }
 }
 
 /// Eval-aware `signal`, including GNU's "peculiar error" handling for
@@ -558,19 +633,33 @@ pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) 
         return dispatch_signal_flow(eval, flow);
     }
 
-    let sym_name = match args[0].as_symbol_name() {
-        Some(name) => name.to_string(),
-        None => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("symbolp"), args[0]],
-            ));
-        }
+    // Preserve the *identity* of the error symbol (GNU `Fsignal` passes the
+    // actual symbol object to `signal_or_quit`).  An uninterned symbol given
+    // `error-conditions' by `define-error' must keep its SymId so condition
+    // matching and `canonicalize_signal_symbol' read the right plist; building
+    // the flow from the symbol's name would re-intern to a different symbol.
+    let Some(symbol_id) = args[0].as_symbol_id() else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("symbolp"), args[0]],
+        ));
     };
 
-    let flow = build_signal_flow(&sym_name, data);
+    let flow = build_signal_flow_id(symbol_id, data);
 
     dispatch_signal_flow(eval, flow)
+}
+
+/// Identity-preserving variant of `build_signal_flow`.
+fn build_signal_flow_id(symbol: SymId, data: Value) -> Flow {
+    match data.kind() {
+        ValueKind::Nil => signal_id(symbol, vec![]),
+        ValueKind::Cons => match list_to_vec(&data) {
+            Some(data) => signal_id(symbol, data),
+            None => signal_with_data_id(symbol, data),
+        },
+        _ => signal_with_data_id(symbol, data),
+    }
 }
 
 fn dispatch_signal_flow(eval: &mut super::eval::Context, flow: Flow) -> EvalResult {
