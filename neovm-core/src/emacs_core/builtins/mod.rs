@@ -8559,13 +8559,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-char-table-range",
-        |_ctx, args| super::chartable::builtin_set_char_table_range(args),
+        |ctx, args| super::chartable::builtin_set_char_table_range(args, Some(&ctx.obarray)),
         3,
         Some(3),
     );
     ctx.defsubr(
         "char-table-range",
-        |_ctx, args| super::chartable::builtin_char_table_range(args),
+        |ctx, args| super::chartable::builtin_char_table_range(args, Some(&ctx.obarray)),
         2,
         Some(2),
     );

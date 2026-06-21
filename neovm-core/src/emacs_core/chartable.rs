@@ -469,11 +469,29 @@ fn expect_character_code(value: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn invalid_range_error(name: &str) -> Flow {
-    signal(
-        "error",
-        vec![Value::string(format!("Invalid RANGE argument to `{name}'"))],
-    )
+/// Signal GNU's `error ("Invalid RANGE argument to `%s'")`
+/// (`src/chartab.c:604,637`).  GNU routes every C-level `error()` message
+/// through `doprnt` (`src/doprnt.c:490-505`), which requotes the grave accent
+/// and apostrophe per `text-quoting-style`; in batch/UTF-8 the effective style
+/// is `curve`, so the literal `` ` `` / `'` become ‘ / ’.  We reproduce that
+/// requoting here from the active obarray's `text-quoting-style` rather than
+/// emitting the raw ASCII quotes, so the captured error data matches GNU
+/// byte-for-byte.
+fn invalid_range_error(name: &str, obarray: Option<&super::symbol::Obarray>) -> Flow {
+    // GNU resolves `text-quoting-style` from the global environment in `doprnt`.
+    // When no obarray is threaded in (internal callers that pass valid ranges
+    // and never reach this path, plus tests), fall back to the batch/UTF-8
+    // default of `curve`, which is what `effective_text_quoting_style` returns
+    // for a nil `text-quoting-style`.
+    let style = obarray.map_or(
+        crate::emacs_core::coding::TextQuotingStyle::Curve,
+        crate::emacs_core::coding::effective_text_quoting_style,
+    );
+    let message = crate::emacs_core::coding::requote_c_error_message(
+        &format!("Invalid RANGE argument to `{name}'"),
+        style,
+    );
+    signal("error", vec![Value::string(message)])
 }
 
 /// Data-pairs region start index for a char-table vector.
@@ -1107,7 +1125,10 @@ pub(crate) fn builtin_char_table_p(args: Vec<Value>) -> EvalResult {
 /// - a cons `(MIN . MAX)` -- set all characters MIN..=MAX
 /// - `nil` -- set the default value
 /// - `t` -- set all character entries while leaving the default slot alone
-pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_set_char_table_range(
+    args: Vec<Value>,
+    obarray: Option<&super::symbol::Obarray>,
+) -> EvalResult {
     expect_args("set-char-table-range", &args, 3)?;
     let table = &args[0];
     let range = &args[1];
@@ -1144,7 +1165,7 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(_) => {
             let ch = match expect_character_code(range) {
                 Ok(ch) => ch,
-                Err(_) => return Err(invalid_range_error("set-char-table-range")),
+                Err(_) => return Err(invalid_range_error("set-char-table-range", obarray)),
             };
             if table.is_char_table() {
                 char_table_set_char_direct(*table, ch, *value);
@@ -1171,7 +1192,7 @@ pub(crate) fn builtin_set_char_table_range(args: Vec<Value>) -> EvalResult {
                 });
             }
         }
-        _ => return Err(invalid_range_error("set-char-table-range")),
+        _ => return Err(invalid_range_error("set-char-table-range", obarray)),
     }
 
     Ok(*value)
@@ -1370,7 +1391,10 @@ fn ct_lookup_ascii_cached(table: &Value, ch: i64) -> Option<Value> {
 /// RANGE may be:
 /// - a character -- look up that character (with parent fallback)
 /// - `nil` -- return the default value
-pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_char_table_range(
+    args: Vec<Value>,
+    obarray: Option<&super::symbol::Obarray>,
+) -> EvalResult {
     expect_args("char-table-range", &args, 2)?;
     let table = &args[0];
     let range = &args[1];
@@ -1391,7 +1415,7 @@ pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(_) => {
             let ch = match expect_character_code(range) {
                 Ok(ch) => ch,
-                Err(_) => return Err(invalid_range_error("char-table-range")),
+                Err(_) => return Err(invalid_range_error("char-table-range", obarray)),
             };
             ct_lookup(table, ch)
         }
@@ -1403,7 +1427,7 @@ pub(crate) fn builtin_char_table_range(args: Vec<Value>) -> EvalResult {
             let (value, _run_from, _run_to) = ct_lookup_and_range(table, from)?;
             Ok(value)
         }
-        _ => Err(invalid_range_error("char-table-range")),
+        _ => Err(invalid_range_error("char-table-range", obarray)),
     }
 }
 

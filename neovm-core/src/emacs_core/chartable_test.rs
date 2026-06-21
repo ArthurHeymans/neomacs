@@ -35,10 +35,10 @@ fn make_char_table_with_default() {
     let ct = make_char_table_value(Value::symbol("syntax-table"), Value::fixnum(42));
     assert!(is_char_table(&ct));
     // Default lookup should return the default.
-    let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
+    let def = builtin_char_table_range(vec![ct, Value::NIL], None).unwrap();
     assert!(def.is_fixnum());
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)], None).unwrap(),
         Value::fixnum(42)
     );
 }
@@ -120,8 +120,9 @@ fn char_table_p_predicate() {
 fn set_and_get_single_char() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::symbol("letter-a")]).unwrap();
-    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::symbol("letter-a")], None)
+        .unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)], None).unwrap();
     assert!(val.is_symbol_named("letter-a"));
 }
 
@@ -130,7 +131,7 @@ fn lookup_falls_back_to_default() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::symbol("default-val"));
     // No entry for char 90.
-    let val = builtin_char_table_range(vec![ct, Value::fixnum(90)]).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum(90)], None).unwrap();
     assert!(val.is_symbol_named("default-val"));
 }
 
@@ -140,13 +141,13 @@ fn set_range_cons() {
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
     // Set chars 65..=67 (A, B, C)
     let range = Value::cons(Value::fixnum(65), Value::fixnum(67));
-    builtin_set_char_table_range(vec![ct, range, Value::symbol("abc")]).unwrap();
+    builtin_set_char_table_range(vec![ct, range, Value::symbol("abc")], None).unwrap();
     for ch in 65..=67 {
-        let val = builtin_char_table_range(vec![ct, Value::fixnum(ch)]).unwrap();
+        let val = builtin_char_table_range(vec![ct, Value::fixnum(ch)], None).unwrap();
         assert!(val.is_symbol_named("abc"));
     }
     // Char 68 should be nil (default).
-    let val = builtin_char_table_range(vec![ct, Value::fixnum(68)]).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum(68)], None).unwrap();
     assert!(val.is_nil());
 }
 
@@ -154,40 +155,49 @@ fn set_range_cons() {
 fn optimize_char_table_compacts_local_runs_without_changing_lookup() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
-        Value::symbol("letter"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
+            Value::symbol("letter"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), Value::NIL]).unwrap();
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('D' as i64), Value::fixnum('F' as i64)),
-        Value::symbol("letter"),
-    ])
+    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), Value::NIL], None).unwrap();
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('D' as i64), Value::fixnum('F' as i64)),
+            Value::symbol("letter"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
-        Value::symbol("letter"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
+            Value::symbol("letter"),
+        ],
+        None,
+    )
     .unwrap();
 
     optimize_char_table(&ct, OptimizeCharTableTest::Equal).unwrap();
 
     assert!(char_table_external_slots(&ct).is_some());
     for ch in ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] {
-        let value = builtin_char_table_range(vec![ct, Value::fixnum(ch as i64)]).unwrap();
+        let value = builtin_char_table_range(vec![ct, Value::fixnum(ch as i64)], None).unwrap();
         assert!(value.is_symbol_named("letter"));
     }
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)])
+        builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)], None)
             .unwrap()
             .is_nil()
     );
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum('J' as i64)])
+        builtin_char_table_range(vec![ct, Value::fixnum('J' as i64)], None)
             .unwrap()
             .is_nil()
     );
@@ -197,39 +207,45 @@ fn optimize_char_table_compacts_local_runs_without_changing_lookup() {
 fn optimize_char_table_preserves_later_override_precedence() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::symbol("default"));
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum(10), Value::fixnum(20)),
-        Value::symbol("base"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum(10), Value::fixnum(20)),
+            Value::symbol("base"),
+        ],
+        None,
+    )
     .unwrap();
     optimize_char_table(&ct, OptimizeCharTableTest::Equal).unwrap();
 
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum(15), Value::fixnum(17)),
-        Value::symbol("later"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum(15), Value::fixnum(17)),
+            Value::symbol("later"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum(16), Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(16), Value::NIL], None).unwrap();
 
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum(14)])
+        builtin_char_table_range(vec![ct, Value::fixnum(14)], None)
             .unwrap()
             .is_symbol_named("base")
     );
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum(15)])
+        builtin_char_table_range(vec![ct, Value::fixnum(15)], None)
             .unwrap()
             .is_symbol_named("later")
     );
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum(16)])
+        builtin_char_table_range(vec![ct, Value::fixnum(16)], None)
             .unwrap()
             .is_symbol_named("default")
     );
     assert!(
-        builtin_char_table_range(vec![ct, Value::fixnum(18)])
+        builtin_char_table_range(vec![ct, Value::fixnum(18)], None)
             .unwrap()
             .is_symbol_named("base")
     );
@@ -240,8 +256,11 @@ fn translation_table_extra_slot_optimizes_constructed_entries() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_with_extra_slots(Value::symbol("translation-table"), Value::NIL, 2);
     for ch in 0..96 {
-        builtin_set_char_table_range(vec![ct, Value::fixnum(0x1000 + ch), Value::fixnum(ch)])
-            .unwrap();
+        builtin_set_char_table_range(
+            vec![ct, Value::fixnum(0x1000 + ch), Value::fixnum(ch)],
+            None,
+        )
+        .unwrap();
     }
 
     builtin_set_char_table_extra_slot(vec![ct, Value::fixnum(1), Value::fixnum(1)]).unwrap();
@@ -249,7 +268,7 @@ fn translation_table_extra_slot_optimizes_constructed_entries() {
     assert!(char_table_external_slots(&ct).is_some());
     for ch in [0, 11, 57, 95] {
         assert_eq!(
-            builtin_char_table_range(vec![ct, Value::fixnum(0x1000 + ch)])
+            builtin_char_table_range(vec![ct, Value::fixnum(0x1000 + ch)], None)
                 .unwrap()
                 .as_fixnum(),
             Some(ch)
@@ -263,8 +282,8 @@ fn optimize_char_table_custom_test_is_noop_until_callbacks_are_supported() {
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
     let first = Value::string("same");
     let second = Value::string("same");
-    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), first]).unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), second]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), first], None).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), second], None).unwrap();
 
     crate::emacs_core::builtins::symbols::builtin_optimize_char_table(vec![
         ct,
@@ -273,8 +292,9 @@ fn optimize_char_table_custom_test_is_noop_until_callbacks_are_supported() {
     .unwrap();
 
     assert!(char_table_external_slots(&ct).is_some());
-    let first_lookup = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap();
-    let second_lookup = builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)]).unwrap();
+    let first_lookup = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)], None).unwrap();
+    let second_lookup =
+        builtin_char_table_range(vec![ct, Value::fixnum('B' as i64)], None).unwrap();
     assert!(crate::emacs_core::value::eq_value(&first_lookup, &first));
     assert!(crate::emacs_core::value::eq_value(&second_lookup, &second));
 }
@@ -283,8 +303,8 @@ fn optimize_char_table_custom_test_is_noop_until_callbacks_are_supported() {
 fn set_default_via_range_nil() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::NIL, Value::fixnum(999)]).unwrap();
-    let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::NIL, Value::fixnum(999)], None).unwrap();
+    let def = builtin_char_table_range(vec![ct, Value::NIL], None).unwrap();
     assert!(def.is_fixnum());
 }
 
@@ -294,11 +314,11 @@ fn set_range_t_sets_default_value() {
     // In GNU Emacs, (set-char-table-range ct t value) sets all character
     // entries, but leaves the default slot untouched.
     let ct = make_char_table_value(Value::symbol("test"), Value::fixnum(0));
-    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)], None).unwrap();
 
-    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)]).unwrap();
-    let b = builtin_char_table_range(vec![ct, Value::fixnum('b' as i64)]).unwrap();
-    let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
+    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)], None).unwrap();
+    let b = builtin_char_table_range(vec![ct, Value::fixnum('b' as i64)], None).unwrap();
+    let def = builtin_char_table_range(vec![ct, Value::NIL], None).unwrap();
     assert!(a.is_fixnum());
     assert!(b.is_fixnum());
     assert!(def.is_fixnum());
@@ -310,12 +330,13 @@ fn set_range_t_allows_single_char_override() {
     // (set-char-table-range ct t 5) sets all characters to 5 without touching
     // the default slot. Later single-char overrides take precedence.
     let ct = make_char_table_value(Value::symbol("test"), Value::fixnum(0));
-    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)]).unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('a' as i64), Value::fixnum(9)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)], None).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('a' as i64), Value::fixnum(9)], None)
+        .unwrap();
 
-    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)]).unwrap();
-    let b = builtin_char_table_range(vec![ct, Value::fixnum('b' as i64)]).unwrap();
-    let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
+    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)], None).unwrap();
+    let b = builtin_char_table_range(vec![ct, Value::fixnum('b' as i64)], None).unwrap();
+    let def = builtin_char_table_range(vec![ct, Value::NIL], None).unwrap();
     assert!(a.is_fixnum());
     assert!(b.is_fixnum());
     assert!(def.is_fixnum());
@@ -325,18 +346,22 @@ fn set_range_t_allows_single_char_override() {
 fn later_t_write_overrides_prior_specific_entries() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::fixnum('a' as i64), Value::fixnum(9)]).unwrap();
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('0' as i64), Value::fixnum('9' as i64)),
-        Value::fixnum(7),
-    ])
+    builtin_set_char_table_range(vec![ct, Value::fixnum('a' as i64), Value::fixnum(9)], None)
+        .unwrap();
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('0' as i64), Value::fixnum('9' as i64)),
+            Value::fixnum(7),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::T, Value::fixnum(5)], None).unwrap();
 
-    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)]).unwrap();
-    let five = builtin_char_table_range(vec![ct, Value::fixnum('5' as i64)]).unwrap();
-    let def = builtin_char_table_range(vec![ct, Value::NIL]).unwrap();
+    let a = builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)], None).unwrap();
+    let five = builtin_char_table_range(vec![ct, Value::fixnum('5' as i64)], None).unwrap();
+    let def = builtin_char_table_range(vec![ct, Value::NIL], None).unwrap();
     assert!(a.is_fixnum());
     assert!(five.is_fixnum());
     assert!(def.is_nil());
@@ -346,23 +371,25 @@ fn later_t_write_overrides_prior_specific_entries() {
 fn parent_chain_lookup() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::fixnum(65),
-        Value::symbol("from-parent"),
-    ])
+    builtin_set_char_table_range(
+        vec![parent, Value::fixnum(65), Value::symbol("from-parent")],
+        None,
+    )
     .unwrap();
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
 
     // Lookup in child falls through to parent.
-    let val = builtin_char_table_range(vec![child, Value::fixnum(65)]).unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum(65)], None).unwrap();
     assert!(val.is_symbol_named("from-parent"));
 
     // Child override takes priority.
-    builtin_set_char_table_range(vec![child, Value::fixnum(65), Value::symbol("child-val")])
-        .unwrap();
-    let val = builtin_char_table_range(vec![child, Value::fixnum(65)]).unwrap();
+    builtin_set_char_table_range(
+        vec![child, Value::fixnum(65), Value::symbol("child-val")],
+        None,
+    )
+    .unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum(65)], None).unwrap();
     assert!(val.is_symbol_named("child-val"));
 }
 
@@ -371,15 +398,21 @@ fn ascii_cache_follows_latest_write_and_default_fallback() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::symbol("default"));
 
-    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), Value::symbol("first")])
-        .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), Value::symbol("second")])
-        .unwrap();
-    let val = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('A' as i64), Value::symbol("first")],
+        None,
+    )
+    .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('A' as i64), Value::symbol("second")],
+        None,
+    )
+    .unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)], None).unwrap();
     assert!(val.is_symbol_named("second"));
 
-    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), Value::NIL]).unwrap();
-    let val = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), Value::NIL], None).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum('A' as i64)], None).unwrap();
     assert!(val.is_symbol_named("default"));
 }
 
@@ -387,24 +420,22 @@ fn ascii_cache_follows_latest_write_and_default_fallback() {
 fn ascii_cache_falls_through_to_parent_when_local_value_is_nil() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::fixnum('A' as i64),
-        Value::symbol("parent"),
-    ])
+    builtin_set_char_table_range(
+        vec![parent, Value::fixnum('A' as i64), Value::symbol("parent")],
+        None,
+    )
     .unwrap();
 
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::fixnum('A' as i64),
-        Value::symbol("child"),
-    ])
+    builtin_set_char_table_range(
+        vec![child, Value::fixnum('A' as i64), Value::symbol("child")],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![child, Value::fixnum('A' as i64), Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![child, Value::fixnum('A' as i64), Value::NIL], None).unwrap();
 
-    let val = builtin_char_table_range(vec![child, Value::fixnum('A' as i64)]).unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum('A' as i64)], None).unwrap();
     assert!(val.is_symbol_named("parent"));
 }
 
@@ -477,13 +508,14 @@ fn char_table_extra_slot_preserves_data() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
     // Set a char entry first.
-    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::symbol("a-val")]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::symbol("a-val")], None)
+        .unwrap();
     // Attempting to set an out-of-range extra slot should fail.
     assert!(
         builtin_set_char_table_extra_slot(vec![ct, Value::fixnum(0), Value::symbol("e0")]).is_err()
     );
     // The char entry should still be intact.
-    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)]).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)], None).unwrap();
     assert!(val.is_symbol_named("a-val"));
     // Extra slot remains out-of-range.
     assert!(builtin_char_table_extra_slot(vec![ct, Value::fixnum(0)]).is_err());
@@ -501,9 +533,9 @@ fn char_table_subtype() {
 fn char_table_overwrite_entry() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::fixnum(1)]).unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::fixnum(2)]).unwrap();
-    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::fixnum(1)], None).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::fixnum(65), Value::fixnum(2)], None).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum(65)], None).unwrap();
     assert!(val.is_fixnum());
 }
 
@@ -511,16 +543,22 @@ fn char_table_overwrite_entry() {
 fn later_range_overrides_earlier_single_entry() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::fixnum('M' as i64), Value::symbol("single")])
-        .unwrap();
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
-        Value::symbol("range"),
-    ])
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('M' as i64), Value::symbol("single")],
+        None,
+    )
+    .unwrap();
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
+            Value::symbol("range"),
+        ],
+        None,
+    )
     .unwrap();
 
-    let val = builtin_char_table_range(vec![ct, Value::fixnum('M' as i64)]).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum('M' as i64)], None).unwrap();
     assert!(val.is_symbol_named("range"));
 }
 
@@ -528,18 +566,17 @@ fn later_range_overrides_earlier_single_entry() {
 fn explicit_nil_entry_inherits_from_parent() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::fixnum('a' as i64),
-        Value::symbol("parent-a"),
-    ])
+    builtin_set_char_table_range(
+        vec![parent, Value::fixnum('a' as i64), Value::symbol("parent-a")],
+        None,
+    )
     .unwrap();
 
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
-    builtin_set_char_table_range(vec![child, Value::fixnum('a' as i64), Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![child, Value::fixnum('a' as i64), Value::NIL], None).unwrap();
 
-    let val = builtin_char_table_range(vec![child, Value::fixnum('a' as i64)]).unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum('a' as i64)], None).unwrap();
     assert!(val.is_symbol_named("parent-a"));
 }
 
@@ -558,14 +595,20 @@ fn set_char_table_parent_rejects_cycles() {
 fn map_char_table_coalesces_ranges_after_single_override() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
-        Value::symbol("upper"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
+            Value::symbol("upper"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('M' as i64), Value::symbol("middle")])
-        .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('M' as i64), Value::symbol("middle")],
+        None,
+    )
+    .unwrap();
 
     let entries = ct_resolved_entries(&ct);
     assert_eq!(entries.len(), 3);
@@ -589,12 +632,21 @@ fn map_char_table_coalesces_ranges_after_single_override() {
 fn map_char_table_coalesces_adjacent_single_overrides() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![ct, Value::fixnum('A' as i64), Value::symbol("upper")])
-        .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('B' as i64), Value::symbol("upper")])
-        .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('Z' as i64), Value::symbol("last")])
-        .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('A' as i64), Value::symbol("upper")],
+        None,
+    )
+    .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('B' as i64), Value::symbol("upper")],
+        None,
+    )
+    .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('Z' as i64), Value::symbol("last")],
+        None,
+    )
+    .unwrap();
 
     let entries = ct_resolved_entries(&ct);
     assert_eq!(
@@ -613,22 +665,28 @@ fn map_char_table_coalesces_adjacent_single_overrides() {
 fn map_char_table_latest_nil_entry_falls_back_to_parent_run() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
-        Value::symbol("parent"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            parent,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
+            Value::symbol("parent"),
+        ],
+        None,
+    )
     .unwrap();
 
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
-        Value::symbol("child"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
+            Value::symbol("child"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![child, Value::fixnum('M' as i64), Value::NIL]).unwrap();
+    builtin_set_char_table_range(vec![child, Value::fixnum('M' as i64), Value::NIL], None).unwrap();
 
     let entries = ct_resolved_entries(&child);
     assert_eq!(
@@ -651,38 +709,53 @@ fn map_char_table_latest_nil_entry_falls_back_to_parent_run() {
 fn effective_runs_parent_fallback_handles_multiple_nil_child_spans() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
-        Value::symbol("parent-left"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            parent,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
+            Value::symbol("parent-left"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
-        Value::symbol("parent-right"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            parent,
+            Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
+            Value::symbol("parent-right"),
+        ],
+        None,
+    )
     .unwrap();
 
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('I' as i64)),
-        Value::symbol("child"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('I' as i64)),
+            Value::symbol("child"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('B' as i64), Value::fixnum('C' as i64)),
-        Value::NIL,
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('B' as i64), Value::fixnum('C' as i64)),
+            Value::NIL,
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('G' as i64), Value::fixnum('H' as i64)),
-        Value::NIL,
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('G' as i64), Value::fixnum('H' as i64)),
+            Value::NIL,
+        ],
+        None,
+    )
     .unwrap();
 
     let entries = ct_resolved_entries(&child);
@@ -711,26 +784,35 @@ fn effective_runs_parent_fallback_handles_multiple_nil_child_spans() {
 fn atomic_runs_in_range_preserve_child_shadowing_and_parent_fallback() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        parent,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
-        Value::symbol("parent"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            parent,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
+            Value::symbol("parent"),
+        ],
+        None,
+    )
     .unwrap();
 
     let child = make_char_table_value(Value::symbol("test"), Value::NIL);
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
-        Value::symbol("child"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('F' as i64)),
+            Value::symbol("child"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![
-        child,
-        Value::cons(Value::fixnum('C' as i64), Value::fixnum('D' as i64)),
-        Value::NIL,
-    ])
+    builtin_set_char_table_range(
+        vec![
+            child,
+            Value::cons(Value::fixnum('C' as i64), Value::fixnum('D' as i64)),
+            Value::NIL,
+        ],
+        None,
+    )
     .unwrap();
 
     let runs =
@@ -750,14 +832,20 @@ fn map_char_table_shared_range_survives_callback_gc() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    builtin_set_char_table_range(vec![
-        ct,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
-        Value::symbol("upper"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            ct,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('Z' as i64)),
+            Value::symbol("upper"),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![ct, Value::fixnum('M' as i64), Value::symbol("middle")])
-        .unwrap();
+    builtin_set_char_table_range(
+        vec![ct, Value::fixnum('M' as i64), Value::symbol("middle")],
+        None,
+    )
+    .unwrap();
 
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(ct);
@@ -795,13 +883,20 @@ fn map_char_table_decodes_unicode_property_run_length_values() {
         Value::vector(vec![Value::NIL, Value::symbol("Lu"), Value::symbol("Ll")]),
     ])
     .unwrap();
-    builtin_set_char_table_range(vec![
-        table,
-        Value::cons(Value::fixnum('A' as i64), Value::fixnum('B' as i64)),
-        Value::fixnum(1),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            table,
+            Value::cons(Value::fixnum('A' as i64), Value::fixnum('B' as i64)),
+            Value::fixnum(1),
+        ],
+        None,
+    )
     .unwrap();
-    builtin_set_char_table_range(vec![table, Value::fixnum('c' as i64), Value::fixnum(2)]).unwrap();
+    builtin_set_char_table_range(
+        vec![table, Value::fixnum('c' as i64), Value::fixnum(2)],
+        None,
+    )
+    .unwrap();
 
     let mut values = Vec::new();
     for_each_char_table_mapping(&table, |_key, value| {
@@ -821,23 +916,26 @@ fn char_table_range_uncompresses_unicode_property_character_blocks() {
     builtin_set_char_table_extra_slot(vec![table, Value::fixnum(0), Value::symbol("uppercase")])
         .unwrap();
     builtin_set_char_table_extra_slot(vec![table, Value::fixnum(2), Value::fixnum(0)]).unwrap();
-    builtin_set_char_table_range(vec![
-        table,
-        Value::cons(Value::fixnum(128), Value::fixnum(255)),
-        Value::string("\u{1}\u{2}AB"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            table,
+            Value::cons(Value::fixnum(128), Value::fixnum(255)),
+            Value::string("\u{1}\u{2}AB"),
+        ],
+        None,
+    )
     .unwrap();
 
     assert_eq!(
-        builtin_char_table_range(vec![table, Value::fixnum(129)]).unwrap(),
+        builtin_char_table_range(vec![table, Value::fixnum(129)], None).unwrap(),
         Value::NIL
     );
     assert_eq!(
-        builtin_char_table_range(vec![table, Value::fixnum(130)]).unwrap(),
+        builtin_char_table_range(vec![table, Value::fixnum(130)], None).unwrap(),
         Value::fixnum('A' as i64)
     );
     assert_eq!(
-        builtin_char_table_range(vec![table, Value::fixnum(131)]).unwrap(),
+        builtin_char_table_range(vec![table, Value::fixnum(131)], None).unwrap(),
         Value::fixnum('B' as i64)
     );
 }
@@ -860,11 +958,14 @@ fn get_unicode_property_internal_uncompresses_run_length_blocks() {
         Value::vector(vec![Value::NIL, Value::symbol("Lu"), Value::symbol("Ll")]),
     ])
     .unwrap();
-    builtin_set_char_table_range(vec![
-        table,
-        Value::cons(Value::fixnum(256), Value::fixnum(383)),
-        Value::string("\u{2}\u{1}\u{83}\u{2}"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            table,
+            Value::cons(Value::fixnum(256), Value::fixnum(383)),
+            Value::string("\u{2}\u{1}\u{83}\u{2}"),
+        ],
+        None,
+    )
     .unwrap();
 
     assert_eq!(
@@ -1211,11 +1312,14 @@ fn format_percent_s_prints_unicode_property_table_as_gnu_char_table() {
     ])
     .unwrap();
     builtin_set_char_table_extra_slot(vec![table, Value::fixnum(1), Value::fixnum(0)]).unwrap();
-    builtin_set_char_table_range(vec![
-        table,
-        Value::cons(Value::fixnum(256), Value::fixnum(383)),
-        Value::string("\u{2}\u{1}\u{83}\u{2}"),
-    ])
+    builtin_set_char_table_range(
+        vec![
+            table,
+            Value::cons(Value::fixnum(256), Value::fixnum(383)),
+            Value::string("\u{2}\u{1}\u{83}\u{2}"),
+        ],
+        None,
+    )
     .unwrap();
 
     let formatted =
@@ -1239,10 +1343,10 @@ fn char_table_p_on_plain_vector() {
 #[test]
 fn char_table_wrong_type_signals() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_char_table_range(vec![Value::fixnum(5), Value::fixnum(65)]);
+    let result = builtin_char_table_range(vec![Value::fixnum(5), Value::fixnum(65)], None);
     assert!(result.is_err());
     let result =
-        builtin_set_char_table_range(vec![Value::NIL, Value::fixnum(65), Value::fixnum(1)]);
+        builtin_set_char_table_range(vec![Value::NIL, Value::fixnum(65), Value::fixnum(1)], None);
     assert!(result.is_err());
     let result = builtin_char_table_parent(vec![Value::string("not-a-table")]);
     assert!(result.is_err());
@@ -1254,8 +1358,8 @@ fn char_table_wrong_arg_count() {
     // builtin_make_char_table arity is validated by the Context dispatch
     // layer; make_char_table_value doesn't validate, so skip that assertion.
     assert!(builtin_char_table_p(vec![]).is_err());
-    assert!(builtin_char_table_range(vec![Value::NIL]).is_err());
-    assert!(builtin_set_char_table_range(vec![Value::NIL, Value::NIL]).is_err());
+    assert!(builtin_char_table_range(vec![Value::NIL], None).is_err());
+    assert!(builtin_set_char_table_range(vec![Value::NIL, Value::NIL], None).is_err());
 }
 
 #[test]
@@ -1263,9 +1367,9 @@ fn char_table_char_key() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
     // Use Value::Char for setting.
-    builtin_set_char_table_range(vec![ct, Value::char('Z'), Value::symbol("zee")]).unwrap();
+    builtin_set_char_table_range(vec![ct, Value::char('Z'), Value::symbol("zee")], None).unwrap();
     // Look up with Int.
-    let val = builtin_char_table_range(vec![ct, Value::fixnum('Z' as i64)]).unwrap();
+    let val = builtin_char_table_range(vec![ct, Value::fixnum('Z' as i64)], None).unwrap();
     assert!(val.is_symbol_named("zee"));
 }
 
@@ -1278,7 +1382,7 @@ fn parent_default_fallback() {
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
 
     // Child has no entry, parent has no entry, parent default is used.
-    let val = builtin_char_table_range(vec![child, Value::fixnum(100)]).unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum(100)], None).unwrap();
     assert!(val.is_symbol_named("parent-default"));
 }
 
@@ -1289,7 +1393,7 @@ fn non_nil_child_default_overrides_parent_lookup() {
     let child = make_char_table_value(Value::symbol("test"), Value::fixnum(0));
     builtin_set_char_table_parent(vec![child, parent]).unwrap();
 
-    let val = builtin_char_table_range(vec![child, Value::fixnum('a' as i64)]).unwrap();
+    let val = builtin_char_table_range(vec![child, Value::fixnum('a' as i64)], None).unwrap();
     assert!(val.is_fixnum());
 }
 
@@ -1551,7 +1655,8 @@ fn bool_vector_wrong_arg_count() {
 fn char_table_range_invalid_range_type() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
-    let result = builtin_set_char_table_range(vec![ct, Value::string("invalid"), Value::fixnum(1)]);
+    let result =
+        builtin_set_char_table_range(vec![ct, Value::string("invalid"), Value::fixnum(1)], None);
     match result {
         Err(Flow::Signal(signal)) => {
             assert_eq!(signal.symbol_name(), "error");
@@ -1560,9 +1665,12 @@ fn char_table_range_invalid_range_type() {
                     .data
                     .first()
                     .and_then(|v| v.as_utf8_str())
-                    .is_some_and(
-                        |message| message == "Invalid RANGE argument to `set-char-table-range'"
-                    )
+                    .is_some_and(|message| {
+                        // GNU requotes C-level `error()` messages via `doprnt`
+                        // (`text-quoting-style' = `curve' in batch), turning the
+                        // grave accent/apostrophe into curly quotes.
+                        message == "Invalid RANGE argument to \u{2018}set-char-table-range\u{2019}"
+                    })
             );
         }
         other => panic!("expected invalid range error, got {other:?}"),
@@ -1575,15 +1683,15 @@ fn char_table_range_reverse_cons_returns_value_without_changing_entries() {
     let ct = make_char_table_value(Value::symbol("test"), Value::fixnum(0));
     let range = Value::cons(Value::fixnum(70), Value::fixnum(65)); // min > max
     assert_eq!(
-        builtin_set_char_table_range(vec![ct, range, Value::fixnum(1)]).unwrap(),
+        builtin_set_char_table_range(vec![ct, range, Value::fixnum(1)], None).unwrap(),
         Value::fixnum(1)
     );
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::fixnum(65)]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::fixnum(65)], None).unwrap(),
         Value::fixnum(0)
     );
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::fixnum(70)]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::fixnum(70)], None).unwrap(),
         Value::fixnum(0)
     );
 }
@@ -1594,8 +1702,8 @@ fn char_table_range_rejects_non_character_fixnum_atoms_like_gnu() {
     let ct = make_char_table_value(Value::symbol("test"), Value::NIL);
 
     for result in [
-        builtin_char_table_range(vec![ct, Value::fixnum(-1)]),
-        builtin_set_char_table_range(vec![ct, Value::fixnum(-1), Value::symbol("x")]),
+        builtin_char_table_range(vec![ct, Value::fixnum(-1)], None),
+        builtin_set_char_table_range(vec![ct, Value::fixnum(-1), Value::symbol("x")], None),
     ] {
         match result {
             Err(Flow::Signal(signal)) => {
@@ -1605,7 +1713,10 @@ fn char_table_range_rejects_non_character_fixnum_atoms_like_gnu() {
                         .data
                         .first()
                         .and_then(|v| v.as_utf8_str())
-                        .is_some_and(|message| message.starts_with("Invalid RANGE argument to `"))
+                        .is_some_and(|message| {
+                            // Curly quotes from GNU's `doprnt` requoting (curve style).
+                            message.starts_with("Invalid RANGE argument to \u{2018}")
+                        })
                 );
             }
             other => panic!("expected invalid range error, got {other:?}"),
@@ -1620,15 +1731,15 @@ fn fillarray_preserves_ascii_cache_while_rewriting_contents_like_gnu() {
     crate::emacs_core::builtins::builtin_fillarray(vec![ct, Value::symbol("x")]).unwrap();
 
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::fixnum('a' as i64)], None).unwrap(),
         Value::symbol("base")
     );
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::fixnum(999_999)]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::fixnum(999_999)], None).unwrap(),
         Value::symbol("x")
     );
     assert_eq!(
-        builtin_char_table_range(vec![ct, Value::NIL]).unwrap(),
+        builtin_char_table_range(vec![ct, Value::NIL], None).unwrap(),
         Value::symbol("x")
     );
 
@@ -1652,7 +1763,7 @@ fn unicode_property_table_internal_returns_alist_char_table() {
         Value::vector(vec![Value::NIL, Value::symbol("letter")]),
     ])
     .unwrap();
-    builtin_set_char_table_range(vec![table, Value::fixnum(65), Value::fixnum(1)]).unwrap();
+    builtin_set_char_table_range(vec![table, Value::fixnum(65), Value::fixnum(1)], None).unwrap();
     eval.obarray.set_symbol_value(
         "char-code-property-alist",
         Value::list(vec![Value::cons(prop, table)]),

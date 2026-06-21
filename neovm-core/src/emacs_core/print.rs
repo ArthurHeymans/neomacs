@@ -1010,6 +1010,17 @@ fn with_bytecode_literal_slots<R>(value: &Value, f: impl FnOnce(&[Value]) -> R) 
     Some(result)
 }
 
+/// Public wrapper over [`with_bytecode_literal_slots`] so other modules (the
+/// princ byte printer in `misc_eval`) can iterate a byte-code object's literal
+/// slots — `[arglist, code, constants, depth, doc?, interactive?, …]` — in the
+/// same order the `#[…]` printer uses. Returns `None` for non-byte-code values.
+pub(crate) fn with_bytecode_literal_slots_public<R>(
+    value: &Value,
+    f: impl FnOnce(&[Value]) -> R,
+) -> Option<R> {
+    with_bytecode_literal_slots(value, f)
+}
+
 fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     with_default_cycle_guard(value, out, state, |out, state| {
         let _ = with_bytecode_literal_slots(value, |slots| {

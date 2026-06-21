@@ -15,7 +15,7 @@ fn make_category_table_matches_gnu_shape() {
     assert!(builtin_category_table_p(vec![table]).unwrap().is_truthy());
 
     let default =
-        super::super::chartable::builtin_char_table_range(vec![table, Value::NIL]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![table, Value::NIL], None).unwrap();
     assert!(
         super::super::chartable::builtin_bool_vector_p(vec![default])
             .unwrap()
@@ -64,7 +64,7 @@ fn copy_category_table_deep_copies_docstrings_and_sets() {
     );
     assert_eq!(
         builtin_category_set_mnemonics(vec![
-            super::super::chartable::builtin_char_table_range(vec![table, Value::char('B')])
+            super::super::chartable::builtin_char_table_range(vec![table, Value::char('B')], None)
                 .unwrap(),
         ])
         .unwrap(),
@@ -72,7 +72,7 @@ fn copy_category_table_deep_copies_docstrings_and_sets() {
     );
     assert_eq!(
         builtin_category_set_mnemonics(vec![
-            super::super::chartable::builtin_char_table_range(vec![copy, Value::char('B')])
+            super::super::chartable::builtin_char_table_range(vec![copy, Value::char('B')], None)
                 .unwrap(),
         ])
         .unwrap(),
@@ -167,8 +167,9 @@ fn modify_category_entry_honors_optional_table_argument() {
     .unwrap();
 
     for ch in ['A', 'B', 'C'] {
-        let set = super::super::chartable::builtin_char_table_range(vec![table, Value::char(ch)])
-            .unwrap();
+        let set =
+            super::super::chartable::builtin_char_table_range(vec![table, Value::char(ch)], None)
+                .unwrap();
         assert_eq!(
             builtin_category_set_mnemonics(vec![set]).unwrap(),
             Value::string("!")
@@ -176,7 +177,8 @@ fn modify_category_entry_honors_optional_table_argument() {
     }
     let current = builtin_category_table(&mut eval, vec![]).unwrap();
     let current_set =
-        super::super::chartable::builtin_char_table_range(vec![current, Value::char('A')]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![current, Value::char('A')], None)
+            .unwrap();
     assert_eq!(
         builtin_category_set_mnemonics(vec![current_set]).unwrap(),
         Value::string("")
@@ -211,9 +213,11 @@ fn modify_category_entry_range_preserves_existing_subranges() {
     .unwrap();
 
     let a_set =
-        super::super::chartable::builtin_char_table_range(vec![table, Value::char('A')]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('A')], None)
+            .unwrap();
     let b_set =
-        super::super::chartable::builtin_char_table_range(vec![table, Value::char('B')]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('B')], None)
+            .unwrap();
     assert_eq!(
         builtin_category_set_mnemonics(vec![a_set]).unwrap(),
         Value::string("!#")
@@ -237,9 +241,11 @@ fn modify_category_entry_interns_equal_category_sets() {
         .unwrap();
 
     let a_set =
-        super::super::chartable::builtin_char_table_range(vec![table, Value::char('a')]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('a')], None)
+            .unwrap();
     let b_set =
-        super::super::chartable::builtin_char_table_range(vec![table, Value::char('b')]).unwrap();
+        super::super::chartable::builtin_char_table_range(vec![table, Value::char('b')], None)
+            .unwrap();
     assert_eq!(a_set, b_set);
 }
 

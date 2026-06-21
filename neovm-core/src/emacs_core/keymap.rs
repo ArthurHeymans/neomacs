@@ -853,8 +853,8 @@ fn lookup_in_keymap_level_impl(
                 if (code & KEY_CHAR_MOD_MASK) == 0 {
                     let base = code & KEY_CHAR_CODE_MASK;
                     if base >= 0 && base <= 0x3FFFFF {
-                        let result =
-                            builtin_char_table_range(vec![entry_car, *event]).unwrap_or(Value::NIL);
+                        let result = builtin_char_table_range(vec![entry_car, *event], None)
+                            .unwrap_or(Value::NIL);
                         if !result.is_nil() {
                             // Qt in char-table means explicitly nil binding
                             // (shadows parent), matching GNU keymap.c:455-459
@@ -1349,7 +1349,8 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                         } else {
                             def
                         };
-                        let _ = builtin_set_char_table_range(vec![entry_car, event, store_val]);
+                        let _ =
+                            builtin_set_char_table_range(vec![entry_car, event, store_val], None);
                         return;
                     }
                 }
@@ -3218,7 +3219,8 @@ fn copy_char_table_for_keymap(ct: &Value, depth: usize) -> Value {
     };
     for (range, value) in entries {
         let copied_value = copy_keymap_item(&value, depth + 1);
-        let _ = super::chartable::builtin_set_char_table_range(vec![copied, range, copied_value]);
+        let _ =
+            super::chartable::builtin_set_char_table_range(vec![copied, range, copied_value], None);
     }
 
     if copied.is_vector() {

@@ -48,11 +48,10 @@ fn fillarray_char_table_preserves_shape_and_updates_default_slot() {
         Value::symbol("syntax-table"),
         Value::fixnum(0),
     );
-    crate::emacs_core::chartable::builtin_set_char_table_range(vec![
-        table,
-        Value::fixnum('a' as i64),
-        Value::fixnum(9),
-    ])
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![table, Value::fixnum('a' as i64), Value::fixnum(9)],
+        None,
+    )
     .unwrap();
 
     let out =
@@ -67,15 +66,16 @@ fn fillarray_char_table_preserves_shape_and_updates_default_slot() {
         Value::symbol("syntax-table")
     );
     assert_eq!(
-        crate::emacs_core::chartable::builtin_char_table_range(vec![
-            table,
-            Value::fixnum('a' as i64)
-        ])
+        crate::emacs_core::chartable::builtin_char_table_range(
+            vec![table, Value::fixnum('a' as i64)],
+            None
+        )
         .unwrap(),
         Value::fixnum(9)
     );
     assert_eq!(
-        crate::emacs_core::chartable::builtin_char_table_range(vec![table, Value::NIL]).unwrap(),
+        crate::emacs_core::chartable::builtin_char_table_range(vec![table, Value::NIL], None)
+            .unwrap(),
         Value::fixnum(7)
     );
 }

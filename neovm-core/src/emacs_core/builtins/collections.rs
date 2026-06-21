@@ -195,19 +195,17 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::CharTable) => {
             let ch = expect_char_table_index(&args[1])?;
-            super::chartable::builtin_set_char_table_range(vec![
-                args[0],
-                Value::fixnum(ch),
-                args[2],
-            ])
+            super::chartable::builtin_set_char_table_range(
+                vec![args[0], Value::fixnum(ch), args[2]],
+                None,
+            )
         }
         ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(&args[0]) => {
             let ch = expect_char_table_index(&args[1])?;
-            super::chartable::builtin_set_char_table_range(vec![
-                args[0],
-                Value::fixnum(ch),
-                args[2],
-            ])
+            super::chartable::builtin_set_char_table_range(
+                vec![args[0], Value::fixnum(ch), args[2]],
+                None,
+            )
         }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             let idx = idx_fixnum as usize;

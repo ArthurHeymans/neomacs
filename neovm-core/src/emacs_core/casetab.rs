@@ -529,7 +529,7 @@ fn range_bounds(key: Value) -> Option<(i64, i64)> {
 }
 
 fn set_char_table_range_value(table: Value, range: Value, value: Value) -> Result<(), Flow> {
-    super::chartable::builtin_set_char_table_range(vec![table, range, value])?;
+    super::chartable::builtin_set_char_table_range(vec![table, range, value], None)?;
     Ok(())
 }
 

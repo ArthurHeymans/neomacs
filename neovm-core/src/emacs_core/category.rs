@@ -289,13 +289,12 @@ fn deep_copy_category_table(source: &Value) -> EvalResult {
     // payloads. Building a fresh category table object here avoids
     // aliasing the original table's nested chartable vectors.
     let copy = make_category_table_object()?;
-    let default = super::chartable::builtin_char_table_range(vec![*source, Value::NIL])?;
+    let default = super::chartable::builtin_char_table_range(vec![*source, Value::NIL], None)?;
     if default.is_vector() {
-        super::chartable::builtin_set_char_table_range(vec![
-            copy,
-            Value::NIL,
-            clone_vector_value(&default)?,
-        ])?;
+        super::chartable::builtin_set_char_table_range(
+            vec![copy, Value::NIL, clone_vector_value(&default)?],
+            None,
+        )?;
     }
 
     let docstrings = super::chartable::builtin_char_table_extra_slot(vec![
@@ -323,7 +322,7 @@ fn deep_copy_category_table(source: &Value) -> EvalResult {
         } else {
             value
         };
-        super::chartable::builtin_set_char_table_range(vec![copy, key, copied])?;
+        super::chartable::builtin_set_char_table_range(vec![copy, key, copied], None)?;
     }
 
     Ok(copy)
@@ -647,11 +646,10 @@ pub(crate) fn builtin_modify_category_entry(
         let has_category = category_set_contains(&existing, category)?;
         if has_category == reset {
             let updated = category_set_with_member(table, existing, category, !reset)?;
-            super::chartable::builtin_set_char_table_range(vec![
-                table,
-                Value::fixnum(start),
-                updated,
-            ])?;
+            super::chartable::builtin_set_char_table_range(
+                vec![table, Value::fixnum(start), updated],
+                None,
+            )?;
         }
         return Ok(Value::NIL);
     }
@@ -668,7 +666,7 @@ pub(crate) fn builtin_modify_category_entry(
             } else {
                 Value::cons(Value::fixnum(cursor), Value::fixnum(chunk_end))
             };
-            super::chartable::builtin_set_char_table_range(vec![table, key, updated])?;
+            super::chartable::builtin_set_char_table_range(vec![table, key, updated], None)?;
         }
     }
 
@@ -751,7 +749,7 @@ pub(crate) fn builtin_char_category_set(
     expect_args("char-category-set", &args, 1)?;
     let _ = extract_char_code(&args[0], "char-category-set")?;
     let table = current_buffer_category_table_in_buffers(&mut eval.buffers)?;
-    super::chartable::builtin_char_table_range(vec![table, args[0]])
+    super::chartable::builtin_char_table_range(vec![table, args[0]], None)
 }
 
 pub(crate) fn builtin_category_table(

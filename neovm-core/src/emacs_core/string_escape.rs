@@ -500,6 +500,25 @@ fn push_octal_escape(out: &mut Vec<u8>, byte: u8) {
     out.push(b'0' + (byte & 7));
 }
 
+/// Render a unibyte string's bytes the way GNU's `print_string`
+/// (`src/print.c`) does under `princ` (escapeflag=false) when the string is a
+/// nested element printed via `print_object`: raw eight-bit bytes (`>= 0x80`)
+/// are octal-escaped as `\NNN` (via `string_escape_byte8`), while ASCII and
+/// control bytes pass through verbatim and there are no surrounding quotes.
+/// Used by the princ printer for nested strings (e.g. a byte-code object's
+/// code string), so `(format "%s" (byte-compile …))` matches GNU byte-for-byte.
+pub(crate) fn octal_escape_unibyte_eight_bit(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    for &b in bytes {
+        if b >= 0x80 {
+            push_octal_escape(&mut out, b);
+        } else {
+            out.push(b);
+        }
+    }
+    out
+}
+
 fn push_escaped_literal_byte(out: &mut Vec<u8>, byte: u8) {
     match byte {
         b'"' => out.extend_from_slice(br#"\""#),

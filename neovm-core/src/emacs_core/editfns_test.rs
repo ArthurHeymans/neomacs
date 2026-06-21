@@ -306,11 +306,10 @@ fn translate_region_accepts_real_char_table_translation_table() {
         .expect("insert test text");
 
     let table = Value::make_char_table(Value::symbol("translation-table"), Value::NIL, 0);
-    crate::emacs_core::chartable::builtin_set_char_table_range(vec![
-        table,
-        Value::fixnum('b' as i64),
-        Value::fixnum('x' as i64),
-    ])
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![table, Value::fixnum('b' as i64), Value::fixnum('x' as i64)],
+        None,
+    )
     .expect("set translation table entry");
 
     let changed = builtin_translate_region_internal(

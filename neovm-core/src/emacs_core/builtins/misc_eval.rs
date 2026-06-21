@@ -1592,6 +1592,23 @@ pub(crate) fn print_value_princ_bytes(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
 ) -> Vec<u8> {
+    // Top-level `%s`/`princ`: a string ARGUMENT is inserted by `Fformat` /
+    // `princ` directly, without `print_object`, so its raw bytes pass through
+    // verbatim. Non-string arguments are printed via `print_object`, which
+    // octal-escapes any eight-bit bytes in nested strings.
+    print_value_princ_bytes_inner(ctx, value, false)
+}
+
+/// `nested` is true for elements reached through an aggregate (list, vector,
+/// record, byte-code object, …), i.e. printed by GNU's
+/// `print_object (…, escapeflag=false)`. In that path, GNU's `print_string`
+/// octal-escapes eight-bit bytes (`\NNN`) even though it omits the surrounding
+/// quotes; only a TOP-LEVEL string argument to `%s`/`princ` is emitted raw.
+fn print_value_princ_bytes_inner(
+    ctx: &crate::emacs_core::eval::Context,
+    value: &Value,
+    nested: bool,
+) -> Vec<u8> {
     let print_quoted = ctx
         .obarray
         .symbol_value("print-quoted")
@@ -1605,6 +1622,7 @@ pub(crate) fn print_value_princ_bytes(
             v,
         )
     };
+    let recurse = |v: &Value| print_value_princ_bytes_inner(ctx, v, true);
     if super::terminal::pure::print_terminal_handle(value).is_some()
         || ctx.threads.thread_id_from_handle(value).is_some()
         || ctx.threads.mutex_id_from_handle(value).is_some()
@@ -1623,6 +1641,13 @@ pub(crate) fn print_value_princ_bytes(
                     // Already canonical Emacs internal encoding — a real
                     // Private-Use glyph survives verbatim (issue #131).
                     ls.as_bytes().to_vec()
+                } else if nested {
+                    // Nested under `print_object` (escapeflag=false): GNU's
+                    // `print_string` octal-escapes the raw eight-bit bytes
+                    // (`\NNN`) while still omitting the surrounding quotes. This
+                    // is what makes `(format "%s" (byte-compile …))` render the
+                    // code string as `\211\300…` rather than the raw bytes.
+                    crate::emacs_core::string_escape::octal_escape_unibyte_eight_bit(ls.as_bytes())
                 } else {
                     // A unibyte string's raw bytes are not a valid multibyte
                     // sequence; promote high bytes to eight-bit characters so
@@ -1644,9 +1669,7 @@ pub(crate) fn print_value_princ_bytes(
         }
         ValueKind::Cons => {
             if let Some(shorthand) =
-                print_value_princ_bytes_list_shorthand(value, print_quoted, &|item| {
-                    print_value_princ_bytes(ctx, item)
-                })
+                print_value_princ_bytes_list_shorthand(value, print_quoted, &recurse)
             {
                 return shorthand;
             }
@@ -1661,7 +1684,7 @@ pub(crate) fn print_value_princ_bytes(
                         }
                         let pair_car = cursor.cons_car();
                         let pair_cdr = cursor.cons_cdr();
-                        out.extend_from_slice(&print_value_princ_bytes(ctx, &pair_car));
+                        out.extend_from_slice(&recurse(&pair_car));
                         cursor = pair_cdr;
                         first = false;
                     }
@@ -1670,7 +1693,7 @@ pub(crate) fn print_value_princ_bytes(
                         if !first {
                             out.extend_from_slice(b" . ");
                         }
-                        out.extend_from_slice(&print_value_princ_bytes(ctx, &cursor));
+                        out.extend_from_slice(&recurse(&cursor));
                         break;
                     }
                 }
@@ -1688,7 +1711,7 @@ pub(crate) fn print_value_princ_bytes(
                 if i > 0 {
                     out.push(b' ');
                 }
-                out.extend_from_slice(&print_value_princ_bytes(ctx, item));
+                out.extend_from_slice(&recurse(item));
             }
             out.push(b']');
             out
@@ -1700,10 +1723,40 @@ pub(crate) fn print_value_princ_bytes(
                 if i > 0 {
                     out.push(b' ');
                 }
-                out.extend_from_slice(&print_value_princ_bytes(ctx, item));
+                out.extend_from_slice(&recurse(item));
             }
             out.push(b')');
             out
+        }
+        // Byte-code objects, interpreted closures, etc. are printed by GNU's
+        // `princ` through `print_object (obj, printcharfun, escapeflag=false)`
+        // (`src/print.c`), recursing into the slots WITHOUT the escape flag, so
+        // nested strings drop their surrounding quotes — but eight-bit bytes are
+        // still octal-escaped by `print_string` (handled by the `nested` String
+        // arm above). Previously these fell through to `prin1_bytes`, which kept
+        // the quotes: `(format "%s" (byte-compile …))` printed `#[257 "\211…"]`
+        // where GNU prints `#[257 \211…]`. Recurse over the byte-code literal
+        // slots in princ mode to match GNU byte-for-byte.
+        ValueKind::Veclike(VecLikeType::ByteCode) => {
+            let mut out = b"#[".to_vec();
+            if let Some(slot_bytes) =
+                super::print::with_bytecode_literal_slots_public(value, |slots| {
+                    let mut inner = Vec::new();
+                    for (i, item) in slots.iter().enumerate() {
+                        if i > 0 {
+                            inner.push(b' ');
+                        }
+                        inner.extend_from_slice(&recurse(item));
+                    }
+                    inner
+                })
+            {
+                out.extend_from_slice(&slot_bytes);
+                out.push(b']');
+                out
+            } else {
+                prin1_bytes(value)
+            }
         }
         _other => prin1_bytes(value),
     }

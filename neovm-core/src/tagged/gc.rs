@@ -895,6 +895,16 @@ pub struct TaggedHeap {
     /// `mark_and_sweep_weak_table_contents`). Holds raw object pointers, valid
     /// only within a single collection; cleared each cycle.
     weak_hash_tables: Vec<*mut HashTableObj>,
+    /// Weak hash tables that have become PERMANENT (tenured old generation or
+    /// mapped pdump image). The main mark never re-runs `trace_veclike` on a
+    /// permanent-black object, so such a table would otherwise never re-register
+    /// itself for the weak sweep and its entries would be pinned forever (a
+    /// weak-table leak: GNU re-sweeps every weak table on every GC). Populated
+    /// at `promote_and_blacken` (tenuring) and at mapped-dump registration;
+    /// seeded into `weak_hash_tables` at the start of every `mark_and_sweep_
+    /// weak_tables` so permanent weak tables are swept against the CURRENT cycle's
+    /// marks exactly like young ones. Permanent, so its pointers never dangle.
+    permanent_weak_hash_tables: Vec<*mut HashTableObj>,
 
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
@@ -1062,6 +1072,7 @@ impl TaggedHeap {
             live_bytes: 0,
             gray_queue: Vec::new(),
             weak_hash_tables: Vec::new(),
+            permanent_weak_hash_tables: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
@@ -2280,6 +2291,21 @@ impl TaggedHeap {
         while !obj.is_null() {
             unsafe {
                 (*obj).tenured = true;
+                // A weak hash table being tenured becomes permanent-black and the
+                // main mark will never re-touch it; record it so the weak sweep
+                // keeps re-evaluating its entries every GC (GNU sweeps every weak
+                // table every GC). See `permanent_weak_hash_tables`.
+                if (*obj).kind == HeapObjectKind::VecLike {
+                    let vptr = obj as *mut VecLikeHeader;
+                    if (*vptr).type_tag == VecLikeType::HashTable {
+                        let ht_ptr = vptr as *mut HashTableObj;
+                        if (*ht_ptr).table.weakness.is_some()
+                            && !self.permanent_weak_hash_tables.contains(&ht_ptr)
+                        {
+                            self.permanent_weak_hash_tables.push(ht_ptr);
+                        }
+                    }
+                }
                 tail = obj;
                 obj = (*obj).next;
             }
@@ -2304,6 +2330,33 @@ impl TaggedHeap {
         }
         for object in &mut self.mapped_string_objects {
             object.marked = true;
+        }
+        // Mapped (pdump) weak hash tables become permanent-black here too (the
+        // preloaded image ships several, e.g. `print-number-table` helpers and
+        // internal caches). Like tenured weak tables, they would never be
+        // re-traced and their entries would be pinned forever; register them so
+        // `mark_and_sweep_weak_tables` re-evaluates them every GC.
+        let mapped_weak: Vec<*mut HashTableObj> = self
+            .mapped_veclike_objects
+            .iter()
+            .filter_map(|object| {
+                let header = object.header;
+                // SAFETY: `header` is a live mapped veclike for the dump's lifetime.
+                unsafe {
+                    if (*header).type_tag == VecLikeType::HashTable {
+                        let ht_ptr = header as *mut HashTableObj;
+                        if (*ht_ptr).table.weakness.is_some() {
+                            return Some(ht_ptr);
+                        }
+                    }
+                }
+                None
+            })
+            .collect();
+        for ht_ptr in mapped_weak {
+            if !self.permanent_weak_hash_tables.contains(&ht_ptr) {
+                self.permanent_weak_hash_tables.push(ht_ptr);
+            }
         }
         // 3. Remember permanents (mapped or tenured) that point at a YOUNG heap
         //    object so its children stay live. After promotion the only young
@@ -2528,19 +2581,35 @@ impl TaggedHeap {
             }
         } else if owner.is_veclike() {
             if let Some(ptr) = owner.as_veclike_ptr() {
-                // STRONG enumeration (collect_veclike_children), NOT trace_veclike:
-                // the remembered-set / SATB paths must conservatively retain weak
-                // hash-table entries. A dumped/tenured weak table is permanent-black
-                // and its entries are reached only here; trace_veclike would DEFER
-                // weak entries to mark_and_sweep_weak_tables, which historically did
-                // not run on the concurrent/incremental termination -> the entries
-                // were swept while still in the table -> UAF (caught by
-                // verify_dump_partition). collect_veclike_children traces them
-                // strongly, matching what the verifier checks. Precise weak
-                // semantics for runtime tables still apply via the weak-table sweep.
-                for child in self.collect_veclike_children(ptr as *mut VecLikeHeader) {
-                    if child.is_heap_object() {
-                        self.push_gray(child, origin);
+                // A dumped/tenured WEAK hash table is permanent-black, so the main
+                // mark never re-runs `trace_veclike` on it and it would otherwise
+                // never re-register for the weak sweep. Register it here (the
+                // remembered-set / SATB / permanent scan is the ONLY path that
+                // reaches such a table) and push only its NON-weak children
+                // (custom test/hash closures) strongly. Its weak keys/values are
+                // deliberately NOT traced here — `mark_and_sweep_weak_tables`
+                // (which runs at every mark termination, before
+                // `verify_dump_partition`) decides per-entry survival against the
+                // current marks and physically removes the dead entries, so the
+                // verifier never sees an unmarked weak child. This mirrors GNU's
+                // `mark_object` PVEC_HASH_TABLE (alloc.c): weak tables register
+                // themselves and do NOT mark their contents.
+                if let Some(weak_children) = self.register_weak_hash_table_for_sweep(ptr) {
+                    for child in weak_children {
+                        if child.is_heap_object() {
+                            self.push_gray(child, origin);
+                        }
+                    }
+                } else {
+                    // STRONG enumeration for every other veclike (and non-weak
+                    // hash tables): the remembered-set / SATB paths and the
+                    // dump-partition verifier require every heap child of a
+                    // permanent owner to be marked, or it is swept while still
+                    // referenced (UAF).
+                    for child in self.collect_veclike_children(ptr as *mut VecLikeHeader) {
+                        if child.is_heap_object() {
+                            self.push_gray(child, origin);
+                        }
                     }
                 }
             }
@@ -2835,6 +2904,52 @@ impl TaggedHeap {
         }
     }
 
+    /// If `ptr` is a WEAK hash table, register it for this cycle's weak sweep
+    /// (deduplicated) and return its NON-weak children — the custom test/hash
+    /// closures from `define-hash-table-test`, which must be traced strongly so
+    /// they outlive the table. Returns `None` for non-weak tables and every
+    /// other veclike, signalling the caller to fall back to the normal strong
+    /// child enumeration.
+    ///
+    /// This is the bridge that lets a dumped/tenured weak table — which the main
+    /// mark never re-touches because it is permanent-black — still be swept every
+    /// full collection, matching GNU (whose non-generational mark re-encounters
+    /// every live weak table every GC and rebuilds `weak_hash_tables`).
+    fn register_weak_hash_table_for_sweep(
+        &mut self,
+        ptr: *const VecLikeHeader,
+    ) -> Option<Vec<TaggedValue>> {
+        let ht_ptr = ptr as *mut HashTableObj;
+        // SAFETY: caller verified `ptr` is a live veclike; the heap is owned
+        // exclusively during marking. Reading the immutable weakness / closure
+        // fields is race-free.
+        let (is_weak, user_cmp, user_hash) = unsafe {
+            if (*ptr).type_tag != VecLikeType::HashTable {
+                return None;
+            }
+            let ht = &(*ht_ptr).table;
+            (
+                ht.weakness.is_some(),
+                ht.user_cmp_function,
+                ht.user_hash_function,
+            )
+        };
+        if !is_weak {
+            return None;
+        }
+        if !self.weak_hash_tables.contains(&ht_ptr) {
+            self.weak_hash_tables.push(ht_ptr);
+        }
+        let mut nonweak = Vec::new();
+        if let Some(f) = user_cmp {
+            nonweak.push(f);
+        }
+        if let Some(f) = user_hash {
+            nonweak.push(f);
+        }
+        Some(nonweak)
+    }
+
     /// Direct children of a mapped vectorlike object (read-only) for the verifier.
     fn collect_veclike_children(&self, ptr: *mut VecLikeHeader) -> Vec<TaggedValue> {
         let mut out = Vec::new();
@@ -3010,6 +3125,19 @@ impl TaggedHeap {
     /// in one weak table may be a key in another — then non-surviving entries
     /// are removed.
     fn mark_and_sweep_weak_tables(&mut self) {
+        // Seed every PERMANENT (tenured/mapped) weak table into this cycle's
+        // worklist. The main mark skips permanent-black objects, so these would
+        // otherwise never be swept again and their entries would be pinned
+        // forever. GNU re-encounters and re-sweeps every live weak table on every
+        // GC; this restores that for permanents. Young/runtime weak tables are
+        // already registered by `trace_veclike` / `register_weak_hash_table_for_
+        // sweep` during this cycle's mark.
+        for &tptr in &self.permanent_weak_hash_tables {
+            if !self.weak_hash_tables.contains(&tptr) {
+                self.weak_hash_tables.push(tptr);
+            }
+        }
+
         if self.weak_hash_tables.is_empty() {
             return;
         }
@@ -3853,11 +3981,15 @@ impl TaggedHeap {
                     // per-entry survival decision happens in
                     // `mark_and_sweep_weak_tables` at the stop-the-world
                     // `complete_collection`, after the main mark drains (GNU
-                    // `mark_and_sweep_weak_table_contents`). The generational
-                    // remembered-set / SATB paths (`collect_veclike_children`)
-                    // still trace weak entries strongly — conservative
-                    // over-retention for a dump-tenured weak table, never a UAF;
-                    // precise weak semantics apply to runtime weak tables.
+                    // `mark_and_sweep_weak_table_contents`). The remembered-set /
+                    // SATB / permanent-scan paths now also defer weak entries
+                    // (`register_weak_hash_table_for_sweep` registers the table
+                    // and pushes only its non-weak closures), and a tenured/mapped
+                    // weak table is re-registered every cycle via
+                    // `permanent_weak_hash_tables`, so weak semantics hold for
+                    // young, tenured, and dumped tables alike. The weak sweep runs
+                    // before `verify_dump_partition`, so dead entries are removed
+                    // before the verifier enumerates — no UAF.
                     self.weak_hash_tables.push(obj as *mut HashTableObj);
                 } else {
                     // Trace all values in the hash table

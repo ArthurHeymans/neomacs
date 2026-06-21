@@ -712,11 +712,14 @@ impl SyntaxTable {
         if self.chartable.is_nil() {
             return;
         }
-        let _ = super::chartable::builtin_set_char_table_range(vec![
-            self.chartable,
-            Value::fixnum(ch as i64),
-            syntax_entry_to_value(&entry),
-        ]);
+        let _ = super::chartable::builtin_set_char_table_range(
+            vec![
+                self.chartable,
+                Value::fixnum(ch as i64),
+                syntax_entry_to_value(&entry),
+            ],
+            None,
+        );
     }
 }
 
@@ -1975,7 +1978,7 @@ pub(crate) fn builtin_copy_syntax_table(args: Vec<Value>) -> EvalResult {
     };
 
     let copy = super::builtins::builtin_copy_sequence(vec![source])?;
-    super::chartable::builtin_set_char_table_range(vec![copy, Value::NIL, Value::NIL])?;
+    super::chartable::builtin_set_char_table_range(vec![copy, Value::NIL, Value::NIL], None)?;
     if super::chartable::builtin_char_table_parent(vec![copy])?.is_nil() {
         super::chartable::builtin_set_char_table_parent(vec![
             copy,
@@ -1997,17 +2000,15 @@ fn ensure_standard_syntax_table_object() -> EvalResult {
             super::chartable::make_char_table_value(Value::symbol("syntax-table"), whitespace);
 
         for cp in 0..=(' ' as i64 - 1) {
-            super::chartable::builtin_set_char_table_range(vec![
-                table,
-                Value::fixnum(cp),
-                punctuation,
-            ])?;
+            super::chartable::builtin_set_char_table_range(
+                vec![table, Value::fixnum(cp), punctuation],
+                None,
+            )?;
         }
-        super::chartable::builtin_set_char_table_range(vec![
-            table,
-            Value::fixnum(0x7f),
-            punctuation,
-        ])?;
+        super::chartable::builtin_set_char_table_range(
+            vec![table, Value::fixnum(0x7f), punctuation],
+            None,
+        )?;
 
         // Standard ASCII defaults — matches GNU `Fset_standard_syntax_table`
         // in `syntax.c:3476-3557`. Word: letters, digits, $ %;
@@ -2015,11 +2016,10 @@ fn ensure_standard_syntax_table_object() -> EvalResult {
         // StringDelim: "; Escape: \; Symbol: _ - + * / & | < > =;
         // Punctuation: . , ; : ? ! # @ ~ ^ ' `.
         let set = |ch: char, e: SyntaxEntry| -> Result<(), Flow> {
-            super::chartable::builtin_set_char_table_range(vec![
-                table,
-                Value::fixnum(ch as i64),
-                syntax_entry_to_value(&e),
-            ])
+            super::chartable::builtin_set_char_table_range(
+                vec![table, Value::fixnum(ch as i64), syntax_entry_to_value(&e)],
+                None,
+            )
             .map(|_| ())
         };
         for ch in [' ', '\t', '\n', '\r', '\u{000c}'] {
@@ -2050,11 +2050,14 @@ fn ensure_standard_syntax_table_object() -> EvalResult {
         for ch in ['.', ',', ';', ':', '?', '!', '#', '@', '~', '^', '\'', '`'] {
             set(ch, SyntaxEntry::simple(SyntaxClass::Punctuation))?;
         }
-        super::chartable::builtin_set_char_table_range(vec![
-            table,
-            Value::cons(Value::fixnum(0x80), Value::fixnum(0x3F_FFFF)),
-            word,
-        ])?;
+        super::chartable::builtin_set_char_table_range(
+            vec![
+                table,
+                Value::cons(Value::fixnum(0x80), Value::fixnum(0x3F_FFFF)),
+                word,
+            ],
+            None,
+        )?;
         *slot.borrow_mut() = Some(table);
         Ok(table)
     })
@@ -2227,8 +2230,9 @@ fn syntax_table_from_chartable(table: Value) -> Result<SyntaxTable, Flow> {
 
 fn syntax_entry_from_syntax_property(prop: Value, ch: char) -> Option<SyntaxEntry> {
     if builtin_syntax_table_p(vec![prop]).ok()?.is_truthy() {
-        let raw = super::chartable::builtin_char_table_range(vec![prop, Value::fixnum(ch as i64)])
-            .ok()?;
+        let raw =
+            super::chartable::builtin_char_table_range(vec![prop, Value::fixnum(ch as i64)], None)
+                .ok()?;
         syntax_entry_from_chartable_entry(&raw)
     } else {
         syntax_entry_from_chartable_entry(&prop)
@@ -2637,7 +2641,10 @@ pub(crate) fn modify_syntax_entry_in_buffers(
     } else {
         syntax_entry_to_value(&entry)
     };
-    super::chartable::builtin_set_char_table_range(vec![target_table, args[0], chartable_entry])?;
+    super::chartable::builtin_set_char_table_range(
+        vec![target_table, args[0], chartable_entry],
+        None,
+    )?;
 
     if !update_current_buffer_table {
         return Ok(Value::NIL);
