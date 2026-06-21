@@ -85,6 +85,29 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         }
     }
 
+    pub(crate) fn from_active_face_row(
+        buffer: &'source B,
+        buffer_id: BufferId,
+        append_surface: &'surface DisplayRowAppendSurface,
+        active_face: &'source DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        row_height_px: f32,
+    ) -> Self {
+        let active_face_metrics = active_face.metrics();
+        Self::new(
+            buffer,
+            buffer_id,
+            append_surface,
+            active_face,
+            glyph_y_offset,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                active_face_metrics.char_width(),
+                row_height_px,
+                active_face_metrics.ascent(),
+            ),
+        )
+    }
+
     fn active_face_context<'row>(
         &self,
         geometry: &'row DisplayRowGeometryState,

@@ -26,7 +26,7 @@ use crate::display_cursor::{
     capture_cursor_info,
 };
 use crate::display_item::{BufferDisplayPropertyReplacementItem, DisplaySourcePosition};
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::{DisplayRowAppendKind, DisplayRowAppendSurface};
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -475,18 +475,13 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             context.active_face_state,
             source_item.item_mut(),
         );
-    let active_face_metrics = active_face_state.metrics();
-    let buffer_row_append_context = BufferSourceRowAppendContext::new(
+    let buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
         buffer,
         context.buffer_id,
         context.append_surface,
         &active_face_state,
         context.glyph_y_offset,
-        DisplayRowFallbackMetrics::from_default_face_extents(
-            active_face_metrics.char_width(),
-            context.char_h,
-            active_face_metrics.ascent(),
-        ),
+        context.char_h,
     );
     let append_position = progress.row_position();
     let append_geometry = *row_geometry;
