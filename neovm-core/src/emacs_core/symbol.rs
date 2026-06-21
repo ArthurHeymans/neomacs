@@ -1606,7 +1606,7 @@ impl Obarray {
         let sym = self.ensure_symbol_id(id);
         sym.function = function;
         sym.function_unbound = false;
-        self.function_epoch = self.function_epoch.wrapping_add(1);
+        self.note_function_redefined(id);
     }
 
     /// Record that function-call behavior changed WITHOUT a cell write — the
@@ -1618,13 +1618,23 @@ impl Obarray {
         self.function_epoch = self.function_epoch.wrapping_add(1);
     }
 
+    /// A specific function `id` was redefined (cell write / fmakunbound): bump the
+    /// epoch (the coarse "any binding may have changed" signal + JIT backstop) AND
+    /// precisely evict the JIT cache entries of callers that INLINED `id`, so an
+    /// unrelated redefinition no longer re-JITs every inlined function. Pure
+    /// optimization layered on the epoch backstop — see jit::cache::evict_inline_dependents.
+    fn note_function_redefined(&mut self, id: SymId) {
+        self.function_epoch = self.function_epoch.wrapping_add(1);
+        crate::emacs_core::jit::cache::evict_inline_dependents(id);
+    }
+
     /// Set the function cell of a symbol by identity.
     pub fn set_symbol_function_id(&mut self, id: SymId, function: Value) {
         self.ensure_global_member_if_canonical(id);
         let sym = self.ensure_symbol_id(id);
         sym.function = function;
         sym.function_unbound = false;
-        self.function_epoch = self.function_epoch.wrapping_add(1);
+        self.note_function_redefined(id);
     }
 
     /// Remove the function cell (fmakunbound).
@@ -1641,7 +1651,7 @@ impl Obarray {
         sym.function_unbound = true;
         sym.function = Value::NIL;
         if !was_unbound || was_bound_function {
-            self.function_epoch = self.function_epoch.wrapping_add(1);
+            self.note_function_redefined(id);
         }
     }
 
@@ -1653,11 +1663,15 @@ impl Obarray {
 
     /// Remove function cell without marking as explicitly unbound, by identity.
     pub fn clear_function_silent_id(&mut self, id: SymId) {
+        let mut redefined = false;
         if let Some(sym) = self.slot_mut(id) {
             if !sym.function.is_nil() {
                 sym.function = Value::NIL;
-                self.function_epoch = self.function_epoch.wrapping_add(1);
+                redefined = true;
             }
+        }
+        if redefined {
+            self.note_function_redefined(id);
         }
     }
 
@@ -2159,7 +2173,7 @@ impl Obarray {
         let removed_symbol = self.clear_global_member(id);
         if removed_symbol {
             crate::emacs_core::intern::unintern_canonical_id(id);
-            self.function_epoch = self.function_epoch.wrapping_add(1);
+            self.note_function_redefined(id);
         }
         removed_symbol
     }

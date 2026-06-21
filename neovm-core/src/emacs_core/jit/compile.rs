@@ -6950,6 +6950,88 @@ mod tests {
     }
 
     #[test]
+    fn precise_eviction_only_evicts_inlined_dependents() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::SymId;
+        // F = (C a) inlines C = (* x x), so INLINE_DEPS records C -> {F}. Redefining
+        // an UNRELATED symbol D must NOT evict F (precision: no churn). Redefining C
+        // DOES evict F (so it re-JITs against the new C) and clears the dep entry.
+        // The coarse inline_epoch backstop would re-JIT regardless; this asserts the
+        // PRECISE eviction (only dependents are evicted, eagerly).
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let mk_sym = |name: &str| {
+            let s = Value::symbol(name);
+            let crate::emacs_core::value::ValueKind::Symbol(id) = s.kind() else {
+                panic!("symbol");
+            };
+            (s, id)
+        };
+        let mk_fn = |ops: Vec<Op>, consts: Vec<Value>| {
+            let mut bf = ByteCodeFunction::new(LambdaParams {
+                required: vec![SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            bf.lexical = true;
+            bf.ops = ops;
+            bf.constants = consts;
+            bf.max_stack = 16;
+            bf
+        };
+        let (c_sym, c_id) = mk_sym("jit-pe-c");
+        let (_d_sym, d_id) = mk_sym("jit-pe-d");
+        ev.obarray.set_symbol_function_id(
+            c_id,
+            Value::make_bytecode(mk_fn(vec![Op::Dup, Op::Mul, Op::Return], vec![])),
+        );
+        ev.obarray.set_symbol_function_id(
+            d_id,
+            Value::make_bytecode(mk_fn(vec![Op::Add1, Op::Return], vec![])),
+        );
+        let f = mk_fn(
+            vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return],
+            vec![c_sym],
+        );
+        let f_val = Value::make_bytecode(f.clone());
+        // Compile F (inlines C).
+        let _ = crate::emacs_core::jit::try_run_compiled(ctx, &f, f_val, &[Value::make_int(4)]);
+        let f_id = f.runtime.compiled_id_or_assign();
+        assert!(
+            crate::emacs_core::jit::cache::is_compiled_for_test(f_id),
+            "F is JIT-cached after compile"
+        );
+        assert_eq!(
+            crate::emacs_core::jit::cache::inline_dependent_count_for_test(c_id),
+            1,
+            "F recorded as inlining C"
+        );
+        // Redefine an UNRELATED symbol D -> F must NOT be evicted (precision).
+        ev.obarray.set_symbol_function_id(
+            d_id,
+            Value::make_bytecode(mk_fn(vec![Op::Sub1, Op::Return], vec![])),
+        );
+        assert!(
+            crate::emacs_core::jit::cache::is_compiled_for_test(f_id),
+            "unrelated redefinition (D) must NOT evict F"
+        );
+        // Redefine the inlined callee C -> F evicted + dep entry cleared.
+        ev.obarray.set_symbol_function_id(
+            c_id,
+            Value::make_bytecode(mk_fn(vec![Op::Add1, Op::Return], vec![])),
+        );
+        assert!(
+            !crate::emacs_core::jit::cache::is_compiled_for_test(f_id),
+            "redefining the inlined callee C evicts F (precise)"
+        );
+        assert_eq!(
+            crate::emacs_core::jit::cache::inline_dependent_count_for_test(c_id),
+            0,
+            "C's dep entry cleared on eviction"
+        );
+    }
+
+    #[test]
     fn backedge_polls_quit_like_the_interpreter() {
         use crate::emacs_core::bytecode::Vm;
         use crate::emacs_core::eval::Context;

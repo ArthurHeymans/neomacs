@@ -60,6 +60,48 @@ fn register_inline_deps(id: u64, leaf: &CompiledLeaf) {
     }
 }
 
+/// Precise invalidation: function `sym` was just redefined — evict the JIT cache
+/// entries of every caller that INLINED it, so each re-JITs against the new
+/// definition on its next call. The coarse `inline_epoch`-vs-live-epoch backstop in
+/// [`try_run_compiled`] ALSO catches them lazily; this removes the affected callers
+/// EAGERLY while leaving unrelated callers cached (no per-redefinition re-JIT churn).
+///
+/// MUST be called OUTSIDE any `COMPILED`/`INLINE_DEPS` borrow (the redefinition path
+/// in symbol.rs is) — it takes the two thread_local borrows itself, separately and
+/// briefly. Idempotent: an absent/already-evicted id is a no-op. Compiled-id never
+/// reuses, so a stale id in a dep set just removes nothing.
+pub(crate) fn evict_inline_dependents(sym: SymId) {
+    let Some(dependents) = INLINE_DEPS.with(|m| m.borrow_mut().remove(&sym)) else {
+        return;
+    };
+    COMPILED.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        for id in dependents {
+            // Disjointness (spec-slot pointer safety): only INLINED-into caller
+            // leaves are ever in a dep set, and resolve_compiled_leaf_ptr refuses to
+            // cache an inlined leaf's pointer in a spec slot — so evicting one here
+            // can never dangle a baked SpecSlot.leaf raw pointer.
+            debug_assert!(
+                !matches!(cache.get(&id), Some(CacheEntry::Compiled(l)) if l.inline_epoch().is_none()),
+                "precise eviction must only touch inlined leaves (spec-slot pointer safety)"
+            );
+            cache.remove(&id);
+        }
+    });
+}
+
+/// Test-only: is a compiled leaf currently cached for `id` on this thread?
+#[cfg(test)]
+pub(crate) fn is_compiled_for_test(id: u64) -> bool {
+    COMPILED.with(|c| matches!(c.borrow().get(&id), Some(CacheEntry::Compiled(_))))
+}
+
+/// Test-only: how many callers are recorded as inlining `sym`.
+#[cfg(test)]
+pub(crate) fn inline_dependent_count_for_test(sym: SymId) -> usize {
+    INLINE_DEPS.with(|m| m.borrow().get(&sym).map_or(0, |s| s.len()))
+}
+
 /// Tier-up entry point: run `func`'s body as native code if possible.
 ///
 /// - `Ok(Some(bits))` — native code produced the result (raw tagged bits).
