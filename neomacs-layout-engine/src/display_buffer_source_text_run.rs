@@ -2,7 +2,7 @@
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
-use crate::display_buffer_source_render::BufferSourceItemRenderOutcome;
+use crate::display_buffer_source_item_render::BufferSourceItemRenderOutcome;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,

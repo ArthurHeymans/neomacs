@@ -15,6 +15,7 @@ pub(crate) mod display_buffer_source_char_render;
 pub(crate) mod display_buffer_source_consumption;
 pub(crate) mod display_buffer_source_face_resolution;
 pub(crate) mod display_buffer_source_item_append;
+pub(crate) mod display_buffer_source_item_render;
 pub(crate) mod display_buffer_source_loop_context;
 pub(crate) mod display_buffer_source_loop_render;
 pub(crate) mod display_buffer_source_loop_state;

@@ -1,12 +1,12 @@
 //! Single-character buffer source rendering.
 
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
+use crate::display_buffer_source_item_render::BufferSourceItemRenderOutcome;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_overflow::{
     BufferSourceOverflowRenderContext, BufferSourceOverflowRenderRequest,
     BufferSourceSpecialOverflowRenderContext, BufferSourceSpecialOverflowRenderRequest,
 };
-use crate::display_buffer_source_render::BufferSourceItemRenderOutcome;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_cursor::capture_cursor_info;
 use crate::display_row::DisplayRowActiveFaceState;
