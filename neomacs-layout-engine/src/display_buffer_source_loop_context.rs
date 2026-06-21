@@ -1,11 +1,10 @@
 //! Buffer text loop request builders.
 
 use crate::display_buffer_source_row_lifecycle::{
-    BufferSourceEndOfBufferTailRenderContext, BufferSourceEndOfBufferTailRenderRequest,
-    BufferSourceHscrollSkipRenderContext, BufferSourceHscrollSkipRenderRequest,
-    BufferSourceInvisibleTextRenderContext, BufferSourceInvisibleTextRenderRequest,
-    BufferSourceLineBreakRenderContext, BufferSourceLineBreakRenderRequest,
-    BufferSourceSelectiveDisplayTailRenderContext, BufferSourceSelectiveDisplayTailRenderRequest,
+    BufferSourceEndOfBufferTailRenderContext, BufferSourceHscrollSkipRenderContext,
+    BufferSourceInvisibleTextRenderContext, BufferSourceLineBreakRenderContext,
+    BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderContext,
+    BufferSourceSelectiveDisplayTailRenderRequest,
 };
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
@@ -80,8 +79,8 @@ impl BufferSourceLoopRequestContext {
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
-    ) -> BufferSourceInvisibleTextRenderRequest<'a> {
-        BufferSourceInvisibleTextRenderRequest::new(BufferSourceInvisibleTextRenderContext::new(
+    ) -> BufferSourceInvisibleTextRenderContext<'a> {
+        BufferSourceInvisibleTextRenderContext::new(
             text,
             self.accessible_end,
             self.point_charpos,
@@ -90,7 +89,7 @@ impl BufferSourceLoopRequestContext {
             active_face_state,
             glyph_y_offset,
             self.metrics,
-        ))
+        )
     }
 
     pub(crate) fn hscroll_skip_request<'a>(
@@ -98,8 +97,8 @@ impl BufferSourceLoopRequestContext {
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
-    ) -> BufferSourceHscrollSkipRenderRequest<'a> {
-        BufferSourceHscrollSkipRenderRequest::new(BufferSourceHscrollSkipRenderContext::new(
+    ) -> BufferSourceHscrollSkipRenderContext<'a> {
+        BufferSourceHscrollSkipRenderContext::new(
             text,
             self.tab_width,
             self.content_x,
@@ -112,7 +111,7 @@ impl BufferSourceLoopRequestContext {
             self.display_text_row_base,
             self.max_rows,
             self.row_limit,
-        ))
+        )
     }
 
     pub(crate) fn selective_display_tail_request<'a>(
@@ -179,16 +178,14 @@ impl BufferSourceLoopRequestContext {
         charpos: i64,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
-    ) -> BufferSourceEndOfBufferTailRenderRequest<'a> {
-        BufferSourceEndOfBufferTailRenderRequest::new(
-            BufferSourceEndOfBufferTailRenderContext::new(
-                byte_idx,
-                charpos,
-                self.accessible_end,
-                self.point_charpos,
-                overlay_context,
-                active_face_state,
-            ),
+    ) -> BufferSourceEndOfBufferTailRenderContext<'a> {
+        BufferSourceEndOfBufferTailRenderContext::new(
+            byte_idx,
+            charpos,
+            self.accessible_end,
+            self.point_charpos,
+            overlay_context,
+            active_face_state,
         )
     }
 

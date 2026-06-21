@@ -62,13 +62,6 @@ pub(crate) struct BufferWindowGeometryPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferWindowChromeHeights {
-    pub(crate) mode_line: f32,
-    pub(crate) header_line: f32,
-    pub(crate) tab_line: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferWindowLocalDisplayPolicy {
     line_number_mode: u8,
     line_number_offset: i64,
@@ -223,16 +216,6 @@ impl BufferWindowGeometryRequest {
         BufferWindowGeometryPlan {
             geometry,
             line_number_columns,
-        }
-    }
-}
-
-impl BufferWindowChromeHeights {
-    pub(crate) const fn new(mode_line: f32, header_line: f32, tab_line: f32) -> Self {
-        Self {
-            mode_line,
-            header_line,
-            tab_line,
         }
     }
 }

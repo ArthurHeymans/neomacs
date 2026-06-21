@@ -10,9 +10,7 @@ use crate::display_buffer_source_render_attempt::{
 use crate::display_buffer_source_tail_render::{
     BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
 };
-use crate::display_buffer_window_geometry::{
-    BufferWindowChromeHeights, BufferWindowGeometry, BufferWindowLocalDisplayPolicy,
-};
+use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -45,43 +43,6 @@ pub(crate) struct BufferSourceDefaultFacePlan {
     measurement_policy: DisplayRowMeasurementPolicy,
 }
 impl BufferSourceOutputSetup {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        frame_id: FrameId,
-        window_id: WindowId,
-        output_window_id: u64,
-        display_text_row_base: usize,
-        display_text_rows: usize,
-        bottom_chrome_rows: usize,
-        cols: usize,
-        bounds: Rect,
-        text_bounds: Rect,
-        selected: bool,
-        text_y: f32,
-        text_height: f32,
-        visibility_bottom_y: f32,
-        max_rows: usize,
-        walk_setup: &BufferSourceWalkSetup,
-    ) -> Self {
-        Self::from_parts(
-            frame_id,
-            window_id,
-            output_window_id,
-            display_text_row_base,
-            display_text_rows,
-            bottom_chrome_rows,
-            cols,
-            bounds,
-            text_bounds,
-            selected,
-            text_y,
-            text_height,
-            visibility_bottom_y,
-            max_rows,
-            walk_setup,
-        )
-    }
-
     pub(crate) fn from_window_geometry(
         frame_id: FrameId,
         window_id: WindowId,
@@ -110,7 +71,7 @@ impl BufferSourceOutputSetup {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn from_parts(
+    pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
         output_window_id: u64,
@@ -267,7 +228,6 @@ impl BufferSourceOutputSetup {
         local_display_policy: BufferWindowLocalDisplayPolicy,
         line_number_cols: i32,
         geometry: &BufferWindowGeometry,
-        chrome_heights: BufferWindowChromeHeights,
         buffer: &'a B,
         buffer_id: BufferId,
         source: BufferWindowSource,
@@ -354,9 +314,9 @@ impl BufferSourceOutputSetup {
             self.body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
-            chrome_heights.mode_line,
-            chrome_heights.header_line,
-            chrome_heights.tab_line,
+            chrome_request.mode_line_height,
+            chrome_request.header_line_height,
+            chrome_request.tab_line_height,
         );
         let publish_request = BufferSourceRedisplayPublishRequest::new(
             self.begin_request.frame_id(),

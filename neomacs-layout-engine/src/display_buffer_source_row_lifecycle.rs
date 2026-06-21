@@ -42,10 +42,6 @@ use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 
-pub(crate) struct BufferSourceEndOfBufferTailRenderRequest<'a> {
-    context: BufferSourceEndOfBufferTailRenderContext<'a>,
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSourceEndOfBufferTailRenderContext<'a> {
     byte_idx: usize,
@@ -338,66 +334,6 @@ impl BufferSourceEndOfBufferTailAction {
     }
 }
 
-impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
-    pub(crate) fn new(context: BufferSourceEndOfBufferTailRenderContext<'a>) -> Self {
-        Self { context }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_and_apply<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        source_render: TextRowSourceRenderState<'_>,
-        row_progress: DisplaySourceRowProgressState<'_>,
-        row_geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> BufferSourceEndOfBufferTailRenderOutcome {
-        let mut row_progress = row_progress;
-        let mut source_render = source_render;
-        let context = self.context;
-
-        let tail = BufferSourceEndOfBufferTailAction::new(
-            context.byte_idx,
-            context.charpos,
-            context.accessible_end,
-            context.point_charpos,
-        );
-        let point_is_visible_eob = tail.point_is_visible_eob();
-        tail.capture_cursor_if_point(
-            cursor_info,
-            context.active_face_state,
-            row_geometry,
-            row_progress.x(),
-            row_progress.col(),
-        );
-
-        if context.overlay_context.should_render(row_geometry) {
-            let (x, col) = row_progress.coordinates_mut();
-            context.overlay_context.render_at_text_row(
-                buffer,
-                context.charpos,
-                source_render.reborrow(),
-                x,
-                col,
-                row_geometry,
-                cursor_info,
-                hit_rows,
-                hit_row_range,
-                row_y_positions,
-                face_ids,
-            );
-        }
-
-        BufferSourceEndOfBufferTailRenderOutcome {
-            point_is_visible_eob,
-        }
-    }
-}
-
 impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
     pub(crate) fn new(
         byte_idx: usize,
@@ -416,10 +352,59 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             active_face_state,
         }
     }
-}
 
-pub(crate) struct BufferSourceHscrollSkipRenderRequest<'a> {
-    context: BufferSourceHscrollSkipRenderContext<'a>,
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        source_render: TextRowSourceRenderState<'_>,
+        row_progress: DisplaySourceRowProgressState<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        cursor_info: &mut CursorCaptureState,
+        hit_rows: &mut Vec<HitRow>,
+        hit_row_range: &mut HitRowRangeTracker,
+        row_y_positions: &mut DisplayRowYPositions,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> BufferSourceEndOfBufferTailRenderOutcome {
+        let mut row_progress = row_progress;
+        let mut source_render = source_render;
+
+        let tail = BufferSourceEndOfBufferTailAction::new(
+            self.byte_idx,
+            self.charpos,
+            self.accessible_end,
+            self.point_charpos,
+        );
+        let point_is_visible_eob = tail.point_is_visible_eob();
+        tail.capture_cursor_if_point(
+            cursor_info,
+            self.active_face_state,
+            row_geometry,
+            row_progress.x(),
+            row_progress.col(),
+        );
+
+        if self.overlay_context.should_render(row_geometry) {
+            let (x, col) = row_progress.coordinates_mut();
+            self.overlay_context.render_at_text_row(
+                buffer,
+                self.charpos,
+                source_render.reborrow(),
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+            );
+        }
+
+        BufferSourceEndOfBufferTailRenderOutcome {
+            point_is_visible_eob,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -491,11 +476,7 @@ fn hscroll_skip_column_width(
     if is_wide_char(source_char.ch()) { 2 } else { 1 }
 }
 
-impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
-    pub(crate) fn new(context: BufferSourceHscrollSkipRenderContext<'a>) -> Self {
-        Self { context }
-    }
-
+impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
@@ -520,7 +501,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
         } = state;
         let mut progress = progress;
         let mut source_render = source_render;
-        let context = self.context;
+        let context = self;
 
         let Some(hscroll_action) = source_walk
             .consume_hscroll_skip(
@@ -607,9 +588,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
         );
         DisplayRowTransitionContinuation::Continue
     }
-}
 
-impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         text: &'a [u8],
@@ -663,10 +642,6 @@ pub(crate) struct BufferSourceSelectiveDisplayTailRenderContext<'a> {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
-}
-
-pub(crate) struct BufferSourceInvisibleTextRenderRequest<'a> {
-    context: BufferSourceInvisibleTextRenderContext<'a>,
 }
 
 #[derive(Clone, Copy)]
@@ -1028,11 +1003,7 @@ impl BufferSourceInvisibleTextSkip {
     }
 }
 
-impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
-    pub(crate) fn new(context: BufferSourceInvisibleTextRenderContext<'a>) -> Self {
-        Self { context }
-    }
-
+impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
     pub(crate) fn render_at_checkpoint_and_apply<B: LayoutBufferView>(
         self,
         source_walk: &mut BufferSourceWalk<'_, B>,
@@ -1052,7 +1023,7 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
             ..
         } = state;
         let mut source_render = source_render;
-        let context = self.context;
+        let context = self;
 
         let action = source_walk
             .consume_invisible_checkpoint(

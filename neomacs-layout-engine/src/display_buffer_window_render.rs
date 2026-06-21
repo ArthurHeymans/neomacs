@@ -9,10 +9,9 @@ use crate::display_buffer_source_render_plan::{
     BufferSourceDefaultFacePlan, BufferSourceOutputSetup,
 };
 use crate::display_buffer_window_geometry::{
-    BufferWindowChromeHeights, BufferWindowGeometryPlan, BufferWindowGeometryRequest,
-    BufferWindowLocalDisplayPolicy,
+    BufferWindowGeometryPlan, BufferWindowGeometryRequest, BufferWindowLocalDisplayPolicy,
 };
-use crate::display_buffer_window_source::BufferWindowSourceReadRequest;
+use crate::display_buffer_window_source::BufferWindowSourceRequest;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
@@ -113,11 +112,6 @@ where
         let chrome_plan = state.with_face_services(|face_resolver, font_metrics| {
             WindowChromeRowsPlan::new(params, face_resolver, font_metrics, default_face.metrics())
         });
-        let chrome_heights = BufferWindowChromeHeights::new(
-            chrome_plan.mode_line_height(),
-            chrome_plan.header_line_height(),
-            chrome_plan.tab_line_height(),
-        );
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);
             if params.is_minibuffer() {
@@ -142,7 +136,7 @@ where
         .with_max_mini_window_rows(max_mini_window_rows)
         .into_window_plan(&local_display_policy, &buf_access);
 
-        let text_source = BufferWindowSourceReadRequest::new(params, geometry.max_rows)
+        let text_source = BufferWindowSourceRequest::from_window_params(params, geometry.max_rows)
             .read_into(&buf_access, text_buf);
         let bytes_read = text_source.bytes_read();
         let text = if bytes_read > 0 {
@@ -199,7 +193,6 @@ where
             local_display_policy,
             line_number_columns,
             &geometry,
-            chrome_heights,
             buffer,
             buffer_id,
             text_source,

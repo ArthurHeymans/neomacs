@@ -1150,52 +1150,51 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, 0, 0);
 
-    let continuation =
-        BufferSourceHscrollSkipRenderRequest::new(BufferSourceHscrollSkipRenderContext::new(
-            b"\tabc",
-            8,
-            0.0,
-            &surface,
-            &active_face,
-            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-            99,
-            false,
-            context.defaults,
-            0,
-            4,
-            row_limit,
-        ))
-        .render_next_and_apply(
-            &mut source_walk,
-            BufferSourceLoopMutableState::new(
-                &mut invisible_text_checkpoint,
-                DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-                text_row_source_render_state(
-                    &mut context.builder,
-                    &mut context.output_emitter,
-                    &mut context.eval,
-                    &mut font_metrics,
-                    &face_resolver,
-                ),
-                &mut row_extend,
-                &mut box_face,
-                &mut line_numbers,
-                &mut context.geometry,
-                &mut context.row_flags,
-                &mut context.hit_rows,
-                &mut hit_row_range,
-                &mut prefix_request,
-                &mut hscroll_skip,
-                &mut word_wrap,
-                &mut trailing_whitespace,
-                &mut face_scan,
-                &mut context.row_y_positions,
-                &mut cursor_info,
-                &mut face_ids,
-                &surface,
-                overlay_context,
+    let continuation = BufferSourceHscrollSkipRenderContext::new(
+        b"\tabc",
+        8,
+        0.0,
+        &surface,
+        &active_face,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        99,
+        false,
+        context.defaults,
+        0,
+        4,
+        row_limit,
+    )
+    .render_next_and_apply(
+        &mut source_walk,
+        BufferSourceLoopMutableState::new(
+            &mut invisible_text_checkpoint,
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
             ),
-        );
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
+        ),
+    );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
     assert_eq!(byte_idx, 1);
@@ -1721,49 +1720,48 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut font_metrics = None;
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, 0, 0);
 
-    let outcome =
-        BufferSourceInvisibleTextRenderRequest::new(BufferSourceInvisibleTextRenderContext::new(
-            b"folded rest",
-            11,
-            2,
+    let outcome = BufferSourceInvisibleTextRenderContext::new(
+        b"folded rest",
+        11,
+        2,
+        &surface,
+        overlay_context,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
+    .render_at_checkpoint_and_apply(
+        &mut source_walk,
+        &snapshot,
+        BufferSourceLoopMutableState::new(
+            &mut checkpoints,
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
             &surface,
             overlay_context,
-            &active_face,
-            0.0,
-            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        ))
-        .render_at_checkpoint_and_apply(
-            &mut source_walk,
-            &snapshot,
-            BufferSourceLoopMutableState::new(
-                &mut checkpoints,
-                DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-                text_row_source_render_state(
-                    &mut context.builder,
-                    &mut context.output_emitter,
-                    &mut context.eval,
-                    &mut font_metrics,
-                    &face_resolver,
-                ),
-                &mut row_extend,
-                &mut box_face,
-                &mut line_numbers,
-                &mut context.geometry,
-                &mut context.row_flags,
-                &mut context.hit_rows,
-                &mut hit_row_range,
-                &mut prefix_request,
-                &mut hscroll_skip,
-                &mut word_wrap,
-                &mut trailing_whitespace,
-                &mut face_scan,
-                &mut context.row_y_positions,
-                &mut cursor_info,
-                &mut face_ids,
-                &surface,
-                overlay_context,
-            ),
-        );
+        ),
+    );
 
     assert_eq!(
         outcome,
@@ -7044,26 +7042,25 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
 
-    let outcome = BufferSourceEndOfBufferTailRenderRequest::new(
-        BufferSourceEndOfBufferTailRenderContext::new(3, 3, 3, 3, overlay_context, &active_face),
-    )
-    .render_and_apply(
-        &snapshot,
-        text_row_source_render_state(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        DisplaySourceRowProgressState::new(&mut x, &mut col),
-        &mut context.geometry,
-        &mut cursor_info,
-        &mut context.hit_rows,
-        &mut hit_row_range,
-        &mut context.row_y_positions,
-        &mut face_ids,
-    );
+    let outcome =
+        BufferSourceEndOfBufferTailRenderContext::new(3, 3, 3, 3, overlay_context, &active_face)
+            .render_and_apply(
+                &snapshot,
+                text_row_source_render_state(
+                    &mut context.builder,
+                    &mut context.output_emitter,
+                    &mut context.eval,
+                    &mut font_metrics,
+                    &face_resolver,
+                ),
+                DisplaySourceRowProgressState::new(&mut x, &mut col),
+                &mut context.geometry,
+                &mut cursor_info,
+                &mut context.hit_rows,
+                &mut hit_row_range,
+                &mut context.row_y_positions,
+                &mut face_ids,
+            );
 
     assert!(outcome.point_is_visible_eob());
     let captured = cursor_info.captured().expect("EOB cursor captured");

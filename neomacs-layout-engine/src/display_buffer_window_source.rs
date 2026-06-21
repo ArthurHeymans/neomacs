@@ -49,12 +49,6 @@ impl BufferWindowSource {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferWindowSourceReadRequest<'a> {
-    params: &'a WindowParams,
-    max_rows: usize,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferWindowSourceRequest {
     requested_window_start: i64,
@@ -65,21 +59,6 @@ pub(crate) struct BufferWindowSourceRequest {
     max_rows: usize,
     visible_cols: i64,
     kind: WindowKind,
-}
-
-impl<'a> BufferWindowSourceReadRequest<'a> {
-    pub(crate) fn new(params: &'a WindowParams, max_rows: usize) -> Self {
-        Self { params, max_rows }
-    }
-
-    pub(crate) fn read_into<B: LayoutBufferView>(
-        self,
-        access: &RustBufferAccess<'_, B>,
-        out: &mut Vec<u8>,
-    ) -> BufferWindowSource {
-        BufferWindowSourceRequest::from_window_params(self.params, self.max_rows)
-            .read_into(access, out)
-    }
 }
 
 impl BufferWindowSourceRequest {

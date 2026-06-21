@@ -5,8 +5,8 @@ use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_render::BufferSourceRenderRequest;
 use crate::display_buffer_source_row_lifecycle::{
-    BufferSourceHscrollSkipRenderRequest, BufferSourceInvisibleTextRenderOutcome,
-    BufferSourceInvisibleTextRenderRequest,
+    BufferSourceHscrollSkipRenderContext, BufferSourceInvisibleTextRenderContext,
+    BufferSourceInvisibleTextRenderOutcome,
 };
 use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_buffer_source_walk::*;
@@ -149,7 +149,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'_, B>,
-        request: BufferSourceInvisibleTextRenderRequest<'_>,
+        request: BufferSourceInvisibleTextRenderContext<'_>,
         buffer: &B,
     ) -> BufferSourceInvisibleTextRenderOutcome {
         request.render_at_checkpoint_and_apply(source_walk, buffer, self.reborrow())
@@ -173,7 +173,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     fn render_hscroll_skip<B: LayoutBufferView>(
         &mut self,
         source_walk: &mut BufferSourceWalk<'_, B>,
-        request: BufferSourceHscrollSkipRenderRequest<'_>,
+        request: BufferSourceHscrollSkipRenderContext<'_>,
     ) -> DisplayRowTransitionContinuation {
         request.render_next_and_apply(source_walk, self.reborrow())
     }
