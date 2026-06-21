@@ -115,14 +115,14 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
 
     assert_eq!(render.output, ChromeRowOutput { row: 3, y: 24.0 });
     assert_eq!(
-        render.measured.owner,
+        render.measured.owner(),
         DisplayRowOwner::WindowChrome {
             window_id: 42,
             kind: WindowChromeKind::ModeLine,
         }
     );
-    assert_eq!(render.measured.row_index, 3);
-    assert_eq!(render.measured.bounds.y, 24.0);
+    assert_eq!(render.measured.row_index(), 3);
+    assert_eq!(render.measured.bounds().y, 24.0);
     assert_eq!(render.measured.output_progress().y, 24.0);
 }
 

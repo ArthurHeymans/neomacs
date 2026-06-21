@@ -75,25 +75,26 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
         &mut self,
         rendered: &RenderedDisplayRow,
     ) -> Option<DisplayRowPosition> {
-        let end = display_row_output_end_position(rendered.progress);
+        let rendered_row = rendered.row();
+        let end = display_row_output_end_position(rendered.progress());
         self.edit_current_row(|row| {
             row.enabled = true;
-            row.role = rendered.row.role;
-            row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
+            row.role = rendered_row.role;
+            row.mode_line = matches!(rendered_row.role, GlyphRowRole::ModeLine);
             row.displays_text |=
-                rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
+                rendered_row.displays_text || !display_row_text_is_empty(rendered_row);
             row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].extend(
-                rendered.row.glyphs
+                rendered_row.glyphs
                     [neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
                 .iter()
                 .cloned(),
             );
-            row.height_px = row.height_px.max(rendered.row.height_px);
+            row.height_px = row.height_px.max(rendered_row.height_px);
             row.ascent_px = row
                 .ascent_px
-                .max(rendered.row.ascent_px)
+                .max(rendered_row.ascent_px)
                 .min(row.height_px.max(1.0));
-            merge_display_row_source_slot_bounds(row, &rendered.source_slots);
+            merge_display_row_source_slot_bounds(row, rendered.source_slots());
         })?;
         Some(end)
     }
@@ -142,7 +143,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     rendered: &RenderedDisplayRow,
     display_row_index: usize,
 ) -> DisplayRowPosition {
-    for face in &rendered.faces {
+    for face in rendered.faces() {
         builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
             face.id,
             face.clone(),
@@ -153,10 +154,10 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
         .expect("current row");
     install_rendered_display_row_fragment_assets(
         builder,
-        rendered.row.role,
+        rendered.row().role,
         display_row_index,
         &[],
-        &rendered.media,
+        rendered.media(),
     );
     end
 }
@@ -173,7 +174,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     output_emitter.emit_text_output_spans(
         evaluator,
         output,
-        output.spans_for_source_slots(&rendered.source_slots),
+        output.spans_for_source_slots(rendered.source_slots()),
         end,
     );
     end

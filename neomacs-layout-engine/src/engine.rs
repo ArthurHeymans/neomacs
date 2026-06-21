@@ -1054,7 +1054,7 @@ impl LayoutEngine {
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
         };
-        let actual_tab_bar_height = measured.bounds.height;
+        let actual_tab_bar_height = measured.bounds().height;
         self.frame_output
             .set_tab_bar(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
                 items: tab_bar.items,

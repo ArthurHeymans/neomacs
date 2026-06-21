@@ -1503,7 +1503,7 @@ fn render_buffer_text_source_shadow_row(
     })
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("typed buffer text source row")
-    .row
+    .into_row()
 }
 
 fn expected_gui_glyph_advance(

@@ -50,7 +50,7 @@ struct MeasuredWindowDisplayRowInstallRequest<'a> {
 impl MeasuredWindowDisplayRowInstallRequest<'_> {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         let measured = self.measured;
-        let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
+        let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner() else {
             panic!("frame chrome rows must install through frame chrome rows");
         };
         debug_assert!(window_id > 0);
@@ -59,17 +59,17 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             kind,
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
         ));
-        let display_row_index = measured.row_index as usize;
+        let display_row_index = measured.row_index() as usize;
         RenderedDisplayRowAssetsInstall::window_row(
-            &measured.rendered,
-            measured.row_index,
-            measured.bounds,
+            measured.rendered(),
+            measured.row_index(),
+            measured.bounds(),
         )
         .install(builder);
         DisplayRowOutputInstall::from_rendered(
             display_row_index,
-            &measured.rendered,
-            measured.bounds,
+            measured.rendered(),
+            measured.bounds(),
             measured.row_height(),
             measured.row_ascent(),
         )
@@ -85,25 +85,25 @@ struct MeasuredFrameChromeRowInstallRequest<'a, 'rows> {
 impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         let measured = self.measured;
-        let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
+        let DisplayRowOwner::FrameChrome { kind } = measured.owner() else {
             panic!("window-owned rows must install through window chrome");
         };
         debug_assert!(matches!(kind, FrameChromeKind::TabBar));
         RenderedDisplayRowAssetsInstall::frame_chrome(
-            &measured.rendered,
-            measured.row_index,
-            measured.bounds,
+            measured.rendered(),
+            measured.row_index(),
+            measured.bounds(),
         )
         .install(builder);
-        let mut row = measured.rendered.row.clone();
-        apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
+        let mut row = measured.rendered().row().clone();
+        apply_display_row_source_slot_bounds(&mut row, measured.rendered().source_slots());
         crate::glyph_row_writer::finalize_external_row(&mut row);
-        row.pixel_y = measured.bounds.y;
+        row.pixel_y = measured.bounds().y;
         row.height_px = measured.row_height();
         row.ascent_px = measured.row_ascent();
         self.frame_chrome_rows.push(FrameChromeRow {
-            row_index: measured.row_index,
-            pixel_bounds: measured.bounds,
+            row_index: measured.row_index(),
+            pixel_bounds: measured.bounds(),
             row,
         });
     }
@@ -143,9 +143,9 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         target: RenderedDisplayRowAssetInstallTarget,
     ) -> Self {
         Self {
-            role: rendered.row.role,
-            faces: &rendered.faces,
-            media: &rendered.media,
+            role: rendered.row().role,
+            faces: rendered.faces(),
+            media: rendered.media(),
             target,
         }
     }

@@ -5165,7 +5165,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             &mut face_ids,
         )
         .expect("rendered source")
-        .rendered
+        .into_rendered()
     };
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);

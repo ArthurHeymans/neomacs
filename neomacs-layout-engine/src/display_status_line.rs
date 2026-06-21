@@ -469,25 +469,13 @@ impl WindowChromeRowsPlan {
         });
 
         let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(
-                font_metrics,
-                face,
-                fallback_metrics,
-            )
+            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
         });
         let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(
-                font_metrics,
-                face,
-                fallback_metrics,
-            )
+            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
         });
         let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(
-                font_metrics,
-                face,
-                fallback_metrics,
-            )
+            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
         });
 
         Self {
@@ -721,7 +709,7 @@ impl<'face> ChromeDisplayRowRenderRequest<'face> {
 
 impl ChromeDisplayRowRenderedRequest {
     fn text_is_empty(&self) -> bool {
-        display_row_text_is_empty(&self.rendered.row)
+        display_row_text_is_empty(self.rendered.row())
     }
 
     fn measure(self) -> MeasuredDisplayRow {

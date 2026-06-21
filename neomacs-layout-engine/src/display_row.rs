@@ -1002,11 +1002,54 @@ pub(crate) struct DisplayRowOutputProgress {
 }
 
 pub(crate) struct RenderedDisplayRow {
-    pub(crate) row: GlyphRow,
-    pub(crate) progress: DisplayRowOutputProgress,
-    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
-    pub(crate) faces: Vec<Face>,
-    pub(crate) media: Vec<RenderedDisplayRowMedia>,
+    row: GlyphRow,
+    progress: DisplayRowOutputProgress,
+    source_slots: Vec<DisplayRowGlyphSlot>,
+    faces: Vec<Face>,
+    media: Vec<RenderedDisplayRowMedia>,
+}
+
+impl RenderedDisplayRow {
+    pub(crate) fn new(
+        row: GlyphRow,
+        progress: DisplayRowOutputProgress,
+        source_slots: Vec<DisplayRowGlyphSlot>,
+        faces: Vec<Face>,
+        media: Vec<RenderedDisplayRowMedia>,
+    ) -> Self {
+        Self {
+            row,
+            progress,
+            source_slots,
+            faces,
+            media,
+        }
+    }
+
+    pub(crate) fn row(&self) -> &GlyphRow {
+        &self.row
+    }
+
+    pub(crate) fn progress(&self) -> DisplayRowOutputProgress {
+        self.progress
+    }
+
+    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
+        &self.source_slots
+    }
+
+    pub(crate) fn faces(&self) -> &[Face] {
+        &self.faces
+    }
+
+    pub(crate) fn media(&self) -> &[RenderedDisplayRowMedia] {
+        &self.media
+    }
+
+    #[cfg(test)]
+    pub(crate) fn into_row(self) -> GlyphRow {
+        self.row
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1039,10 +1082,10 @@ pub(crate) enum DisplayRowBoundsPolicy {
 }
 
 pub(crate) struct MeasuredDisplayRow {
-    pub(crate) owner: DisplayRowOwner,
-    pub(crate) row_index: u32,
-    pub(crate) bounds: Rect,
-    pub(crate) rendered: RenderedDisplayRow,
+    owner: DisplayRowOwner,
+    row_index: u32,
+    bounds: Rect,
+    rendered: RenderedDisplayRow,
 }
 
 fn stable_pixel_ceil(px: f32) -> f32 {
@@ -1060,13 +1103,17 @@ fn stable_pixel_ceil(px: f32) -> f32 {
 
 fn rendered_display_row_content_height(rendered: &RenderedDisplayRow) -> f32 {
     let mut height = 1.0_f32;
-    for glyph in rendered.row.glyphs.iter().flatten() {
-        if let Some(face) = rendered.faces.iter().find(|face| face.id == glyph.face_id) {
+    for glyph in rendered.row().glyphs.iter().flatten() {
+        if let Some(face) = rendered
+            .faces()
+            .iter()
+            .find(|face| face.id == glyph.face_id)
+        {
             let face_height = (face.font_ascent + face.font_descent).max(1) as f32;
             height = height.max(face_height + glyph.vertical_offset_px.abs());
         }
     }
-    for media in &rendered.media {
+    for media in rendered.media() {
         height = height.max(media.height);
     }
     height
@@ -1084,8 +1131,8 @@ impl MeasuredDisplayRow {
         let allocated_height = stable_pixel_ceil(
             fallback_bounds
                 .height
-                .max(rendered.row.height_px)
-                .max(rendered.progress.height)
+                .max(rendered.row().height_px)
+                .max(rendered.progress().height)
                 .max(content_height),
         );
         let height = match bounds_policy {
@@ -1105,19 +1152,39 @@ impl MeasuredDisplayRow {
         }
     }
 
+    pub(crate) fn owner(&self) -> DisplayRowOwner {
+        self.owner
+    }
+
+    pub(crate) fn row_index(&self) -> u32 {
+        self.row_index
+    }
+
+    pub(crate) fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    pub(crate) fn rendered(&self) -> &RenderedDisplayRow {
+        &self.rendered
+    }
+
     pub(crate) fn row_height(&self) -> f32 {
         self.bounds.height.max(1.0)
     }
 
     pub(crate) fn row_ascent(&self) -> f32 {
-        self.rendered.row.ascent_px.max(0.0).min(self.row_height())
+        self.rendered
+            .row()
+            .ascent_px
+            .max(0.0)
+            .min(self.row_height())
     }
 
     pub(crate) fn output_progress(&self) -> DisplayRowOutputProgress {
         DisplayRowOutputProgress {
             y: self.bounds.y,
             height: self.bounds.height,
-            ..self.rendered.progress
+            ..self.rendered.progress()
         }
     }
 }
@@ -1278,7 +1345,26 @@ struct NaturalDisplayRowRenderPolicy;
 impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
 
 pub(crate) struct DisplayRowRenderResult {
-    pub(crate) rendered: RenderedDisplayRow,
+    rendered: RenderedDisplayRow,
+}
+
+impl DisplayRowRenderResult {
+    fn new(rendered: RenderedDisplayRow) -> Self {
+        Self { rendered }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rendered(&self) -> &RenderedDisplayRow {
+        &self.rendered
+    }
+
+    pub(crate) fn into_rendered(self) -> RenderedDisplayRow {
+        self.rendered
+    }
+
+    fn finalize_external_row(&mut self) {
+        glyph_row_writer::finalize_external_row(&mut self.rendered.row);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1519,7 +1605,7 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
     ) -> Option<RenderedDisplayRow> {
         let mut state = DisplayRowSourceState::default();
         self.render_step_with_context(renderer, source, &mut state, context)
-            .map(|result| result.rendered)
+            .map(DisplayRowRenderResult::into_rendered)
     }
 
     #[cfg(test)]
@@ -1778,15 +1864,13 @@ impl DisplayRowRenderIntoRowResult {
     }
 
     fn with_row(self, row: GlyphRow) -> DisplayRowRenderResult {
-        DisplayRowRenderResult {
-            rendered: RenderedDisplayRow {
-                row,
-                progress: self.progress,
-                source_slots: self.source_slots,
-                faces: self.faces,
-                media: self.media,
-            },
-        }
+        DisplayRowRenderResult::new(RenderedDisplayRow::new(
+            row,
+            self.progress,
+            self.source_slots,
+            self.faces,
+            self.media,
+        ))
     }
 }
 
@@ -2579,7 +2663,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut session = DisplayRowLispStringSourceSession::new(session_request)?;
         session
             .render_next_row_plan_with_context(self, plan, context)
-            .map(|result| result.rendered)
+            .map(DisplayRowRenderResult::into_rendered)
     }
 
     fn render_display_item_source_row_step_with_context(
@@ -2592,7 +2676,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut result = self.render_display_item_source_row_fragment_step_with_context(
             plan, source, state, context,
         )?;
-        glyph_row_writer::finalize_external_row(&mut result.rendered.row);
+        result.finalize_external_row();
         Some(result)
     }
 

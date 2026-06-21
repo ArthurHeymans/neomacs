@@ -90,8 +90,8 @@ impl<'a> DisplayRowOutputInstall<'a> {
     ) -> Self {
         Self {
             display_row_index,
-            row: &rendered.row,
-            source_slots: Some(&rendered.source_slots),
+            row: rendered.row(),
+            source_slots: Some(rendered.source_slots()),
             pixel_y: bounds.y,
             height_px,
             ascent_px,

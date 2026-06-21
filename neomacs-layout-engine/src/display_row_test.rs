@@ -721,9 +721,9 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     )
     .expect("display source row");
 
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
-    assert_eq!(rendered.row.role, GlyphRowRole::TabLine);
-    assert_eq!(rendered.progress.end_col, 3);
+    assert_eq!(row_text_expanding_stretches(rendered.row()), "A中");
+    assert_eq!(rendered.row().role, GlyphRowRole::TabLine);
+    assert_eq!(rendered.progress().end_col, 3);
 }
 
 /// The HELLO file separates a script name from its greeting with a literal
@@ -882,9 +882,9 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     )
     .expect("display source row");
 
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
-    assert_eq!(rendered.progress.end_x, 16.0);
-    assert_eq!(rendered.progress.end_col, 2);
+    assert_eq!(row_text_expanding_stretches(rendered.row()), "AB");
+    assert_eq!(rendered.progress().end_x, 16.0);
+    assert_eq!(rendered.progress().end_col, 2);
 }
 
 #[test]
@@ -926,11 +926,11 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     )
     .expect("display source row");
 
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
-    assert_eq!(rendered.progress.end_x, 32.0);
-    assert_eq!(rendered.progress.end_col, 4);
-    assert_eq!(rendered.source_slots[0].x_px, 16.0);
-    assert_eq!(rendered.source_slots[0].col, 2);
+    assert_eq!(row_text_expanding_stretches(rendered.row()), "AB");
+    assert_eq!(rendered.progress().end_x, 32.0);
+    assert_eq!(rendered.progress().end_col, 4);
+    assert_eq!(rendered.source_slots()[0].x_px, 16.0);
+    assert_eq!(rendered.source_slots()[0].col, 2);
 }
 
 #[test]
@@ -972,13 +972,13 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     )
     .expect("display source row");
 
-    let glyphs = &rendered.row.glyphs[1];
+    let glyphs = &rendered.row().glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
     assert_eq!(glyphs[0].pixel_width, 16.0);
-    assert_eq!(rendered.progress.end_x, 40.0);
-    assert_eq!(rendered.progress.end_col, 5);
-    assert_eq!(rendered.source_slots[0].x_px, 16.0);
-    assert_eq!(rendered.source_slots[0].width_px, 16.0);
+    assert_eq!(rendered.progress().end_x, 40.0);
+    assert_eq!(rendered.progress().end_col, 5);
+    assert_eq!(rendered.source_slots()[0].x_px, 16.0);
+    assert_eq!(rendered.source_slots()[0].width_px, 16.0);
 }
 
 #[test]
@@ -1048,8 +1048,8 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
     .expect("second row");
 
-    assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
-    assert_eq!(row_text_expanding_stretches(&second.rendered.row), "C");
+    assert_eq!(row_text_expanding_stretches(first.rendered().row()), "AB");
+    assert_eq!(row_text_expanding_stretches(second.rendered().row()), "C");
 }
 
 #[test]
@@ -1360,9 +1360,9 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("display source row");
 
-    assert_eq!(rendered.source_slots.len(), 5);
+    assert_eq!(rendered.source_slots().len(), 5);
     assert_eq!(
-        rendered.source_slots[0].source,
+        rendered.source_slots()[0].source,
         crate::display_item::DisplaySourcePosition::buffer(
             buf_id,
             CharPos0::new(0),
@@ -1370,17 +1370,17 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         )
     );
     assert_eq!(
-        rendered.source_slots[1].source,
+        rendered.source_slots()[1].source,
         crate::display_item::DisplaySourcePosition::buffer(
             buf_id,
             CharPos0::new(1),
             EmacsBytePos::new(1)
         )
     );
-    assert_eq!(rendered.source_slots[0].width_cols, 1);
-    assert_eq!(rendered.source_slots[1].width_cols, 2);
+    assert_eq!(rendered.source_slots()[0].width_cols, 1);
+    assert_eq!(rendered.source_slots()[1].width_cols, 2);
 
-    let row = rendered.row;
+    let row = rendered.into_row();
     let glyphs = &row.glyphs[1];
     let cjk = glyphs
         .iter()
@@ -1457,9 +1457,9 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
         render_lisp_string_row(&mut renderer, spec, rendered_text, &resolver, &mut face_ids)
             .expect("display source row");
 
-    let glyphs = &rendered.row.glyphs[1];
+    let glyphs = &rendered.row().glyphs[1];
     assert_eq!(
-        row_text_expanding_stretches(&rendered.row),
+        row_text_expanding_stretches(rendered.row()),
         "A            B"
     );
     assert!(matches!(
@@ -1467,7 +1467,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
         GlyphType::Stretch { width_cols: 12 }
     ));
     assert_eq!(
-        rendered.media,
+        rendered.media(),
         vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
             x: 8.0,
@@ -1543,7 +1543,7 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00112233, 0x00445566);
 
     assert_eq!(
-        rendered.media,
+        rendered.media(),
         vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Image { image_id: 42 },
             x: 8.0,
@@ -1588,7 +1588,7 @@ fn render_lisp_string_row_resolves_video_display_property_through_display_host()
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
 
     assert_eq!(
-        rendered.media,
+        rendered.media(),
         vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Video {
                 video_id: 84,
@@ -1636,7 +1636,7 @@ fn render_lisp_string_row_resolves_webkit_display_property_through_display_host(
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
 
     assert_eq!(
-        rendered.media,
+        rendered.media(),
         vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 99 },
             x: 8.0,
@@ -1916,11 +1916,11 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("display source row");
 
-    let glyphs = &rendered.row.glyphs[1];
+    let glyphs = &rendered.row().glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
     let emitted_width: f32 = glyphs.iter().map(|glyph| glyph.pixel_width).sum();
     assert!(
-        (rendered.progress.end_x - emitted_width).abs() <= 0.01,
+        (rendered.progress().end_x - emitted_width).abs() <= 0.01,
         "row progress should include the emitted tab stretch and following character"
     );
 }
@@ -1961,7 +1961,7 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
     )
     .expect("display source row");
 
-    let glyphs = &rendered.row.glyphs[1];
+    let glyphs = &rendered.row().glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
 }
 
@@ -2447,7 +2447,7 @@ fn display_row_baseline_tab_bar_preserves_lisp_string_height_property() {
     );
 
     let rendered = render_lisp_display_row_output(rendered, GlyphRowRole::TabBar);
-    let row = &rendered.row;
+    let row = rendered.row();
     let glyphs = &row.glyphs[1];
 
     assert_eq!(row.role, GlyphRowRole::TabBar);
@@ -2466,7 +2466,7 @@ fn display_row_baseline_tab_bar_preserves_lisp_string_height_property() {
     assert_eq!(raised_face.font_ascent, 24);
     assert_eq!(row.height_px, 32.0);
     assert_eq!(row.ascent_px, 24.0);
-    assert_eq!(rendered.progress.height, 32.0);
+    assert_eq!(rendered.progress().height, 32.0);
 }
 
 #[test]
@@ -2702,8 +2702,8 @@ fn display_row_lisp_string_source_request_uses_render_context() {
     )
     .expect("rendered context row");
 
-    assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "ctx");
+    assert_eq!(rendered.row().role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(rendered.row()), "ctx");
 }
 
 #[test]
@@ -2738,8 +2738,8 @@ fn display_row_render_executor_renders_lisp_string_source_request() {
         ))
         .expect("executor rendered lisp string row");
 
-    assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "exec");
+    assert_eq!(rendered.row().role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(rendered.row()), "exec");
 }
 
 #[test]
@@ -2867,8 +2867,8 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             &mut face_ids,
         )
         .expect("unfinalized row fragment")
-        .rendered
-        .row;
+        .into_rendered()
+        .into_row();
 
     assert!(!fragment.reversed_p);
     assert_eq!(row_text_expanding_stretches(&fragment), "אב");
@@ -2984,17 +2984,17 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     row.pixel_y = 4.0;
     row.height_px = 54.0;
     row.ascent_px = 42.0;
-    let rendered = RenderedDisplayRow {
+    let rendered = RenderedDisplayRow::new(
         row,
-        progress: DisplayRowOutputProgress {
+        DisplayRowOutputProgress {
             end_x: 0.0,
             end_col: 0,
             y: 4.0,
             height: 54.0,
         },
-        source_slots: Vec::new(),
-        faces: Vec::new(),
-        media: vec![RenderedDisplayRowMedia {
+        Vec::new(),
+        Vec::new(),
+        vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
             x: 8.0,
             y: 4.0,
@@ -3002,7 +3002,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
             width: 96.0,
             height: 54.0,
         }],
-    };
+    );
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let window_bounds = Rect::new(0.0, 0.0, 200.0, 80.0);
     let row_bounds = Rect::new(0.0, 4.0, 200.0, 54.0);
@@ -3061,22 +3061,22 @@ fn measured_display_row_promotes_bounds_from_rendered_row_metrics() {
         },
         0,
         Rect::new(10.0, 6.0, 120.0, 17.0),
-        RenderedDisplayRow {
+        RenderedDisplayRow::new(
             row,
-            progress: DisplayRowOutputProgress {
+            DisplayRowOutputProgress {
                 end_x: 24.0,
                 end_col: 3,
                 y: 6.0,
                 height: 24.0,
             },
-            source_slots: Vec::new(),
-            faces: Vec::new(),
-            media: Vec::new(),
-        },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
 
-    assert_eq!(measured.bounds.height, 24.0);
+    assert_eq!(measured.bounds().height, 24.0);
     assert_eq!(measured.row_height(), 24.0);
     assert_eq!(measured.row_ascent(), 20.0);
 }
@@ -3097,17 +3097,17 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
         },
         0,
         Rect::new(0.0, 0.0, 640.0, 120.0),
-        RenderedDisplayRow {
+        RenderedDisplayRow::new(
             row,
-            progress: DisplayRowOutputProgress {
+            DisplayRowOutputProgress {
                 end_x: 24.0,
                 end_col: 1,
                 y: 0.0,
                 height: 120.0,
             },
-            source_slots: Vec::new(),
-            faces: vec![face],
-            media: vec![RenderedDisplayRowMedia {
+            Vec::new(),
+            vec![face],
+            vec![RenderedDisplayRowMedia {
                 kind: RenderedDisplayRowMediaKind::Image { image_id: 77 },
                 x: 0.0,
                 y: 0.0,
@@ -3115,10 +3115,10 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
                 width: 32.0,
                 height: 24.0,
             }],
-        },
+        ),
         DisplayRowBoundsPolicy::MeasureContent,
     );
 
-    assert_eq!(measured.bounds.height, 24.0);
+    assert_eq!(measured.bounds().height, 24.0);
     assert_eq!(measured.row_height(), 24.0);
 }
