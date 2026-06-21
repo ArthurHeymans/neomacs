@@ -32,8 +32,6 @@ pub(crate) use crate::display_row_render_state::{
     RenderedDisplayRow, display_row_progress,
 };
 pub(crate) use crate::display_row_source_state::DisplayRowSourceState;
-#[cfg(test)]
-pub(crate) use crate::display_row_source_state::DisplayRowSourceWalker;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 use crate::display_source_resolver::{DisplaySourceFaceBasis, DisplaySourceResolveParams};
 use crate::font_metrics::FontMetricsService;

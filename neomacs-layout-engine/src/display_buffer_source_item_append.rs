@@ -1,6 +1,4 @@
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-#[cfg(test)]
-use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendKind, DisplayRowAppendSurface,
 };
@@ -27,8 +25,6 @@ use crate::display_source_item_append::{
     DisplaySourceTextCharAppendPlan, DisplaySourceTextCharPreparedAppend,
 };
 use crate::neovm_bridge::LayoutBufferView;
-#[cfg(test)]
-use crate::neovm_bridge::ResolvedFace;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -450,84 +446,4 @@ pub(crate) fn buffer_source_item_append_request<B: LayoutBufferView + ?Sized>(
     let append_kind = source_item.append_kind();
     let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
     Some(DisplaySourceRangeItemAppendRequest::new(item, append_kind))
-}
-
-#[cfg(test)]
-pub(crate) struct BufferSourceRequestAppendContext<'a, B: LayoutBufferView + ?Sized> {
-    buffer: &'a B,
-    buffer_id: BufferId,
-    item_context: DisplaySourceItemAppendContext<'a>,
-}
-
-#[cfg(test)]
-impl<'a, B: LayoutBufferView + ?Sized> BufferSourceRequestAppendContext<'a, B> {
-    pub(crate) fn new(
-        buffer: &'a B,
-        buffer_id: BufferId,
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-        frame: DisplayRowAppendFrame,
-    ) -> Self {
-        Self {
-            buffer,
-            buffer_id,
-            item_context: DisplaySourceItemAppendContext::new(face_id, base_face, frame),
-        }
-    }
-
-    pub(crate) fn append_source_request_to_text_row_and_emit(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        source_item: DisplaySourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> Option<DisplayRowAppendProgress> {
-        let append_item = buffer_source_item_append_request(
-            source_item,
-            self.buffer_id,
-            self.buffer,
-            self.item_context.face_id(),
-        )?;
-        let kind = append_item.append_kind();
-        let item = append_item.into_item();
-        self.item_context
-            .append_display_item_to_text_row_and_emit(state, item, position, kind)
-    }
-
-    pub(crate) fn try_measure_source_request_width_to_text_row(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        source_item: DisplaySourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> Option<f32> {
-        let append_item = buffer_source_item_append_request(
-            source_item,
-            self.buffer_id,
-            self.buffer,
-            self.item_context.face_id(),
-        )?;
-        let kind = append_item.append_kind();
-        let item = append_item.into_item();
-        self.item_context
-            .measure_display_item_width_naturally(state, &item, position, kind)
-    }
-
-    pub(crate) fn measure_source_request_width_to_text_row(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        source_item: DisplaySourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> f32 {
-        let fallback_width = source_item.fallback_width();
-        let Some(append_item) = buffer_source_item_append_request(
-            source_item.clone(),
-            self.buffer_id,
-            self.buffer,
-            self.item_context.face_id(),
-        ) else {
-            return fallback_width.resolve_to_text_row(self.item_context.frame());
-        };
-        let item = append_item.into_item();
-        self.item_context
-            .measure_source_display_item_width_to_text_row(state, &item, source_item, position)
-    }
 }

@@ -5852,7 +5852,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     let source =
         crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
             .expect("string source");
-    let mut source = crate::display_row::DisplayRowSourceWalker::new(source);
+    let mut source = DisplayRowSourceWalker::new(source);
     let (first, second, third) = {
         let mut next_item = |label: &str| {
             let step = source
@@ -10773,4 +10773,154 @@ fn display_replacement_append_context_installs_video_replacements() {
     assert_eq!(video.height, 45.0);
     assert_eq!(video.loop_count, -1);
     assert!(video.autoplay);
+}
+
+struct DisplayRowSourceStep {
+    item: crate::display_item::DisplayItem,
+    pending_faces: Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
+}
+
+impl DisplayRowSourceStep {
+    fn into_parts(
+        self,
+    ) -> (
+        crate::display_item::DisplayItem,
+        Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
+    ) {
+        (self.item, self.pending_faces)
+    }
+}
+
+struct DisplayRowSourceWalker<S> {
+    source: S,
+    state: DisplayRowSourceState,
+}
+
+impl<S> DisplayRowSourceWalker<S> {
+    fn new(source: S) -> Self {
+        Self {
+            source,
+            state: DisplayRowSourceState::default(),
+        }
+    }
+}
+
+impl<S: crate::display_source::DisplayItemSource> DisplayRowSourceWalker<S> {
+    fn next_step(
+        &mut self,
+        face_resolver: &FaceResolver,
+        base_face: &crate::neovm_bridge::ResolvedFace,
+        base_face_id: u32,
+        face_ids: &mut FrameFaceIdAllocator,
+        display_host: Option<&dyn DisplayHost>,
+        fallback_char_width: f32,
+        fallback_ascent: f32,
+        fallback_row_height: f32,
+    ) -> Option<DisplayRowSourceStep> {
+        let face_basis = crate::display_source_resolver::DisplaySourceFaceBasis::new(
+            face_resolver,
+            base_face_id,
+            base_face,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                fallback_char_width,
+                fallback_row_height,
+                fallback_ascent,
+            ),
+        );
+        let resolved = self.state.next_resolved_item(
+            &mut self.source,
+            crate::display_source_resolver::DisplaySourceResolveParams::new(
+                face_basis,
+                display_host,
+            ),
+            face_ids,
+        );
+        let (item, pending_faces) = resolved.into_parts();
+        item.map(|item| DisplayRowSourceStep {
+            item,
+            pending_faces,
+        })
+    }
+}
+
+struct BufferSourceRequestAppendContext<'a, B: crate::neovm_bridge::LayoutBufferView + ?Sized> {
+    buffer: &'a B,
+    buffer_id: BufferId,
+    item_context: crate::display_source_item_append::DisplaySourceItemAppendContext<'a>,
+}
+
+impl<'a, B: crate::neovm_bridge::LayoutBufferView + ?Sized>
+    BufferSourceRequestAppendContext<'a, B>
+{
+    fn new(
+        buffer: &'a B,
+        buffer_id: BufferId,
+        face_id: u32,
+        base_face: &'a crate::neovm_bridge::ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            buffer,
+            buffer_id,
+            item_context: crate::display_source_item_append::DisplaySourceItemAppendContext::new(
+                face_id, base_face, frame,
+            ),
+        }
+    }
+
+    fn append_source_request_to_text_row_and_emit(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        source_item: DisplaySourceItemRequest,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        let append_item = buffer_source_item_append_request(
+            source_item,
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id(),
+        )?;
+        let kind = append_item.append_kind();
+        let item = append_item.into_item();
+        self.item_context
+            .append_display_item_to_text_row_and_emit(state, item, position, kind)
+    }
+
+    fn try_measure_source_request_width_to_text_row(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        source_item: DisplaySourceItemRequest,
+        position: DisplayRowPosition,
+    ) -> Option<f32> {
+        let append_item = buffer_source_item_append_request(
+            source_item,
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id(),
+        )?;
+        let kind = append_item.append_kind();
+        let item = append_item.into_item();
+        self.item_context
+            .measure_display_item_width_naturally(state, &item, position, kind)
+    }
+
+    fn measure_source_request_width_to_text_row(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        source_item: DisplaySourceItemRequest,
+        position: DisplayRowPosition,
+    ) -> f32 {
+        let fallback_width = source_item.fallback_width();
+        let Some(append_item) = buffer_source_item_append_request(
+            source_item.clone(),
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id(),
+        ) else {
+            return fallback_width.resolve_to_text_row(self.item_context.frame());
+        };
+        let item = append_item.into_item();
+        self.item_context
+            .measure_source_display_item_width_to_text_row(state, &item, source_item, position)
+    }
 }
