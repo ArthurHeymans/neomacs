@@ -159,11 +159,15 @@ fn whole_text_run_can_render<B: LayoutBufferView>(
     if source_item.source_end_byte_idx().is_none() {
         return false;
     }
-    if context.overlay_context.has_overlay_strings_in_range(
-        buffer,
-        source_item.source_step_char().start_charpos(),
-        source_end_charpos,
-    ) {
+    if context
+        .overlay_context
+        .first_overlay_string_charpos_in_range(
+            buffer,
+            source_item.source_step_char().start_charpos(),
+            source_end_charpos,
+        )
+        .is_some()
+    {
         return false;
     }
 
@@ -406,6 +410,22 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         col: *progress.row.col,
     };
     let append_geometry = *row_geometry;
+
+    if let Some(source_end_charpos) = source_item.source_end_charpos()
+        && let Some(first_overlay_charpos) = context
+            .overlay_context
+            .first_overlay_string_charpos_in_range(
+                buffer,
+                source_item.source_step_char().start_charpos(),
+                source_end_charpos,
+            )
+        && let Some((prefix, suffix)) = source_item
+            .clone()
+            .split_text_run_at_charpos(first_overlay_charpos, context.text_start_byte)
+    {
+        source_walk.prepend_pending_render_items(vec![suffix]);
+        source_item = prefix;
+    }
 
     if whole_text_run_can_render(
         &source_item,

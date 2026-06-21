@@ -479,6 +479,26 @@ impl DisplaySourceStepItem {
         Some((first, pending))
     }
 
+    pub(crate) fn split_text_run_at_charpos(
+        self,
+        split_charpos: i64,
+        text_start_byte: usize,
+    ) -> Option<(Self, Self)> {
+        let source_step_char = self.source_step_char;
+        let source_item = DisplaySourceItem::new(
+            self.item,
+            source_step_char.start_byte_idx(),
+            source_step_char.start_charpos(),
+            Some(source_step_char.ch()),
+        );
+        let (prefix, suffix) =
+            source_item.split_text_run_at_charpos(split_charpos, text_start_byte)?;
+        Some((
+            DisplaySourceStepItem::new(prefix, text_start_byte)?,
+            DisplaySourceStepItem::new(suffix, text_start_byte)?,
+        ))
+    }
+
     pub(crate) fn into_render_parts(
         self,
     ) -> (
@@ -662,6 +682,81 @@ impl DisplaySourceItem {
         let first = iter.next()?;
         let pending = iter.collect();
         Some((first, pending))
+    }
+
+    pub(crate) fn split_text_run_at_charpos(
+        self,
+        split_charpos: i64,
+        text_start_byte: usize,
+    ) -> Option<(Self, Self)> {
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+        } = self.item;
+        let DisplayItemKind::TextRun(run) = kind else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer {
+            buffer_id,
+            char_pos: start_char_pos,
+            byte_pos: start_byte_pos,
+        } = span.start
+        else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer {
+            char_pos: end_char_pos,
+            byte_pos: end_byte_pos,
+            ..
+        } = span.end
+        else {
+            return None;
+        };
+        let start_charpos = start_char_pos.get() as i64;
+        let end_charpos = end_char_pos.get() as i64;
+        if split_charpos <= start_charpos || split_charpos >= end_charpos {
+            return None;
+        }
+
+        let split_char_offset = split_charpos.checked_sub(start_charpos)? as usize;
+        let split_text_byte_offset = run
+            .text
+            .char_indices()
+            .nth(split_char_offset)
+            .map(|(idx, _)| idx)?;
+        if split_text_byte_offset == 0 || split_text_byte_offset >= run.text.len() {
+            return None;
+        }
+        let split_byte_idx = self.start_byte_idx.checked_add(split_text_byte_offset)?;
+        let split_byte_pos = EmacsBytePos::new(text_start_byte.checked_add(split_byte_idx)?);
+        let split_char_pos = CharPos0::new(split_charpos as usize);
+        let prefix_text = run.text.get(..split_text_byte_offset)?.to_owned();
+        let suffix_text = run.text.get(split_text_byte_offset..)?.to_owned();
+
+        let prefix = DisplayItem::new(
+            SourceSpan::new(
+                DisplaySourcePosition::buffer(buffer_id, start_char_pos, start_byte_pos),
+                DisplaySourcePosition::buffer(buffer_id, split_char_pos, split_byte_pos),
+            ),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(prefix_text)),
+        )
+        .with_layout(layout);
+        let suffix = DisplayItem::new(
+            SourceSpan::new(
+                DisplaySourcePosition::buffer(buffer_id, split_char_pos, split_byte_pos),
+                DisplaySourcePosition::buffer(buffer_id, end_char_pos, end_byte_pos),
+            ),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(suffix_text)),
+        )
+        .with_layout(layout);
+        Some((
+            DisplaySourceItem::new(prefix, self.start_byte_idx, self.start_charpos, None),
+            DisplaySourceItem::new(suffix, split_byte_idx, split_charpos, None),
+        ))
     }
 
     #[cfg(test)]

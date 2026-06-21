@@ -37,6 +37,44 @@ fn item_texts(items: &[DisplayItem]) -> Vec<String> {
         .collect()
 }
 
+#[test]
+fn display_source_step_item_splits_text_run_at_buffer_charpos() {
+    let buffer_id = BufferId(7);
+    let item = DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(buffer_id, CharPos0::new(5), EmacsBytePos::new(110)),
+            DisplaySourcePosition::buffer(buffer_id, CharPos0::new(8), EmacsBytePos::new(115)),
+        ),
+        RenderFaceRef::FaceId(3),
+        DisplayItemKind::TextRun(DisplayTextRun::new("éβx")),
+    );
+    let source_item = DisplaySourceItem::new_for_test(item, 10, 5, Some('é'));
+    let step_item = DisplaySourceStepItem::new(source_item, 100).expect("step item");
+
+    let (prefix, suffix) = step_item
+        .split_text_run_at_charpos(7, 100)
+        .expect("split text run");
+    let (_prefix_step, prefix_item) = prefix.into_test_render_parts().expect("prefix parts");
+    let (_suffix_step, suffix_item) = suffix.into_test_render_parts().expect("suffix parts");
+
+    let DisplayItemKind::TextRun(prefix_run) = &prefix_item.kind else {
+        panic!("expected prefix text run");
+    };
+    let DisplayItemKind::TextRun(suffix_run) = &suffix_item.kind else {
+        panic!("expected suffix text run");
+    };
+    assert_eq!(&*prefix_run.text, "éβ");
+    assert_eq!(&*suffix_run.text, "x");
+    assert_eq!(
+        prefix_item.span.end,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(7), EmacsBytePos::new(114))
+    );
+    assert_eq!(
+        suffix_item.span.start,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(7), EmacsBytePos::new(114))
+    );
+}
+
 fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) {
     let mut eval = Context::new();
     let buffer_id = eval
