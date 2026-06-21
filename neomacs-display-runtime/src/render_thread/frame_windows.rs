@@ -1971,9 +1971,29 @@ impl GuiFrameWindowManager {
         });
     }
 
+    /// Tick child frame counters and prune frames that have not been
+    /// updated recently.  This is a defense-in-depth safety net: the
+    /// primary removal path is `remove_child_frame` triggered by
+    /// `(set-frame-parameter FRAME 'visibility nil)` →
+    /// `notify_gui_child_frame_hidden`.  The prune catches any edge
+    /// case where the Elisp side dismisses a frame without going
+    /// through the visibility/delete-frame path.
     pub(super) fn tick_top_level_child_frames(&mut self) {
+        const STALE_MAX_AGE: u64 = 60;
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.compositor.child_frames.tick();
+            let mgr = &mut window_state.render.compositor.child_frames;
+            mgr.tick();
+            let before = mgr.frames.len();
+            mgr.prune_stale(STALE_MAX_AGE);
+            let after = mgr.frames.len();
+            if after < before {
+                tracing::warn!(
+                    pruned = before - after,
+                    remaining = after,
+                    "child_frame: prune_stale removed orphaned child frames \
+                     (no visibility notification received from VM)"
+                );
+            }
         });
     }
 

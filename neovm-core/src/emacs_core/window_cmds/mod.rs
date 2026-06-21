@@ -5807,21 +5807,45 @@ pub(crate) fn builtin_iconify_frame(
     let frame = frames
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    frame.visible = false;
-    notify_gui_child_frame_hidden(eval, fid)?;
+    set_frame_visibility(eval, fid, false)?;
     Ok(Value::NIL)
 }
 
-fn notify_gui_child_frame_hidden(
+/// Single source of truth for frame visibility changes.
+///
+/// Mirrors GNU Emacs's design where `gui_set_visibility` delegates to
+/// `Fmake_frame_invisible` / `Fmake_frame_visible`, ensuring the host
+/// notification side effect always fires regardless of the entry point.
+///
+/// All callers — `iconify-frame`, `make-frame-invisible`,
+/// `make-frame-visible`, and `modify-frame-parameters` with `visibility`
+/// — must route through this function to guarantee the display runtime
+/// receives `RemoveChildFrame` when a GUI child frame becomes invisible.
+fn set_frame_visibility(
     eval: &mut super::eval::Context,
     fid: FrameId,
+    visible: bool,
 ) -> Result<(), Flow> {
-    let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
-        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
-    });
-    if is_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
-        host.remove_gui_child_frame(fid)
-            .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    let was_visible = eval.frames.get(fid).is_some_and(|f| f.visible);
+    if visible {
+        if let Some(frame) = eval.frames.get_mut(fid) {
+            frame.visible = true;
+            if frame.parent_frame.as_frame_id().is_some() {
+                eval.frames.raise_or_lower_child_frame(fid, true);
+            }
+        }
+    } else if was_visible {
+        if let Some(frame) = eval.frames.get_mut(fid) {
+            frame.visible = false;
+        }
+        // Notify display runtime: GUI child frames need RemoveChildFrame.
+        let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
+            frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
+        });
+        if is_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
+            host.remove_gui_child_frame(fid)
+                .map_err(|message| signal("error", vec![Value::string(message)]))?;
+        }
     }
     Ok(())
 }
@@ -5891,12 +5915,7 @@ pub(crate) fn builtin_make_frame_invisible(
         })?;
 
     if is_tty_child || is_window_frame {
-        if let Some(frame) = eval.frames.get_mut(fid) {
-            frame.visible = false;
-        }
-        if is_window_frame {
-            notify_gui_child_frame_hidden(eval, fid)?;
-        }
+        set_frame_visibility(eval, fid, false)?;
         if is_tty_child
             && eval
                 .frames
@@ -5941,14 +5960,13 @@ pub(crate) fn builtin_make_frame_visible(
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("make-frame-visible", &args, 1)?;
     let fid = resolve_frame_id_in_state(frames, buffers, args.first(), "frame-live-p")?;
-    let frame = frames
-        .get_mut(fid)
-        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    frame.visible = true;
-    if frame.parent_frame.as_frame_id().is_some() {
-        frames.raise_or_lower_child_frame(fid, true);
+    // Ensure the frame exists.
+    if eval.frames.get(fid).is_none() {
+        return Err(signal("error", vec![Value::string("Frame not found")]));
     }
-    let frame = frames
+    set_frame_visibility(eval, fid, true)?;
+    let frame = eval
+        .frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     Ok(Value::make_frame(frame.id.0))
@@ -7987,10 +8005,10 @@ pub(crate) fn builtin_modify_frame_parameters(
                             }
                         }
                         FrameParamKey::Known(FrameParam::Visibility) => {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.visible = pair_cdr.is_truthy();
-                                frame.set_known_parameter(FrameParam::Visibility, pair_cdr);
-                            }
+                            // Route through set_frame_visibility so the
+                            // display runtime is notified — mirrors
+                            // GNU's gui_set_visibility → Fmake_frame_invisible.
+                            set_frame_visibility(eval, fid, pair_cdr.is_truthy())?;
                         }
                         FrameParamKey::Known(FrameParam::Undecorated) => {
                             if let Some(frame) = eval.frames.get_mut(fid) {
