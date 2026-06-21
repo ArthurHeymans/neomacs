@@ -2395,6 +2395,68 @@ fn mir_as_tagged(
     }
 }
 
+/// Force MIR value `v` to its TAGGED form IN PLACE (mutating `cval`/`cval_raw`),
+/// returning the tagged value. Wired by the calls-slice (next increment); kept
+/// separate so the soundness-critical force-tag/deopt-routing logic lands and is
+/// reviewable on its own. Use before a call (a GC SAFEPOINT): a raw
+/// (untagged) fixnum must not be live across a call — the concurrent GC would
+/// trace the bare i64 as a tagged pointer (a raw `3` has bits `0b011` == TAG_CONS
+/// -> a bogus rooted cons -> UAF). Unlike [`mir_as_tagged`] (which retags WITHOUT
+/// writing back), this clears the raw mask so every LATER use and every
+/// deopt-framestate snapshot sees the tagged form — no stale raw alias survives
+/// the safepoint. The MIR analogue of the baseline's `stack_force_tagged`.
+#[allow(dead_code)] // wired by the calls-slice (next increment)
+fn mir_force_tagged(
+    fb: &mut FunctionBuilder,
+    cval: &mut [Option<ClifValue>],
+    cval_raw: &mut [bool],
+    v: mir::MirValue,
+) -> Result<ClifValue, CompileError> {
+    let i = v.0 as usize;
+    let cv = cval[i].ok_or(CompileError::BadOperand)?;
+    if cval_raw[i] {
+        let tagged = retag_fixnum(fb, cv);
+        cval[i] = Some(tagged);
+        cval_raw[i] = false;
+        Ok(tagged)
+    } else {
+        Ok(cv)
+    }
+}
+
+/// The deopt landing block for a guard-emitting MIR inst. In a CALL-BEARING body
+/// (`precise`), every guard gets a fresh PER-SITE STATUS_DEOPT_AT block capturing
+/// the inst's pre-op operand stack from `inst.pre_stack` (snapshotted EAGERLY
+/// through `cval`/`cval_raw`, because a later call force-tags residual slots and
+/// would otherwise corrupt a pre-call guard's raw mask) — NEVER rerun-from-start,
+/// which would re-execute a call's side effect (the loop-back-edge hole the
+/// adversarial critique caught). In a pure body it is the shared rerun-from-start
+/// block (STATUS_DEOPT), created lazily.
+#[allow(dead_code)] // wired by the calls-slice (next increment)
+fn mir_deopt_block(
+    fb: &mut FunctionBuilder,
+    precise: bool,
+    inst: &mir::MirInst,
+    cval: &[Option<ClifValue>],
+    cval_raw: &[bool],
+    shared: &mut Option<Block>,
+    pending: &mut Vec<PendingDeopt>,
+) -> Result<Block, CompileError> {
+    if precise {
+        let mut stack = Vec::with_capacity(inst.pre_stack.len());
+        let mut raw = Vec::with_capacity(inst.pre_stack.len());
+        for v in &inst.pre_stack {
+            stack.push(cval[v.0 as usize].ok_or(CompileError::BadOperand)?);
+            raw.push(cval_raw[v.0 as usize]);
+        }
+        // handlers_len = 0: build_mir bails on handler/bind opcodes, so a MIR leaf
+        // never has condition-case/catch frames to transfer on resume.
+        Ok(deopt_site(fb, inst.pc, 0, &stack, &raw, pending))
+    } else {
+        Ok(*shared.get_or_insert_with(|| fb.create_block()))
+    }
+}
+
 /// Raw fixnum add/sub: operands and result are untagged i64 (no untag/retag), with
 /// the interpreter's fixnum-range check (deopt on overflow). The unboxed analogue
 /// of [`lower_fixnum_binop`].
