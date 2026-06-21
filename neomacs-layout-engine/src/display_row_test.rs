@@ -169,9 +169,9 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
     let rendered = realizer.realize_face(7, &face, 8.0, 12.0, 16.0);
 
     assert_eq!(rendered.face_id, 7);
-    assert_eq!(rendered.metrics.char_width_px, 8.0);
-    assert_eq!(rendered.metrics.ascent_px, 12.0);
-    assert_eq!(rendered.metrics.descent_px, 4);
+    assert_eq!(rendered.metrics.char_width_px(8.0), 8.0);
+    assert_eq!(rendered.metrics.ascent_px(), 12.0);
+    assert_eq!(rendered.metrics.descent_px(), 4);
 }
 
 #[test]
