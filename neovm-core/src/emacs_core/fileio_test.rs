@@ -4549,6 +4549,72 @@ fn test_write_region_bounds_and_order_semantics() {
 }
 
 #[test]
+fn test_write_region_mustbenew_excl_semantics() {
+    // GNU `Fwrite_region` MUSTBENEW handling (src/fileio.c):
+    //   open_flags |= EQ (mustbenew, Qexcl) ? O_EXCL : ...
+    // When MUSTBENEW is `excl` and the file already exists, the O_EXCL open
+    // fails with EEXIST, which `get_file_errno_data` turns into
+    //   (file-already-exists "File exists" FILENAME).
+    // When the file does not exist, the write succeeds normally.
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let dir = std::env::temp_dir().join("neovm_eval_write_region_excl");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    // --- excl on a NON-existent file: succeeds and writes content. ---
+    let new_path = dir.join("brand-new.txt");
+    let new_str = new_path.to_string_lossy().to_string();
+    let mut eval = Context::new();
+    eval.buffers.current_buffer_mut().unwrap().insert("hi");
+    builtin_write_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(&new_str),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("excl"),
+        ],
+    )
+    .expect("excl write-region to a new file should succeed");
+    assert_eq!(read_file_contents(&new_str).unwrap(), "hi");
+
+    // --- excl on an EXISTING file: signals file-already-exists. ---
+    let err = builtin_write_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(&new_str),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("excl"),
+        ],
+    )
+    .expect_err("excl write-region to an existing file should signal");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "file-already-exists");
+            // GNU data: (file-already-exists "File exists" FILENAME)
+            assert_eq!(
+                sig.data,
+                vec![Value::string("File exists"), Value::string(&new_str)],
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+    // The pre-existing content must be untouched by the failed excl write.
+    assert_eq!(read_file_contents(&new_str).unwrap(), "hi");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_write_region_visit_sets_file_name_and_clears_modified() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

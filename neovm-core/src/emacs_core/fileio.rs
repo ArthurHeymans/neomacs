@@ -1297,10 +1297,15 @@ pub fn write_string_to_file(content: &str, filename: &str, append: bool) -> std:
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 enum FileWriteMode {
     Truncate,
     Append,
     Seek(u64),
+    /// `O_WRONLY | O_CREAT | O_EXCL` — used by `write-region` when MUSTBENEW is
+    /// `excl`.  Fails with `ErrorKind::AlreadyExists` (EEXIST) if the file
+    /// already exists, matching GNU's `open_flags |= O_EXCL`.
+    Excl,
 }
 
 /// Write raw bytes to a file, returning the open `File` handle so the caller
@@ -1311,15 +1316,21 @@ fn write_bytes_to_file_with_mode(
     mode: FileWriteMode,
 ) -> std::io::Result<fs::File> {
     let mut options = fs::OpenOptions::new();
-    options.write(true).create(true);
+    options.write(true);
     match mode {
         FileWriteMode::Truncate => {
-            options.truncate(true);
+            options.create(true).truncate(true);
         }
         FileWriteMode::Append => {
-            options.append(true);
+            options.create(true).append(true);
         }
-        FileWriteMode::Seek(_) => {}
+        FileWriteMode::Seek(_) => {
+            options.create(true);
+        }
+        FileWriteMode::Excl => {
+            // `create_new` maps to O_CREAT | O_EXCL.
+            options.create_new(true);
+        }
     }
     let mut file = options.open(filename)?;
     if let FileWriteMode::Seek(offset) = mode {
@@ -2806,6 +2817,94 @@ fn signal_existing_path_value(path: &Path, value: Value) -> Flow {
             vec![Value::string("File already exists"), value],
         )
     }
+}
+
+/// Faithful port of GNU `barf_or_query_if_file_exists` (`src/fileio.c`).
+///
+/// If FILENAME exists (or `known_to_exist` is set), either signal a
+/// `file-already-exists` error or interactively ask the user whether to
+/// proceed.  Mirrors the C control flow exactly:
+///
+/// * A directory at FILENAME always signals `file-error` with
+///   "File is a directory".
+/// * Non-interactive (`interactive == false`): signal `file-already-exists`
+///   with the message "File already exists".
+/// * Interactive: format the prompt
+///   `"File <name> already exists; <querystring> anyway? "` and dispatch it
+///   through `y-or-n-p` (when `quick`) or `yes-or-no-p`.  A negative answer
+///   signals `file-already-exists` ("File already exists"); a positive answer
+///   returns `Ok(())` so the caller proceeds to overwrite.
+///
+/// `absname` is the already-expanded filename (GNU calls this with the result
+/// of `Fexpand_file_name`).  We keep it as a `LispString` so non-UTF-8
+/// filenames are reproduced byte-for-byte in the prompt and the error data.
+fn barf_or_query_if_file_exists(
+    eval: &mut Context,
+    absname: &LispString,
+    known_to_exist: bool,
+    querystring: &str,
+    interactive: bool,
+    quick: bool,
+) -> Result<(), Flow> {
+    let path = lisp_file_name_to_path_buf(absname);
+    let absname_value = Value::heap_string(absname.clone());
+
+    // `! known_to_exist && stat(...) == 0` in GNU: probe the file with a
+    // non-symlink-following stat so a dangling symlink still counts as
+    // existing, and so a directory is reported distinctly.
+    let mut exists = known_to_exist;
+    if !known_to_exist {
+        if let Ok(metadata) = fs::symlink_metadata(&path) {
+            if metadata.is_dir() {
+                return Err(signal(
+                    "file-error",
+                    vec![Value::string("File is a directory"), absname_value],
+                ));
+            }
+            exists = true;
+        }
+    }
+
+    if !exists {
+        return Ok(());
+    }
+
+    if !interactive {
+        return Err(signal(
+            "file-already-exists",
+            vec![Value::string("File already exists"), absname_value],
+        ));
+    }
+
+    // GNU: AUTO_STRING (format, "File %s already exists; %s anyway? ")
+    //      tem = CALLN (Fformat, format, absname, build_string (querystring));
+    // `y-or-n-p` / `yes-or-no-p` append the "(y or n) " / "(yes or no) "
+    // suffix themselves, so we only build the leading sentence here.
+    let mut prompt_bytes = b"File ".to_vec();
+    prompt_bytes.extend_from_slice(absname.as_bytes());
+    prompt_bytes.extend_from_slice(b" already exists; ");
+    prompt_bytes.extend_from_slice(querystring.as_bytes());
+    prompt_bytes.extend_from_slice(b" anyway? ");
+    let prompt = if absname.is_multibyte() {
+        Value::heap_string(LispString::from_emacs_bytes(prompt_bytes))
+    } else {
+        Value::heap_string(LispString::from_unibyte(prompt_bytes))
+    };
+
+    let answer = if quick {
+        eval.apply(Value::symbol("y-or-n-p"), vec![prompt])?
+    } else {
+        eval.apply(Value::symbol("yes-or-no-p"), vec![prompt])?
+    };
+
+    if answer.is_nil() {
+        return Err(signal(
+            "file-already-exists",
+            vec![Value::string("File already exists"), absname_value],
+        ));
+    }
+
+    Ok(())
 }
 
 fn maybe_dispatch_resolved_file_handler(
@@ -5588,6 +5687,23 @@ pub(crate) fn builtin_write_region(
         _ => None,
     };
 
+    // GNU `Fwrite_region`, immediately after `Fexpand_file_name` and before the
+    // file-name-handler dispatch:
+    //
+    //   if (!NILP (mustbenew) && !EQ (mustbenew, Qexcl))
+    //     barf_or_query_if_file_exists (filename, false, "overwrite", true, true);
+    //
+    // `excl` is handled later via the `O_EXCL` open flag (it produces an
+    // EEXIST -> `file-already-exists` error at write time); every other
+    // non-nil MUSTBENEW asks for interactive confirmation here.
+    let mustbenew = args.get(6).copied().unwrap_or(Value::NIL);
+    let mustbenew_is_excl = mustbenew
+        .as_symbol_name()
+        .is_some_and(|name| name == "excl");
+    if !mustbenew.is_nil() && !mustbenew_is_excl {
+        barf_or_query_if_file_exists(eval, &resolved, false, "overwrite", true, true)?;
+    }
+
     let op = Value::symbol("write-region");
     let handler = find_file_name_handler_lisp_for_eval(eval, &resolved, op);
     if !handler.is_nil() {
@@ -5611,12 +5727,21 @@ pub(crate) fn builtin_write_region(
     }
 
     let resolved_path = lisp_file_name_to_path_buf(&resolved);
-    let append_mode = match args.get(3) {
-        Some(value) if value.is_fixnum() || value.is_char() => {
-            FileWriteMode::Seek(expect_file_offset(value)? as u64)
+    // GNU `Fwrite_region`:
+    //   open_flags |= EQ (mustbenew, Qexcl) ? O_EXCL
+    //               : !NILP (append) ? 0 : O_TRUNC;
+    // `excl` forces an exclusive create (O_EXCL) that takes precedence over
+    // APPEND; a pre-existing file then yields EEXIST -> `file-already-exists`.
+    let append_mode = if mustbenew_is_excl {
+        FileWriteMode::Excl
+    } else {
+        match args.get(3) {
+            Some(value) if value.is_fixnum() || value.is_char() => {
+                FileWriteMode::Seek(expect_file_offset(value)? as u64)
+            }
+            Some(value) if value.is_truthy() => FileWriteMode::Append,
+            _ => FileWriteMode::Truncate,
         }
-        Some(value) if value.is_truthy() => FileWriteMode::Append,
-        _ => FileWriteMode::Truncate,
     };
     let current_id = current_buffer_id_or_error(&eval.buffers)?;
 
@@ -5658,7 +5783,31 @@ pub(crate) fn builtin_write_region(
     // --- Write encoded bytes and handle fsync ---
     let file = write_bytes_to_file_with_mode(&encoded_bytes, &resolved_path, append_mode).map_err(
         |err| {
-            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
+            // GNU opens the output file and reports failures via
+            // `report_file_errno ("Opening output file", filename, errno)`.
+            // For MUSTBENEW=`excl`, an existing file makes the O_EXCL open
+            // fail with EEXIST, which `get_file_errno_data` turns into
+            // `(file-already-exists "File exists" FILENAME)` — note the
+            // strerror text "File exists" and the omitted action prefix.
+            if matches!(append_mode, FileWriteMode::Excl) && err.kind() == ErrorKind::AlreadyExists
+            {
+                // GNU's error string here is `emacs_strerror (EEXIST)`, i.e.
+                // the bare C `strerror` text "File exists" (no "(os error N)"
+                // suffix that Rust's `io::Error::to_string` would add).
+                return signal(
+                    "file-already-exists",
+                    vec![
+                        Value::string("File exists"),
+                        Value::heap_string(resolved.clone()),
+                    ],
+                );
+            }
+            let action = if matches!(append_mode, FileWriteMode::Excl) {
+                "Opening output file"
+            } else {
+                "Writing to"
+            };
+            signal_file_action_error_value(err, action, Value::heap_string(resolved.clone()))
         },
     )?;
 
