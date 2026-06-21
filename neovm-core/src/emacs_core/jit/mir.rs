@@ -203,6 +203,17 @@ pub struct MirInst {
     pub op: MirOp,
     pub ty: LispType,
     pub effect: Effect,
+    /// Bytecode index of the op that produced this inst — the pc a precise deopt
+    /// resumes the interpreter at. (Synthetic `Arg` insts use 0; never deopt sites.)
+    pub pc: usize,
+    /// The operand stack (SSA values) just BEFORE this op executed — the framestate
+    /// a precise deopt spills (the interpreter reruns the op at `pc` with this
+    /// stack) and the full residual stack an `Opaque` (call) delegation needs.
+    /// Captured from build_mir's ACCURATE model stack, which includes the inst-less
+    /// Pop/Dup/StackRef/StackSet/DiscardN folds the SSA representation otherwise
+    /// loses (without this, the reconstructed framestate would be a silent
+    /// miscompile).
+    pub pre_stack: Vec<MirValue>,
 }
 
 /// A block terminator. Successor edges carry the live operand stack as argument
@@ -374,6 +385,8 @@ pub fn build_mir(
                     op: MirOp::Arg(i),
                     ty: LispType::Any,
                     effect: Effect::Pure,
+                    pc: 0,
+                    pre_stack: Vec::new(),
                 });
             }
         }
@@ -443,7 +456,20 @@ pub fn build_mir(
                 | Op::PopHandler => {
                     return Err(CompileError::UnsupportedOp("mir-unmodelled-control"));
                 }
-                _ => lower_value_op(&mut b, op, constants, &mut stack, &mut insts)?,
+                _ => {
+                    // Snapshot the pre-op stack (the accurate model stack, incl. the
+                    // inst-less stack-shuffle folds) and stamp it + the bytecode pc
+                    // onto every inst this op emits — the precise-deopt framestate
+                    // and the Opaque-delegation full stack read these directly
+                    // instead of replaying the (lossy) folds.
+                    let pre = stack.clone();
+                    let before = insts.len();
+                    lower_value_op(&mut b, op, constants, &mut stack, &mut insts)?;
+                    for inst in &mut insts[before..] {
+                        inst.pc = i;
+                        inst.pre_stack = pre.clone();
+                    }
+                }
             }
         }
 
@@ -497,6 +523,10 @@ fn lower_value_op(
             op: mop,
             ty,
             effect: eff,
+            // Stamped by the caller (build_mir's block loop) once the pre-op stack
+            // + bytecode pc are known; placeholders here.
+            pc: 0,
+            pre_stack: Vec::new(),
         });
         r
     };
@@ -844,6 +874,40 @@ mod tests {
         // not buildable, which is all Phase 4a needs.
         let sw = vec![Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return];
         assert!(build_mir(&sw, &[], 0).is_err());
+    }
+
+    #[test]
+    fn mir_inst_pre_stack_captures_inst_less_folds() {
+        // [Const a, Const b, StackRef 1, Add, Return]: StackRef 1 copies slot 0 (a)
+        // to the top as an INST-LESS fold (no MirInst). The Add inst's pre_stack
+        // must still reflect the folded stack ([a, b, a]) — otherwise a precise
+        // deopt at Add would spill the wrong operand stack (the Hole-1 silent
+        // miscompile). This is the regression guard for framestate non-lossiness.
+        let ops = vec![
+            Op::Constant(0),
+            Op::Constant(1),
+            Op::StackRef(1),
+            Op::Add,
+            Op::Return,
+        ];
+        let constants = vec![Value::make_int(10), Value::make_int(20)];
+        let mir = build_mir(&ops, &constants, 0).expect("builds");
+        let add = mir
+            .blocks
+            .iter()
+            .flat_map(|b| &b.insts)
+            .find(|i| matches!(i.op, MirOp::Bin(BinKind::Add, _, _)))
+            .expect("has an Add inst");
+        assert_eq!(add.pc, 3, "Add is at bytecode pc 3");
+        assert_eq!(
+            add.pre_stack.len(),
+            3,
+            "pre_stack must include the inst-less StackRef fold: [a, b, a]"
+        );
+        assert_eq!(
+            add.pre_stack[0], add.pre_stack[2],
+            "StackRef 1 copied slot 0's value to the top — same SSA value"
+        );
     }
 
     #[test]
