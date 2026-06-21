@@ -279,21 +279,6 @@ impl<'emit, 'output, 'face> FrameTabBarDisplayRowRenderState<'emit, 'output, 'fa
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct WindowChromeDisplayText {
-    value: Value,
-}
-
-impl WindowChromeDisplayText {
-    pub(crate) fn new(value: Value, _selected_window: bool) -> Self {
-        Self { value }
-    }
-
-    fn value(self) -> Value {
-        self.value
-    }
-}
-
 struct ChromeLispStringRowRequest<'face> {
     y: f32,
     width: f32,
@@ -403,7 +388,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
-    pub(crate) text: WindowChromeDisplayText,
+    pub(crate) text: Value,
 }
 
 pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
@@ -588,7 +573,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     .tab_line_face
                     .expect("tab-line face should exist when tab-line height is positive"),
                 symbol_values: status_line_symbol_values.clone(),
-                text: WindowChromeDisplayText::new(tab_line_text, params.selected),
+                text: tab_line_text,
             });
         }
 
@@ -620,7 +605,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     .header_line_face
                     .expect("header-line face should exist when header-line height is positive"),
                 symbol_values: status_line_symbol_values.clone(),
-                text: WindowChromeDisplayText::new(header_line_text, params.selected),
+                text: header_line_text,
             });
         }
 
@@ -663,7 +648,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     .mode_line_face
                     .expect("mode-line face should exist when mode-line height is positive"),
                 symbol_values: status_line_symbol_values,
-                text: WindowChromeDisplayText::new(mode_line_text, params.selected),
+                text: mode_line_text,
             });
         }
     }
@@ -774,7 +759,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
-            self.text.value(),
+            self.text,
         )
     }
 

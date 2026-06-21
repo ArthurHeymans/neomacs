@@ -15,7 +15,7 @@ use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };
-use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
+use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;

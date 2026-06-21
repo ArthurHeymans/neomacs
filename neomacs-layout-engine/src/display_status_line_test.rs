@@ -26,30 +26,6 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
 }
 
 #[test]
-fn window_chrome_display_text_preserves_lisp_value_for_source_renderer() {
-    let _eval = Context::new();
-
-    assert_eq!(
-        WindowChromeDisplayText::new(Value::string("tab-line"), true)
-            .value()
-            .as_utf8_str(),
-        Some("tab-line")
-    );
-    assert_eq!(
-        WindowChromeDisplayText::new(Value::string("header"), true)
-            .value()
-            .as_utf8_str(),
-        Some("header")
-    );
-    assert_eq!(
-        WindowChromeDisplayText::new(Value::string("mode"), false)
-            .value()
-            .as_utf8_str(),
-        Some("mode")
-    );
-}
-
-#[test]
 fn chrome_lisp_string_row_request_preserves_policy_inputs() {
     let _eval = Context::new();
     let base_face = ResolvedFace::default();
@@ -108,7 +84,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         tab_policy: DisplayTabPolicy::every(4),
         base_face: &base_face,
         symbol_values,
-        text: WindowChromeDisplayText::new(Value::string("mode"), true),
+        text: Value::string("mode"),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)

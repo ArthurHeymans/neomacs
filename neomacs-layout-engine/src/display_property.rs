@@ -2,8 +2,9 @@ use crate::display_item::{
     DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
     DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
 };
-use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
-use crate::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
+use crate::display_spec::{
+    DisplaySpaceKey, DisplaySpecHead, is_display_space_spec, parse_display_xwidget_layout,
+};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::list_to_vec;
 

@@ -5,7 +5,7 @@
 
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
-use crate::display_face_ref::render_face_ref_with_fallback;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
@@ -225,7 +225,8 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         active_face_state: &DisplayRowActiveFaceState,
         item: &mut DisplayItem,
     ) -> DisplayRowActiveFaceState {
-        item.face = render_face_ref_with_fallback(item.face, active_face_state.face_id());
+        item.face =
+            RenderFaceRef::FaceId(render_face_ref_id(item.face, active_face_state.face_id()));
 
         let Some(factor) = item
             .layout
