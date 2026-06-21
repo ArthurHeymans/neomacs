@@ -156,10 +156,14 @@ impl DisplaySourcePreparedCharAppend {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceTextCharPreparedAppend {
-    pub(crate) plan: DisplaySourceTextCharAppendPlan,
+    plan: DisplaySourceTextCharAppendPlan,
 }
 
 impl DisplaySourceTextCharPreparedAppend {
+    pub(crate) fn new(plan: DisplaySourceTextCharAppendPlan) -> Self {
+        Self { plan }
+    }
+
     fn advance_px(&self) -> f32 {
         self.plan.advance_px()
     }
@@ -386,11 +390,7 @@ impl DisplaySpecialSourceCharRequest {
         position: DisplayRowPosition,
         display_item: DisplayItem,
     ) -> DisplaySourceSpecialCharAppendPlan {
-        DisplaySourceSpecialCharAppendPlan {
-            source_item: self.source_item_request(),
-            position,
-            display_item,
-        }
+        DisplaySourceSpecialCharAppendPlan::new(self.source_item_request(), position, display_item)
     }
 
     pub(crate) fn prepared_append_at(
@@ -399,11 +399,11 @@ impl DisplaySpecialSourceCharRequest {
         measured_width_px: Option<f32>,
         display_item: DisplayItem,
     ) -> DisplaySourceSpecialCharPreparedAppend {
-        DisplaySourceSpecialCharPreparedAppend {
-            kind: self.kind(),
-            append_plan: self.append_plan_at(position, display_item),
+        DisplaySourceSpecialCharPreparedAppend::new(
+            self.kind(),
+            self.append_plan_at(position, display_item),
             measured_width_px,
-        }
+        )
     }
 }
 
@@ -419,15 +419,32 @@ impl DisplaySourceSpecialDisplayKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceSpecialCharPreparedAppend {
-    pub(crate) kind: DisplaySourceSpecialDisplayKind,
-    pub(crate) append_plan: DisplaySourceSpecialCharAppendPlan,
-    pub(crate) measured_width_px: Option<f32>,
+    kind: DisplaySourceSpecialDisplayKind,
+    append_plan: DisplaySourceSpecialCharAppendPlan,
+    measured_width_px: Option<f32>,
 }
 
 impl DisplaySourceSpecialCharPreparedAppend {
+    pub(crate) fn new(
+        kind: DisplaySourceSpecialDisplayKind,
+        append_plan: DisplaySourceSpecialCharAppendPlan,
+        measured_width_px: Option<f32>,
+    ) -> Self {
+        Self {
+            kind,
+            append_plan,
+            measured_width_px,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn kind(&self) -> DisplaySourceSpecialDisplayKind {
         self.kind
+    }
+
+    #[cfg(test)]
+    pub(crate) fn display_item(&self) -> &DisplayItem {
+        self.append_plan.display_item()
     }
 
     fn prepare_append_policy(
@@ -558,52 +575,90 @@ impl DisplaySourceSpecialCharAppendOutcome {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceSpecialCharAppendPlan {
-    pub(crate) source_item: DisplaySourceItemRequest,
-    pub(crate) position: DisplayRowPosition,
-    pub(crate) display_item: DisplayItem,
+    source_item: DisplaySourceItemRequest,
+    position: DisplayRowPosition,
+    display_item: DisplayItem,
 }
 
 impl DisplaySourceSpecialCharAppendPlan {
-    pub(crate) fn position(&self) -> DisplayRowPosition {
-        self.position
+    pub(crate) fn new(
+        source_item: DisplaySourceItemRequest,
+        position: DisplayRowPosition,
+        display_item: DisplayItem,
+    ) -> Self {
+        Self {
+            source_item,
+            position,
+            display_item,
+        }
     }
 
-    pub(crate) fn source_item(&self) -> DisplaySourceItemRequest {
-        self.source_item.clone()
+    #[cfg(test)]
+    pub(crate) fn display_item(&self) -> &DisplayItem {
+        &self.display_item
+    }
+
+    pub(crate) fn into_append_request(
+        self,
+    ) -> (DisplayItem, DisplayRowPosition, DisplayRowAppendKind) {
+        let fallback_kind = self.source_item.append_kind();
+        (self.display_item, self.position, fallback_kind)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceTextCharAppendPlan {
-    pub(crate) source_text: DisplaySourceTextRequest,
-    pub(crate) position: DisplayRowPosition,
-    pub(crate) source_item: DisplayItem,
+    source_text: DisplaySourceTextRequest,
+    position: DisplayRowPosition,
+    source_item: DisplayItem,
 }
 
 impl DisplaySourceTextCharAppendPlan {
+    pub(crate) fn new(
+        source_text: DisplaySourceTextRequest,
+        position: DisplayRowPosition,
+        source_item: DisplayItem,
+    ) -> Self {
+        Self {
+            source_text,
+            position,
+            source_item,
+        }
+    }
+
     pub(crate) fn from_render_plan(
         source: DisplaySourceRenderPlanRequest<'_>,
         position: DisplayRowPosition,
         source_item: &DisplayItem,
         render_plan: DisplaySourceAppendRenderPlan,
     ) -> Self {
-        Self {
-            source_text: source.into_text_request(render_plan),
+        Self::new(
+            source.into_text_request(render_plan),
             position,
-            source_item: source_item.clone(),
-        }
-    }
-
-    pub(crate) fn source_text(&self) -> DisplaySourceTextRequest {
-        self.source_text
-    }
-
-    pub(crate) fn position(&self) -> DisplayRowPosition {
-        self.position
+            source_item.clone(),
+        )
     }
 
     fn advance_px(&self) -> f32 {
         self.source_text.advance_px()
+    }
+
+    pub(crate) fn into_render_request(
+        self,
+    ) -> (
+        DisplayItem,
+        DisplayRowPosition,
+        DisplayRowAppendKind,
+        DisplaySourceAppendRenderPolicy,
+    ) {
+        let fallback_kind = self.source_text.source_item().append_kind();
+        let render_policy = self.source_text.append_render_policy();
+        (
+            self.source_item,
+            self.position,
+            fallback_kind,
+            render_policy,
+        )
     }
 }
 

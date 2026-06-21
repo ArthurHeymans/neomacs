@@ -3323,27 +3323,27 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
         buffer.insert("a");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let prepared_append = DisplaySourceSpecialCharPreparedAppend {
-        kind: DisplaySourceSpecialDisplayKind::Control,
-        append_plan: DisplaySourceSpecialCharAppendPlan {
-            source_item: DisplaySourceItemRequest::new(
+    let prepared_append = DisplaySourceSpecialCharPreparedAppend::new(
+        DisplaySourceSpecialDisplayKind::Control,
+        DisplaySourceSpecialCharAppendPlan::new(
+            DisplaySourceItemRequest::new(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 DisplaySourceAppendItem::ControlChar { ch: '\n' },
             ),
-            position: DisplayRowPosition {
+            DisplayRowPosition {
                 x_px: 80.0,
                 col: 10,
             },
-            display_item: buffer_display_item(
+            buffer_display_item(
                 buf_id,
                 21,
                 22,
                 RenderFaceRef::Inherit,
                 DisplayItemKind::ControlChar { ch: '\n' },
             ),
-        },
-        measured_width_px: Some(8.0),
-    };
+        ),
+        Some(8.0),
+    );
     let text = b"a";
     let mut byte_idx = 0;
     let mut charpos = 21;
@@ -3581,26 +3581,19 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let text = b"a";
     let mut byte_idx = 0;
     let source_step_char = DisplaySourceStepChar::new('a', 0, 21);
-    let prepared_append = DisplaySourceTextCharPreparedAppend {
-        plan: DisplaySourceTextCharAppendPlan {
-            source_text: DisplaySourceTextRequest::new(
+    let prepared_append =
+        DisplaySourceTextCharPreparedAppend::new(DisplaySourceTextCharAppendPlan::new(
+            DisplaySourceTextRequest::new(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 'a',
                 DisplaySourceAppendRenderPlan::resolved_advance(8.0),
             ),
-            position: DisplayRowPosition {
+            DisplayRowPosition {
                 x_px: 80.0,
                 col: 10,
             },
-            source_item: buffer_source_mapped_display_item(
-                buf_id,
-                21,
-                22,
-                "a",
-                RenderFaceRef::Inherit,
-            ),
-        },
-    };
+            buffer_source_mapped_display_item(buf_id, 21, 22, "a", RenderFaceRef::Inherit),
+        ));
     let mut charpos = 21;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut col = 10;
@@ -8807,7 +8800,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
         prepared_append.kind(),
         DisplaySourceSpecialDisplayKind::Control
     );
-    let direct_item = prepared_append.append_plan.display_item.clone();
+    let direct_item = prepared_append.display_item().clone();
     assert!(matches!(
         direct_item.kind,
         DisplayItemKind::ControlChar { ch: '\u{0007}' }

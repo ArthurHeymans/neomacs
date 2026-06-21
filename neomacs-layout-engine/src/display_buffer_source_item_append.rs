@@ -159,15 +159,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplaySourceSpecialCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        let position = plan.position();
-        let fallback_kind = plan.source_item().append_kind();
+        let (display_item, position, fallback_kind) = plan.into_append_request();
         self.item_active_face(geometry)
-            .append_display_item_to_text_row_and_emit(
-                state,
-                plan.display_item,
-                position,
-                fallback_kind,
-            )
+            .append_display_item_to_text_row_and_emit(state, display_item, position, fallback_kind)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -230,16 +224,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         cluster_tail: Option<(char, bool)>,
     ) -> DisplaySourceTextCharPreparedAppend {
         let source = source_char.advance_request(text, byte_idx, cluster_tail);
-        DisplaySourceTextCharPreparedAppend {
-            plan: self.prepare_source_char_append_plan(
-                geometry,
-                append_state,
-                measure_state,
-                source,
-                position,
-                source_item,
-            ),
-        }
+        DisplaySourceTextCharPreparedAppend::new(self.prepare_source_char_append_plan(
+            geometry,
+            append_state,
+            measure_state,
+            source,
+            position,
+            source_item,
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -355,14 +347,11 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         state: &mut TextRowSourceRenderState<'_>,
         plan: DisplaySourceTextCharAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        let position = plan.position();
-        let source_text = plan.source_text();
-        let fallback_kind = source_text.source_item().append_kind();
-        let mut render_policy = source_text.append_render_policy();
+        let (source_item, position, fallback_kind, mut render_policy) = plan.into_render_request();
         self.append_source_display_item_to_text_row(
             geometry,
             state,
-            plan.source_item,
+            source_item,
             position,
             fallback_kind,
             &mut render_policy,
