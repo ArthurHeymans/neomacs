@@ -293,21 +293,6 @@ pub(crate) fn store_text_output_phys_cursor(
     builder.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
 }
 
-pub(crate) fn edit_current_text_output_row<R>(
-    builder: &mut DisplayOutputBuilder,
-    display_row_index: usize,
-    f: impl FnOnce(&mut GlyphRow, usize) -> R,
-) -> Option<R> {
-    builder.edit_current_window_row_with_matrix_cols(display_row_index, f)
-}
-
-pub(crate) fn edit_last_text_output_rows(
-    builder: &mut DisplayOutputBuilder,
-    f: impl FnMut(&mut GlyphRow, usize),
-) {
-    builder.edit_last_window_rows_with_matrix_cols(f);
-}
-
 pub(crate) fn begin_text_output_row(
     builder: &mut DisplayOutputBuilder,
     display_row_index: usize,

@@ -12,9 +12,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::display_text_output_install::{
-    edit_current_text_output_row, edit_last_text_output_rows, install_output_resolved_face,
-};
+use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
@@ -387,8 +385,7 @@ pub(crate) fn install_text_window_right_edge_markers(
 ) {
     let base_face = render_services.face_resolver().default_face().clone();
     for decoration in text_window_right_edge_marker_decorations(&request) {
-        let _ = edit_current_text_output_row(
-            output_builder,
+        let _ = output_builder.edit_current_window_row_with_matrix_cols(
             decoration.display_row_index,
             |row, matrix_cols| {
                 install_right_edge_marker_from_source_request(
@@ -412,7 +409,7 @@ pub(crate) fn install_text_window_right_border_rows(
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    edit_last_text_output_rows(output_builder, |row, matrix_cols| {
+    output_builder.edit_last_window_rows_with_matrix_cols(|row, matrix_cols| {
         install_right_border_from_source_request(
             row,
             matrix_cols.saturating_sub(1),
