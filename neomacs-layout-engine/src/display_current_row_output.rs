@@ -2,6 +2,7 @@ use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_output_builder::DisplayOutputBuilder;
 #[cfg(test)]
 use crate::display_output_install_request::OutputFrameStateInstallRequest;
+pub(crate) use crate::display_output_row_request::DisplayCurrentRowMutation;
 #[cfg(test)]
 use crate::display_rendered_row_output_install::install_rendered_display_row_fragment_assets;
 #[cfg(test)]
@@ -24,12 +25,6 @@ pub(crate) struct DisplayRowCurrentRowOutput<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
-pub(crate) trait DisplayCurrentRowMutation {
-    type Output;
-
-    fn apply(self, row: &mut GlyphRow) -> Self::Output;
-}
-
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
         Self { builder }
@@ -41,10 +36,6 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
         }
     }
 
-    fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        self.builder.edit_current_output_row(f)
-    }
-
     fn current_row_snapshot(&self) -> Option<GlyphRow> {
         self.builder.current_row_for_render().cloned()
     }
@@ -53,7 +44,7 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     where
         M: DisplayCurrentRowMutation,
     {
-        self.edit_current_row(|row| mutation.apply(row))
+        self.builder.apply_current_output_row_mutation(mutation)
     }
 
     fn apply_current_row_scratch_mutation<M>(&self, mutation: M) -> Option<M::Output>
@@ -69,7 +60,24 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
         &mut self,
         rendered: &RenderedDisplayRow,
     ) -> Option<DisplayRowPosition> {
-        self.edit_current_row(|row| rendered.append_fragment_to_current_row(row))
+        self.builder
+            .apply_current_output_row_mutation(AppendRenderedDisplayRowFragmentMutation {
+                rendered,
+            })
+    }
+}
+
+#[cfg(test)]
+struct AppendRenderedDisplayRowFragmentMutation<'a> {
+    rendered: &'a RenderedDisplayRow,
+}
+
+#[cfg(test)]
+impl DisplayCurrentRowMutation for AppendRenderedDisplayRowFragmentMutation<'_> {
+    type Output = DisplayRowPosition;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        self.rendered.append_fragment_to_current_row(row)
     }
 }
 

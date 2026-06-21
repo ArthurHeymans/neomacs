@@ -16,7 +16,7 @@ use crate::display_output_install_request::{
 };
 #[cfg(test)]
 use crate::display_output_row_request::OutputCurrentRowDecorationRequest;
-use crate::display_output_row_request::OutputRowLifecycleRequest;
+use crate::display_output_row_request::{DisplayCurrentRowMutation, OutputRowLifecycleRequest};
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_output_window_state::OutputWindowBuildState;
 #[cfg(test)]
@@ -279,11 +279,12 @@ impl DisplayOutputBuilder {
         ));
     }
 
-    pub(crate) fn edit_current_output_row<R>(
-        &mut self,
-        f: impl FnOnce(&mut GlyphRow) -> R,
-    ) -> Option<R> {
-        self.window_state.edit_current_row(f)
+    pub(crate) fn apply_current_output_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        self.window_state
+            .edit_current_row(|row| mutation.apply(row))
     }
 
     #[cfg(test)]

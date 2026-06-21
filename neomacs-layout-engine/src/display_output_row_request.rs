@@ -51,6 +51,12 @@ pub(crate) enum OutputRowLifecycleRequest {
     CurrentDecoration(OutputCurrentRowDecorationRequest),
 }
 
+pub(crate) trait DisplayCurrentRowMutation {
+    type Output;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output;
+}
+
 impl OutputRowBeginRequest {
     pub(crate) fn new(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
         Self {
