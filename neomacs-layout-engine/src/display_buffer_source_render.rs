@@ -2,8 +2,8 @@
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_display_property_render::{
+    BufferDisplayPropertyTextReplacementRenderContext,
     BufferDisplayPropertyTextReplacementRenderOutcome,
-    BufferDisplayPropertyTextReplacementRenderRequest,
     BufferDisplayPropertyTextReplacementRenderState,
 };
 use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
@@ -867,25 +867,19 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     where
         'surface: 'request,
     {
-        let start_charpos = replacement.start_charpos();
-        let active_face_metrics = self.active_face_state.metrics();
-        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
+        let replacement_context = BufferDisplayPropertyTextReplacementRenderContext::new(
             replacement,
             self.loop_context.text_start_byte(),
             self.text,
             self.loop_context.content_x(),
             self.params,
             0.0,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                active_face_metrics.char_width(),
-                self.loop_context.char_height(),
-                active_face_metrics.ascent(),
-            ),
+            self.loop_context.char_height(),
             self.active_face_state,
+            self.state.progress.row_progress().x(),
+            self.state.progress.row_position(),
         );
-        let current_x = self.state.progress.row_progress().x();
-        let start_position = self.state.progress.row_position();
-        match request.render(
+        match replacement_context.render(
             buffer,
             BufferDisplayPropertyTextReplacementRenderState::new(
                 self.state.source_render.reborrow(),
@@ -894,27 +888,18 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.row_geometry,
                 self.active_face_state,
             ),
-            current_x,
-            start_position,
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
-                outcome.apply_to_progress_and_cursor(
-                    self.text,
+                replacement_context.apply_rendered_outcome(
+                    outcome,
                     &mut self.state.progress,
                     self.state.cursor_info,
-                    self.active_face_state,
                     self.state.row_geometry,
                     self.loop_context.point_charpos(),
-                    start_charpos,
                 );
                 true
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
-                let Some(source_item) =
-                    DisplaySourceStepItem::new(source_item, self.loop_context.text_start_byte())
-                else {
-                    return false;
-                };
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Stop => false,

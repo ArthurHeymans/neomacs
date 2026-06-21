@@ -9,8 +9,8 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementRowRenderRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_source::DisplaySourceItem;
 use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source::{DisplaySourceItem, DisplaySourceStepItem};
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -29,8 +29,15 @@ pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
 
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Rendered(BufferDisplayPropertyTextReplacementOutcome),
-    Fallback(DisplaySourceItem),
+    Fallback(DisplaySourceStepItem),
     Stop,
+}
+
+pub(crate) struct BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
+    request: BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face>,
+    current_x: f32,
+    start_position: DisplayRowPosition,
+    start_charpos: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
@@ -70,6 +77,73 @@ impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
     }
 }
 
+impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        replacement: BufferDisplayPropertyReplacementItem,
+        text_start_byte: usize,
+        text: &'a [u8],
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        row_height_px: f32,
+        active_face_state: &'face DisplayRowActiveFaceState,
+        current_x: f32,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        let start_charpos = replacement.start_charpos();
+        let active_face_metrics = active_face_state.metrics();
+        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
+            replacement,
+            text_start_byte,
+            text,
+            content_x,
+            params,
+            glyph_y_offset,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                active_face_metrics.char_width(),
+                row_height_px,
+                active_face_metrics.ascent(),
+            ),
+            active_face_state,
+        );
+        Self {
+            request,
+            current_x,
+            start_position,
+            start_charpos,
+        }
+    }
+
+    pub(crate) fn render<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        self.request
+            .render(buffer, state, self.current_x, self.start_position)
+    }
+
+    pub(crate) fn apply_rendered_outcome(
+        &self,
+        outcome: BufferDisplayPropertyTextReplacementOutcome,
+        progress: &mut DisplaySourceProgressState<'_>,
+        cursor_info: &mut CursorCaptureState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+    ) {
+        outcome.apply_to_progress_and_cursor(
+            self.request.text,
+            progress,
+            cursor_info,
+            self.request.active_face_state,
+            row_geometry,
+            point_charpos,
+            self.start_charpos,
+        );
+    }
+}
+
 impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -94,19 +168,15 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         }
     }
 
-    fn fallback_render_item(&self) -> Option<DisplaySourceItem> {
+    fn fallback_render_item(&self) -> Option<DisplaySourceStepItem> {
         let fallback = self.replacement.fallback_display_item(
             self.text_start_byte,
             self.text,
             RenderFaceRef::FaceId(self.active_face_state.face_id()),
         )?;
         let (item, start_byte_idx, start_charpos, source_char) = fallback.into_parts();
-        Some(DisplaySourceItem::new(
-            item,
-            start_byte_idx,
-            start_charpos,
-            source_char,
-        ))
+        let source_item = DisplaySourceItem::new(item, start_byte_idx, start_charpos, source_char);
+        DisplaySourceStepItem::new(source_item, self.text_start_byte)
     }
 
     fn render_append_request<B: LayoutBufferView>(
@@ -137,7 +207,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
     }
 
     pub(crate) fn render<B: LayoutBufferView>(
-        self,
+        &self,
         buffer: &B,
         mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
         current_x: f32,
