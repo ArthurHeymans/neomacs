@@ -288,11 +288,34 @@ impl DisplayGlyphMeasurer for FixedGlyphAdvances {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DisplayRowWriteMetrics {
-    pub(crate) width_px: f32,
-    pub(crate) width_cols: usize,
+    width_px: f32,
+    width_cols: usize,
 }
 
 impl DisplayRowWriteMetrics {
+    pub(crate) const fn new(width_px: f32, width_cols: usize) -> Self {
+        Self {
+            width_px,
+            width_cols,
+        }
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.width_px
+    }
+
+    pub(crate) fn width_cols(self) -> usize {
+        self.width_cols
+    }
+
+    pub(crate) fn has_positive_width(self) -> bool {
+        self.width_px > 0.0
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        self.width_px <= 0.0 && self.width_cols == 0
+    }
+
     fn from_glyphs(glyphs: &[Glyph], char_width_px: f32) -> Self {
         glyphs.iter().fold(Self::default(), |mut metrics, glyph| {
             let width_cols = match &glyph.glyph_type {
@@ -477,10 +500,10 @@ impl DisplayRowPosition {
     }
 
     pub(crate) fn saturating_width_to(self, end: Self) -> DisplayRowWriteMetrics {
-        DisplayRowWriteMetrics {
-            width_px: (end.x_px - self.x_px).max(0.0),
-            width_cols: end.col.saturating_sub(self.col),
-        }
+        DisplayRowWriteMetrics::new(
+            (end.x_px - self.x_px).max(0.0),
+            end.col.saturating_sub(self.col),
+        )
     }
 }
 
@@ -616,7 +639,7 @@ impl DisplayRowAppendProgress {
     }
 
     pub(crate) fn is_complete_with_positive_width(&self) -> bool {
-        self.status == DisplayRowAppendStatus::Complete && self.metrics.width_px > 0.0
+        self.status == DisplayRowAppendStatus::Complete && self.metrics.has_positive_width()
     }
 }
 
@@ -959,7 +982,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 let written = self
                     .writer
                     .push_item(DisplayItem::new(span, face, kind).with_layout(item_layout));
-                if written.width_px > 0.0 && self.position.x_px + written.width_px > self.max_x_px {
+                if written.has_positive_width()
+                    && self.position.x_px() + written.width_px() > self.max_x_px
+                {
                     checkpoint.restore(self.writer.row);
                     return DisplayRowAppendProgress::new(
                         start,
@@ -969,13 +994,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                         slots,
                     );
                 }
-                if written.width_px > 0.0 || written.width_cols > 0 {
+                if !written.is_empty() {
                     slots.push(DisplayRowGlyphSlot::new(
                         slot_source,
                         slot_start.x_px(),
                         slot_start.col(),
-                        written.width_px,
-                        written.width_cols,
+                        written.width_px(),
+                        written.width_cols(),
                     ));
                 }
                 self.advance(written);
@@ -1031,8 +1056,8 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 source_mapping.slot_source(&span.start, char_offset, byte_offset),
                 slot_start.x_px(),
                 slot_start.col(),
-                written.width_px,
-                written.width_cols,
+                written.width_px(),
+                written.width_cols(),
             ));
             self.advance(written);
             metrics.add(written);
@@ -1344,8 +1369,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn current_text_position(&self) -> DisplayRowPosition {
         let metrics = self.current_text_metrics();
         DisplayRowPosition::new(
-            self.layout.tab_policy.origin_x_px + metrics.width_px,
-            metrics.width_cols,
+            self.layout.tab_policy.origin_x_px + metrics.width_px(),
+            metrics.width_cols(),
         )
     }
 
@@ -1469,7 +1494,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             DisplayStretchWidth::AlignTo(expr) => {
                 let target = self.length_expr_pixels(expr)?;
-                let current = self.current_text_metrics().width_px;
+                let current = self.current_text_metrics().width_px();
                 let pixels = (target - current).max(0.0);
                 let cols = (pixels / self.layout.char_width_px.max(1.0)).round() as u16;
                 Some((cols, pixels))

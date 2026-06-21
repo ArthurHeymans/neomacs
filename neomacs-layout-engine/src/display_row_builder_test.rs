@@ -651,8 +651,8 @@ fn display_row_writer_can_append_items_to_left_margin_area() {
     let margin = &row.glyphs[GlyphArea::LeftMargin.index()];
     assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
     assert!(!row.displays_text);
-    assert_eq!(stretch_metrics.width_cols, 1);
-    assert_eq!(text_metrics.width_cols, 2);
+    assert_eq!(stretch_metrics.width_cols(), 1);
+    assert_eq!(text_metrics.width_cols(), 2);
     assert_eq!(margin.len(), 3);
     assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 1 });
     assert_eq!(margin[1].glyph_type, GlyphType::Char { ch: '1' });
@@ -685,8 +685,8 @@ fn display_row_writer_reports_appended_metrics() {
 
     let metrics = writer.push_item(text_item("a\tb"));
 
-    assert_eq!(metrics.width_cols, 5);
-    assert_eq!(metrics.width_px, 40.0);
+    assert_eq!(metrics.width_cols(), 5);
+    assert_eq!(metrics.width_px(), 40.0);
 }
 
 #[test]

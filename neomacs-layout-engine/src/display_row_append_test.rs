@@ -4336,8 +4336,8 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition::new(24.0, 3));
-    assert_eq!(progress.metrics().width_px, 24.0);
-    assert_eq!(progress.metrics().width_cols, 3);
+    assert_eq!(progress.metrics().width_px(), 24.0);
+    assert_eq!(progress.metrics().width_cols(), 3);
     assert_eq!(progress.slots().len(), 3);
     assert_eq!(
         progress.slots()[0].source(),
@@ -4744,8 +4744,8 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition::new(8.0, 1));
-    assert_eq!(progress.metrics().width_px, 0.0);
-    assert_eq!(progress.metrics().width_cols, 0);
+    assert_eq!(progress.metrics().width_px(), 0.0);
+    assert_eq!(progress.metrics().width_cols(), 0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -5078,8 +5078,8 @@ fn current_text_row_render_outcome_builds_append_progress() {
     assert_eq!(end, DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.start(), start);
     assert_eq!(progress.end(), end);
-    assert_eq!(progress.metrics().width_px, 16.0);
-    assert_eq!(progress.metrics().width_cols, 2);
+    assert_eq!(progress.metrics().width_px(), 16.0);
+    assert_eq!(progress.metrics().width_cols(), 2);
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
     assert_eq!(progress.slots().len(), 1);
     assert_eq!(
@@ -8024,7 +8024,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     let end = appended.end();
 
     assert_eq!(end.x_px() - position.x_px(), measured_width);
-    assert_eq!(appended.metrics().width_px, measured_width);
+    assert_eq!(appended.metrics().width_px(), measured_width);
 }
 
 #[test]
@@ -8095,7 +8095,7 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
     let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition::new(13.0, 1));
-    assert_eq!(progress.metrics().width_px, 13.0);
+    assert_eq!(progress.metrics().width_px(), 13.0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -8174,8 +8174,8 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition::new(8.0, 1));
-    assert_eq!(progress.metrics().width_px, 0.0);
-    assert_eq!(progress.metrics().width_cols, 0);
+    assert_eq!(progress.metrics().width_px(), 0.0);
+    assert_eq!(progress.metrics().width_cols(), 0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -8291,7 +8291,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     assert_eq!(measured_width, 16.0);
     assert_eq!(fallback_width, 16.0);
     assert_eq!(edge_width, 16.0);
-    assert_eq!(progress.metrics().width_px, measured_width);
+    assert_eq!(progress.metrics().width_px(), measured_width);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -10244,10 +10244,7 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
     let zero_width_progress = DisplayRowAppendProgress::new(
         progress.start(),
         progress.end(),
-        DisplayRowWriteMetrics {
-            width_px: 0.0,
-            width_cols: progress.metrics().width_cols,
-        },
+        DisplayRowWriteMetrics::new(0.0, progress.metrics().width_cols()),
         DisplayRowAppendStatus::Complete,
         Vec::new(),
     );
@@ -10756,7 +10753,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     let end = progress.end();
 
     assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
-    assert_eq!(progress.metrics().width_px, 96.0);
+    assert_eq!(progress.metrics().width_px(), 96.0);
     assert_eq!(end, DisplayRowPosition::new(112.0, 14));
     builder
         .edit_current_row_for_test(|row| {
@@ -10887,7 +10884,7 @@ fn display_replacement_append_context_installs_image_replacements() {
     let end = progress.end();
 
     assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
-    assert_eq!(progress.metrics().width_px, 64.0);
+    assert_eq!(progress.metrics().width_px(), 64.0);
     assert_eq!(end, DisplayRowPosition::new(80.0, 10));
     builder
         .edit_current_row_for_test(|row| {
@@ -11020,7 +11017,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     let end = progress.end();
 
     assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
-    assert_eq!(progress.metrics().width_px, 80.0);
+    assert_eq!(progress.metrics().width_px(), 80.0);
     assert_eq!(end, DisplayRowPosition::new(96.0, 12));
     builder
         .edit_current_row_for_test(|row| {

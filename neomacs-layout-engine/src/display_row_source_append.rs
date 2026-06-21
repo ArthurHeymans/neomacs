@@ -592,7 +592,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             kind,
             render_policy,
         )?;
-        Some(outcome.into_append_progress(position).metrics().width_px)
+        Some(outcome.into_append_progress(position).metrics().width_px())
     }
 
     pub(crate) fn measure_width_naturally(
