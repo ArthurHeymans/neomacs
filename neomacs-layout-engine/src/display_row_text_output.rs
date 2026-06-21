@@ -21,13 +21,13 @@ pub(crate) struct TextRowOutput {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextOutputSpan {
-    pub(crate) buffer_pos: LispCharPos1,
-    pub(crate) row: usize,
-    pub(crate) row_y: f32,
-    pub(crate) glyph_y: f32,
-    pub(crate) height: f32,
-    pub(crate) start: DisplayRowPosition,
-    pub(crate) end: DisplayRowPosition,
+    buffer_pos: LispCharPos1,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+    start: DisplayRowPosition,
+    end: DisplayRowPosition,
 }
 
 impl TextRowOutput {
@@ -82,15 +82,15 @@ impl TextOutputSpanContext {
         let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source() else {
             return None;
         };
-        Some(TextOutputSpan {
-            buffer_pos: layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
-            row: self.row,
-            row_y: self.row_y,
-            glyph_y: self.glyph_y,
-            height: self.height,
-            start: slot.start_position(),
-            end: slot.end_position(),
-        })
+        Some(TextOutputSpan::new(
+            layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
+            self.row,
+            self.row_y,
+            self.glyph_y,
+            self.height,
+            slot.start_position(),
+            slot.end_position(),
+        ))
     }
 
     pub(crate) fn spans_for_source_slots(
@@ -115,16 +115,64 @@ impl TextOutputSpanContext {
 }
 
 impl TextOutputSpan {
+    pub(crate) fn new(
+        buffer_pos: LispCharPos1,
+        row: usize,
+        row_y: f32,
+        glyph_y: f32,
+        height: f32,
+        start: DisplayRowPosition,
+        end: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            buffer_pos,
+            row,
+            row_y,
+            glyph_y,
+            height,
+            start,
+            end,
+        }
+    }
+
+    pub(crate) fn buffer_pos(self) -> LispCharPos1 {
+        self.buffer_pos
+    }
+
+    pub(crate) fn row(self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn row_y(self) -> f32 {
+        self.row_y
+    }
+
+    pub(crate) fn glyph_y(self) -> f32 {
+        self.glyph_y
+    }
+
+    pub(crate) fn height(self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn start(self) -> DisplayRowPosition {
+        self.start
+    }
+
+    pub(crate) fn end(self) -> DisplayRowPosition {
+        self.end
+    }
+
     fn can_merge(self, next: Self) -> bool {
-        self.buffer_pos == next.buffer_pos
-            && self.row == next.row
-            && self.row_y == next.row_y
-            && self.glyph_y == next.glyph_y
-            && self.height == next.height
-            && self.end == next.start
+        self.buffer_pos() == next.buffer_pos()
+            && self.row() == next.row()
+            && self.row_y() == next.row_y()
+            && self.glyph_y() == next.glyph_y()
+            && self.height() == next.height()
+            && self.end() == next.start()
     }
 
     fn merge(&mut self, next: Self) {
-        self.end = next.end;
+        self.end = next.end();
     }
 }

@@ -1101,17 +1101,19 @@ impl WindowOutputEmitter {
     }
 
     fn emit_text_output_span(&mut self, evaluator: &mut Context, span: TextOutputSpan) {
+        let start = span.start();
+        let end = span.end();
         self.emit_text_span(
             evaluator,
-            span.buffer_pos,
-            span.row,
-            span.row_y,
-            span.start.x_px(),
-            span.glyph_y,
-            span.end.x_px() - span.start.x_px(),
-            span.height,
-            span.start.col(),
-            span.end.col(),
+            span.buffer_pos(),
+            span.row(),
+            span.row_y(),
+            start.x_px(),
+            span.glyph_y(),
+            end.x_px() - start.x_px(),
+            span.height(),
+            start.col(),
+            end.col(),
         );
     }
 
