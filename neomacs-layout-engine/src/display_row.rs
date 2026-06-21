@@ -1132,6 +1132,21 @@ impl RenderedDisplayRow {
         apply_display_row_source_slot_bounds(row, &self.source_slots);
     }
 
+    pub(crate) fn materialize_output_row(
+        &self,
+        pixel_y: f32,
+        height_px: f32,
+        ascent_px: f32,
+    ) -> GlyphRow {
+        let mut row = self.row.clone();
+        self.apply_source_slot_bounds_to(&mut row);
+        glyph_row_writer::finalize_external_row(&mut row);
+        row.pixel_y = pixel_y;
+        row.height_px = height_px;
+        row.ascent_px = ascent_px;
+        row
+    }
+
     #[cfg(test)]
     pub(crate) fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
         merge_display_row_source_slot_bounds(row, &self.source_slots);
@@ -1284,6 +1299,19 @@ impl MeasuredDisplayRow {
             .progress()
             .with_y(self.bounds.y)
             .with_height(self.bounds.height)
+    }
+
+    pub(crate) fn absolute_output_row(&self) -> GlyphRow {
+        self.rendered
+            .materialize_output_row(self.bounds.y, self.row_height(), self.row_ascent())
+    }
+
+    pub(crate) fn window_relative_output_row(&self, window_bounds: Rect) -> GlyphRow {
+        self.rendered.materialize_output_row(
+            self.bounds.y - window_bounds.y,
+            self.row_height(),
+            self.row_ascent(),
+        )
     }
 }
 

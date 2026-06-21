@@ -7,7 +7,7 @@ use crate::display_output_row_request::{
     OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
 };
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
-use crate::display_row::{RenderedDisplayRow, resolved_display_row_face};
+use crate::display_row::resolved_display_row_face;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -20,7 +20,6 @@ use neomacs_display_protocol::types::{Color, Rect};
 pub(crate) struct DisplayRowOutputInstall<'a> {
     display_row_index: usize,
     row: &'a GlyphRow,
-    rendered: Option<&'a RenderedDisplayRow>,
     pixel_y: f32,
     height_px: f32,
     ascent_px: f32,
@@ -73,36 +72,15 @@ impl<'a> DisplayRowOutputInstall<'a> {
         Self {
             display_row_index,
             row,
-            rendered: None,
             pixel_y: row.pixel_y,
             height_px: row.height_px,
             ascent_px: row.ascent_px,
         }
     }
 
-    pub(crate) fn from_rendered(
-        display_row_index: usize,
-        rendered: &'a RenderedDisplayRow,
-        bounds: Rect,
-        height_px: f32,
-        ascent_px: f32,
-    ) -> Self {
-        Self {
-            display_row_index,
-            row: rendered.row(),
-            rendered: Some(rendered),
-            pixel_y: bounds.y,
-            height_px,
-            ascent_px,
-        }
-    }
-
     pub(crate) fn install(self, builder: &mut DisplayOutputBuilder) {
         let pixel_bounds = builder.current_window_pixel_bounds();
         let mut row = self.row.clone();
-        if let Some(rendered) = self.rendered {
-            rendered.apply_source_slot_bounds_to(&mut row);
-        }
         row.pixel_y = self.pixel_y - pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;

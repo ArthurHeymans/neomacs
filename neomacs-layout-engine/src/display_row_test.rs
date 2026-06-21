@@ -2973,6 +2973,65 @@ fn mock_current_row_output_install_preserves_row_metadata() {
 }
 
 #[test]
+fn rendered_display_row_materializes_output_row_with_geometry_and_finalization() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabLine);
+    row.enabled = true;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('T', 0, 0));
+
+    let rendered = RenderedDisplayRow::new(
+        row,
+        DisplayRowOutputProgress::new(8.0, 1, 0.0, 16.0),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+
+    let output = rendered.materialize_output_row(21.0, 18.0, 13.0);
+
+    assert_eq!(output.pixel_y, 21.0);
+    assert_eq!(output.height_px, 18.0);
+    assert_eq!(output.ascent_px, 13.0);
+    assert!(output.displays_text);
+    assert!(matches!(
+        output.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Char { ch: 'T' }
+    ));
+}
+
+#[test]
+fn measured_display_row_materializes_absolute_and_window_relative_output_rows() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.enabled = true;
+    row.height_px = 18.0;
+    row.ascent_px = 13.0;
+    let measured = MeasuredDisplayRow::new(
+        DisplayRowOwner::FrameChrome {
+            kind: FrameChromeKind::TabBar,
+        },
+        3,
+        Rect::new(10.0, 40.0, 120.0, 18.0),
+        RenderedDisplayRow::new(
+            row,
+            DisplayRowOutputProgress::new(0.0, 0, 40.0, 18.0),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+    );
+
+    let absolute = measured.absolute_output_row();
+    let relative = measured.window_relative_output_row(Rect::new(0.0, 16.0, 120.0, 80.0));
+
+    assert_eq!(absolute.pixel_y, 40.0);
+    assert_eq!(relative.pixel_y, 24.0);
+    assert_eq!(absolute.height_px, 18.0);
+    assert_eq!(relative.height_px, 18.0);
+    assert_eq!(absolute.ascent_px, 13.0);
+    assert_eq!(relative.ascent_px, 13.0);
+}
+
+#[test]
 fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.enabled = true;

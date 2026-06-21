@@ -6,7 +6,6 @@ use crate::display_row::{
     DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
     RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
 };
-use crate::display_text_output_install::DisplayRowOutputInstall;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::FrameChromeRow;
@@ -65,14 +64,15 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             measured.bounds(),
         )
         .install(builder);
-        DisplayRowOutputInstall::from_rendered(
-            display_row_index,
-            measured.rendered(),
-            measured.bounds(),
-            measured.row_height(),
-            measured.row_ascent(),
-        )
-        .install(builder);
+        let row = measured.window_relative_output_row(builder.current_window_pixel_bounds());
+        builder.install_output_row_lifecycle(
+            crate::display_output_row_request::OutputRowLifecycleRequest::complete(
+                display_row_index,
+                row.role,
+                row.mode_line,
+                row,
+            ),
+        );
     }
 }
 
@@ -94,12 +94,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
             measured.bounds(),
         )
         .install(builder);
-        let mut row = measured.rendered().row().clone();
-        measured.rendered().apply_source_slot_bounds_to(&mut row);
-        crate::glyph_row_writer::finalize_external_row(&mut row);
-        row.pixel_y = measured.bounds().y;
-        row.height_px = measured.row_height();
-        row.ascent_px = measured.row_ascent();
+        let row = measured.absolute_output_row();
         self.frame_chrome_rows.push(FrameChromeRow {
             row_index: measured.row_index(),
             pixel_bounds: measured.bounds(),
