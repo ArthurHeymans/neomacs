@@ -13,8 +13,7 @@ use crate::display_item::DisplayPropertyReplacementDescriptor;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceFragmentRenderRequest,
-    DisplayRowSourceRenderRequest,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
@@ -91,7 +90,7 @@ struct DisplayRowCurrentSourceStepMutation<'a, 'request, 'renderer, 'face, 'host
 }
 
 struct DisplayRowNaturalSourceFragmentMutation<'a, 'request, 'metrics, 'face, 'host, S> {
-    request: DisplayRowSourceFragmentRenderRequest<'request>,
+    request: DisplayRowSourceRenderRequest<'request>,
     render_executor: &'a mut DisplayRowRenderExecutor<'metrics, 'face, 'host>,
     source: &'a mut S,
     source_state: &'a mut DisplayRowSourceState,
@@ -244,7 +243,7 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
 
     fn render_natural_fragment_into_current_row<S: DisplayItemSource>(
         &mut self,
-        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<DisplayRowRenderIntoRowResult> {
@@ -635,7 +634,7 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     pub(crate) fn render_natural_fragment_into_current_row<S: DisplayItemSource>(
         &mut self,
-        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         face_ids: &mut FrameFaceIdAllocator,

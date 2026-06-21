@@ -23,7 +23,7 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_row::{
     DisplayRowLispStringSourceRenderRequest, DisplayRowRenderExecutor,
-    DisplayRowSourceFragmentRenderRequest,
+    DisplayRowSourceRenderRequest,
 };
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
 pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
@@ -145,7 +145,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
 
     pub(crate) fn render_item_source_fragment_into_row(
         &mut self,
-        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         row: &mut GlyphRow,
         source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,

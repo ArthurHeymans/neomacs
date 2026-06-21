@@ -141,28 +141,9 @@ impl RenderedDisplayRow {
     pub(crate) fn into_row(self) -> GlyphRow {
         self.row
     }
-}
-
-pub(crate) struct DisplayRowRenderResult {
-    rendered: RenderedDisplayRow,
-}
-
-impl DisplayRowRenderResult {
-    pub(crate) fn new(rendered: RenderedDisplayRow) -> Self {
-        Self { rendered }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rendered(&self) -> &RenderedDisplayRow {
-        &self.rendered
-    }
-
-    pub(crate) fn into_rendered(self) -> RenderedDisplayRow {
-        self.rendered
-    }
 
     pub(crate) fn finalize_external_row(&mut self) {
-        glyph_row_writer::finalize_external_row(&mut self.rendered.row);
+        glyph_row_writer::finalize_external_row(&mut self.row);
     }
 }
 
@@ -259,14 +240,14 @@ impl DisplayRowRenderIntoRowResult {
         )
     }
 
-    pub(crate) fn with_row(self, row: GlyphRow) -> DisplayRowRenderResult {
-        DisplayRowRenderResult::new(RenderedDisplayRow::new(
+    pub(crate) fn with_row(self, row: GlyphRow) -> RenderedDisplayRow {
+        RenderedDisplayRow::new(
             row,
             self.progress,
             self.source_slots,
             self.faces,
             self.media,
-        ))
+        )
     }
 }
 

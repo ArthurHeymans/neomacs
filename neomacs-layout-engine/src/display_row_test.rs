@@ -1025,7 +1025,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     let mut state = DisplayRowSourceState::default();
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let first = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+    let first = display_row_request_for_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 16.0,
@@ -1037,10 +1037,10 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         base_face_id,
         &test_base_face,
         GlyphRowRole::Text,
-    ))
+    )
     .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
     .expect("first row");
-    let second = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+    let second = display_row_request_for_face(
         DisplayRowGeometry {
             y: 16.0,
             width: 16.0,
@@ -1052,12 +1052,12 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         base_face_id,
         &test_base_face,
         GlyphRowRole::Text,
-    ))
+    )
     .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
     .expect("second row");
 
-    assert_eq!(row_text_expanding_stretches(first.rendered().row()), "AB");
-    assert_eq!(row_text_expanding_stretches(second.rendered().row()), "C");
+    assert_eq!(row_text_expanding_stretches(first.row()), "AB");
+    assert_eq!(row_text_expanding_stretches(second.row()), "C");
 }
 
 #[test]
@@ -1113,7 +1113,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let mut policy = DirectTextRunPolicy;
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let result = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+    let result = display_row_request_for_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1125,7 +1125,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
         base_face_id,
         base_face,
         GlyphRowRole::Text,
-    ))
+    )
     .render_fragment_step_into_row_with_policy(
         &mut renderer,
         &mut row,
@@ -1320,7 +1320,7 @@ fn render_buffer_display_row_with_properties(
         request.base_face_ref(),
     );
 
-    DisplayRowItemSourceRenderRequest::new(request)
+    request
         .render(&mut renderer, &mut source, &resolver, &mut face_ids)
         .expect("buffer display source row")
         .into_row()
@@ -1352,7 +1352,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+    let rendered = display_row_request_for_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1364,7 +1364,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         1,
         resolver.default_face(),
         GlyphRowRole::TabLine,
-    ))
+    )
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("display source row");
 
@@ -1904,7 +1904,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+    let rendered = display_row_request_for_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1920,7 +1920,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         1,
         resolver.default_face(),
         GlyphRowRole::TabLine,
-    ))
+    )
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("display source row");
 
@@ -2865,7 +2865,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
-    let fragment = DisplayRowItemSourceRenderRequest::new(request)
+    let fragment = request
         .render_fragment_step_with_display_host(
             &mut renderer,
             &mut source,
@@ -2875,7 +2875,6 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             &mut face_ids,
         )
         .expect("unfinalized row fragment")
-        .into_rendered()
         .into_row();
 
     assert!(!fragment.reversed_p);
@@ -2925,7 +2924,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
-    let result = DisplayRowItemSourceRenderRequest::new(request)
+    let result = request
         .render_fragment_step_into_row_with_display_host(
             &mut renderer,
             &mut row,
