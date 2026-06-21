@@ -110,7 +110,7 @@ where
             &mut context,
             self.render_policy,
         )?;
-        result.merge_source_slot_bounds_into(row);
+        result.apply_current_row_effects_to(row);
         Some((result, row.height_px, row.ascent_px))
     }
 }
@@ -128,7 +128,7 @@ where
             self.source,
             self.source_state,
         )?;
-        result.merge_source_slot_bounds_into(row);
+        result.apply_current_row_effects_to(row);
         Some(result)
     }
 }

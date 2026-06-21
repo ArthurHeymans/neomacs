@@ -7,15 +7,11 @@ use crate::display_rendered_row_output_install::install_rendered_display_row_fra
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
-use crate::display_row::display_row_output_end_position;
-#[cfg(test)]
-use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
+use crate::display_row_builder::DisplayRowPosition;
 #[cfg(test)]
 use crate::display_row_text_output::TextRowOutput;
 #[cfg(test)]
 use crate::window_output::WindowOutputEmitter;
-#[cfg(test)]
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
@@ -73,28 +69,7 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
         &mut self,
         rendered: &RenderedDisplayRow,
     ) -> Option<DisplayRowPosition> {
-        let rendered_row = rendered.row();
-        let end = display_row_output_end_position(rendered.progress());
-        self.edit_current_row(|row| {
-            row.enabled = true;
-            row.role = rendered_row.role;
-            row.mode_line = matches!(rendered_row.role, GlyphRowRole::ModeLine);
-            row.displays_text |=
-                rendered_row.displays_text || !display_row_text_is_empty(rendered_row);
-            row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].extend(
-                rendered_row.glyphs
-                    [neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
-                .iter()
-                .cloned(),
-            );
-            row.height_px = row.height_px.max(rendered_row.height_px);
-            row.ascent_px = row
-                .ascent_px
-                .max(rendered_row.ascent_px)
-                .min(row.height_px.max(1.0));
-            rendered.merge_source_slot_bounds_into(row);
-        })?;
-        Some(end)
+        self.edit_current_row(|row| rendered.append_fragment_to_current_row(row))
     }
 }
 

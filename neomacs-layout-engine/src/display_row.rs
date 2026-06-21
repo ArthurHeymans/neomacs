@@ -1148,8 +1148,22 @@ impl RenderedDisplayRow {
     }
 
     #[cfg(test)]
-    pub(crate) fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
+    pub(crate) fn append_fragment_to_current_row(&self, row: &mut GlyphRow) -> DisplayRowPosition {
+        let rendered_row = self.row();
+        row.enabled = true;
+        row.role = rendered_row.role;
+        row.mode_line = matches!(rendered_row.role, GlyphRowRole::ModeLine);
+        row.displays_text |=
+            rendered_row.displays_text || !rendered_row.glyphs[GlyphArea::Text.index()].is_empty();
+        row.glyphs[GlyphArea::Text.index()]
+            .extend(rendered_row.glyphs[GlyphArea::Text.index()].iter().cloned());
+        row.height_px = row.height_px.max(rendered_row.height_px);
+        row.ascent_px = row
+            .ascent_px
+            .max(rendered_row.ascent_px)
+            .min(row.height_px.max(1.0));
         merge_display_row_source_slot_bounds(row, &self.source_slots);
+        display_row_output_end_position(self.progress())
     }
 
     pub(crate) fn faces(&self) -> &[Face] {
@@ -1964,8 +1978,12 @@ impl DisplayRowRenderIntoRowResult {
         self.stop
     }
 
-    pub(crate) fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
+    fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
         merge_display_row_source_slot_bounds(row, &self.source_slots);
+    }
+
+    pub(crate) fn apply_current_row_effects_to(&self, row: &mut GlyphRow) {
+        self.merge_source_slot_bounds_into(row);
     }
 
     pub(crate) fn into_current_row_parts(
