@@ -3,9 +3,9 @@
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 use crate::display_output_row_grid::{OutputWindowGridEntry, OutputWindowRowGrid};
 use crate::display_output_row_request::{
-    DisplayWindowRowMutation, DisplayWindowRowsMutation, OutputCompleteRowInstallRequest,
-    OutputCurrentRowDecorationRequest, OutputRowBeginRequest, OutputRowLifecycleRequest,
-    OutputRowMetricsRequest,
+    DisplayCurrentRowMutation, DisplayWindowRowMutation, DisplayWindowRowsMutation,
+    OutputCompleteRowInstallRequest, OutputCurrentRowDecorationRequest, OutputRowBeginRequest,
+    OutputRowLifecycleRequest, OutputRowMetricsRequest,
 };
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
@@ -92,7 +92,7 @@ impl OutputWindowBuildState {
         }
     }
 
-    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
+    fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
         let grid = self.current_row_grid.as_mut()?;
         let row = grid.row_mut(self.current_row)?;
         Some(f(row))
@@ -100,6 +100,13 @@ impl OutputWindowBuildState {
 
     pub(crate) fn current_row_for_render(&self) -> Option<&GlyphRow> {
         self.current_row_grid.as_ref()?.row(self.current_row)
+    }
+
+    pub(crate) fn apply_current_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
+    where
+        M: DisplayCurrentRowMutation,
+    {
+        self.edit_current_row(|row| mutation.apply(row))
     }
 
     pub(crate) fn apply_current_window_row_mutation<M>(

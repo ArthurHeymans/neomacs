@@ -286,8 +286,7 @@ impl DisplayOutputBuilder {
     where
         M: DisplayCurrentRowMutation,
     {
-        self.window_state
-            .edit_current_row(|row| mutation.apply(row))
+        self.window_state.apply_current_row_mutation(mutation)
     }
 
     #[cfg(test)]
@@ -362,7 +361,7 @@ impl DisplayOutputBuilder {
         &mut self,
         f: impl FnOnce(&mut GlyphRow) -> R,
     ) -> Option<R> {
-        self.window_state.edit_current_row(f)
+        self.apply_current_output_row_mutation(EditCurrentRowForTestMutation { f })
     }
 
     pub(crate) fn current_row_for_render(&self) -> Option<&GlyphRow> {
@@ -763,6 +762,23 @@ impl DisplayOutputBuilder {
         state.frame_pixel_width = frame_pixel_width;
         state.frame_pixel_height = frame_pixel_height;
         state
+    }
+}
+
+#[cfg(test)]
+struct EditCurrentRowForTestMutation<F> {
+    f: F,
+}
+
+#[cfg(test)]
+impl<F, R> DisplayCurrentRowMutation for EditCurrentRowForTestMutation<F>
+where
+    F: FnOnce(&mut GlyphRow) -> R,
+{
+    type Output = R;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        (self.f)(row)
     }
 }
 
