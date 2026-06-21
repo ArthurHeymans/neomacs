@@ -17,6 +17,60 @@ use crate::buffer::{
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
+use std::cell::Cell;
+
+// ---------------------------------------------------------------------------
+// last_known_column cache (GNU src/indent.c:40-51, 323-342)
+// ---------------------------------------------------------------------------
+//
+// GNU caches the column of point so a `current-column' that immediately follows
+// an operation which already computed it (e.g. `indent-to') returns the cached
+// value without rescanning the line.  This is not merely an optimization: it is
+// observable, because the cached value reflects the `tab-width' in effect *when
+// the column was computed*, even if `tab-width' has since changed (e.g. a
+// dynamic `let' has been unwound).  Rescanning would use the current
+// `tab-width' and produce a different answer (oracle test cx122).
+//
+// GNU keeps a single global tied to the current buffer; we additionally key on
+// the buffer id so a buffer switch invalidates the cache, and on the buffer's
+// modification tick so any edit invalidates it (GNU compares `MODIFF').
+
+#[derive(Clone, Copy)]
+struct LastKnownColumn {
+    buffer_id: u64,
+    point: EmacsBytePos,
+    modiff: i64,
+    column: usize,
+}
+
+thread_local! {
+    static LAST_KNOWN_COLUMN: Cell<Option<LastKnownColumn>> = const { Cell::new(None) };
+}
+
+/// Record the column of point after it has just been computed.
+fn set_last_known_column(buffer_id: u64, point: EmacsBytePos, modiff: i64, column: usize) {
+    LAST_KNOWN_COLUMN.with(|slot| {
+        slot.set(Some(LastKnownColumn {
+            buffer_id,
+            point,
+            modiff,
+            column,
+        }))
+    });
+}
+
+/// Return the cached column if it is still valid for (buffer, point, modiff).
+///
+/// Unlike GNU's explicit `invalidate_current_column`, the (buffer, point,
+/// modiff) key is self-invalidating: any point movement or buffer edit changes
+/// the key and forces a fresh scan, so no separate invalidation hook is needed.
+fn cached_current_column(buffer_id: u64, point: EmacsBytePos, modiff: i64) -> Option<usize> {
+    LAST_KNOWN_COLUMN.with(|slot| {
+        slot.get().and_then(|c| {
+            (c.buffer_id == buffer_id && c.point == point && c.modiff == modiff).then_some(c.column)
+        })
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Argument helpers (local to this module)
@@ -773,14 +827,24 @@ pub(crate) fn builtin_current_column(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::fixnum(0));
     };
-    let point = {
+    let (point, modiff) = {
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(Value::fixnum(0));
         };
-        buf.accessible_emacs_byte_region()
-            .clamp(buf.point_emacs_byte_pos())
+        (
+            buf.accessible_emacs_byte_region()
+                .clamp(buf.point_emacs_byte_pos()),
+            buf.modified_tick(),
+        )
     };
+    // GNU `Fcurrent_column`/`current_column' (src/indent.c:298-342) returns the
+    // cached `last_known_column' when point and MODIFF are unchanged, so the
+    // column reflects the `tab-width' in effect when it was last computed.
+    if let Some(column) = cached_current_column(current_id.0, point, modiff) {
+        return Ok(Value::fixnum(column as i64));
+    }
     let scan = scan_for_column(ctx, current_id, Some(point), None)?;
+    set_last_known_column(current_id.0, point, modiff, scan.column);
     Ok(Value::fixnum(scan.column as i64))
 }
 
@@ -990,6 +1054,18 @@ pub(crate) fn builtin_indent_to(
             true,
         )?;
         super::editfns::signal_after_text_change(ctx, change)?;
+    }
+
+    // GNU `Findent_to` caches the resulting column at the new point/MODIFF so a
+    // following `current-column' returns it without rescanning (src/indent.c:
+    // 831-833).  Record it for the same reason here.
+    if let Some(buf) = ctx.buffers.get(current_id) {
+        set_last_known_column(
+            current_id.0,
+            buf.point_emacs_byte_pos(),
+            buf.modified_tick(),
+            mincol,
+        );
     }
 
     Ok(Value::fixnum(mincol as i64))
