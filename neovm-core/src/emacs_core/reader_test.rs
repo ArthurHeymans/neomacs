@@ -3596,6 +3596,36 @@ fn read_from_string_hash_radix_n_syntax_matches_gnu() {
 }
 
 #[test]
+fn read_from_string_hash_radix_trailing_invalid_digit_errors_like_gnu() {
+    // GNU `read_integer' (src/lread.c:2944) keeps consuming alphanumeric
+    // characters; an alphanumeric that is not a valid digit for the radix
+    // (e.g. `g' after `#x1') poisons the whole token, so `#x1g' signals
+    // `(invalid-read-syntax "integer, radix 16")' rather than reading `1'
+    // and leaving `g' for the next form (oracle test cx27).
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    for (src, radix) in [("#x1g", 16), ("#o18", 8), ("#b12", 2)] {
+        match builtin_read_from_string(&mut ev, vec![Value::string(src)]) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "invalid-read-syntax", "src={src}");
+                assert_eq!(
+                    sig.data,
+                    vec![Value::string(format!("integer, radix {radix}"))],
+                    "src={src}"
+                );
+            }
+            other => panic!("expected invalid-read-syntax for {src}, got {other:?}"),
+        }
+    }
+
+    // A valid token followed by a non-alphanumeric terminator still reads fine.
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("#xff)")])
+        .expect("#xff) should read as 255");
+    assert_eq!(result.cons_car(), Value::fixnum(255));
+}
+
+#[test]
 fn read_from_string_circular_cons_label_matches_gnu() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

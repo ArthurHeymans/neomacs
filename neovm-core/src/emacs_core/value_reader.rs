@@ -1932,8 +1932,22 @@ impl<'a> Reader<'a> {
             false
         };
 
+        // GNU `read_integer` (src/lread.c:2944) keeps consuming *all*
+        // alphanumeric characters via `digit_to_number`, which distinguishes a
+        // non-alphanumeric terminator (return < -1, stop) from an alphanumeric
+        // character that is not a valid digit for this radix (return -1, e.g.
+        // `g' in `#x1g' or `8' in `#o18').  The latter does NOT stop reading:
+        // it is consumed and flags the whole token invalid, so the integer is
+        // rejected with "integer, radix N" rather than silently truncated and
+        // leaving the stray letter to be misread as the next form.
+        let mut saw_invalid_digit = false;
         while let Some(c) = self.current_code() {
             if is_ascii_digit_for_radix_code(c, radix) || c == b'_' as u32 {
+                self.bump();
+            } else if is_ascii_alphanumeric_code(c) {
+                // Alphanumeric but not a digit for this radix: consume and
+                // poison the token (matches GNU `digit == -1` path).
+                saw_invalid_digit = true;
                 self.bump();
             } else {
                 break;
@@ -1945,7 +1959,7 @@ impl<'a> Reader<'a> {
             .chars()
             .filter(|c| *c != '_' && *c != '-' && *c != '+')
             .collect();
-        if digits.is_empty() {
+        if digits.is_empty() || saw_invalid_digit {
             return Err(self.error(&format!("integer, radix {}", radix)));
         }
 
@@ -2579,6 +2593,15 @@ fn ascii_hex_digit_value(code: u32) -> Option<u32> {
 
 fn is_ascii_digit_for_radix_code(code: u32, radix: u32) -> bool {
     code <= 0x7F && (code as u8 as char).is_digit(radix)
+}
+
+/// True for ASCII [0-9A-Za-z], i.e. characters that GNU `digit_to_number`
+/// maps to a non-negative *or* `-1` value (it returns `-2` only for
+/// non-alphanumerics).  Used by the radix reader to keep consuming a token
+/// like `1g` so a letter that is not a valid digit poisons the integer
+/// instead of silently terminating it.
+fn is_ascii_alphanumeric_code(code: u32) -> bool {
+    code <= 0x7F && (code as u8 as char).is_ascii_alphanumeric()
 }
 
 fn character_name_to_code(name: &str) -> Option<u32> {
