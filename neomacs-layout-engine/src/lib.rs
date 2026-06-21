@@ -11,6 +11,7 @@ pub mod composition;
 pub(crate) mod coords;
 pub(crate) mod display_buffer_display_property_render;
 pub(crate) mod display_buffer_source_body_render;
+pub(crate) mod display_buffer_source_char_render;
 pub(crate) mod display_buffer_source_consumption;
 pub(crate) mod display_buffer_source_face_resolution;
 pub(crate) mod display_buffer_source_item_append;

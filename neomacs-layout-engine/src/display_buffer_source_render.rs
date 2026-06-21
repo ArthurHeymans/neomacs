@@ -5,23 +5,19 @@ use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
 };
+use crate::display_buffer_source_char_render::BufferSourceCharRenderRequest;
 use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
 use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
 use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResolutionContext;
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
-use crate::display_buffer_source_overflow::{
-    BufferSourceOverflowRenderContext, BufferSourceOverflowRenderRequest,
-    BufferSourceSpecialOverflowRenderContext, BufferSourceSpecialOverflowRenderRequest,
-};
 use crate::display_buffer_source_row_lifecycle::{
     BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
     BufferSourceSelectiveDisplayTailRenderRequest,
 };
 use crate::display_buffer_source_text_run::BufferSourceTextRunRenderRequest;
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_cursor::capture_cursor_info;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -32,7 +28,6 @@ use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
-use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::buffer::BufferId;
@@ -263,133 +258,31 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         );
     }
 
-    if source_item.is_multi_char_text_run()
-        && let Some((first, pending)) = source_item
-            .clone()
-            .split_text_run_items(context.text_start_byte)
-    {
-        source_walk.prepend_pending_render_items(pending);
-        source_item = first;
-    }
-
-    let (source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
-        source_item.into_render_parts();
-    let ch = source_step_char.ch();
-    source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
-
-    let buffer_source_char = source_step_char.source_char(context.params.nobreak_char_display);
-    let prepared_append = buffer_row_append_context.prepare_source_item_for_current_text_row(
-        append_geometry,
-        source_walk.append_state(),
-        &mut source_render,
-        &buffer_source_char,
+    BufferSourceCharRenderRequest::new(
         context.text,
-        source_step_char.start_byte_idx(),
-        append_position,
-        &source_item,
-    );
-
-    let prepared_append = match prepared_append {
-        DisplaySourcePreparedCharAppend::Special(special_prepared_append) => {
-            let special_overflow_outcome = BufferSourceSpecialOverflowRenderRequest::new(
-                &special_prepared_append,
-                BufferSourceSpecialOverflowRenderContext::new(
-                    context.text,
-                    context.text_start_byte,
-                    progress.row_progress().x(),
-                    context.append_surface.full_text_right_edge(),
-                    context.params.wrap_mode,
-                    context.row_visibility_limit,
-                    context.content_x,
-                    context.has_prefix,
-                    context.row_geometry_defaults,
-                    context.display_text_row_base,
-                    context.max_rows,
-                    context.row_limit,
-                ),
-            )
-            .render_if_needed_and_apply(
-                source_walk,
-                buffer,
-                BufferSourceLoopMutableState::new(
-                    invisible_text_checkpoint,
-                    progress.reborrow(),
-                    source_render.reborrow(),
-                    row_extend,
-                    box_face,
-                    line_numbers,
-                    row_geometry,
-                    row_flags,
-                    hit_rows,
-                    hit_row_range,
-                    prefix_request,
-                    hscroll_skip,
-                    word_wrap,
-                    trailing_whitespace,
-                    face_scan,
-                    row_y_positions,
-                    cursor_info,
-                    face_ids,
-                    append_surface,
-                    overlay_context,
-                ),
-            );
-            if special_overflow_outcome.should_break() {
-                return BufferSourceItemRenderOutcome::Stop;
-            }
-            if special_overflow_outcome.should_continue_buffer_walk() {
-                return BufferSourceItemRenderOutcome::ContinueBufferWalk;
-            }
-
-            if special_prepared_append
-                .append_to_text_row_and_apply(
-                    &buffer_row_append_context,
-                    row_geometry,
-                    context.params,
-                    face_ids,
-                    &mut source_render.reborrow(),
-                    face_scan,
-                    word_wrap,
-                    &mut progress.reborrow(),
-                )
-                .should_break()
-            {
-                return BufferSourceItemRenderOutcome::Stop;
-            }
-            if let Some(end_byte_idx) = source_end_byte_idx {
-                progress.set_byte_idx(end_byte_idx);
-            }
-            return BufferSourceItemRenderOutcome::ContinueBufferWalk;
-        }
-        DisplaySourcePreparedCharAppend::Text(prepared_append) => prepared_append,
-    };
-
-    prepared_append
-        .update_cursor_info_for_main_char(cursor_info, source_step_char.start_byte_idx());
-    let overflow_outcome = BufferSourceOverflowRenderRequest::new(
-        &prepared_append,
-        source_step_char,
-        BufferSourceOverflowRenderContext::new(
-            ch,
-            context.append_surface.right_edge(),
-            context.params.wrap_mode,
-            *word_wrap,
-            context.row_visibility_limit,
-            context.content_x,
-            context.has_prefix,
-            context.row_geometry_defaults,
-            context.display_text_row_base,
-            context.max_rows,
-            context.row_limit,
-        ),
+        context.text_start_byte,
+        context.append_surface,
+        context.overlay_context,
+        context.params,
+        context.point_charpos,
+        context.row_visibility_limit,
+        context.content_x,
+        context.has_prefix,
+        context.row_geometry_defaults,
+        context.display_text_row_base,
+        context.max_rows,
+        context.row_limit,
     )
-    .render_if_needed_and_apply(
+    .render_and_apply(
+        source_item,
         source_walk,
-        context.text,
+        buffer,
+        &active_face_state,
+        &buffer_row_append_context,
         BufferSourceLoopMutableState::new(
             invisible_text_checkpoint,
-            progress.reborrow(),
-            source_render.reborrow(),
+            progress,
+            source_render,
             row_extend,
             box_face,
             line_numbers,
@@ -408,86 +301,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             append_surface,
             overlay_context,
         ),
-    );
-    if overflow_outcome.should_break() {
-        return BufferSourceItemRenderOutcome::Stop;
-    }
-    if overflow_outcome.should_continue_buffer_walk() {
-        return BufferSourceItemRenderOutcome::ContinueBufferWalk;
-    }
-
-    {
-        let overlay_charpos = progress.charpos();
-        let (x, col) = progress.row_progress_mut().coordinates_mut();
-        context.overlay_context.render_at_text_row(
-            buffer,
-            overlay_charpos,
-            &active_face_state,
-            source_render.reborrow(),
-            x,
-            col,
-            row_geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        );
-    }
-
-    let row_position = progress.row_position();
-    prepared_append.capture_cursor_info_for_main_char_if_point(
-        cursor_info,
-        &active_face_state,
-        row_geometry,
-        row_position.x_px(),
-        source_step_char.start_byte_idx(),
-        row_position.col(),
-        ch == '\t',
-        progress.charpos(),
-        context.point_charpos,
-    );
-    if cursor_info.is_missing()
-        && source_end_charpos.is_some_and(|end| {
-            context.point_charpos > progress.charpos() && context.point_charpos < end
-        })
-    {
-        capture_cursor_info(
-            cursor_info,
-            prepared_append.cursor_info_for_main_char(
-                &active_face_state,
-                row_geometry.text_position(
-                    row_position.x_px(),
-                    source_step_char.start_byte_idx(),
-                    row_position.col(),
-                ),
-                ch == '\t',
-            ),
-        );
-    }
-
-    if prepared_append
-        .append_to_text_row_and_apply(
-            &buffer_row_append_context,
-            &append_geometry,
-            ch,
-            &mut source_render.reborrow(),
-            trailing_whitespace,
-            word_wrap,
-            &mut progress.reborrow(),
-        )
-        .should_break()
-    {
-        return BufferSourceItemRenderOutcome::Stop;
-    }
-    if let Some(end_charpos) = source_end_charpos {
-        progress.max_charpos(end_charpos);
-    }
-    if let Some(end_byte_idx) = source_end_byte_idx {
-        progress.set_byte_idx(end_byte_idx);
-    }
-
-    BufferSourceItemRenderOutcome::Rendered
+    )
 }
 
 impl<'rows, 'request, 'emit, 'surface, 'face>
