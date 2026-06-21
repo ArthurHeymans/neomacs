@@ -57,6 +57,16 @@ pub(crate) trait DisplayCurrentRowMutation {
     fn apply(self, row: &mut GlyphRow) -> Self::Output;
 }
 
+pub(crate) trait DisplayWindowRowMutation {
+    type Output;
+
+    fn apply(self, row: &mut GlyphRow, matrix_cols: usize) -> Self::Output;
+}
+
+pub(crate) trait DisplayWindowRowsMutation {
+    fn apply(&mut self, row: &mut GlyphRow, matrix_cols: usize);
+}
+
 impl OutputRowBeginRequest {
     pub(crate) fn new(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
         Self {

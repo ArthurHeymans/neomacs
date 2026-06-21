@@ -16,7 +16,10 @@ use crate::display_output_install_request::{
 };
 #[cfg(test)]
 use crate::display_output_row_request::OutputCurrentRowDecorationRequest;
-use crate::display_output_row_request::{DisplayCurrentRowMutation, OutputRowLifecycleRequest};
+use crate::display_output_row_request::{
+    DisplayCurrentRowMutation, DisplayWindowRowMutation, DisplayWindowRowsMutation,
+    OutputRowLifecycleRequest,
+};
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_output_window_state::OutputWindowBuildState;
 #[cfg(test)]
@@ -317,20 +320,28 @@ impl DisplayOutputBuilder {
         ));
     }
 
-    pub(crate) fn edit_current_window_row_with_matrix_cols<R>(
+    pub(crate) fn apply_current_window_row_mutation<M>(
         &mut self,
         row_idx: usize,
-        f: impl FnOnce(&mut GlyphRow, usize) -> R,
-    ) -> Option<R> {
+        mutation: M,
+    ) -> Option<M::Output>
+    where
+        M: DisplayWindowRowMutation,
+    {
         self.window_state
-            .edit_current_window_row_with_matrix_cols(row_idx, f)
+            .edit_current_window_row_with_matrix_cols(row_idx, |row, matrix_cols| {
+                mutation.apply(row, matrix_cols)
+            })
     }
 
-    pub(crate) fn edit_last_window_rows_with_matrix_cols(
-        &mut self,
-        f: impl FnMut(&mut GlyphRow, usize),
-    ) {
-        self.window_state.edit_last_window_rows_with_matrix_cols(f);
+    pub(crate) fn apply_last_window_rows_mutation<M>(&mut self, mut mutation: M)
+    where
+        M: DisplayWindowRowsMutation,
+    {
+        self.window_state
+            .edit_last_window_rows_with_matrix_cols(|row, matrix_cols| {
+                mutation.apply(row, matrix_cols);
+            });
     }
 
     #[cfg(test)]

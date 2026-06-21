@@ -4,6 +4,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_row_request::{DisplayWindowRowMutation, DisplayWindowRowsMutation};
 use crate::display_row::DisplayRowSourceState;
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
@@ -251,6 +252,31 @@ pub(crate) fn text_window_right_edge_marker_decorations(
     decorations
 }
 
+struct TextWindowRightEdgeMarkerMutation<'base, 'services, 'emit, 'face> {
+    decoration: TextWindowRightEdgeMarkerDecoration,
+    face_id: u32,
+    char_width: f32,
+    base_face: &'base ResolvedFace,
+    render_services: &'services mut ChromeRowRenderServices<'emit, 'face>,
+}
+
+impl DisplayWindowRowMutation for TextWindowRightEdgeMarkerMutation<'_, '_, '_, '_> {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow, matrix_cols: usize) -> Self::Output {
+        install_right_edge_marker_from_source_request(
+            row,
+            self.decoration.target_col,
+            self.decoration.marker,
+            self.face_id,
+            self.base_face,
+            self.char_width,
+            matrix_cols,
+            self.render_services,
+        );
+    }
+}
+
 struct RightBorderTextRenderRequest<'face> {
     text: String,
     area: GlyphArea,
@@ -378,6 +404,25 @@ fn install_right_border_from_source_request(
     row.displays_text = prior_displays_text;
 }
 
+struct TextWindowRightBorderRowsMutation<'base, 'emit, 'face> {
+    render_services: ChromeRowRenderServices<'emit, 'face>,
+    request: TextWindowRightBorder,
+    base_face: &'base ResolvedFace,
+}
+
+impl DisplayWindowRowsMutation for TextWindowRightBorderRowsMutation<'_, '_, '_> {
+    fn apply(&mut self, row: &mut GlyphRow, matrix_cols: usize) {
+        install_right_border_from_source_request(
+            row,
+            matrix_cols.saturating_sub(1),
+            self.request,
+            self.base_face,
+            matrix_cols,
+            &mut self.render_services,
+        );
+    }
+}
+
 pub(crate) fn install_text_window_right_edge_markers(
     output_builder: &mut DisplayOutputBuilder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
@@ -385,19 +430,14 @@ pub(crate) fn install_text_window_right_edge_markers(
 ) {
     let base_face = render_services.face_resolver().default_face().clone();
     for decoration in text_window_right_edge_marker_decorations(&request) {
-        let _ = output_builder.edit_current_window_row_with_matrix_cols(
+        let _ = output_builder.apply_current_window_row_mutation(
             decoration.display_row_index,
-            |row, matrix_cols| {
-                install_right_edge_marker_from_source_request(
-                    row,
-                    decoration.target_col,
-                    decoration.marker,
-                    request.face_id,
-                    &base_face,
-                    request.char_width,
-                    matrix_cols,
-                    &mut render_services,
-                );
+            TextWindowRightEdgeMarkerMutation {
+                decoration,
+                face_id: request.face_id,
+                char_width: request.char_width,
+                base_face: &base_face,
+                render_services: &mut render_services,
             },
         );
     }
@@ -405,19 +445,14 @@ pub(crate) fn install_text_window_right_edge_markers(
 
 pub(crate) fn install_text_window_right_border_rows(
     output_builder: &mut DisplayOutputBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
+    render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    output_builder.edit_last_window_rows_with_matrix_cols(|row, matrix_cols| {
-        install_right_border_from_source_request(
-            row,
-            matrix_cols.saturating_sub(1),
-            request,
-            base_face,
-            matrix_cols,
-            &mut render_services,
-        );
+    output_builder.apply_last_window_rows_mutation(TextWindowRightBorderRowsMutation {
+        render_services,
+        request,
+        base_face,
     });
 }
 
