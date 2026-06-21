@@ -23,7 +23,6 @@ use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
-use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_replacement::DisplayPropertyReplacementRowRenderRequest;
 use crate::display_row_text_output::TextRowOutput;
@@ -111,7 +110,7 @@ where
             &mut context,
             self.render_policy,
         )?;
-        merge_display_row_source_slot_bounds(row, result.source_slots());
+        result.merge_source_slot_bounds_into(row);
         Some((result, row.height_px, row.ascent_px))
     }
 }
@@ -129,7 +128,7 @@ where
             self.source,
             self.source_state,
         )?;
-        merge_display_row_source_slot_bounds(row, result.source_slots());
+        result.merge_source_slot_bounds_into(row);
         Some(result)
     }
 }

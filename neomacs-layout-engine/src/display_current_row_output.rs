@@ -9,9 +9,7 @@ use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 #[cfg(test)]
-use crate::display_row_builder::{
-    DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
-};
+use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
 #[cfg(test)]
 use crate::display_row_text_output::TextRowOutput;
 #[cfg(test)]
@@ -94,7 +92,7 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
                 .ascent_px
                 .max(rendered_row.ascent_px)
                 .min(row.height_px.max(1.0));
-            merge_display_row_source_slot_bounds(row, rendered.source_slots());
+            rendered.merge_source_slot_bounds_into(row);
         })?;
         Some(end)
     }

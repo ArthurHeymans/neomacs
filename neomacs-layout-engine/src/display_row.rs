@@ -10,7 +10,8 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
-    DisplayTabPolicy, new_display_row_for_role,
+    DisplayTabPolicy, apply_display_row_source_slot_bounds, merge_display_row_source_slot_bounds,
+    new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
@@ -1069,8 +1070,18 @@ impl RenderedDisplayRow {
         self.progress
     }
 
+    #[cfg(test)]
     pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
         &self.source_slots
+    }
+
+    pub(crate) fn apply_source_slot_bounds_to(&self, row: &mut GlyphRow) {
+        apply_display_row_source_slot_bounds(row, &self.source_slots);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
+        merge_display_row_source_slot_bounds(row, &self.source_slots);
     }
 
     pub(crate) fn faces(&self) -> &[Face] {
@@ -1875,8 +1886,8 @@ impl DisplayRowRenderIntoRowResult {
         self.stop
     }
 
-    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
-        &self.source_slots
+    pub(crate) fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
+        merge_display_row_source_slot_bounds(row, &self.source_slots);
     }
 
     pub(crate) fn into_current_row_parts(
