@@ -149,20 +149,66 @@ struct DisplayReplacementStringAppendRequest {
 
 #[cfg(test)]
 pub(crate) struct DisplayReplacementStringSourceSnapshot {
-    pub(crate) value: Value,
-    pub(crate) source_id: LispStringSourceId,
-    pub(crate) position: DisplayRowPosition,
-    pub(crate) origin: DisplayOrigin,
-    pub(crate) base_face_policy: BaseFacePolicy,
-    pub(crate) cursor_slot_width_px: f32,
-    pub(crate) is_empty: bool,
+    value: Value,
+    source_id: LispStringSourceId,
+    position: DisplayRowPosition,
+    origin: DisplayOrigin,
+    base_face_policy: BaseFacePolicy,
+    cursor_slot_width_px: f32,
+    is_empty: bool,
 }
 
 #[cfg(test)]
 pub(crate) struct DisplayPropertyReplacementStringPlanSnapshot {
-    pub(crate) origin: DisplayOrigin,
-    pub(crate) base_face_policy: BaseFacePolicy,
-    pub(crate) has_replacement_base_face: bool,
+    origin: DisplayOrigin,
+    base_face_policy: BaseFacePolicy,
+    has_replacement_base_face: bool,
+}
+
+#[cfg(test)]
+impl DisplayReplacementStringSourceSnapshot {
+    pub(crate) fn value(&self) -> Value {
+        self.value
+    }
+
+    pub(crate) fn source_id(&self) -> LispStringSourceId {
+        self.source_id
+    }
+
+    pub(crate) fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    pub(crate) fn origin(&self) -> DisplayOrigin {
+        self.origin
+    }
+
+    pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
+        self.base_face_policy
+    }
+
+    pub(crate) fn cursor_slot_width_px(&self) -> f32 {
+        self.cursor_slot_width_px
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.is_empty
+    }
+}
+
+#[cfg(test)]
+impl DisplayPropertyReplacementStringPlanSnapshot {
+    pub(crate) fn origin(&self) -> DisplayOrigin {
+        self.origin
+    }
+
+    pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
+        self.base_face_policy
+    }
+
+    pub(crate) fn has_replacement_base_face(&self) -> bool {
+        self.has_replacement_base_face
+    }
 }
 
 impl DisplayReplacementStringAppendRequest {
@@ -340,6 +386,16 @@ impl DisplayReplacementItemAppendRequest {
             frame: self.frame,
             position: self.position,
         }
+    }
+}
+
+impl DisplayReplacementItemAppendPlan {
+    fn frame(&self) -> DisplayReplacementItemAppendFrame {
+        self.frame
+    }
+
+    fn into_parts(self) -> (DisplayItem, DisplayRowPosition) {
+        (self.item, self.position)
     }
 }
 
@@ -562,11 +618,7 @@ impl DisplayPropertyReplacementAppendRequest {
             row_geometry,
             active_face_state,
         );
-        DisplayPropertyReplacementAppendOutcome {
-            start_position,
-            end_position,
-            cursor_policy,
-        }
+        DisplayPropertyReplacementAppendOutcome::new(start_position, end_position, cursor_policy)
     }
 }
 
@@ -675,12 +727,24 @@ impl DisplayPropertyReplacementRowRenderRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayPropertyReplacementAppendOutcome {
-    pub(crate) start_position: DisplayRowPosition,
-    pub(crate) end_position: DisplayRowPosition,
-    pub(crate) cursor_policy: DisplayPropertyReplacementCursorPolicy,
+    start_position: DisplayRowPosition,
+    end_position: DisplayRowPosition,
+    cursor_policy: DisplayPropertyReplacementCursorPolicy,
 }
 
 impl DisplayPropertyReplacementAppendOutcome {
+    pub(crate) fn new(
+        start_position: DisplayRowPosition,
+        end_position: DisplayRowPosition,
+        cursor_policy: DisplayPropertyReplacementCursorPolicy,
+    ) -> Self {
+        Self {
+            start_position,
+            end_position,
+            cursor_policy,
+        }
+    }
+
     pub(crate) fn start_position(self) -> DisplayRowPosition {
         self.start_position
     }
@@ -960,7 +1024,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<DisplayRowAppendProgress> {
         let plan = request.into_plan(self.replacement_source, self.active_face.face_id());
-        let append_context = match plan.frame {
+        let append_context = match plan.frame() {
             DisplayReplacementItemAppendFrame::ActiveFace => {
                 self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
             }
@@ -1043,8 +1107,8 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
-        let position = plan.position;
-        let mut source = DisplayItemOnceSource::new(plan.item);
+        let (item, position) = plan.into_parts();
+        let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         let outcome = self.single_item.render_source_with_policy(

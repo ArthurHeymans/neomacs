@@ -9284,24 +9284,27 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
     assert!(!item.is_empty());
     let snapshot = item.append_source_snapshot(DisplayRowPosition { x_px: 2.0, col: 1 });
     assert_eq!(
-        snapshot.source_id,
+        snapshot.source_id(),
         LispStringSourceId::display_replacement(9)
     );
-    assert_eq!(snapshot.value, value);
-    assert_eq!(snapshot.position, DisplayRowPosition { x_px: 2.0, col: 1 });
+    assert_eq!(snapshot.value(), value);
     assert_eq!(
-        snapshot.origin,
+        snapshot.position(),
+        DisplayRowPosition { x_px: 2.0, col: 1 }
+    );
+    assert_eq!(
+        snapshot.origin(),
         DisplayOrigin::DisplayPropertyString {
             anchor_charpos: CharPos0::new(4),
             source: DisplayPropertySource::TextProperty,
         }
     );
     assert_eq!(
-        snapshot.base_face_policy,
+        snapshot.base_face_policy(),
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
-    assert_eq!(snapshot.cursor_slot_width_px, 8.0);
-    assert!(!snapshot.is_empty);
+    assert_eq!(snapshot.cursor_slot_width_px(), 8.0);
+    assert!(!snapshot.is_empty());
 
     let empty = DisplayReplacementStringSourceItem::display_property_string(
         Value::string(""),
@@ -9651,27 +9654,27 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
         .string_plan_snapshot(&buffer, &mut source_render, &active_face, &mut face_ids)
         .expect("string replacement lowers to string append request");
     assert_eq!(
-        snapshot.origin,
+        snapshot.origin(),
         DisplayOrigin::DisplayPropertyString {
             anchor_charpos: CharPos0::new(3),
             source: DisplayPropertySource::TextProperty,
         }
     );
     assert_eq!(
-        snapshot.base_face_policy,
+        snapshot.base_face_policy(),
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
-    assert!(snapshot.has_replacement_base_face);
+    assert!(snapshot.has_replacement_base_face());
 }
 
 #[test]
 fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let outcome = BufferDisplayPropertyTextReplacementOutcome {
-        replacement: DisplayPropertyReplacementAppendOutcome {
-            start_position: DisplayRowPosition { x_px: 4.0, col: 1 },
-            end_position: DisplayRowPosition { x_px: 12.0, col: 2 },
-            cursor_policy: DisplayPropertyReplacementCursorPolicy::FaceChar,
-        },
+        replacement: DisplayPropertyReplacementAppendOutcome::new(
+            DisplayRowPosition { x_px: 4.0, col: 1 },
+            DisplayRowPosition { x_px: 12.0, col: 2 },
+            DisplayPropertyReplacementCursorPolicy::FaceChar,
+        ),
         skip_to: 4,
     };
     let mut byte_idx = "a".len();
