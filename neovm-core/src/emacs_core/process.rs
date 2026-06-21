@@ -3951,6 +3951,18 @@ fn default_process_tty_name() -> String {
 pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     obarray.set_symbol_value("process-connection-type", Value::T);
     obarray.make_special("process-connection-type");
+    // GNU `process.c` `syms_of_process` DEFVAR_LISPs
+    // `process-adaptive-read-buffering` (default nil); it controls the
+    // short-read delay heuristic in `read_process_output` and is set per
+    // process at `start-process'/`make-process' time
+    // (`p->adaptive_read_buffering`).  It must be *bound* (to nil) so that
+    // `(boundp 'process-adaptive-read-buffering)` is t and reading the
+    // variable does not signal `void-variable`; e.g. `tramp-sh.el` binds it
+    // with `(let ((process-adaptive-read-buffering nil)) ...)`.  Without this
+    // DEFVAR, code that reads the variable before calling a (non-existent)
+    // helper sees `void-variable` instead of reaching the real error.
+    obarray.set_symbol_value("process-adaptive-read-buffering", Value::NIL);
+    obarray.make_special("process-adaptive-read-buffering");
     // GNU `gnutls.c` provides this via `DEFVAR_INT ("gnutls-log-level",
     // global_gnutls_log_level)` (default 0).  `gnutls.el` only forward-declares
     // it (`(defvar gnutls-log-level)  ; gnutls.c`), so without the C-side
@@ -8137,6 +8149,14 @@ fn builtin_make_process_impl_with_environment(
         executable,
     );
     processes.sync_process_mark(buffers, id)?;
+
+    // GNU `make_process` (src/process.c) initialises every process's locking
+    // thread to the creating thread (`pset_thread (p, Fcurrent_thread ())`),
+    // so `process-thread` returns that thread rather than nil.  The network /
+    // serial / pipe creators already do this; the subprocess path must too.
+    if let Some(proc) = processes.get_mut(id) {
+        proc.thread = current_thread_handle(threads);
+    }
 
     // Set filter and sentinel if provided.
     if !filter.is_nil() {

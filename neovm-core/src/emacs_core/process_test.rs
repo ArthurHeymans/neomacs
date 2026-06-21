@@ -4272,3 +4272,23 @@ fn libgnutls_version_is_defined_for_nsm_tls_checks() {
     let result = runtime_startup_eval_one("(list (boundp 'libgnutls-version) libgnutls-version)");
     assert_eq!(result, "OK (t -1)");
 }
+
+#[test]
+fn process_adaptive_read_buffering_is_a_bound_nil_variable() {
+    // GNU `process.c` `syms_of_process` DEFVAR_LISPs
+    // `process-adaptive-read-buffering` (default nil).  It is a *variable*,
+    // not a function: GNU has no `process-adaptive-read-buffering-p` nor
+    // `set-process-adaptive-read-buffering`.  The variable must be bound to
+    // nil so `(boundp 'process-adaptive-read-buffering)` is t and reading it
+    // (e.g. tramp-sh.el's `(let ((process-adaptive-read-buffering nil)) ...)`)
+    // does not raise `void-variable`.
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        "(list (boundp 'process-adaptive-read-buffering)
+               process-adaptive-read-buffering
+               (default-boundp 'process-adaptive-read-buffering)
+               (fboundp 'process-adaptive-read-buffering-p)
+               (fboundp 'set-process-adaptive-read-buffering))",
+    );
+    assert_eq!(result, "OK (t nil t nil nil)");
+}
