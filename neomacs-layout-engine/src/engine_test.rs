@@ -9509,6 +9509,97 @@ fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
 }
 
 #[test]
+fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
+    // GNU face_at_buffer_position merges the `face' text property FIRST, then
+    // overlay faces LAST (overlays win on conflict but both contribute). A char
+    // carrying both a text-property face and an overlay face must render the
+    // merged face, not either contribution alone.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("ab");
+        let len = buf.total_emacs_byte_len().get();
+        // Text-property face: a NAMED face (`bold`) — this resolves to a concrete
+        // face id (unlike a plist face, which defers to face_at_pos). The named
+        // face sets weight but not background.
+        buf.put_text_property(0, len, Value::symbol("face"), Value::symbol("bold"));
+        // Overlay face spanning the same text: distinctive BACKGROUND only.
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: len,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("face"),
+            Value::list(vec![Value::keyword("background"), Value::string("#00ff00")]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-face-merge", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let default_face = state
+        .faces
+        .get(&u32::from(
+            neomacs_display_protocol::face::BasicFaceId::Default,
+        ))
+        .expect("default face");
+    let default_bg = default_face.background;
+
+    let a_face_id = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[1].iter())
+        .find_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch: 'a' } => Some(glyph.face_id),
+            _ => None,
+        })
+        .expect("glyph 'a' face");
+    let face = state.faces.get(&a_face_id).expect("resolved face for 'a'");
+
+    assert!(
+        face.is_bold(),
+        "text-property bold face must survive the merge"
+    );
+    assert_ne!(
+        face.background, default_bg,
+        "overlay background must merge in (GNU merges overlays after the text-prop face); \
+         dropping it means the named text-prop face overrode the overlay-merged checkpoint face"
+    );
+}
+
+#[test]
 fn layout_frame_rust_continues_eob_before_string_after_overlong_line() {
     let mut eval = Context::new();
     let buf_id = eval
