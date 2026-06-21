@@ -1,8 +1,8 @@
 //! Buffer text source consumption with replacement application.
 
 use crate::display_buffer_display_property_render::{
+    BufferDisplayPropertyTextReplacementApplyOutcome,
     BufferDisplayPropertyTextReplacementRenderContext,
-    BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderState,
 };
 use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
@@ -105,7 +105,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.state.progress.row_progress().x(),
             self.state.progress.row_position(),
         );
-        match replacement_context.render(
+        match replacement_context.render_and_apply(
             buffer,
             BufferDisplayPropertyTextReplacementRenderState::new(
                 self.state.source_render.reborrow(),
@@ -114,21 +114,15 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.row_geometry,
                 self.active_face_state,
             ),
+            &mut self.state.progress,
+            self.state.cursor_info,
+            self.loop_context.point_charpos(),
         ) {
-            BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
-                replacement_context.apply_rendered_outcome(
-                    outcome,
-                    &mut self.state.progress,
-                    self.state.cursor_info,
-                    self.state.row_geometry,
-                    self.loop_context.point_charpos(),
-                );
-                true
-            }
-            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
+            BufferDisplayPropertyTextReplacementApplyOutcome::Applied => true,
+            BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
-            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => false,
+            BufferDisplayPropertyTextReplacementApplyOutcome::Stop => false,
         }
     }
 

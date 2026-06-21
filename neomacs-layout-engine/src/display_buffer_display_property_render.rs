@@ -34,6 +34,12 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Stop,
 }
 
+pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
+    Applied,
+    Fallback(DisplaySourceStepItem),
+    Stop,
+}
+
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
     request: BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face>,
     current_x: f32,
@@ -115,16 +121,40 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
         }
     }
 
-    pub(crate) fn render<B: LayoutBufferView>(
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
         &self,
         buffer: &B,
-        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
-        self.request
-            .render(buffer, state, self.current_x, self.start_position)
+        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
+        cursor_info: &mut CursorCaptureState,
+        point_charpos: i64,
+    ) -> BufferDisplayPropertyTextReplacementApplyOutcome {
+        match self.request.render_with_state(
+            buffer,
+            &mut state,
+            self.current_x,
+            self.start_position,
+        ) {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
+                self.apply_rendered_outcome(
+                    outcome,
+                    progress,
+                    cursor_info,
+                    state.row_geometry,
+                    point_charpos,
+                );
+                BufferDisplayPropertyTextReplacementApplyOutcome::Applied
+            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
+                BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item)
+            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
+                BufferDisplayPropertyTextReplacementApplyOutcome::Stop
+            }
+        }
     }
 
-    pub(crate) fn apply_rendered_outcome(
+    fn apply_rendered_outcome(
         &self,
         outcome: BufferDisplayPropertyTextReplacementOutcome,
         progress: &mut DisplaySourceProgressState<'_>,
@@ -183,22 +213,15 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         &self,
         append_request: DisplayPropertyReplacementRowRenderRequest,
         buffer: &B,
-        state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+        state: &mut BufferDisplayPropertyTextReplacementRenderState<'_>,
     ) -> BufferDisplayPropertyTextReplacementOutcome {
-        let BufferDisplayPropertyTextReplacementRenderState {
-            mut source_render,
-            face_ids,
-            append_surface,
-            row_geometry,
-            active_face_state,
-        } = state;
         let outcome = append_request.render_to_text_row(
             buffer,
-            &mut source_render.reborrow(),
-            face_ids,
-            append_surface,
-            row_geometry,
-            active_face_state,
+            &mut state.source_render.reborrow(),
+            state.face_ids,
+            state.append_surface,
+            state.row_geometry,
+            state.active_face_state,
         );
         BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
@@ -206,10 +229,21 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn render<B: LayoutBufferView>(
         &self,
         buffer: &B,
         mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+        current_x: f32,
+        start_position: DisplayRowPosition,
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        self.render_with_state(buffer, &mut state, current_x, start_position)
+    }
+
+    fn render_with_state<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        state: &mut BufferDisplayPropertyTextReplacementRenderState<'_>,
         current_x: f32,
         start_position: DisplayRowPosition,
     ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
