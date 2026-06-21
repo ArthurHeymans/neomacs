@@ -2142,6 +2142,14 @@ fn lower_fixnum_mul(
 /// operands are <= 61-bit so the i64 ops cannot trap, and the interpreter's
 /// `Value::fixnum` retag of `MOST_NEGATIVE_FIXNUM / -1` (a wrap) produces the
 /// same bits as our retag, so no extra range guard is needed for parity.
+///
+/// FRAGILE PARITY: this matches a quirk of the interpreter's `Op::Div` fast path
+/// (`vm.rs`), which `Value::fixnum`-wraps `MOST_NEGATIVE_FIXNUM / -1` instead of
+/// promoting to a bignum (the `/` *builtin* does promote). If `Op::Div` is ever
+/// corrected to promote, THIS lowering must change too (it would otherwise return
+/// the wrapped fixnum while the interpreter returns a bignum). The unboxed MIR
+/// analogue `raw_fixnum_divrem` is robust to that fix — it range-checks and deopts
+/// on the overflow rather than wrapping.
 fn lower_fixnum_divrem(
     fb: &mut FunctionBuilder,
     deopt: Block,
