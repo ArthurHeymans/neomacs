@@ -1198,7 +1198,13 @@ pub const DISPLAY_AFFECTING_BUFFER_SLOTS: &[&str] = &[
     "selective-display-ellipses",
     "buffer-display-table",
     "line-spacing",
-    "fill-column",
+    // NOTE: `fill-column` is `DEFVAR_PER_BUFFER` in GNU but is NOT read by
+    // `redisplay_window`/the iterator when laying out text — it only drives
+    // fill commands and `display-fill-column-indicator` (which reads it
+    // live). GNU does not repaint on a `fill-column` change, so it is
+    // excluded here to avoid spurious redisplays (e.g. enriched-mode sets it
+    // during HELLO-buffer setup; an extra redisplay then painted the mode
+    // line at a transient narrower width).
     // Bidi reordering parameters.
     "bidi-display-reordering",
     "bidi-paragraph-direction",
@@ -1235,6 +1241,8 @@ pub const DISPLAY_AFFECTING_BUFFER_SLOTS: &[&str] = &[
 /// does. Kept conservative: only variables read by the layout/iterator
 /// path are listed, to avoid over-triggering redisplay.
 pub const DISPLAY_AFFECTING_GLOBAL_VARS: &[&str] = &[
+    // Layout/iterator inputs that change how currently-displayed text is laid
+    // out the moment they change.
     "truncate-partial-width-windows",
     "line-prefix",
     "wrap-prefix",
@@ -1249,27 +1257,31 @@ pub const DISPLAY_AFFECTING_GLOBAL_VARS: &[&str] = &[
     "indicate-empty-lines",
     "overlay-arrow-position",
     "overlay-arrow-string",
+    "ctl-arrow",
+    "glyphless-char-display",
+    "nobreak-char-display",
+    // The `*-format` and per-buffer-mirrored display names below are also
+    // settable as globals (the buffer default); marking on the default keeps
+    // windows reading that default in sync.
     "mode-line-format",
     "header-line-format",
     "tab-line-format",
-    "ctl-arrow",
     "tab-width",
     "truncate-lines",
     "word-wrap",
     "bidi-display-reordering",
     "bidi-paragraph-direction",
-    "scroll-margin",
-    "scroll-conservatively",
-    "scroll-step",
-    "hscroll-margin",
-    "hscroll-step",
     "fringe-indicator-alist",
     "fringe-cursor-alist",
-    "glyphless-char-display",
-    "nobreak-char-display",
-    "void-text-area-pointer",
-    "blink-cursor-mode",
     "cursor-in-non-selected-windows",
+    // NOTE: the `scroll-*`/`hscroll-*` variables (scroll-margin,
+    // scroll-conservatively, scroll-step, hscroll-margin, hscroll-step) are
+    // deliberately EXCLUDED. GNU does not repaint a window when they change —
+    // they only influence where the *next* scroll lands, not the layout of
+    // the text currently on screen. `blink-cursor-mode` and
+    // `void-text-area-pointer` are likewise excluded: the cursor blink is a
+    // timer-driven minor mode and the void-area pointer is a mouse-cursor
+    // shape, neither of which alters text layout.
 ];
 
 /// Whether setting the named variable should mark redisplay dirty.
