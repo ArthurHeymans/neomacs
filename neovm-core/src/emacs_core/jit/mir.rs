@@ -833,6 +833,9 @@ pub fn inline_pure_single_block_callees(
     m: &mut MirFunction,
     resolve: &impl Fn(Value) -> Option<MirFunction>,
     max_insts: usize,
+    // Out: the SymId of each callee actually inlined (for the precise
+    // dependency/invalidation map — redefining one of these must re-JIT this caller).
+    inlined_syms: &mut Vec<crate::emacs_core::intern::SymId>,
 ) -> usize {
     let mut inlined = 0usize;
     let mut subs: Vec<(MirValue, MirValue)> = Vec::new();
@@ -859,13 +862,14 @@ pub fn inline_pure_single_block_callees(
                     args,
                 } if args.len() == *n as usize + 1 => consts
                     .get(&args[0])
-                    .and_then(|sym| resolve(*sym))
-                    .filter(|c| c.arity == *n as usize && callee_inlinable(c, max_insts))
-                    .map(|c| (c, args[1..].to_vec())),
+                    .and_then(|sym| sym.as_symbol_id().map(|id| (*sym, id)))
+                    .and_then(|(sym, id)| resolve(sym).map(|c| (c, id)))
+                    .filter(|(c, _)| c.arity == *n as usize && callee_inlinable(c, max_insts))
+                    .map(|(c, id)| (c, args[1..].to_vec(), id)),
                 _ => None,
             };
 
-            let Some((callee, arg_vals)) = resolved else {
+            let Some((callee, arg_vals, callee_sym)) = resolved else {
                 new_insts.push(inst);
                 continue;
             };
@@ -909,6 +913,7 @@ pub fn inline_pure_single_block_callees(
             };
             let new_result = remap.get(rv).copied().unwrap_or(*rv);
             subs.push((inst.result, new_result));
+            inlined_syms.push(callee_sym);
             inlined += 1;
         }
 
@@ -1127,6 +1132,7 @@ mod tests {
             &mut m,
             &|v| (v.bits() == id_sym.bits()).then(|| build_mir(&id_ops, &[], 1).expect("id builds")),
             8,
+            &mut Vec::new(),
         );
         assert_eq!(n, 2, "both id calls inline");
         let MirTerm::Return(rv) = m.blocks[0].term else {

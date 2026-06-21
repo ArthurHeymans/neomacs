@@ -1335,6 +1335,11 @@ pub struct CompiledLeaf {
     /// every guard is STATUS_DEOPT_AT, so it never reruns after a call). Guards the
     /// null-vmctx degradation in `invoke_native` (the HOLE-3 refuse-to-rerun).
     has_side_effects: bool,
+    /// SymIds of the callees this leaf INLINED — its precise dependency set. If any
+    /// is redefined, this leaf must re-JIT; the dispatch evicts it eagerly via the
+    /// INLINE_DEPS reverse map (cache.rs), and the coarse inline_epoch backstop
+    /// catches it lazily regardless. Empty unless the leaf inlined something.
+    inline_deps: Box<[crate::emacs_core::intern::SymId]>,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -1392,6 +1397,11 @@ impl CompiledLeaf {
     /// inlined nothing). The dispatch recompiles when the live epoch differs.
     pub(crate) fn inline_epoch(&self) -> Option<u64> {
         self.inline_epoch
+    }
+
+    /// The SymIds of the callees this leaf inlined (its precise dependency set).
+    pub(crate) fn inline_deps(&self) -> &[crate::emacs_core::intern::SymId] {
+        &self.inline_deps
     }
 
     /// Whether a call with `n` arguments is valid for this function's lambda
@@ -1934,12 +1944,14 @@ fn compile_bytecode_function_inner(
             // former call boundary. Record the armed function_epoch so the dispatch
             // re-JITs if any inlined callee is later redefined (see CompiledLeaf
             // ::inline_epoch).
+            let mut inlined_syms: Vec<crate::emacs_core::intern::SymId> = Vec::new();
             let inline_epoch = obarray.and_then(|ob| {
                 let armed = ob.function_epoch();
                 let n = mir::inline_pure_single_block_callees(
                     &mut mir,
                     &|sym| resolve_inline_callee(ob, sym),
                     MAX_INLINE_INSTS,
+                    &mut inlined_syms,
                 );
                 (n > 0).then_some(armed)
             });
@@ -1954,6 +1966,10 @@ fn compile_bytecode_function_inner(
                     leaf.required = required;
                     leaf.has_rest = has_rest;
                     leaf.inline_epoch = inline_epoch;
+                    // The precise dependency set (registered into INLINE_DEPS at the
+                    // cache compile-miss site so a redefinition of any inlined callee
+                    // evicts exactly this leaf).
+                    leaf.inline_deps = inlined_syms.into();
                     return Ok(leaf);
                 }
             }
@@ -3017,6 +3033,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // A call-bearing body runs a side effect ahead of its (precise) deopts, so
         // it must never rerun-from-start (the refuse-to-rerun guard).
         has_side_effects: has_call,
+        // Baseline default; compile_bytecode_function_inner overrides with the
+        // actual inlined-callee SymIds after the inline pass.
+        inline_deps: Box::from([]),
         spec_slots: Box::from([]),
         deopt_spill,
         deopt_meta,
@@ -5956,6 +5975,8 @@ pub fn lower_leaf_full(
         // The baseline is all-precise (every guard is STATUS_DEOPT_AT, never a
         // rerun-from-start after a call), so it never needs the refuse-to-rerun.
         has_side_effects: false,
+        // The baseline never inlines.
+        inline_deps: Box::from([]),
         has_binds: ops.iter().any(|o| {
             matches!(
                 o,
@@ -6724,6 +6745,7 @@ mod tests {
             &mut m,
             &|v| (v.bits() == sq_sym.bits()).then(|| mir::build_mir(&sq_ops, &[], 1).expect("sq builds")),
             16,
+            &mut Vec::new(),
         );
         assert_eq!(n, 1, "sq must be inlined (the call replaced by its body)");
         let leaf = lower_mir_pure(&m).expect("inlined (now pure) MIR lowers");

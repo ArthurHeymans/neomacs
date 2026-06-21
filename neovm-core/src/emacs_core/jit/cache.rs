@@ -17,13 +17,14 @@
 //!   use-after-free.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function_with, take_pending_flow};
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
+use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::Value;
 
 /// One thread's knowledge of a function's compiled state.
@@ -39,6 +40,24 @@ enum CacheEntry {
 thread_local! {
     /// `compiled_id` -> compiled state, owned by and private to this thread.
     static COMPILED: RefCell<HashMap<u64, CacheEntry>> = RefCell::new(HashMap::new());
+
+    /// Precise inline-dependency REVERSE map: callee `SymId` -> the set of caller
+    /// `compiled_id`s that INLINED it. Populated at compile-miss (the `or_insert_with`
+    /// closures register `leaf.inline_deps()`); consulted by `evict_inline_dependents`
+    /// when a function is redefined, to evict exactly the affected callers EARLY. The
+    /// coarse `inline_epoch`-vs-live-epoch backstop in `try_run_compiled` remains the
+    /// correctness floor regardless — this map is a pure churn-reduction optimization.
+    /// Same thread/scope as COMPILED (its values are only meaningful as COMPILED keys).
+    static INLINE_DEPS: RefCell<HashMap<SymId, HashSet<u64>>> = RefCell::new(HashMap::new());
+}
+
+/// Register a freshly-compiled leaf's inlined-callee deps into the reverse map.
+/// Called ONLY from the cache compile-miss path (the `or_insert_with` closures), so
+/// it runs once per compile, never on the hot dispatch path.
+fn register_inline_deps(id: u64, leaf: &CompiledLeaf) {
+    for &sym in leaf.inline_deps() {
+        INLINE_DEPS.with(|m| m.borrow_mut().entry(sym).or_default().insert(id));
+    }
 }
 
 /// Tier-up entry point: run `func`'s body as native code if possible.
@@ -123,7 +142,12 @@ pub fn try_run_compiled(
         }
         match cache.entry(id).or_insert_with(|| {
             match compile_bytecode_function_with(func, obarray) {
-                Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
+                Ok(leaf) => {
+                    // Compile-only (this closure runs solely on a cache miss): record
+                    // the precise inline deps so a later redefinition evicts this leaf.
+                    register_inline_deps(id, &leaf);
+                    CacheEntry::Compiled(Rc::new(leaf))
+                }
                 Err(_) => CacheEntry::NotCompilable,
             }
         }) {
@@ -160,7 +184,12 @@ pub(crate) fn resolve_compiled_leaf_ptr(
             // SAFETY: same dormant-Context contract as try_run_compiled.
             let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
             match compile_bytecode_function_with(func, obarray) {
-                Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
+                Ok(leaf) => {
+                    // Compile-only (this closure runs solely on a cache miss): record
+                    // the precise inline deps so a later redefinition evicts this leaf.
+                    register_inline_deps(id, &leaf);
+                    CacheEntry::Compiled(Rc::new(leaf))
+                }
                 Err(_) => CacheEntry::NotCompilable,
             }
         }) {
