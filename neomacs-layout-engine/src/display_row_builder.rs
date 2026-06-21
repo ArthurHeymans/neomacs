@@ -33,6 +33,38 @@ pub(crate) struct DisplayRowLayout {
     pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowVerticalMetrics {
+    height_px: f32,
+    ascent_px: f32,
+}
+
+impl DisplayRowVerticalMetrics {
+    pub(crate) fn new(height_px: f32, ascent_px: f32) -> Self {
+        Self {
+            height_px,
+            ascent_px,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_row(row: &GlyphRow) -> Self {
+        Self::new(row.height_px, row.ascent_px)
+    }
+
+    fn from_glyph(glyph: &Glyph) -> Option<Self> {
+        (glyph.pixel_height > 0.0).then(|| Self::new(glyph.pixel_height, glyph.pixel_ascent))
+    }
+
+    pub(crate) fn include_in_row(self, row: &mut GlyphRow) {
+        if self.height_px <= 0.0 {
+            return;
+        }
+        row.height_px = row.height_px.max(self.height_px).max(1.0);
+        row.ascent_px = row.ascent_px.max(self.ascent_px).min(row.height_px);
+    }
+}
+
 impl DisplayRowLayout {
     fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
         DisplayRowTextNaturalAdvancePolicy::new(self.tab_policy.clone(), self.char_width_px)
@@ -1427,15 +1459,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let Some(glyph) = self.row.glyphs[self.area_index].last() else {
             return;
         };
-        if glyph.pixel_height <= 0.0 {
-            return;
+        if let Some(metrics) = DisplayRowVerticalMetrics::from_glyph(glyph) {
+            metrics.include_in_row(self.row);
         }
-        self.row.height_px = self.row.height_px.max(glyph.pixel_height).max(1.0);
-        self.row.ascent_px = self
-            .row
-            .ascent_px
-            .max(glyph.pixel_ascent)
-            .min(self.row.height_px);
     }
 
     fn push_control_char(&mut self, ch: char, face_id: u32, charpos: usize) {

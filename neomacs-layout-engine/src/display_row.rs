@@ -1157,11 +1157,8 @@ impl RenderedDisplayRow {
             rendered_row.displays_text || !rendered_row.glyphs[GlyphArea::Text.index()].is_empty();
         row.glyphs[GlyphArea::Text.index()]
             .extend(rendered_row.glyphs[GlyphArea::Text.index()].iter().cloned());
-        row.height_px = row.height_px.max(rendered_row.height_px);
-        row.ascent_px = row
-            .ascent_px
-            .max(rendered_row.ascent_px)
-            .min(row.height_px.max(1.0));
+        crate::display_row_builder::DisplayRowVerticalMetrics::from_row(rendered_row)
+            .include_in_row(row);
         merge_display_row_source_slot_bounds(row, &self.source_slots);
         display_row_output_end_position(self.progress())
     }

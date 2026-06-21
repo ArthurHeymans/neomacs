@@ -1136,6 +1136,23 @@ fn display_row_builder_promotes_explicit_stretch_height_to_row_metrics() {
 }
 
 #[test]
+fn display_row_vertical_metrics_include_in_row_only_grows_extents() {
+    let mut row = new_display_row(&layout());
+
+    DisplayRowVerticalMetrics::new(10.0, 9.0).include_in_row(&mut row);
+    assert_eq!(row.height_px, 16.0);
+    assert_eq!(row.ascent_px, 12.0);
+
+    DisplayRowVerticalMetrics::new(24.0, 20.0).include_in_row(&mut row);
+    assert_eq!(row.height_px, 24.0);
+    assert_eq!(row.ascent_px, 20.0);
+
+    DisplayRowVerticalMetrics::new(0.0, 40.0).include_in_row(&mut row);
+    assert_eq!(row.height_px, 24.0);
+    assert_eq!(row.ascent_px, 20.0);
+}
+
+#[test]
 fn display_row_builder_ceil_pixel_stretch_columns() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(stretch_item(DisplayLength::Pixels(9.0)));
