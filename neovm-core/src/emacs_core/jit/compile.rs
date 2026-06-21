@@ -5789,6 +5789,19 @@ mod tests {
                 "if-branch mismatch for arg bits {}",
                 arg.bits()
             );
+            // Also via the typed-MIR Tier-2 path (probe lower_mir_pure control flow).
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 1) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    let ctx_ptr = &mut eval as *mut Context as *mut u8;
+                    if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[arg]) {
+                        assert_eq!(
+                            bits, want,
+                            "MIR if-branch mismatch for arg bits {}",
+                            arg.bits()
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -5896,6 +5909,61 @@ mod tests {
                 Some(Value::make_int(0).bits()),
                 "countdown should reach 0 (n={n})"
             );
+            // Also via the typed-MIR Tier-2 path (probe lower_mir_pure loops/back-edges).
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 1) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    let ctx_ptr = &mut eval as *mut Context as *mut u8;
+                    if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[Value::make_int(n)]) {
+                        assert_eq!(bits, want, "MIR loop mismatch for n={n}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mir_merge_phi_matches_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        // (lambda (c) (1+ (if c 10 20))) — a diamond whose then/else values merge
+        // at a common block (a phi), consumed by Add1. Tests build_mir's merge-phi.
+        let ops = [
+            Op::StackRef(0),  // 0: cond
+            Op::GotoIfNil(4), // 1: pop; else->4, fall to then->2
+            Op::Constant(0),  // 2: then: 10
+            Op::Goto(5),      // 3
+            Op::Constant(1),  // 4: else: 20 (leader); falls through to 5
+            Op::Add1,         // 5: merge: 1+ phi (leader)
+            Op::Return,       // 6
+        ];
+        let constants = [Value::make_int(10), Value::make_int(20)];
+        for c in [Value::T, Value::NIL] {
+            let mut eval = Context::new_minimal_vm_harness();
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![crate::emacs_core::intern::SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.to_vec();
+            f.constants = constants.to_vec();
+            f.max_stack = 16;
+            let want = {
+                let mut vm = Vm::from_context(&mut eval);
+                vm.execute(&f, vec![c]).expect("interp diamond").bits()
+            };
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 1) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    let ctx_ptr = &mut eval as *mut Context as *mut u8;
+                    if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[c]) {
+                        assert_eq!(
+                            bits, want,
+                            "MIR merge-phi mismatch for cond bits {}",
+                            c.bits()
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -8018,6 +8086,29 @@ mod tests {
                         interp.is_err(),
                         "seed {seed}: JIT signaled but interpreter succeeded: {ops:?}"
                     );
+                }
+            }
+
+            // Also exercise the typed-MIR Tier-2 path (build_mir + lower_mir_pure)
+            // on the same body, skipping bodies the pure subset bails on. Localizes
+            // lower_mir_pure miscompiles (the module-test failures under MIR wiring).
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 0) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    match mleaf.call(ctx_ptr, &[]) {
+                        NativeRun::Ok(bits) => {
+                            if let Ok(want) = &interp {
+                                assert_eq!(
+                                    bits,
+                                    want.bits(),
+                                    "seed {seed}: MIR/interpreter mismatch on {ops:?}"
+                                );
+                            }
+                        }
+                        NativeRun::Deopt | NativeRun::DeoptAt { .. } => {}
+                        NativeRun::Signal => {
+                            let _ = take_pending_flow();
+                        }
+                    }
                 }
             }
         }
