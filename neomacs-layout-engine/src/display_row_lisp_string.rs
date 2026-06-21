@@ -635,20 +635,26 @@ pub(crate) struct LispStringSourceRowAppendSession<'a> {
     metrics: DisplayRowAppendMetrics,
 }
 
-impl<'a> LispStringSourceRowAppendSession<'a> {
+pub(crate) struct LispStringSourceRowAppendSessionRequest<'a> {
+    source_request: LispStringSourceAppendSessionRequest<'a>,
+    append_surface: &'a DisplayRowAppendSurface,
+    glyph_y_offset: f32,
+    metrics: DisplayRowAppendMetrics,
+}
+
+impl<'a> LispStringSourceRowAppendSessionRequest<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        request: LispStringSourceAppendSessionRequest<'a>,
+        source_request: LispStringSourceAppendSessionRequest<'a>,
         append_surface: &'a DisplayRowAppendSurface,
         glyph_y_offset: f32,
         height: f32,
         ascent: f32,
         char_width: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
-    ) -> Option<Self> {
-        let source_session = LispStringSourceAppendSession::new(request)?;
-        Some(Self {
-            source_session,
+    ) -> Self {
+        Self {
+            source_request,
             append_surface,
             glyph_y_offset,
             metrics: DisplayRowAppendMetrics::text_row(
@@ -657,6 +663,18 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
                 char_width,
                 fallback_metrics,
             ),
+        }
+    }
+}
+
+impl<'a> LispStringSourceRowAppendSession<'a> {
+    pub(crate) fn new(request: LispStringSourceRowAppendSessionRequest<'a>) -> Option<Self> {
+        let source_session = LispStringSourceAppendSession::new(request.source_request)?;
+        Some(Self {
+            source_session,
+            append_surface: request.append_surface,
+            glyph_y_offset: request.glyph_y_offset,
+            metrics: request.metrics,
         })
     }
 

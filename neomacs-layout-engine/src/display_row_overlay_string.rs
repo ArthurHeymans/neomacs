@@ -21,7 +21,7 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_lisp_string::{
     LispStringSourceAppendRequest, LispStringSourceAppendSessionRequest, LispStringSourceId,
-    LispStringSourceRowAppendSession,
+    LispStringSourceRowAppendSession, LispStringSourceRowAppendSessionRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowLineBreakTransitionRequest;
@@ -385,7 +385,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         base_face.face_id(),
         base_face.face(),
     );
-    let Some(mut source_context) = LispStringSourceRowAppendSession::new(
+    let row_session_request = LispStringSourceRowAppendSessionRequest::new(
         session_request,
         row_context.append_surface,
         0.0,
@@ -393,7 +393,9 @@ fn render_overlay_string<B: LayoutBufferView>(
         row_context.metrics.ascent(),
         row_context.metrics.char_width(),
         row_context.metrics,
-    ) else {
+    );
+    let Some(mut source_context) = LispStringSourceRowAppendSession::new(row_session_request)
+    else {
         return;
     };
 

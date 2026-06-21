@@ -54,7 +54,8 @@ use crate::display_row_lisp_string::{
     BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest, DisplayRowPrefixRequest,
     DisplayRowPrefixValues, LispStringRowAppendContext, LispStringSourceAppendRequest,
     LispStringSourceAppendSessionRequest, LispStringSourceId, LispStringSourceRowAppendSession,
-    append_lisp_string_to_text_row, apply_pending_display_source_faces,
+    LispStringSourceRowAppendSessionRequest, append_lisp_string_to_text_row,
+    apply_pending_display_source_faces,
 };
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
@@ -9054,7 +9055,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         Value::string("a\nb"),
     );
     let session_request = LispStringSourceAppendSessionRequest::new(request, 7, base_face);
-    let mut append_context = LispStringSourceRowAppendSession::new(
+    let row_session_request = LispStringSourceRowAppendSessionRequest::new(
         session_request,
         &surface,
         0.0,
@@ -9062,8 +9063,9 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         12.0,
         8.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-    )
-    .expect("lisp string source session");
+    );
+    let mut append_context = LispStringSourceRowAppendSession::new(row_session_request)
+        .expect("lisp string source session");
 
     let first = append_context
         .render_to_text_row_and_emit(
