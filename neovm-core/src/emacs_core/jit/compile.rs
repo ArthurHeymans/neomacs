@@ -1864,7 +1864,14 @@ fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
     let sym_id = sym.as_symbol_id()?;
     let binding = ob.symbol_function_id(sym_id)?;
     let bc = binding.get_bytecode_data()?;
-    if !bc.lexical || !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+    // Required-only lexical, and no captured lexenv: inlining drops the lexenv
+    // install, which is only otherwise safe because lexenv-reading ops lower to
+    // Opaque and `callee_inlinable` rejects them — keep the safety local here too.
+    if !bc.lexical
+        || bc.env.is_some()
+        || !bc.params.optional.is_empty()
+        || bc.params.rest.is_some()
+    {
         return None;
     }
     mir::build_mir(&bc.ops, &bc.constants, bc.params.required.len()).ok()

@@ -891,8 +891,15 @@ pub fn inline_pure_single_block_callees(
                     op,
                     ty: cinst.ty,
                     effect: cinst.effect,
-                    // The inlined body shares the call's framestate anchor (unused
-                    // by pure rerun-from-start lowering).
+                    // The inlined body inherits the CALL SITE's framestate anchor
+                    // (pc + pre-call stack). This is sound only because the pure
+                    // MIR tier deopts via rerun-from-start (STATUS_DEOPT), which
+                    // needs no framestate. BEFORE wiring precise deopt (DeoptAt)
+                    // into the MIR tier (task #16), reconstruct each inlined inst's
+                    // pre_stack from the inlined region's own model stack — the
+                    // call-site snapshot would resume the interpreter at the wrong
+                    // point. (The substitution pass below does fix up the VALUES in
+                    // these snapshots, so they reference no dead SSA values.)
                     pc: inst.pc,
                     pre_stack: inst.pre_stack.clone(),
                 });
@@ -908,14 +915,31 @@ pub fn inline_pure_single_block_callees(
         m.blocks[bi].insts = new_insts;
     }
 
-    // Substitute each inlined call's old result with the callee's return value
-    // across the whole function (later uses + terminators).
-    for (old, new) in &subs {
+    // Substitute each inlined call's old result with the callee's return value,
+    // across the whole function (later uses, terminators, AND framestate snapshots).
+    // COMPOSE the substitutions: a callee that returns a param directly (identity /
+    // accessor wrappers) yields a pre-existing caller value, which may itself be an
+    // earlier inlined call's result — so resolve each value through the substitution
+    // chain to a fixpoint. (Sequential application would reintroduce a value an
+    // earlier substitution already deleted.)
+    if !subs.is_empty() {
+        let resolve = |v: MirValue| -> MirValue {
+            let mut v = v;
+            // Each `old` is a fresh, distinct call result and each `new` is an older
+            // value, so the chain strictly decreases and terminates.
+            while let Some((_, n)) = subs.iter().find(|(o, _)| *o == v) {
+                v = *n;
+            }
+            v
+        };
         for blk in &mut m.blocks {
             for inst in &mut blk.insts {
-                map_op_operands(&mut inst.op, |v| if v == *old { *new } else { v });
+                map_op_operands(&mut inst.op, |v| resolve(v));
+                for pv in inst.pre_stack.iter_mut() {
+                    *pv = resolve(*pv);
+                }
             }
-            map_term_operands(&mut blk.term, |v| if v == *old { *new } else { v });
+            map_term_operands(&mut blk.term, |v| resolve(v));
         }
     }
 
@@ -1077,6 +1101,40 @@ mod tests {
         assert_eq!(
             add.pre_stack[0], add.pre_stack[2],
             "StackRef 1 copied slot 0's value to the top — same SSA value"
+        );
+    }
+
+    #[test]
+    fn inline_composes_substitutions_for_returned_params() {
+        // id = (lambda (v) v); caller (lambda (x) (id (id x))). Both calls inline,
+        // and each id returns its param, so the result substitutions CHAIN (outer
+        // result -> inner result -> arg). A composed substitution must resolve the
+        // Return to the ARG; a sequential one reintroduces the deleted inner-call
+        // result (a dangling value). Regression for the splice substitution.
+        let id_sym = Value::symbol("jit-inline-id");
+        let id_ops = vec![Op::StackRef(0), Op::Return];
+        let caller_ops = vec![
+            Op::Constant(0), // id (outer fn)
+            Op::Constant(0), // id (inner fn)
+            Op::StackRef(2), // x
+            Op::Call(1),     // (id x)
+            Op::Call(1),     // (id (id x))
+            Op::Return,
+        ];
+        let constants = vec![id_sym];
+        let mut m = build_mir(&caller_ops, &constants, 1).expect("caller builds");
+        let n = inline_pure_single_block_callees(
+            &mut m,
+            &|v| (v.bits() == id_sym.bits()).then(|| build_mir(&id_ops, &[], 1).expect("id builds")),
+            8,
+        );
+        assert_eq!(n, 2, "both id calls inline");
+        let MirTerm::Return(rv) = m.blocks[0].term else {
+            panic!("single Return block");
+        };
+        assert_eq!(
+            rv, m.blocks[0].params[0],
+            "(id (id x)) must return the arg x — composed substitution resolves the chain"
         );
     }
 
