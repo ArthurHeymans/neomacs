@@ -523,14 +523,14 @@ impl DisplayRowAppendMetrics {
 
 #[derive(Clone)]
 pub(crate) struct DisplayRowAppendFrame {
-    pub(crate) row: usize,
-    pub(crate) glyph_y: f32,
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) default_row_height: f32,
-    pub(crate) content_x: f32,
-    pub(crate) text_width: f32,
-    pub(crate) line_number_width: f32,
-    pub(crate) face_space_width: f32,
+    row: usize,
+    glyph_y: f32,
+    geometry: DisplayRowGeometry,
+    default_row_height: f32,
+    content_x: f32,
+    text_width: f32,
+    line_number_width: f32,
+    face_space_width: f32,
 }
 
 pub(crate) struct DisplayRowAppendSourceRenderRequest<'face> {
@@ -587,23 +587,55 @@ impl<'face> DisplayRowAppendSourceMeasureRequest<'face> {
 }
 
 impl DisplayRowAppendFrame {
+    pub(crate) fn row(&self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn glyph_y(&self) -> f32 {
+        self.glyph_y
+    }
+
+    pub(crate) fn geometry(&self) -> &DisplayRowGeometry {
+        &self.geometry
+    }
+
+    pub(crate) fn default_row_height(&self) -> f32 {
+        self.default_row_height
+    }
+
+    pub(crate) fn content_x(&self) -> f32 {
+        self.content_x
+    }
+
+    pub(crate) fn text_width(&self) -> f32 {
+        self.text_width
+    }
+
+    pub(crate) fn line_number_width(&self) -> f32 {
+        self.line_number_width
+    }
+
+    pub(crate) fn face_space_width(&self) -> f32 {
+        self.face_space_width
+    }
+
     pub(crate) fn width_for_columns(&self, columns: usize) -> f32 {
-        columns as f32 * self.geometry.char_width().max(1.0)
+        columns as f32 * self.geometry().char_width().max(1.0)
     }
 
     pub(crate) fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
         DisplayRowTextNaturalAdvancePolicy::new(
-            self.geometry.tab_policy().clone(),
-            self.face_space_width,
+            self.geometry().tab_policy().clone(),
+            self.face_space_width(),
         )
     }
 
     fn right_edge(&self) -> f32 {
-        self.content_x + self.geometry.width()
+        self.content_x() + self.geometry().width()
     }
 
     fn text_right_edge_excluding_line_number(&self) -> f32 {
-        self.content_x + (self.text_width - self.line_number_width).max(0.0)
+        self.content_x() + (self.text_width() - self.line_number_width()).max(0.0)
     }
 
     fn from_parts(
@@ -674,14 +706,16 @@ impl DisplayRowAppendFrame {
     }
 
     fn source_render_geometry(&self, kind: DisplayRowAppendKind) -> DisplayRowGeometry {
-        self.geometry.clone().with_char_width(kind.char_width(self))
+        self.geometry()
+            .clone()
+            .with_char_width(kind.char_width(self))
     }
 
     fn text_row_output(&self, kind: DisplayRowAppendKind) -> TextRowOutput {
         TextRowOutput::new(
-            self.row,
-            self.geometry.y(),
-            self.glyph_y,
+            self.row(),
+            self.geometry().y(),
+            self.glyph_y(),
             kind.output_height(self),
         )
     }
@@ -701,12 +735,12 @@ pub(crate) enum DisplayRowAppendKind {
 impl DisplayRowAppendKind {
     pub(crate) fn char_width(self, frame: &DisplayRowAppendFrame) -> f32 {
         match self {
-            Self::Tab | Self::DisplayReplacementString => frame.face_space_width,
+            Self::Tab | Self::DisplayReplacementString => frame.face_space_width(),
             Self::SourceText
             | Self::ControlChar
             | Self::SourceMappedText
             | Self::Glyphless
-            | Self::DisplayReplacement => frame.geometry.char_width(),
+            | Self::DisplayReplacement => frame.geometry().char_width(),
         }
     }
 
@@ -729,8 +763,8 @@ impl DisplayRowAppendKind {
             Self::SourceText
             | Self::Glyphless
             | Self::DisplayReplacement
-            | Self::DisplayReplacementString => frame.geometry.height(),
-            Self::Tab | Self::ControlChar | Self::SourceMappedText => frame.default_row_height,
+            | Self::DisplayReplacementString => frame.geometry().height(),
+            Self::Tab | Self::ControlChar | Self::SourceMappedText => frame.default_row_height(),
         }
     }
 }

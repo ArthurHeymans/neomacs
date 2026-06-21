@@ -4221,15 +4221,15 @@ fn display_row_append_frame_builds_from_geometry_state() {
         ),
     );
 
-    assert_eq!(frame.row, 2);
-    assert_eq!(frame.glyph_y, 43.0);
-    assert_eq!(frame.geometry.y(), 40.0);
-    assert_eq!(frame.geometry.width(), 90.0);
-    assert_eq!(frame.geometry.height(), 18.0);
-    assert_eq!(frame.default_row_height, 16.0);
-    assert_eq!(frame.content_x, 10.0);
-    assert_eq!(frame.text_width, 120.0);
-    assert_eq!(frame.line_number_width, 6.0);
+    assert_eq!(frame.row(), 2);
+    assert_eq!(frame.glyph_y(), 43.0);
+    assert_eq!(frame.geometry().y(), 40.0);
+    assert_eq!(frame.geometry().width(), 90.0);
+    assert_eq!(frame.geometry().height(), 18.0);
+    assert_eq!(frame.default_row_height(), 16.0);
+    assert_eq!(frame.content_x(), 10.0);
+    assert_eq!(frame.text_width(), 120.0);
+    assert_eq!(frame.line_number_width(), 6.0);
 }
 
 #[test]
@@ -5566,15 +5566,15 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
         ),
     );
 
-    assert_eq!(frame.row, 3);
-    assert_eq!(frame.glyph_y, 22.0);
+    assert_eq!(frame.row(), 3);
+    assert_eq!(frame.glyph_y(), 22.0);
     assert_eq!(
-        frame.geometry,
+        *frame.geometry(),
         DisplayRowGeometry::new(20.0, 120.0, 16.0, 9.0, 11.0, tab_policy)
     );
-    assert_eq!(frame.content_x, 8.0);
-    assert_eq!(frame.text_width, 150.0);
-    assert_eq!(frame.line_number_width, 10.0);
+    assert_eq!(frame.content_x(), 8.0);
+    assert_eq!(frame.text_width(), 150.0);
+    assert_eq!(frame.line_number_width(), 10.0);
 }
 
 #[test]
@@ -5593,16 +5593,16 @@ fn display_row_text_append_context_builds_text_frame_from_shared_surface() {
     )
     .text_row_frame(&surface, &geometry, 2.0);
 
-    assert_eq!(frame.row, 3);
-    assert_eq!(frame.glyph_y, 22.0);
-    assert_eq!(frame.geometry.height(), 16.0);
-    assert_eq!(frame.geometry.ascent(), 11.0);
-    assert_eq!(frame.geometry.char_width(), 9.0);
-    assert_eq!(frame.face_space_width, 9.0);
-    assert_eq!(frame.default_row_height, 14.0);
-    assert_eq!(frame.content_x, 8.0);
-    assert_eq!(frame.text_width, 150.0);
-    assert_eq!(frame.line_number_width, 10.0);
+    assert_eq!(frame.row(), 3);
+    assert_eq!(frame.glyph_y(), 22.0);
+    assert_eq!(frame.geometry().height(), 16.0);
+    assert_eq!(frame.geometry().ascent(), 11.0);
+    assert_eq!(frame.geometry().char_width(), 9.0);
+    assert_eq!(frame.face_space_width(), 9.0);
+    assert_eq!(frame.default_row_height(), 14.0);
+    assert_eq!(frame.content_x(), 8.0);
+    assert_eq!(frame.text_width(), 150.0);
+    assert_eq!(frame.line_number_width(), 10.0);
 }
 
 #[test]
@@ -5639,13 +5639,13 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     )
     .active_face_frame();
 
-    assert_eq!(frame.row, 3);
-    assert_eq!(frame.glyph_y, 22.0);
-    assert_eq!(frame.geometry.height(), 18.0);
-    assert_eq!(frame.geometry.ascent(), 13.0);
-    assert_eq!(frame.geometry.char_width(), 7.5);
-    assert_eq!(frame.face_space_width, 8.0);
-    assert_eq!(frame.default_row_height, 16.0);
+    assert_eq!(frame.row(), 3);
+    assert_eq!(frame.glyph_y(), 22.0);
+    assert_eq!(frame.geometry().height(), 18.0);
+    assert_eq!(frame.geometry().ascent(), 13.0);
+    assert_eq!(frame.geometry().char_width(), 7.5);
+    assert_eq!(frame.face_space_width(), 8.0);
+    assert_eq!(frame.default_row_height(), 16.0);
 
     let full_text_frame = DisplayRowActiveFaceAppendContext::new(
         &surface,
@@ -5655,7 +5655,7 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
     .full_text_width_active_face_frame();
-    assert_eq!(full_text_frame.geometry.width(), 140.0);
+    assert_eq!(full_text_frame.geometry().width(), 140.0);
 }
 
 #[test]
@@ -5676,17 +5676,17 @@ fn display_row_append_frame_preserves_geometry_and_area() {
         tab_policy.clone(),
     );
 
-    assert_eq!(frame.row, 3);
-    assert_eq!(frame.glyph_y, 22.0);
+    assert_eq!(frame.row(), 3);
+    assert_eq!(frame.glyph_y(), 22.0);
     assert_eq!(
-        frame.geometry,
+        *frame.geometry(),
         DisplayRowGeometry::new(20.0, 120.0, 16.0, 9.0, 11.0, tab_policy)
     );
-    assert_eq!(frame.default_row_height, 14.0);
-    assert_eq!(frame.content_x, 8.0);
-    assert_eq!(frame.text_width, 150.0);
-    assert_eq!(frame.line_number_width, 10.0);
-    assert_eq!(frame.face_space_width, 7.0);
+    assert_eq!(frame.default_row_height(), 14.0);
+    assert_eq!(frame.content_x(), 8.0);
+    assert_eq!(frame.text_width(), 150.0);
+    assert_eq!(frame.line_number_width(), 10.0);
+    assert_eq!(frame.face_space_width(), 7.0);
 }
 
 #[test]
