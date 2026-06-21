@@ -3103,6 +3103,7 @@ impl<'a> Vm<'a> {
         } = plan;
         self.ctx
             .loadhist_attach(Value::cons(Value::symbol("defun"), result));
+        self.ctx.record_defalias_function_history(result);
         match action {
             crate::emacs_core::builtins::DefaliasAction::SetFunction { symbol, definition } => {
                 self.ctx.obarray.set_symbol_function_id(symbol, definition);

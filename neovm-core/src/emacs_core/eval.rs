@@ -10518,6 +10518,7 @@ impl Context {
         let plan = builtins::plan_defalias_in_obarray(self.obarray(), &[sym, def])?;
         let builtins::DefaliasPlan { action, result, .. } = plan;
         self.loadhist_attach(Value::cons(Value::symbol("defun"), result));
+        self.record_defalias_function_history(result);
         match action {
             builtins::DefaliasAction::SetFunction { symbol, definition } => {
                 self.note_macro_expansion_mutation();
@@ -10543,6 +10544,110 @@ impl Context {
             );
         }
         Ok(result)
+    }
+
+    /// GNU `defalias` records a `function-history' entry whenever a symbol
+    /// that already has a function definition is redefined (`olddef' is
+    /// non-nil; src/data.c:983-991).  This drives, among other things, the
+    /// `Properties:' line of `apropos' output, so the property must exist on
+    /// multiply-defined symbols (e.g. a C/preloaded builtin later redefined
+    /// when its `.el' loads).  Must run *before* the new definition is
+    /// installed, so the previous definition is still readable.
+    pub(crate) fn record_defalias_function_history(&mut self, result: Value) {
+        if let Some(symbol) = result.as_symbol_id() {
+            let olddef = self
+                .obarray
+                .symbol_function_id(symbol)
+                .unwrap_or(Value::NIL);
+            if !olddef.is_nil() {
+                self.add_to_function_history(symbol, olddef);
+            }
+        }
+    }
+
+    /// Port of GNU `add_to_function_history` (`src/data.c:933-968`): push
+    /// `(FILE OLDDEF . PAST)` onto SYMBOL's `function-history' property, where
+    /// FILE is the file currently being loaded (the trailing string element of
+    /// `current-load-list', or nil).  If the property already has a record for
+    /// FILE, the stale record is removed first so the history reflects only one
+    /// entry per file (so an unload reverts cleanly).
+    fn add_to_function_history(&mut self, symbol: SymId, olddef: Value) {
+        let history_prop = intern("function-history");
+        let past = self
+            .obarray
+            .get_property_id(symbol, history_prop)
+            .unwrap_or(Value::NIL);
+
+        // FILE = trailing string element of current-load-list (GNU walks the
+        // list looking for an entry whose cdr is nil and car is a string).
+        let mut file = Value::NIL;
+        let mut tail = self.visible_variable_value_or_nil("current-load-list");
+        while tail.is_cons() {
+            if tail.cons_cdr().is_nil() && tail.cons_car().is_string() {
+                file = tail.cons_car();
+            }
+            tail = tail.cons_cdr();
+        }
+
+        // `(plist-member PAST FILE 'equal)` — find the existing record for FILE.
+        if let Some(tem) = Self::plist_member_equal(past, file) {
+            if tem == past {
+                // New def from the same file as the last change: nothing to do.
+                return;
+            }
+            // Remove the previous info for this file by splicing it out:
+            // prev = nthcdr(len(past) - len(tem) - 2, past); (setcdr prev (cdr tem)).
+            let past_len = Self::list_length(past);
+            let tem_len = Self::list_length(tem);
+            let tempos = past_len - tem_len;
+            if tempos >= 2 {
+                let mut prev = past;
+                for _ in 0..(tempos - 2) {
+                    prev = prev.cons_cdr();
+                }
+                if prev.is_cons() {
+                    prev.set_cdr(tem.cons_cdr());
+                }
+            }
+        }
+
+        let roots = self.save_specpdl_roots();
+        self.push_specpdl_root(past);
+        self.push_specpdl_root(olddef);
+        let new_history = Value::cons(file, Value::cons(olddef, past));
+        self.push_specpdl_root(new_history);
+        let _ = self
+            .obarray
+            .put_property_id(symbol, history_prop, new_history);
+        self.restore_specpdl_roots(roots);
+    }
+
+    /// `(plist-member PLIST KEY 'equal)` restricted to the key positions
+    /// (even indices), returning the tail starting at the matching key.
+    fn plist_member_equal(plist: Value, key: Value) -> Option<Value> {
+        let mut tail = plist;
+        while tail.is_cons() {
+            if equal_value(&tail.cons_car(), &key, 0) {
+                return Some(tail);
+            }
+            // Advance two cells (key, value).
+            let cdr = tail.cons_cdr();
+            if !cdr.is_cons() {
+                break;
+            }
+            tail = cdr.cons_cdr();
+        }
+        None
+    }
+
+    fn list_length(list: Value) -> i64 {
+        let mut n = 0;
+        let mut tail = list;
+        while tail.is_cons() {
+            n += 1;
+            tail = tail.cons_cdr();
+        }
+        n
     }
 
     fn current_load_list_is_file_context(current_load_list: Value) -> bool {
