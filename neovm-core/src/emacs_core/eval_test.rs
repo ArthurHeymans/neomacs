@@ -12967,7 +12967,20 @@ fn jit_direct_call_speculation_tracks_redefinition() {
             rest: None,
         });
         f.lexical = true;
-        f.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+        // Two blocks so the JIT inliner (single-block callees only) leaves this a
+        // SPEC call — `(if x (* x k) (* x k))`, same value, two basic blocks.
+        f.ops = vec![
+            Op::StackRef(0),
+            Op::GotoIfNil(6),
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Mul,
+            Op::Return,
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Mul,
+            Op::Return,
+        ];
         f.constants = vec![Value::make_int(k)];
         f.max_stack = 16;
         Value::make_bytecode(f)
@@ -13425,7 +13438,20 @@ fn jit_v3_fast_path_engages_and_tracks_redefinition() {
             rest: None,
         });
         f.lexical = true;
-        f.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+        // Two blocks so the JIT inliner (single-block callees only) leaves this a
+        // SPEC call — `(if x (* x k) (* x k))`, same value, two basic blocks.
+        f.ops = vec![
+            Op::StackRef(0),
+            Op::GotoIfNil(6),
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Mul,
+            Op::Return,
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Mul,
+            Op::Return,
+        ];
         f.constants = vec![Value::make_int(k)];
         f.max_stack = 16;
         Value::make_bytecode(f)

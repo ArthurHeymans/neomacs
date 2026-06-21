@@ -1323,6 +1323,11 @@ pub struct CompiledLeaf {
     /// `cleanup_bytecode_frame` — no stale frame may be matchable while unbind
     /// cleanups run lisp) and requires a non-null vmctx.
     has_handlers: bool,
+    /// If this leaf INLINED a callee, the obarray `function_epoch` armed at compile
+    /// time. The dispatch (try_run_compiled / resolve_compiled_leaf_ptr) recompiles
+    /// the leaf when the epoch moves — so redefining any inlined callee re-JITs and
+    /// no stale inline ever runs. `None` = no inlining (never epoch-checked).
+    inline_epoch: Option<u64>,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -1374,6 +1379,12 @@ impl CompiledLeaf {
     /// The number of fixed slots the native code reads (see the field doc).
     pub fn arity(&self) -> usize {
         self.arity
+    }
+
+    /// The obarray `function_epoch` this leaf's inlining was armed at (`None` if it
+    /// inlined nothing). The dispatch recompiles when the live epoch differs.
+    pub(crate) fn inline_epoch(&self) -> Option<u64> {
+        self.inline_epoch
     }
 
     /// Whether a call with `n` arguments is valid for this function's lambda
@@ -1841,6 +1852,24 @@ pub fn compile_bytecode_function_with(
     result
 }
 
+/// Max instruction budget (excluding `Arg`s) for an inlined callee body. Small
+/// pure helpers (`sq`, `1+`-wrappers, accessors) are the target; larger callees
+/// stay calls and the baseline handles them.
+const MAX_INLINE_INSTS: usize = 8;
+
+/// Resolve a constant call-target symbol to its callee MIR for inlining, or `None`
+/// unless it is a required-only lexical bytecode function (so `build_mir`'s
+/// argument seeding matches the arity).
+fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
+    let sym_id = sym.as_symbol_id()?;
+    let binding = ob.symbol_function_id(sym_id)?;
+    let bc = binding.get_bytecode_data()?;
+    if !bc.lexical || !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+        return None;
+    }
+    mir::build_mir(&bc.ops, &bc.constants, bc.params.required.len()).ok()
+}
+
 fn compile_bytecode_function_inner(
     f: &ByteCodeFunction,
     obarray: Option<&Obarray>,
@@ -1865,10 +1894,26 @@ fn compile_bytecode_function_inner(
     // any bail (calls, cons, optional/&rest args, ...). Restricted to no
     // optional/&rest so the MIR's argument seeding matches `native_arity`.
     if !has_rest && f.params.optional.is_empty() {
-        if let Ok(mir) = mir::build_mir(&f.ops, &f.constants, native_arity) {
+        if let Ok(mut mir) = mir::build_mir(&f.ops, &f.constants, native_arity) {
+            // Inline pure single-block callees (resolved through the obarray). When
+            // a call is inlined the body can become pure (no Opaque), so
+            // lower_mir_pure handles it and unboxing/guard-elision flow ACROSS the
+            // former call boundary. Record the armed function_epoch so the dispatch
+            // re-JITs if any inlined callee is later redefined (see CompiledLeaf
+            // ::inline_epoch).
+            let inline_epoch = obarray.and_then(|ob| {
+                let armed = ob.function_epoch();
+                let n = mir::inline_pure_single_block_callees(
+                    &mut mir,
+                    &|sym| resolve_inline_callee(ob, sym),
+                    MAX_INLINE_INSTS,
+                );
+                (n > 0).then_some(armed)
+            });
             if let Ok(mut leaf) = lower_mir_pure(&mir) {
                 leaf.required = required;
                 leaf.has_rest = has_rest;
+                leaf.inline_epoch = inline_epoch;
                 return Ok(leaf);
             }
         }
@@ -2686,6 +2731,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         has_rest: false,
         has_binds: false,
         has_handlers: false,
+        // Set by compile_bytecode_function_inner after a successful inline pass.
+        inline_epoch: None,
         spec_slots: Box::from([]),
         deopt_spill: Box::from([]),
         deopt_meta: Box::new(DeoptCells {
@@ -5624,6 +5671,8 @@ pub fn lower_leaf_full(
         // &optional/&rest lambda lists.
         required: arity,
         has_rest: false,
+        // The baseline never inlines; only the MIR tier sets this.
+        inline_epoch: None,
         has_binds: ops.iter().any(|o| {
             matches!(
                 o,
@@ -6407,6 +6456,60 @@ mod tests {
                 other => panic!("a={a}: unexpected {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn inlined_callee_redefinition_rejits() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::SymId;
+        // C = (lambda (x) (* x x)); F = (lambda (a) (C a)). Compiling F inlines C
+        // -> (* a a). Redefine C = (1+ x) + bump the function epoch (as fset would):
+        // F's cache entry is now stale -> re-JIT -> F computes the NEW C, (1+ a).
+        // If the inline-epoch invalidation were broken, the stale inline would
+        // return 25 instead of 6. Verifies the redefinition soundness.
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let c_sym = Value::symbol("jit-inline-redef-c");
+        let crate::emacs_core::value::ValueKind::Symbol(c_id) = c_sym.kind() else {
+            panic!("symbol");
+        };
+        let mk = |ops: Vec<Op>| {
+            let mut c = ByteCodeFunction::new(LambdaParams {
+                required: vec![SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            c.lexical = true;
+            c.ops = ops;
+            c.max_stack = 16;
+            Value::make_bytecode(c)
+        };
+        ev.obarray
+            .set_symbol_function_id(c_id, mk(vec![Op::Dup, Op::Mul, Op::Return]));
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(2)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![c_sym];
+        f.max_stack = 16;
+        let f_val = Value::make_bytecode(f.clone());
+        let r1 = crate::emacs_core::jit::try_run_compiled(ctx, &f, f_val, &[Value::make_int(5)]);
+        assert!(
+            matches!(r1, Ok(Some(b)) if b == Value::make_int(25).bits()),
+            "inlined (* 5 5) should be 25"
+        );
+        // Redefine C and bump the epoch (fset/defalias bump function_epoch).
+        ev.obarray
+            .set_symbol_function_id(c_id, mk(vec![Op::Add1, Op::Return]));
+        ev.obarray.bump_function_epoch();
+        let r2 = crate::emacs_core::jit::try_run_compiled(ctx, &f, f_val, &[Value::make_int(5)]);
+        assert!(
+            matches!(r2, Ok(Some(b)) if b == Value::make_int(6).bits()),
+            "after redefinition + epoch bump, re-JIT inlines the new C: (1+ 5) = 6"
+        );
     }
 
     #[test]

@@ -104,12 +104,24 @@ pub fn try_run_compiled(
     }
     let leaf: Option<Rc<CompiledLeaf>> = COMPILED.with(|cache| {
         let mut cache = cache.borrow_mut();
+        // SAFETY: the seam-provided Context is dormant for the whole native
+        // dispatch (see neovm_jit_call's contract); a shared read of its obarray
+        // for compile-time speculation. A null ctx (shim-free test bodies) just
+        // disables speculation.
+        let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
+        // Re-JIT a STALE INLINED leaf: if it inlined a callee and the obarray's
+        // function_epoch has since moved, a callee it inlined may have been
+        // redefined — drop the entry so it recompiles below (no stale inline runs).
+        let stale = matches!(
+            cache.get(&id),
+            Some(CacheEntry::Compiled(l))
+                if l.inline_epoch().is_some()
+                    && l.inline_epoch() != obarray.map(|ob| ob.function_epoch())
+        );
+        if stale {
+            cache.remove(&id);
+        }
         match cache.entry(id).or_insert_with(|| {
-            // SAFETY: the seam-provided Context is dormant for the whole
-            // native dispatch (see neovm_jit_call's contract); this is a
-            // shared read of its obarray for compile-time speculation.
-            // A null ctx (shim-free test bodies) just disables speculation.
-            let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
             match compile_bytecode_function_with(func, obarray) {
                 Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
                 Err(_) => CacheEntry::NotCompilable,
@@ -152,8 +164,13 @@ pub(crate) fn resolve_compiled_leaf_ptr(
                 Err(_) => CacheEntry::NotCompilable,
             }
         }) {
-            CacheEntry::Compiled(leaf) => Some(Rc::as_ptr(leaf)),
-            CacheEntry::NotCompilable => None,
+            // INLINED leaves must NOT be fast-path-cached in a spec slot: their
+            // validity depends on an inlined callee's epoch, which the caller's
+            // spec guard doesn't check. Force them through try_run_compiled (which
+            // re-JITs on a stale epoch). Non-inlined leaves keep the stable-pointer
+            // fast path (they are never epoch-stale, so the cache never evicts them).
+            CacheEntry::Compiled(leaf) if leaf.inline_epoch().is_none() => Some(Rc::as_ptr(leaf)),
+            _ => None,
         }
     })
 }
