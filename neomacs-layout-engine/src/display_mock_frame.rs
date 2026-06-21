@@ -7,11 +7,11 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderExecutor, DisplayRowSourceFragmentFrame,
-    DisplayRowSourceState,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_row_render_state::DisplayRowRenderBounds;
+use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::display_text_output_install::install_display_row;
 use crate::font_metrics::FontMetricsService;

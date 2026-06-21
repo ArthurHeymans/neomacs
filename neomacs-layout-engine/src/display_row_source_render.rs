@@ -15,7 +15,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowRenderContext,
     DisplayRowRenderExecutor, DisplayRowRenderPolicy, DisplayRowRenderer,
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentFrame,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
@@ -27,6 +27,7 @@ use crate::display_row_render_state::{
     CurrentTextRowRenderOutcome, DisplayRowRenderIntoRowResult, display_row_output_end_position,
 };
 use crate::display_row_replacement::DisplayPropertyReplacementRowRenderRequest;
+use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{

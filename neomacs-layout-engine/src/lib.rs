@@ -67,6 +67,7 @@ pub(crate) mod display_row_render_state;
 pub(crate) mod display_row_replacement;
 pub(crate) mod display_row_source_append;
 pub(crate) mod display_row_source_render;
+pub(crate) mod display_row_source_state;
 pub(crate) mod display_row_special_glyphs;
 pub(crate) mod display_row_text_output;
 pub(crate) mod display_row_transition;

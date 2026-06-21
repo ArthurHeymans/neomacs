@@ -5,9 +5,9 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::DisplayRowSourceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use neomacs_display_protocol::glyph_matrix::GlyphArea;

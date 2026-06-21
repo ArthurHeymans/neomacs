@@ -5,7 +5,7 @@ use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowSourceState};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendMetrics, DisplayRowAppendSurface,
@@ -16,6 +16,7 @@ use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::CurrentTextRowRenderOutcome;
 use crate::display_row_source_append::DisplayItemSourceAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::LispStringSourceCursor;
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;

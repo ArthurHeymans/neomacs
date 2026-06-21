@@ -5,12 +5,12 @@ use crate::display_item::{
 };
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_row_request::{DisplayWindowRowMutation, DisplayWindowRowsMutation};
-use crate::display_row::DisplayRowSourceState;
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
     trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
+use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::display_text_output_install::install_output_resolved_face;
