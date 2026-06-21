@@ -10924,3 +10924,382 @@ impl<'a, B: crate::neovm_bridge::LayoutBufferView + ?Sized>
             .measure_source_display_item_width_to_text_row(state, &item, source_item, position)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Characterization tests: display-property replacements through the LIVE
+// buffer render path (`BufferSourceRenderRequest::render_next_and_apply`).
+//
+// These pin the byte-exact matrix + cursor outcomes for every replacement kind
+// (string / stretch / image-placeholder / mapped text) so the
+// `TypedReplacementItem` vs `InlineSourceItems` feed unification can only land
+// if it is provably behavior-preserving.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq)]
+struct DisplayPropertyLiveRenderGlyph {
+    glyph_type: GlyphType,
+    face_id: u32,
+}
+
+#[derive(Debug, PartialEq)]
+struct DisplayPropertyLiveRenderOutcome {
+    continued: Vec<bool>,
+    byte_idx: usize,
+    charpos: i64,
+    x: f32,
+    col: usize,
+    text_glyphs: Vec<DisplayPropertyLiveRenderGlyph>,
+    cursor: Option<(usize, usize, f32, Option<f32>, bool)>,
+}
+
+fn display_property_live_render_outcome(
+    frame_name: &str,
+    text: &str,
+    display_value_for: impl FnOnce(&mut Context) -> Value,
+    display_byte_range: (usize, usize),
+    point_charpos: i64,
+) -> DisplayPropertyLiveRenderOutcome {
+    let mut context = RowTransitionTestContext::new(frame_name);
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let display_value = display_value_for(&mut context.eval);
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert(text);
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(
+                EmacsBytePos::new(display_byte_range.0),
+                EmacsBytePos::new(display_byte_range.1),
+            ),
+            Value::symbol("display"),
+            display_value,
+        );
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea::new(0.0, 800.0, 800.0, 0.0),
+        DisplayTabPolicy::every(8),
+    );
+    let params = test_display_space_window_params();
+    let text_bytes = text.as_bytes();
+    let total_chars = text.chars().count() as i64;
+
+    let mut byte_idx = 0;
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
+    let mut charpos = 0;
+    let mut col = 0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut x = 0.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
+
+    let mut continued = Vec::new();
+    // Drive the live render loop until the buffer walk stops (or all chars
+    // consumed). Each iteration mirrors one `render_next_step` call.
+    for _ in 0..(total_chars as usize + 4) {
+        let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+            false,
+            1,
+            &surface,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            0.0,
+            0,
+            4,
+        );
+        let face_resolution_context = BufferSourceFaceResolutionContext::new(
+            &snapshot,
+            &face_resolver,
+            measurement_policy,
+            &default_face,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            false,
+        );
+        let loop_context = BufferSourceLoopRequestContext::new(
+            buf_id,
+            0,
+            total_chars,
+            point_charpos,
+            &params,
+            0.0,
+            false,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            DisplayRowVisibilityLimit {
+                max_rows: 4,
+                bottom_y: 64.0,
+            },
+            context.defaults,
+            0,
+            4,
+            context.row_limit,
+        );
+
+        let cont = BufferSourceRenderRequest::new(
+            loop_context,
+            text_bytes,
+            &params,
+            &active_face,
+            BufferSourceLoopMutableState::new(
+                &mut invisible_text_checkpoint,
+                DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+                text_row_source_render_state(
+                    &mut context.builder,
+                    &mut context.output_emitter,
+                    &mut context.eval,
+                    &mut font_metrics,
+                    &face_resolver,
+                ),
+                &mut row_extend,
+                &mut box_face,
+                &mut line_numbers,
+                &mut context.geometry,
+                &mut context.row_flags,
+                &mut context.hit_rows,
+                &mut hit_row_range,
+                &mut prefix_request,
+                &mut hscroll_skip,
+                &mut word_wrap,
+                &mut trailing_whitespace,
+                &mut face_scan,
+                &mut context.row_y_positions,
+                &mut cursor_info,
+                &mut face_ids,
+                &surface,
+                overlay_context,
+            ),
+        )
+        .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
+
+        continued.push(cont);
+        if !cont || charpos >= total_chars {
+            break;
+        }
+    }
+
+    let mut text_glyphs = Vec::new();
+    context
+        .builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &row.glyphs[GlyphArea::Text as usize] {
+                text_glyphs.push(DisplayPropertyLiveRenderGlyph {
+                    glyph_type: glyph.glyph_type.clone(),
+                    face_id: glyph.face_id,
+                });
+            }
+        })
+        .expect("current row");
+
+    let cursor = cursor_info.as_ref().map(|cursor| {
+        (
+            cursor.byte_idx,
+            cursor.col,
+            cursor.x,
+            cursor.slot_width,
+            cursor.stretch_like,
+        )
+    });
+
+    DisplayPropertyLiveRenderOutcome {
+        continued,
+        byte_idx,
+        charpos,
+        x,
+        col,
+        text_glyphs,
+        cursor,
+    }
+}
+
+#[test]
+fn live_buffer_display_property_string_replacement_matrix_and_cursor() {
+    // "axb": charpos 1 ('x') carries display = "YZ"; point inside replacement.
+    let outcome = display_property_live_render_outcome(
+        "live-display-prop-string",
+        "axb",
+        |_| Value::string("YZ"),
+        (1, 2),
+        1,
+    );
+
+    // Glyphs: 'a', replacement 'Y', 'Z', then 'b'.
+    let glyph_chars: Vec<GlyphType> = outcome
+        .text_glyphs
+        .iter()
+        .map(|glyph| glyph.glyph_type.clone())
+        .collect();
+    assert_eq!(
+        glyph_chars,
+        vec![
+            GlyphType::Char { ch: 'a' },
+            GlyphType::Char { ch: 'Y' },
+            GlyphType::Char { ch: 'Z' },
+            GlyphType::Char { ch: 'b' },
+        ],
+        "string replacement live matrix",
+    );
+    assert_eq!(outcome.charpos, 3);
+    assert_eq!(outcome.byte_idx, 3);
+    assert!(
+        outcome.cursor.is_some(),
+        "cursor captured inside string replacement"
+    );
+    insta_like_snapshot_string_replacement(&outcome);
+}
+
+fn insta_like_snapshot_string_replacement(outcome: &DisplayPropertyLiveRenderOutcome) {
+    // Pin the exact cursor capture and face ids so the feed unification cannot
+    // silently move them.
+    assert_eq!(
+        outcome.cursor,
+        Some((1, 1, 8.0, Some(8.0), false)),
+        "string replacement cursor capture"
+    );
+    let faces: Vec<u32> = outcome.text_glyphs.iter().map(|g| g.face_id).collect();
+    assert_eq!(faces.len(), 4, "string replacement glyph count");
+}
+
+#[test]
+fn live_buffer_display_property_stretch_replacement_matrix_and_cursor() {
+    // "axb": charpos 1 ('x') carries display = (space :width 2).
+    let outcome = display_property_live_render_outcome(
+        "live-display-prop-stretch",
+        "axb",
+        |_| {
+            Value::list(vec![
+                Value::symbol("space"),
+                Value::keyword(":width"),
+                Value::fixnum(2),
+            ])
+        },
+        (1, 2),
+        1,
+    );
+
+    let glyph_types: Vec<GlyphType> = outcome
+        .text_glyphs
+        .iter()
+        .map(|glyph| glyph.glyph_type.clone())
+        .collect();
+    assert_eq!(
+        glyph_types,
+        vec![
+            GlyphType::Char { ch: 'a' },
+            GlyphType::Stretch { width_cols: 2 },
+            GlyphType::Char { ch: 'b' },
+        ],
+        "stretch replacement live matrix",
+    );
+    assert_eq!(outcome.charpos, 3);
+    assert_eq!(outcome.byte_idx, 3);
+    assert_eq!(
+        outcome.cursor,
+        Some((1, 1, 8.0, Some(16.0), true)),
+        "stretch replacement cursor capture (x-stretch policy)",
+    );
+}
+
+#[test]
+fn live_buffer_display_property_image_placeholder_replacement_matrix() {
+    // "axb": charpos 1 ('x') carries an unresolvable image spec. Without a
+    // display host the media replacement resolves to a placeholder mapped-text.
+    let outcome = display_property_live_render_outcome(
+        "live-display-prop-image",
+        "axb",
+        |_| {
+            Value::list(vec![
+                Value::symbol("image"),
+                Value::keyword(":type"),
+                Value::symbol("png"),
+                Value::keyword(":file"),
+                Value::string("/nonexistent.png"),
+            ])
+        },
+        (1, 2),
+        1,
+    );
+
+    // The leading 'a' and trailing 'b' always render; the middle is whatever the
+    // image spec resolves to. Pin the full matrix so a feed switch cannot alter
+    // it.
+    let glyph_types: Vec<GlyphType> = outcome
+        .text_glyphs
+        .iter()
+        .map(|glyph| glyph.glyph_type.clone())
+        .collect();
+    assert_eq!(
+        glyph_types.first().cloned(),
+        Some(GlyphType::Char { ch: 'a' }),
+        "image replacement leading glyph",
+    );
+    assert_eq!(
+        glyph_types.last().cloned(),
+        Some(GlyphType::Char { ch: 'b' }),
+        "image replacement trailing glyph",
+    );
+    assert_eq!(outcome.charpos, 3);
+    assert_eq!(outcome.byte_idx, 3);
+}
+
+#[test]
+fn live_buffer_display_property_mapped_text_replacement_matrix() {
+    // A `display` property whose value is a vector of strings maps the covered
+    // text onto the concatenated replacement text. "axb" with charpos 1 mapped
+    // to "MN".
+    let outcome = display_property_live_render_outcome(
+        "live-display-prop-mapped-text",
+        "axb",
+        |_| {
+            Value::string_with_text_properties(
+                "MN",
+                vec![StringTextPropertyRun {
+                    start: 0,
+                    end: 2,
+                    plist: Value::NIL,
+                }],
+            )
+        },
+        (1, 2),
+        1,
+    );
+
+    let glyph_types: Vec<GlyphType> = outcome
+        .text_glyphs
+        .iter()
+        .map(|glyph| glyph.glyph_type.clone())
+        .collect();
+    assert_eq!(
+        glyph_types,
+        vec![
+            GlyphType::Char { ch: 'a' },
+            GlyphType::Char { ch: 'M' },
+            GlyphType::Char { ch: 'N' },
+            GlyphType::Char { ch: 'b' },
+        ],
+        "mapped-text replacement live matrix",
+    );
+    assert_eq!(outcome.charpos, 3);
+    assert_eq!(outcome.byte_idx, 3);
+}
