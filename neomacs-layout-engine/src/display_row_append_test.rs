@@ -4155,7 +4155,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
 
-    let resolved = append_context.resolve_source_render_plan_request_to_text_row(
+    let resolved = append_context.resolve_source_render_plan_to_text_row(
         &geometry,
         &mut append_state,
         &mut text_row_source_measure_state(
@@ -4164,16 +4164,14 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &mut font_metrics,
             &face_resolver,
         ),
-        DisplaySourceTextPositionedRenderPlanRequest::new(
-            DisplaySourceRenderPlanRequest::new(
-                b"x",
-                0,
-                DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
-                DisplaySourceClusterState::for_char('x', None),
-            ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            &source_item,
+        DisplaySourceRenderPlanRequest::new(
+            b"x",
+            0,
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
+            DisplaySourceClusterState::for_char('x', None),
         ),
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        &source_item,
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
@@ -4208,7 +4206,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
 
-    let resolved = append_context.resolve_source_render_plan_request_to_text_row(
+    let resolved = append_context.resolve_source_render_plan_to_text_row(
         &geometry,
         &mut append_state,
         &mut text_row_source_measure_state(
@@ -4217,16 +4215,14 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &mut font_metrics,
             &face_resolver,
         ),
-        DisplaySourceTextPositionedRenderPlanRequest::new(
-            DisplaySourceRenderPlanRequest::new(
-                "\u{0633}".as_bytes(),
-                0,
-                DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
-                DisplaySourceClusterState::for_char('\u{0633}', None),
-            ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            &source_item,
+        DisplaySourceRenderPlanRequest::new(
+            "\u{0633}".as_bytes(),
+            0,
+            DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
+            DisplaySourceClusterState::for_char('\u{0633}', None),
         ),
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        &source_item,
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
@@ -8019,7 +8015,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     );
     let mut append_state = DisplaySourceRowAppendState::default();
     let measured_width = append_context
-        .resolve_source_render_plan_request_to_text_row(
+        .resolve_source_render_plan_to_text_row(
             &geometry,
             &mut append_state,
             &mut text_row_source_measure_state(
@@ -8028,16 +8024,14 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplaySourceTextPositionedRenderPlanRequest::new(
-                DisplaySourceRenderPlanRequest::new(
-                    b"b",
-                    0,
-                    source_range,
-                    DisplaySourceClusterState::for_char('b', None),
-                ),
-                position,
-                &source_item,
+            DisplaySourceRenderPlanRequest::new(
+                b"b",
+                0,
+                source_range,
+                DisplaySourceClusterState::for_char('b', None),
             ),
+            position,
+            &source_item,
         )
         .advance_px();
 

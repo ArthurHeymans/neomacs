@@ -18,8 +18,7 @@ use crate::display_source::{
     DisplaySourceAppendContinuation, DisplaySourceAppendItem, DisplaySourceClusterState,
     DisplaySourceItemRequest, DisplaySourceNaturalMeasurementRequest,
     DisplaySourceRenderPlanRequest, DisplaySourceSpecialDisplayKind, DisplaySourceStepChar,
-    DisplaySourceTextChar, DisplaySourceTextRange, DisplaySourceTextRequest,
-    DisplaySpecialSourceCharRequest,
+    DisplaySourceTextRange, DisplaySourceTextRequest, DisplaySpecialSourceCharRequest,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -67,13 +66,17 @@ pub(crate) struct DisplaySourceRowAppendState {
 }
 
 impl DisplaySourceRowAppendState {
-    pub(crate) fn resolve_source_render_plan_request_to_text_row(
+    pub(crate) fn resolve_source_render_plan_to_text_row(
         &mut self,
         state: &mut TextRowSourceMeasureState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
+        source: DisplaySourceRenderPlanRequest<'_>,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
     ) -> DisplaySourceAppendRenderPlan {
+        let request =
+            DisplaySourceTextPositionedRenderPlanRequest::new(source, position, source_item);
         self.render_plan_resolver
             .resolve_source_render_plan_request_to_text_row(
                 state,
@@ -377,23 +380,6 @@ impl DisplaySourceStepChar {
     }
 }
 
-impl DisplaySourceTextChar {
-    pub(crate) fn render_plan_request_for_item_at<'text, 'item>(
-        &self,
-        text: &'text [u8],
-        byte_idx: usize,
-        position: DisplayRowPosition,
-        source_item: &'item DisplayItem,
-        tail: Option<(char, bool)>,
-    ) -> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
-        DisplaySourceTextPositionedRenderPlanRequest::new(
-            self.advance_request(text, byte_idx, tail),
-            position,
-            source_item,
-        )
-    }
-}
-
 impl DisplaySpecialSourceCharRequest {
     pub(crate) fn append_plan_at(
         &self,
@@ -595,6 +581,19 @@ pub(crate) struct DisplaySourceTextCharAppendPlan {
 }
 
 impl DisplaySourceTextCharAppendPlan {
+    pub(crate) fn from_render_plan(
+        source: DisplaySourceRenderPlanRequest<'_>,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
+        render_plan: DisplaySourceAppendRenderPlan,
+    ) -> Self {
+        Self {
+            source_text: source.into_text_request(render_plan),
+            position,
+            source_item: source_item.clone(),
+        }
+    }
+
     pub(crate) fn source_text(&self) -> DisplaySourceTextRequest {
         self.source_text
     }
@@ -609,14 +608,14 @@ impl DisplaySourceTextCharAppendPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
+struct DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
     source: DisplaySourceRenderPlanRequest<'text>,
     position: DisplayRowPosition,
     source_item: &'item DisplayItem,
 }
 
 impl<'text, 'item> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
-    pub(crate) fn new(
+    fn new(
         source: DisplaySourceRenderPlanRequest<'text>,
         position: DisplayRowPosition,
         source_item: &'item DisplayItem,
@@ -654,17 +653,6 @@ impl<'text, 'item> DisplaySourceTextPositionedRenderPlanRequest<'text, 'item> {
 
     fn source_item(self) -> &'item DisplayItem {
         self.source_item
-    }
-
-    pub(crate) fn append_plan(
-        self,
-        render_plan: DisplaySourceAppendRenderPlan,
-    ) -> DisplaySourceTextCharAppendPlan {
-        DisplaySourceTextCharAppendPlan {
-            source_text: self.source.into_text_request(render_plan),
-            position: self.position,
-            source_item: self.source_item.clone(),
-        }
     }
 }
 

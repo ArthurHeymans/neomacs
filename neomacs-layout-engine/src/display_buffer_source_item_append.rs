@@ -12,8 +12,9 @@ use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceR
 #[cfg(test)]
 use crate::display_source::DisplaySourceTextItemRequest;
 use crate::display_source::{
-    DisplaySourceItemRequest, DisplaySourceRangeItemAppendRequest, DisplaySourceSpecialDisplayKind,
-    DisplaySourceTextChar, DisplaySourceTextRequest, DisplaySpecialSourceCharRequest,
+    DisplaySourceItemRequest, DisplaySourceRangeItemAppendRequest, DisplaySourceRenderPlanRequest,
+    DisplaySourceSpecialDisplayKind, DisplaySourceTextChar, DisplaySourceTextRequest,
+    DisplaySpecialSourceCharRequest,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendRenderPlan, DisplaySourceAppendRenderPolicy,
@@ -23,7 +24,6 @@ use crate::display_source_item_append::{
     DisplaySourcePreparedCharAppend, DisplaySourceRowAppendState,
     DisplaySourceSpecialCharAppendPlan, DisplaySourceSpecialCharPreparedAppend,
     DisplaySourceTextCharAppendPlan, DisplaySourceTextCharPreparedAppend,
-    DisplaySourceTextPositionedRenderPlanRequest,
 };
 use crate::neovm_bridge::LayoutBufferView;
 #[cfg(test)]
@@ -171,19 +171,23 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_render_plan_request_to_text_row(
+    pub(crate) fn resolve_source_render_plan_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
+        source: DisplaySourceRenderPlanRequest<'_>,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
     ) -> DisplaySourceAppendRenderPlan {
         let frame = self.active_face_context(geometry).active_face_frame();
-        append_state.resolve_source_render_plan_request_to_text_row(
+        append_state.resolve_source_render_plan_to_text_row(
             measure_state,
             self.active_face,
             frame,
-            request,
+            source,
+            position,
+            source_item,
         )
     }
 
@@ -192,15 +196,24 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut DisplaySourceRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: DisplaySourceTextPositionedRenderPlanRequest<'_, '_>,
+        source: DisplaySourceRenderPlanRequest<'_>,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
     ) -> DisplaySourceTextCharAppendPlan {
-        let render_plan = self.resolve_source_render_plan_request_to_text_row(
+        let render_plan = self.resolve_source_render_plan_to_text_row(
             geometry,
             append_state,
             measure_state,
-            request,
+            source,
+            position,
+            source_item,
         );
-        request.append_plan(render_plan)
+        DisplaySourceTextCharAppendPlan::from_render_plan(
+            source,
+            position,
+            source_item,
+            render_plan,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -216,19 +229,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         source_item: &DisplayItem,
         cluster_tail: Option<(char, bool)>,
     ) -> DisplaySourceTextCharPreparedAppend {
-        let request = source_char.render_plan_request_for_item_at(
-            text,
-            byte_idx,
-            position,
-            source_item,
-            cluster_tail,
-        );
+        let source = source_char.advance_request(text, byte_idx, cluster_tail);
         DisplaySourceTextCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
                 append_state,
                 measure_state,
-                request,
+                source,
+                position,
+                source_item,
             ),
         }
     }
