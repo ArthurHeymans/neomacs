@@ -4,14 +4,6 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use neovm_core::buffer::LispCharPos1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextOutputSpanContext {
-    row: usize,
-    row_y: f32,
-    glyph_y: f32,
-    height: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextRowOutput {
     row: usize,
     row_y: f32,
@@ -54,28 +46,6 @@ impl TextRowOutput {
 
     pub(crate) fn height(self) -> f32 {
         self.height
-    }
-
-    pub(crate) fn span_context(self) -> TextOutputSpanContext {
-        TextOutputSpanContext::new(self.row(), self.row_y(), self.glyph_y(), self.height())
-    }
-
-    pub(crate) fn spans_for_source_slots(
-        self,
-        slots: &[DisplayRowGlyphSlot],
-    ) -> Vec<TextOutputSpan> {
-        self.span_context().spans_for_source_slots(slots)
-    }
-}
-
-impl TextOutputSpanContext {
-    pub(crate) fn new(row: usize, row_y: f32, glyph_y: f32, height: f32) -> Self {
-        Self {
-            row,
-            row_y,
-            glyph_y,
-            height,
-        }
     }
 
     fn span_for_buffer_slot(self, slot: &DisplayRowGlyphSlot) -> Option<TextOutputSpan> {

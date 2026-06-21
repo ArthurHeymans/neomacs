@@ -16,7 +16,7 @@ use crate::display_row_transition::{
 };
 use crate::display_row_walk_state::{
     FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate,
-    WordWrapRenderState,
+    WordWrapRenderState, sync_position_after_row_transition,
 };
 use crate::display_source::{DisplaySourceStepChar, DisplaySourceTextPosition};
 use crate::display_source_item_append::{
@@ -350,15 +350,6 @@ impl BufferSourceTruncationSkipAction {
         row_extend.clear();
     }
 
-    pub(crate) fn sync_after_row_transition(
-        synced_charpos: i64,
-        position: &mut DisplaySourceTextPosition,
-        hit_row_range: &mut HitRowRangeTracker,
-    ) {
-        *position = position.with_charpos(synced_charpos);
-        hit_row_range.advance_to(position.charpos());
-    }
-
     pub(crate) fn transition_continuation(
         self,
         row_transition: DisplayTextRowTransition,
@@ -380,7 +371,7 @@ impl BufferSourceTruncationSkipAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_row_transition(synced_charpos, position, hit_row_range);
+        sync_position_after_row_transition(synced_charpos, position, hit_row_range);
         DisplayRowTransitionContinuation::Continue
     }
 }

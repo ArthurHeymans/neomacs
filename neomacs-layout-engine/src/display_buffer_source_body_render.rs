@@ -102,33 +102,7 @@ struct BufferSourceWalkRenderState<'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-struct BufferSourceBodyRenderState<'emit> {
-    source_render: TextRowSourceRenderState<'emit>,
-    line_numbers: &'emit mut LineNumberRenderState,
-    face_scan: &'emit mut FaceScanCheckpoint,
-    active_face_state: &'emit mut DisplayRowActiveFaceState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-}
-
 impl<'emit> BufferSourceWalkRenderState<'emit> {
-    fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        line_numbers: &'emit mut LineNumberRenderState,
-        face_scan: &'emit mut FaceScanCheckpoint,
-        active_face_state: &'emit mut DisplayRowActiveFaceState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            line_numbers,
-            face_scan,
-            active_face_state,
-            face_ids,
-        }
-    }
-}
-
-impl<'emit> BufferSourceBodyRenderState<'emit> {
     fn new(
         source_render: TextRowSourceRenderState<'emit>,
         line_numbers: &'emit mut LineNumberRenderState,
@@ -408,7 +382,7 @@ impl BufferSourceWalkSetup {
     #[allow(clippy::too_many_arguments)]
     fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        state: &mut BufferSourceBodyRenderState<'_>,
+        state: &mut BufferSourceWalkRenderState<'_>,
         row_prelude_context: BufferSourceRowPreludeRequestContext,
         loop_context: BufferSourceLoopRequestContext,
         face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
@@ -420,13 +394,7 @@ impl BufferSourceWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferSourcePostLoopRenderOutcome {
         self.render_visible_steps(
-            &mut BufferSourceWalkRenderState::new(
-                state.source_render.reborrow(),
-                state.line_numbers,
-                state.face_scan,
-                state.active_face_state,
-                state.face_ids,
-            ),
+            state,
             row_prelude_context,
             loop_context,
             face_resolution_context,
@@ -474,7 +442,7 @@ impl BufferSourceWalkSetup {
         let source_render =
             output.source_render_state(&mut output_emitter, font_metrics, face_resolver);
         let post_loop = self.render_body_and_tail(
-            &mut BufferSourceBodyRenderState::new(
+            &mut BufferSourceWalkRenderState::new(
                 source_render,
                 line_numbers,
                 face_scan,

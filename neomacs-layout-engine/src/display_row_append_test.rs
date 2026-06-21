@@ -2587,11 +2587,12 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
 }
 
 #[test]
-fn buffer_text_line_break_source_action_syncs_after_transition() {
+fn sync_position_after_row_transition_advances_charpos_and_hit_range() {
+    // Shared by the line-break, hidden-line-break, and truncation-skip actions.
     let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
-    BufferSourceLineBreakSourceAction::sync_after_row_transition(
+    crate::display_row_walk_state::sync_position_after_row_transition(
         14,
         &mut position,
         &mut hit_row_range,
@@ -2791,21 +2792,6 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     assert_eq!(box_face.row(), context.geometry.current_row_marker());
     assert_eq!(box_face.start_x(), Some(0.0));
     assert!(cursor_info.as_ref().is_some());
-}
-
-#[test]
-fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
-    let mut position = DisplaySourceTextPosition::new(2, 9);
-    let mut hit_row_range = HitRowRangeTracker::new(3);
-
-    BufferSourceSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
-        14,
-        &mut position,
-        &mut hit_row_range,
-    );
-
-    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
-    assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]
@@ -3045,21 +3031,6 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
     assert_eq!(line_numbers.current_line(), 6);
     assert_eq!(x, 3.0);
     assert_eq!(row_extend.value_on(&geometry), None);
-}
-
-#[test]
-fn buffer_text_truncation_skip_action_syncs_after_transition() {
-    let mut position = DisplaySourceTextPosition::new(2, 9);
-    let mut hit_row_range = HitRowRangeTracker::new(2);
-
-    BufferSourceTruncationSkipAction::sync_after_row_transition(
-        14,
-        &mut position,
-        &mut hit_row_range,
-    );
-
-    assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
-    assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]

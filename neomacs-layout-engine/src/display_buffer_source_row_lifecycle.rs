@@ -30,7 +30,7 @@ use crate::display_row_transition::{
 };
 use crate::display_row_walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
-    LineNumberRenderState, TrailingWhitespaceRenderState,
+    LineNumberRenderState, TrailingWhitespaceRenderState, sync_position_after_row_transition,
 };
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceTextPosition;
@@ -1218,15 +1218,6 @@ impl BufferSourceSelectiveDisplayLineTailAction {
         }
     }
 
-    pub(crate) fn sync_after_hidden_line_break_transition(
-        synced_charpos: i64,
-        position: &mut DisplaySourceTextPosition,
-        hit_row_range: &mut HitRowRangeTracker,
-    ) {
-        *position = position.with_charpos(synced_charpos);
-        hit_row_range.advance_to(position.charpos());
-    }
-
     pub(crate) fn apply_after_hidden_line_break_transition(
         self,
         row_transition: DisplayTextRowTransition,
@@ -1237,7 +1228,7 @@ impl BufferSourceSelectiveDisplayLineTailAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_hidden_line_break_transition(synced_charpos, position, hit_row_range);
+        sync_position_after_row_transition(synced_charpos, position, hit_row_range);
         DisplayRowTransitionContinuation::Continue
     }
 
@@ -1690,18 +1681,9 @@ impl BufferSourceLineBreakSourceAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_row_transition(synced_charpos, position, hit_row_range);
+        sync_position_after_row_transition(synced_charpos, position, hit_row_range);
         self.apply_after_row_transition(row_geometry, box_face, content_x);
         DisplayRowTransitionContinuation::Continue
-    }
-
-    pub(crate) fn sync_after_row_transition(
-        synced_charpos: i64,
-        position: &mut DisplaySourceTextPosition,
-        hit_row_range: &mut HitRowRangeTracker,
-    ) {
-        *position = position.with_charpos(synced_charpos);
-        hit_row_range.advance_to(position.charpos());
     }
 
     pub(crate) fn cursor_info(

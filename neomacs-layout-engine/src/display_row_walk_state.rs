@@ -2,6 +2,7 @@ use crate::coords::lisp_char_pos_to_layout_i64;
 #[cfg(test)]
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::LineWrapMode;
 use neomacs_display_protocol::types::Color;
@@ -652,6 +653,19 @@ impl HitRowRangeTracker {
     ) -> bool {
         current_charpos > self.start_charpos || has_pending_row_output
     }
+}
+
+/// Sync the source text position to `synced_charpos` and advance the hit-row
+/// range to follow it after a row transition. GNU's xdisp.c keeps this as one
+/// operation; the line-break, hidden-line-break, and truncation-skip actions
+/// all perform exactly this step.
+pub(crate) fn sync_position_after_row_transition(
+    synced_charpos: i64,
+    position: &mut DisplaySourceTextPosition,
+    hit_row_range: &mut HitRowRangeTracker,
+) {
+    *position = position.with_charpos(synced_charpos);
+    hit_row_range.advance_to(position.charpos());
 }
 
 impl InvisibleTextScanCheckpoint {
