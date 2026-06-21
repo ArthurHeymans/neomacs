@@ -11,7 +11,7 @@ use crate::display_row::{
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
-    DisplayRowAppendMetrics, DisplayRowAppendSurface, DisplayRowTextAppendContext,
+    DisplayRowAppendMetrics, DisplayRowAppendSurface,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -612,17 +612,9 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let frame = DisplayRowTextAppendContext::new(
-            self.append_surface,
-            geometry,
-            self.glyph_y_offset,
-            self.metrics.fallback_metrics,
-        )
-        .text_row_frame(
-            self.metrics.height,
-            self.metrics.ascent,
-            self.metrics.char_width,
-        );
+        let frame = self
+            .metrics
+            .text_row_frame(self.append_surface, geometry, self.glyph_y_offset);
         self.source_context
             .render_to_text_row_and_emit(state, face_ids, frame, position)
     }

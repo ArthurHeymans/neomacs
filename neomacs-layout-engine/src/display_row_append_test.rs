@@ -5756,13 +5756,13 @@ fn display_row_text_append_context_builds_text_frame_from_shared_surface() {
     );
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
 
-    let frame = DisplayRowTextAppendContext::new(
-        &surface,
-        &geometry,
-        2.0,
+    let frame = DisplayRowAppendMetrics::text_row(
+        16.0,
+        11.0,
+        9.0,
         DisplayRowFallbackMetrics::from_default_face_extents(9.0, 14.0, 11.0),
     )
-    .text_row_frame(16.0, 11.0, 9.0);
+    .text_row_frame(&surface, &geometry, 2.0);
 
     assert_eq!(frame.row, 3);
     assert_eq!(frame.glyph_y, 22.0);

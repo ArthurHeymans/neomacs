@@ -305,7 +305,7 @@ impl DisplayRowTextCharState {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct DisplayRowTextAppendContext<'a> {
+struct DisplayRowTextAppendContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     geometry: &'a DisplayRowGeometryState,
     glyph_y_offset: f32,
@@ -313,7 +313,7 @@ pub(crate) struct DisplayRowTextAppendContext<'a> {
 }
 
 impl<'a> DisplayRowTextAppendContext<'a> {
-    pub(crate) fn new(
+    fn new(
         append_surface: &'a DisplayRowAppendSurface,
         geometry: &'a DisplayRowGeometryState,
         glyph_y_offset: f32,
@@ -327,12 +327,7 @@ impl<'a> DisplayRowTextAppendContext<'a> {
         }
     }
 
-    pub(crate) fn text_row_frame(
-        self,
-        height: f32,
-        ascent: f32,
-        char_width: f32,
-    ) -> DisplayRowAppendFrame {
+    fn text_row_frame(self, height: f32, ascent: f32, char_width: f32) -> DisplayRowAppendFrame {
         self.append_surface.text_row_frame_from_geometry_state(
             self.geometry,
             self.glyph_y_offset,
@@ -476,6 +471,21 @@ impl DisplayRowAppendMetrics {
             metrics.space_width,
             fallback_metrics,
         )
+    }
+
+    pub(crate) fn text_row_frame(
+        self,
+        append_surface: &DisplayRowAppendSurface,
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
+    ) -> DisplayRowAppendFrame {
+        DisplayRowTextAppendContext::new(
+            append_surface,
+            geometry,
+            glyph_y_offset,
+            self.fallback_metrics,
+        )
+        .text_row_frame(self.height, self.ascent, self.char_width)
     }
 }
 
