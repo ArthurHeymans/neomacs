@@ -21,11 +21,13 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
+#[cfg(test)]
+use crate::display_row::DisplayRowSourceRequestPolicy;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowFallbackMetrics, DisplayRowLispStringSourceRenderRequest,
     DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest,
-    DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow,
-    RenderedDisplayRow, WindowChromeKind,
+    DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind,
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
@@ -292,6 +294,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         self
     }
 
+    #[cfg(test)]
     fn into_render_request_parts(
         self,
     ) -> (DisplayRowSourceRequestPolicy, &'face ResolvedFace, Value) {
@@ -327,9 +330,29 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         self,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayRowLispStringSourceRenderRequest<'face> {
-        let (row_request, base_face, text) = self.into_render_request_parts();
-        let row_request = row_request.source_request_from_base_face(face_ids, base_face);
-        DisplayRowLispStringSourceRenderRequest::from_value(row_request, text)
+        let Self {
+            y,
+            width,
+            metrics,
+            tab_policy,
+            origin,
+            base_face,
+            text,
+            symbol_values,
+        } = self;
+        DisplayRowLispStringSourceRenderRequest::from_origin_value(
+            y,
+            width,
+            metrics.row_height(),
+            metrics.char_width(),
+            metrics.ascent(),
+            tab_policy,
+            origin,
+            face_ids,
+            base_face,
+            text,
+            symbol_values,
+        )
     }
 }
 

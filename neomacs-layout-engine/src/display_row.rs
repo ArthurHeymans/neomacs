@@ -1403,6 +1403,28 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_origin_value(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+        origin: DisplayOrigin,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &'a ResolvedFace,
+        value: Value,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        let row_request = DisplayRowSourceRequestPolicy::from_origin(
+            y, width, height, char_width, ascent, tab_policy, origin,
+        )
+        .with_symbol_values(symbol_values)
+        .source_request_from_base_face(face_ids, base_face);
+        Self::from_value(row_request, value)
+    }
+
     fn into_render_parts(
         self,
     ) -> (
