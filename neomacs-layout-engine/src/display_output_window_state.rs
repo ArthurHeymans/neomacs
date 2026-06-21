@@ -160,7 +160,7 @@ impl OutputWindowBuildState {
         )
     }
 
-    pub(crate) fn write_row_cursor(
+    fn write_row_cursor(
         &mut self,
         row: usize,
         col: u16,

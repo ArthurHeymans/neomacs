@@ -624,8 +624,11 @@ impl DisplayOutputBuilder {
         }
 
         if let Some(placement) = placement {
-            self.window_state
-                .write_row_cursor(cursor.row, placement.col(), cursor.style);
+            self.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
+                cursor.row,
+                placement.col(),
+                cursor.style,
+            ));
         }
 
         // The selected window is represented solely by the phys cursor: the
@@ -637,8 +640,11 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.window_state
-            .write_row_cursor(cursor.row, cursor.col, cursor.style);
+        self.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
+            cursor.row,
+            cursor.col,
+            cursor.style,
+        ));
 
         self.phys_cursor = Some(cursor);
     }
