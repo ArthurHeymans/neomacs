@@ -25,9 +25,7 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
-use crate::display_item::{
-    BufferDisplayPropertyReplacementItem, DisplayItem, DisplaySourcePosition,
-};
+use crate::display_item::{BufferDisplayPropertyReplacementItem, DisplaySourcePosition};
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
 use crate::display_row_append_context::{DisplayRowAppendKind, DisplayRowAppendSurface};
 use crate::display_row_builder::{
@@ -48,7 +46,7 @@ use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::neovm_bridge::LayoutBufferView;
-use crate::types::WindowParams;
+use crate::types::{LineWrapMode, WindowParams};
 use neovm_core::buffer::{BufferId, LispCharPos1};
 
 #[derive(Clone, Copy)]
@@ -205,6 +203,71 @@ fn whole_text_run_render_decision<B: LayoutBufferView>(
     }
 }
 
+fn source_display_item_fits_text_row<B: LayoutBufferView>(
+    source_item: &DisplaySourceStepItem,
+    right_edge_px: f32,
+    position: DisplayRowPosition,
+    append_context: &BufferSourceRowAppendContext<'_, '_, B>,
+    geometry: &DisplayRowGeometryState,
+    source_render: &mut TextRowSourceRenderState<'_>,
+) -> bool {
+    let measured_width = {
+        let mut measure = source_render.measure_state();
+        append_context.measure_source_display_item_width_naturally(
+            geometry,
+            &mut measure,
+            source_item.item(),
+            position,
+            DisplayRowAppendKind::SourceText,
+        )
+    };
+    measured_width
+        .map(|width| position.x_px + width <= right_edge_px + f32::EPSILON)
+        .unwrap_or(false)
+}
+
+fn split_text_run_prefix_to_fit<B: LayoutBufferView>(
+    source_item: &DisplaySourceStepItem,
+    context: &BufferSourceItemRenderContext<'_>,
+    right_edge_px: f32,
+    position: DisplayRowPosition,
+    append_context: &BufferSourceRowAppendContext<'_, '_, B>,
+    geometry: &DisplayRowGeometryState,
+    source_render: &mut TextRowSourceRenderState<'_>,
+) -> Option<(DisplaySourceStepItem, DisplaySourceStepItem)> {
+    if context.params.wrap_mode != LineWrapMode::Truncate {
+        return None;
+    }
+    let text = source_item.text_run()?;
+    let start_charpos = source_item.source_step_char().start_charpos();
+    let end_charpos = source_item.source_end_charpos()?;
+    let mut last_fit_split_charpos = None;
+    for char_offset in 1..text.chars().count() {
+        let split_charpos = start_charpos.saturating_add(char_offset as i64);
+        if split_charpos >= end_charpos {
+            break;
+        }
+        let (prefix, _) = source_item
+            .clone()
+            .split_text_run_at_charpos(split_charpos, context.text_start_byte)?;
+        if source_display_item_fits_text_row(
+            &prefix,
+            right_edge_px,
+            position,
+            append_context,
+            geometry,
+            source_render,
+        ) {
+            last_fit_split_charpos = Some(split_charpos);
+        } else {
+            break;
+        }
+    }
+    source_item
+        .clone()
+        .split_text_run_at_charpos(last_fit_split_charpos?, context.text_start_byte)
+}
+
 fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -> bool {
     let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
         return false;
@@ -303,8 +366,7 @@ fn apply_whole_text_run_word_wrap_state(
 
 #[allow(clippy::too_many_arguments)]
 fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
-    source_item: DisplayItem,
-    source_text: &str,
+    source_item: DisplaySourceStepItem,
     source_end_charpos: Option<i64>,
     source_end_byte_idx: Option<usize>,
     active_face_state: &DisplayRowActiveFaceState,
@@ -320,6 +382,8 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
     source_render: &mut TextRowSourceRenderState<'_>,
     progress: &mut DisplaySourceProgressState<'_>,
 ) -> BufferSourceItemRenderOutcome {
+    let source_text = source_item.raw_text_run().unwrap_or_default().to_owned();
+    let (_source_step_char, _, _, source_item) = source_item.into_render_parts();
     let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
     let Some(append_progress) = append_context.append_source_display_item_to_text_row(
         geometry,
@@ -339,13 +403,13 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         &append_progress,
     );
     apply_whole_text_run_trailing_whitespace_state(
-        source_text,
+        &source_text,
         trailing_whitespace,
         geometry,
         &append_progress,
     );
     apply_whole_text_run_word_wrap_state(
-        source_text,
+        &source_text,
         word_wrap,
         output_display_point_start,
         output_row_positions_start,
@@ -457,16 +521,49 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &mut source_render,
     ) == WholeTextRunRenderDecision::Render
     {
-        let source_text = source_item.text_run().unwrap_or_default().to_owned();
         let output_display_point_start = source_render.output_emitter().display_point_len();
         let output_row_positions_start = source_render
             .output_emitter()
             .current_row_display_positions();
-        let (_source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
-            source_item.into_render_parts();
+        let source_end_charpos = source_item.source_end_charpos();
+        let source_end_byte_idx = source_item.source_end_byte_idx();
         return render_whole_text_run_and_apply(
             source_item,
-            &source_text,
+            source_end_charpos,
+            source_end_byte_idx,
+            &active_face_state,
+            &buffer_row_append_context,
+            &append_geometry,
+            append_position,
+            context.point_charpos,
+            cursor_info,
+            trailing_whitespace,
+            word_wrap,
+            output_display_point_start,
+            output_row_positions_start,
+            &mut source_render,
+            &mut progress,
+        );
+    }
+
+    if let Some((prefix, suffix)) = split_text_run_prefix_to_fit(
+        &source_item,
+        &context,
+        context.append_surface.right_edge(),
+        append_position,
+        &buffer_row_append_context,
+        &append_geometry,
+        &mut source_render,
+    ) {
+        source_walk.prepend_pending_render_items(vec![suffix]);
+        let output_display_point_start = source_render.output_emitter().display_point_len();
+        let output_row_positions_start = source_render
+            .output_emitter()
+            .current_row_display_positions();
+        let source_end_charpos = prefix.source_end_charpos();
+        let source_end_byte_idx = prefix.source_end_byte_idx();
+        return render_whole_text_run_and_apply(
+            prefix,
             source_end_charpos,
             source_end_byte_idx,
             &active_face_state,

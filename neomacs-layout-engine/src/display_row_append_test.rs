@@ -1998,7 +1998,7 @@ fn buffer_text_source_consumption_state_can_return_full_text_run_item() {
         .id();
     {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("abc");
+        buffer.insert("abcdefghij");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut cursor = BufferTextSourceCursor::new(
@@ -6660,7 +6660,8 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
         0,
         4,
     );
-    let params = test_display_space_window_params();
+    let mut params = test_display_space_window_params();
+    params.wrap_mode = LineWrapMode::Truncate;
     let text = b"a ";
     let mut byte_idx = 0;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
@@ -6672,7 +6673,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', context.geometry.start_marker_at_x(0.0));
@@ -6924,6 +6925,152 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
                 text_glyphs[2].glyph_type,
                 GlyphType::Char { ch: 'b' }
             ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
+    let mut context = RowTransitionTestContext::new("source-run-fit-prefix");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("abc");
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 32.0,
+            text_width: 32.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context = BufferOverlayStringTextRowRenderContext::new(
+        false,
+        1,
+        &surface,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        0.0,
+        0,
+        4,
+    );
+    let params = test_display_space_window_params();
+    let text = b"abcdefghij";
+    let mut byte_idx = 0;
+    let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
+    let mut charpos = 0;
+    let mut col = 0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut x = 0.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
+    let face_resolution_context = BufferSourceFaceResolutionContext::new(
+        &snapshot,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        false,
+    );
+    let loop_context = BufferSourceLoopRequestContext::new(
+        buf_id,
+        0,
+        10,
+        99,
+        &params,
+        0.0,
+        false,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        context.defaults,
+        0,
+        4,
+        context.row_limit,
+    );
+
+    let continue_buffer_walk = BufferSourceRenderRequest::new(
+        loop_context,
+        text,
+        &params,
+        &active_face,
+        BufferSourceLoopMutableState::new(
+            &mut invisible_text_checkpoint,
+            DisplaySourceProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+            &surface,
+            overlay_context,
+        ),
+    )
+    .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
+
+    assert!(continue_buffer_walk);
+    assert!(
+        byte_idx > 1 && byte_idx < text.len(),
+        "expected multi-char prefix before overflow, got byte_idx={byte_idx}"
+    );
+    assert_eq!(charpos, byte_idx as i64);
+    assert_eq!(x, 8.0 * byte_idx as f32);
+    assert_eq!(col, byte_idx);
+    context
+        .builder
+        .edit_current_row_for_test(|row| {
+            let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
+            assert_eq!(text_glyphs.len(), byte_idx);
+            for (idx, glyph) in text_glyphs.iter().enumerate() {
+                let expected = (b'a' + idx as u8) as char;
+                assert!(matches!(glyph.glyph_type, GlyphType::Char { ch } if ch == expected));
+            }
         })
         .expect("current row");
 }

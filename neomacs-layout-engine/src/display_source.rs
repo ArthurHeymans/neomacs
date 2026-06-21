@@ -459,6 +459,13 @@ impl DisplaySourceStepItem {
             .then_some(text)
     }
 
+    pub(crate) fn raw_text_run(&self) -> Option<&str> {
+        let DisplayItemKind::TextRun(run) = &self.item.kind else {
+            return None;
+        };
+        Some(&run.text)
+    }
+
     pub(crate) fn split_text_run_items(
         self,
         text_start_byte: usize,
