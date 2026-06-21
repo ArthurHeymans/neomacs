@@ -1328,6 +1328,13 @@ pub struct CompiledLeaf {
     /// the leaf when the epoch moves — so redefining any inlined callee re-JITs and
     /// no stale inline ever runs. `None` = no inlining (never epoch-checked).
     inline_epoch: Option<u64>,
+    /// Whether this leaf executes a SIDE EFFECT (a call) that may precede a deopt.
+    /// Such a body must NEVER rerun-from-start (STATUS_DEOPT) — only precise
+    /// STATUS_DEOPT_AT resume is sound, because a rerun would re-execute the side
+    /// effect. Set only by the MIR tier's calls-slice (the baseline is all-precise:
+    /// every guard is STATUS_DEOPT_AT, so it never reruns after a call). Guards the
+    /// null-vmctx degradation in `invoke_native` (the HOLE-3 refuse-to-rerun).
+    has_side_effects: bool,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -1505,6 +1512,15 @@ impl CompiledLeaf {
             // free test bodies — side-effect-free by construction) fall back
             // to the legacy rerun-from-start mapping.
             if vmctx.is_null() {
+                // HOLE-3 refuse-to-rerun: a side-effecting body must NEVER degrade
+                // to rerun-from-start — the call's side effect would re-execute.
+                // The calls-slice's capability tests use a REAL Context, so this
+                // never fires there; it bars any future shim-free (call_for_test)
+                // path from silently double-executing a side effect.
+                assert!(
+                    !self.has_side_effects,
+                    "side-effecting JIT leaf cannot rerun from start with a null vmctx"
+                );
                 return NativeRun::Deopt;
             }
             let pc = self.deopt_meta.pc.get() as usize;
@@ -1576,7 +1592,17 @@ impl CompiledLeaf {
         match status {
             STATUS_OK => NativeRun::Ok(out as usize),
             STATUS_SIGNAL => NativeRun::Signal,
-            _ => NativeRun::Deopt,
+            _ => {
+                // STATUS_DEOPT = rerun-from-start. A side-effecting body must never
+                // reach here: the calls-slice routes EVERY guard in a call-bearing
+                // body to precise STATUS_DEOPT_AT (the all-precise rule that closes
+                // the loop-back-edge double-side-effect hole). Defensive assert.
+                assert!(
+                    !self.has_side_effects,
+                    "side-effecting JIT leaf must use precise deopt, not rerun-from-start"
+                );
+                NativeRun::Deopt
+            }
         }
     }
 
@@ -2740,6 +2766,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         has_handlers: false,
         // Set by compile_bytecode_function_inner after a successful inline pass.
         inline_epoch: None,
+        // Set by the calls-slice when a call is lowered ahead of a precise deopt.
+        has_side_effects: false,
         spec_slots: Box::from([]),
         deopt_spill: Box::from([]),
         deopt_meta: Box::new(DeoptCells {
@@ -5680,6 +5708,9 @@ pub fn lower_leaf_full(
         has_rest: false,
         // The baseline never inlines; only the MIR tier sets this.
         inline_epoch: None,
+        // The baseline is all-precise (every guard is STATUS_DEOPT_AT, never a
+        // rerun-from-start after a call), so it never needs the refuse-to-rerun.
+        has_side_effects: false,
         has_binds: ops.iter().any(|o| {
             matches!(
                 o,
