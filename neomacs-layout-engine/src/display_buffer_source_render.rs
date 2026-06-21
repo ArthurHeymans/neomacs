@@ -74,6 +74,20 @@ struct BufferSourceItemRenderContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WholeTextRunRenderDecision {
+    Render,
+    Fallback(WholeTextRunFallbackReason),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WholeTextRunFallbackReason {
+    NotTextRun,
+    MissingSourceEnd,
+    OverlayString,
+    DoesNotFit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceItemRenderOutcome {
     Rendered,
     ContinueBufferWalk,
@@ -140,7 +154,7 @@ impl<'a> BufferSourceItemRenderContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn whole_text_run_can_render<B: LayoutBufferView>(
+fn whole_text_run_render_decision<B: LayoutBufferView>(
     source_item: &DisplaySourceStepItem,
     context: &BufferSourceItemRenderContext<'_>,
     buffer: &B,
@@ -149,15 +163,15 @@ fn whole_text_run_can_render<B: LayoutBufferView>(
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
     geometry: &DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
-) -> bool {
+) -> WholeTextRunRenderDecision {
     if source_item.text_run().is_none() {
-        return false;
+        return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::NotTextRun);
     }
     let Some(source_end_charpos) = source_item.source_end_charpos() else {
-        return false;
+        return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::MissingSourceEnd);
     };
     if source_item.source_end_byte_idx().is_none() {
-        return false;
+        return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::MissingSourceEnd);
     }
     if context
         .overlay_context
@@ -168,7 +182,7 @@ fn whole_text_run_can_render<B: LayoutBufferView>(
         )
         .is_some()
     {
-        return false;
+        return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::OverlayString);
     }
 
     let measured_width = {
@@ -181,9 +195,14 @@ fn whole_text_run_can_render<B: LayoutBufferView>(
             DisplayRowAppendKind::SourceText,
         )
     };
-    measured_width
+    if measured_width
         .map(|width| position.x_px + width <= right_edge_px + f32::EPSILON)
         .unwrap_or(false)
+    {
+        WholeTextRunRenderDecision::Render
+    } else {
+        WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::DoesNotFit)
+    }
 }
 
 fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -> bool {
@@ -427,7 +446,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         source_item = prefix;
     }
 
-    if whole_text_run_can_render(
+    if whole_text_run_render_decision(
         &source_item,
         &context,
         buffer,
@@ -436,7 +455,8 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &buffer_row_append_context,
         &append_geometry,
         &mut source_render,
-    ) {
+    ) == WholeTextRunRenderDecision::Render
+    {
         let source_text = source_item.text_run().unwrap_or_default().to_owned();
         let output_display_point_start = source_render.output_emitter().display_point_len();
         let output_row_positions_start = source_render
