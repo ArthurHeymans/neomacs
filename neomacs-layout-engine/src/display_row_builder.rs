@@ -37,6 +37,23 @@ impl DisplayRowLayout {
     fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
         DisplayRowTextNaturalAdvancePolicy::new(self.tab_policy.clone(), self.char_width_px)
     }
+
+    fn row_height_px(&self) -> f32 {
+        self.height_px.max(1.0)
+    }
+
+    fn row_ascent_px(&self) -> f32 {
+        self.ascent_px.max(0.0).min(self.row_height_px())
+    }
+
+    fn apply_to_row(&self, row: &mut GlyphRow) {
+        row.enabled = true;
+        row.role = self.role;
+        row.mode_line = matches!(self.role, GlyphRowRole::ModeLine);
+        row.pixel_y = self.y_px;
+        row.height_px = self.row_height_px();
+        row.ascent_px = self.row_ascent_px();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -376,9 +393,7 @@ impl DisplayRowGlyphCheckpoint {
 
 pub(crate) fn new_display_row(layout: &DisplayRowLayout) -> GlyphRow {
     let mut row = new_display_row_for_role(layout.role);
-    row.pixel_y = layout.y_px;
-    row.height_px = layout.height_px.max(1.0);
-    row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+    layout.apply_to_row(&mut row);
     row
 }
 
@@ -1100,12 +1115,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         row: &'row mut GlyphRow,
         area: GlyphArea,
     ) -> Self {
-        row.enabled = true;
-        row.role = layout.role;
-        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
-        row.pixel_y = layout.y_px;
-        row.height_px = layout.height_px.max(1.0);
-        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        layout.apply_to_row(row);
         Self {
             layout,
             row,
@@ -1129,12 +1139,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
         area: GlyphArea,
     ) -> Self {
-        row.enabled = true;
-        row.role = layout.role;
-        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
-        row.pixel_y = layout.y_px;
-        row.height_px = layout.height_px.max(1.0);
-        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        layout.apply_to_row(row);
         Self {
             layout,
             row,
