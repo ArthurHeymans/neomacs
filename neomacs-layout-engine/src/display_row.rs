@@ -995,10 +995,45 @@ impl DisplayRowActiveFaceState {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct DisplayRowOutputProgress {
-    pub end_x: f32,
-    pub end_col: i64,
-    pub y: f32,
-    pub height: f32,
+    end_x: f32,
+    end_col: i64,
+    y: f32,
+    height: f32,
+}
+
+impl DisplayRowOutputProgress {
+    pub(crate) fn new(end_x: f32, end_col: i64, y: f32, height: f32) -> Self {
+        Self {
+            end_x,
+            end_col,
+            y,
+            height,
+        }
+    }
+
+    pub(crate) fn end_x(self) -> f32 {
+        self.end_x
+    }
+
+    pub(crate) fn end_col(self) -> i64 {
+        self.end_col
+    }
+
+    pub(crate) fn y(self) -> f32 {
+        self.y
+    }
+
+    pub(crate) fn height(self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn with_y(self, y: f32) -> Self {
+        Self { y, ..self }
+    }
+
+    pub(crate) fn with_height(self, height: f32) -> Self {
+        Self { height, ..self }
+    }
 }
 
 pub(crate) struct RenderedDisplayRow {
@@ -1132,7 +1167,7 @@ impl MeasuredDisplayRow {
             fallback_bounds
                 .height
                 .max(rendered.row().height_px)
-                .max(rendered.progress().height)
+                .max(rendered.progress().height())
                 .max(content_height),
         );
         let height = match bounds_policy {
@@ -1181,11 +1216,10 @@ impl MeasuredDisplayRow {
     }
 
     pub(crate) fn output_progress(&self) -> DisplayRowOutputProgress {
-        DisplayRowOutputProgress {
-            y: self.bounds.y,
-            height: self.bounds.height,
-            ..self.rendered.progress()
-        }
+        self.rendered
+            .progress()
+            .with_y(self.bounds.y)
+            .with_height(self.bounds.height)
     }
 }
 
@@ -2434,18 +2468,18 @@ pub(crate) fn display_row_output_end_position(
     progress: DisplayRowOutputProgress,
 ) -> DisplayRowPosition {
     DisplayRowPosition {
-        x_px: progress.end_x,
-        col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
+        x_px: progress.end_x(),
+        col: usize::try_from(progress.end_col().max(0)).unwrap_or(usize::MAX),
     }
 }
 
 fn display_row_progress(end: DisplayRowPosition, y: f32, height: f32) -> DisplayRowOutputProgress {
-    DisplayRowOutputProgress {
-        end_x: end.x_px.max(0.0),
-        end_col: end.col.min(i64::MAX as usize) as i64,
+    DisplayRowOutputProgress::new(
+        end.x_px.max(0.0),
+        end.col.min(i64::MAX as usize) as i64,
         y,
         height,
-    }
+    )
 }
 
 fn clipped_display_item_remainder(

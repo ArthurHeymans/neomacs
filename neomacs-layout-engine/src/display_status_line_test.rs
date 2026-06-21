@@ -123,7 +123,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     );
     assert_eq!(render.measured.row_index(), 3);
     assert_eq!(render.measured.bounds().y, 24.0);
-    assert_eq!(render.measured.output_progress().y, 24.0);
+    assert_eq!(render.measured.output_progress().y(), 24.0);
 }
 
 #[test]

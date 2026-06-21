@@ -1214,9 +1214,9 @@ impl WindowOutputEmitter {
         self.move_output_to(
             evaluator,
             row,
-            progress.end_col,
-            (progress.y - self.window_top).round() as i64,
-            progress.end_x.round() as i64,
+            progress.end_col(),
+            (progress.y() - self.window_top).round() as i64,
+            progress.end_x().round() as i64,
         );
     }
 
@@ -1259,7 +1259,7 @@ impl WindowOutputEmitter {
         self.push_chrome_row(DisplayRowSnapshot {
             row: row_progress.row,
             y: row_progress.y,
-            height: progress.height.round() as i64,
+            height: progress.height().round() as i64,
             start_x: row_progress.start_x,
             start_col: row_progress.start_col,
             end_x: row_progress.x,
