@@ -1485,14 +1485,14 @@ fn render_buffer_text_source_shadow_row(
     let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
     DisplayRowSourceFragmentFrame::new(
-        DisplayRowGeometry {
-            y: 0.0,
-            width: width_px,
-            height: height_px,
-            char_width: char_width_px,
-            ascent: ascent_px,
-            tab_policy: DisplayTabPolicy::every(8),
-        },
+        DisplayRowGeometry::new(
+            0.0,
+            width_px,
+            height_px,
+            char_width_px,
+            ascent_px,
+            DisplayTabPolicy::every(8),
+        ),
         GlyphRowRole::Text,
         0,
         resolver.default_face(),

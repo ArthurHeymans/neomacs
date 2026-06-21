@@ -556,18 +556,18 @@ impl<'face> DisplayRowAppendSourceMeasureRequest<'face> {
 
 impl DisplayRowAppendFrame {
     pub(crate) fn width_for_columns(&self, columns: usize) -> f32 {
-        columns as f32 * self.geometry.char_width.max(1.0)
+        columns as f32 * self.geometry.char_width().max(1.0)
     }
 
     pub(crate) fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
         DisplayRowTextNaturalAdvancePolicy::new(
-            self.geometry.tab_policy.clone(),
+            self.geometry.tab_policy().clone(),
             self.face_space_width,
         )
     }
 
     fn right_edge(&self) -> f32 {
-        self.content_x + self.geometry.width
+        self.content_x + self.geometry.width()
     }
 
     fn text_right_edge_excluding_line_number(&self) -> f32 {
@@ -583,14 +583,14 @@ impl DisplayRowAppendFrame {
         Self {
             row: placement.row,
             glyph_y: placement.glyph_y,
-            geometry: DisplayRowGeometry {
-                y: placement.y,
-                width: area.width,
-                height: metrics.height,
-                char_width: metrics.char_width,
-                ascent: metrics.ascent,
+            geometry: DisplayRowGeometry::new(
+                placement.y,
+                area.width,
+                metrics.height,
+                metrics.char_width,
+                metrics.ascent,
                 tab_policy,
-            },
+            ),
             default_row_height: metrics.fallback_metrics.row_height(),
             content_x: area.content_x,
             text_width: area.text_width,
@@ -642,16 +642,13 @@ impl DisplayRowAppendFrame {
     }
 
     fn source_render_geometry(&self, kind: DisplayRowAppendKind) -> DisplayRowGeometry {
-        DisplayRowGeometry {
-            char_width: kind.char_width(self),
-            ..self.geometry.clone()
-        }
+        self.geometry.clone().with_char_width(kind.char_width(self))
     }
 
     fn text_row_output(&self, kind: DisplayRowAppendKind) -> TextRowOutput {
         TextRowOutput {
             row: self.row,
-            row_y: self.geometry.y,
+            row_y: self.geometry.y(),
             glyph_y: self.glyph_y,
             height: kind.output_height(self),
         }
@@ -677,7 +674,7 @@ impl DisplayRowAppendKind {
             | Self::ControlChar
             | Self::SourceMappedText
             | Self::Glyphless
-            | Self::DisplayReplacement => frame.geometry.char_width,
+            | Self::DisplayReplacement => frame.geometry.char_width(),
         }
     }
 
@@ -700,7 +697,7 @@ impl DisplayRowAppendKind {
             Self::SourceText
             | Self::Glyphless
             | Self::DisplayReplacement
-            | Self::DisplayReplacementString => frame.geometry.height,
+            | Self::DisplayReplacementString => frame.geometry.height(),
             Self::Tab | Self::ControlChar | Self::SourceMappedText => frame.default_row_height,
         }
     }

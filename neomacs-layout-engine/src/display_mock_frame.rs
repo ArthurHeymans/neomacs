@@ -93,14 +93,14 @@ fn mock_display_row_geometry(
     char_h: f32,
     ascent: f32,
 ) -> DisplayRowGeometry {
-    DisplayRowGeometry {
-        y: pixel_y,
-        width: width_px.max(1.0),
-        height: char_h.max(1.0),
-        char_width: char_w.max(1.0),
-        ascent: ascent.max(0.0).min(char_h.max(1.0)),
-        tab_policy: DisplayTabPolicy::every(8),
-    }
+    DisplayRowGeometry::new(
+        pixel_y,
+        width_px.max(1.0),
+        char_h.max(1.0),
+        char_w.max(1.0),
+        ascent.max(0.0).min(char_h.max(1.0)),
+        DisplayTabPolicy::every(8),
+    )
 }
 
 fn new_empty_mock_display_row(
@@ -110,8 +110,8 @@ fn new_empty_mock_display_row(
 ) -> GlyphRow {
     new_display_row(&geometry.to_layout(
         role,
-        geometry.char_width.max(1.0),
-        geometry.ascent.max(0.0).min(geometry.height.max(1.0)),
+        geometry.char_width().max(1.0),
+        geometry.ascent().max(0.0).min(geometry.height().max(1.0)),
         RenderFaceRef::FaceId(base_face.face_id),
         std::collections::HashMap::new(),
     ))
@@ -239,7 +239,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
         font_metrics,
         face_ids,
     } = request;
-    let render_width = geometry.width;
+    let render_width = geometry.width();
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
         DisplayRowSourceFragmentFrame::new(geometry, role, base_face.face_id, base_face)

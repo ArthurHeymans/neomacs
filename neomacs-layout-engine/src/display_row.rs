@@ -1438,14 +1438,14 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
         let char_width = char_width.max(1.0);
         let height = row.height_px.max(1.0);
         Self::new(
-            DisplayRowGeometry {
-                y: row.pixel_y,
-                width: matrix_cols.max(1) as f32 * char_width,
+            DisplayRowGeometry::new(
+                row.pixel_y,
+                matrix_cols.max(1) as f32 * char_width,
                 height,
-                ascent: row.ascent_px.max(0.0).min(height),
                 char_width,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
+                row.ascent_px.max(0.0).min(height),
+                DisplayTabPolicy::every(8),
+            ),
             role,
             base_face_id,
             base_face,
@@ -1462,14 +1462,14 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
     ) -> Self {
         let char_width = char_width.max(1.0);
         Self::new(
-            DisplayRowGeometry {
-                y: row_geometry.y(),
-                width: columns.max(1) as f32 * char_width,
-                height: row_geometry.height(),
-                ascent: row_geometry.ascent(),
+            DisplayRowGeometry::new(
+                row_geometry.y(),
+                columns.max(1) as f32 * char_width,
+                row_geometry.height(),
                 char_width,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
+                row_geometry.ascent(),
+                DisplayTabPolicy::every(8),
+            ),
             role,
             base_face_id,
             base_face,
@@ -1901,15 +1901,62 @@ pub(crate) enum RenderedDisplayRowMediaKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowGeometry {
-    pub(crate) y: f32,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
-    pub(crate) tab_policy: DisplayTabPolicy,
+    y: f32,
+    width: f32,
+    height: f32,
+    char_width: f32,
+    ascent: f32,
+    tab_policy: DisplayTabPolicy,
 }
 
 impl DisplayRowGeometry {
+    pub(crate) fn new(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+    ) -> Self {
+        Self {
+            y,
+            width,
+            height,
+            char_width,
+            ascent,
+            tab_policy,
+        }
+    }
+
+    pub(crate) fn y(&self) -> f32 {
+        self.y
+    }
+
+    pub(crate) fn width(&self) -> f32 {
+        self.width
+    }
+
+    pub(crate) fn height(&self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn char_width(&self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn tab_policy(&self) -> &DisplayTabPolicy {
+        &self.tab_policy
+    }
+
+    pub(crate) fn with_char_width(mut self, char_width: f32) -> Self {
+        self.char_width = char_width;
+        self
+    }
+
     pub(crate) fn to_layout(
         &self,
         role: GlyphRowRole,
@@ -1963,24 +2010,24 @@ impl DisplayRowSourceGeometry {
 
     fn from_display_row_geometry(geometry: DisplayRowGeometry) -> Self {
         Self::new(
-            geometry.y,
-            geometry.width,
-            geometry.height,
-            geometry.char_width,
-            geometry.ascent,
-            geometry.tab_policy,
+            geometry.y(),
+            geometry.width(),
+            geometry.height(),
+            geometry.char_width(),
+            geometry.ascent(),
+            geometry.tab_policy().clone(),
         )
     }
 
     fn into_geometry(self) -> DisplayRowGeometry {
-        DisplayRowGeometry {
-            y: self.y,
-            width: self.width,
-            height: self.height,
-            char_width: self.char_width,
-            ascent: self.ascent,
-            tab_policy: self.tab_policy,
-        }
+        DisplayRowGeometry::new(
+            self.y,
+            self.width,
+            self.height,
+            self.char_width,
+            self.ascent,
+            self.tab_policy,
+        )
     }
 
     pub(crate) fn source_request_from_base_face<'face>(
@@ -2122,7 +2169,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
     ) -> Self {
-        let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width);
+        let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width());
         Self {
             geometry,
             render_bounds,
@@ -2146,7 +2193,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         } else {
             face_ids.allocate()
         };
-        let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width);
+        let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width());
         Self {
             geometry,
             render_bounds,
@@ -2752,12 +2799,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let row_face = face_realizer.realize_face(
             base_face_id,
             base_face,
-            geometry.char_width,
-            geometry.ascent,
-            geometry.height,
+            geometry.char_width(),
+            geometry.ascent(),
+            geometry.height(),
         );
         let char_width = face_realizer
-            .char_width(&row_face, geometry.char_width)
+            .char_width(&row_face, geometry.char_width())
             .max(1.0);
         let mut row_faces = vec![row_face.clone()];
 
@@ -2768,8 +2815,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let row_ascent = row_face
             .metrics
             .ascent_px
-            .max(geometry.ascent)
-            .min(geometry.height.max(1.0));
+            .max(geometry.ascent())
+            .min(geometry.height().max(1.0));
         let mut row_layout = geometry.to_layout(
             role,
             char_width,
@@ -2782,8 +2829,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut media = Vec::new();
         let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
             char_width,
-            geometry.height,
-            geometry.ascent,
+            geometry.height(),
+            geometry.ascent(),
         );
         let stop = loop {
             let params =
@@ -2796,8 +2843,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     face_id,
                     &resolved,
                     char_width,
-                    geometry.ascent,
-                    geometry.height,
+                    geometry.ascent(),
+                    geometry.height(),
                 );
                 include_display_row_face_metrics(&mut row_layout, &row_face);
                 row_faces.push(row_face);
@@ -2817,8 +2864,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         face_id,
                         &resolved,
                         char_width,
-                        geometry.ascent,
-                        geometry.height,
+                        geometry.ascent(),
+                        geometry.height(),
                     );
                     include_display_row_face_metrics(&mut row_layout, &realized);
                     row_faces.push(realized);
@@ -2892,7 +2939,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         } else {
             row_layout.height_px
         };
-        let progress = display_row_progress(position, geometry.y, progress_height);
+        let progress = display_row_progress(position, geometry.y(), progress_height);
         let faces = row_faces
             .into_iter()
             .map(|face| face.render_face())
