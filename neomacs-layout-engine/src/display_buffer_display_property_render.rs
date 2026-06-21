@@ -150,24 +150,19 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
             return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
         };
         let descriptor = self.replacement.descriptor();
-        let append_request =
-            state
-                .source_render
-                .with_font_metrics_and_display_host(|font_metrics, host| {
-                    DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
-                        descriptor,
-                        source_text,
-                        self.active_face_state,
-                        font_metrics,
-                        current_x,
-                        self.content_x,
-                        self.params,
-                        host,
-                        self.glyph_y_offset,
-                        self.fallback_metrics,
-                        start_position,
-                    )
-                });
+        let append_request = state
+            .source_render
+            .resolve_display_property_replacement_row_request(
+                descriptor,
+                source_text,
+                self.active_face_state,
+                current_x,
+                self.content_x,
+                self.params,
+                self.glyph_y_offset,
+                self.fallback_metrics,
+                start_position,
+            );
         match append_request {
             Some(request) => BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
                 self.render_append_request(request, buffer, state),

@@ -9,6 +9,7 @@
 use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
+use crate::display_item::DisplayPropertyReplacementDescriptor;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
@@ -21,8 +22,10 @@ use crate::display_row::{
 use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
+use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_replacement::DisplayPropertyReplacementRowRenderRequest;
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
@@ -32,6 +35,7 @@ use crate::display_source_resolver::{
 use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::types::WindowParams;
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
     TextWindowOutputTarget, WindowOutputEmitter, finish_and_end_text_window_row,
@@ -707,11 +711,32 @@ impl<'a> TextRowSourceRenderState<'a> {
             .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
     }
 
-    pub(crate) fn with_font_metrics_and_display_host<R>(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_display_property_replacement_row_request(
         &mut self,
-        f: impl FnOnce(&mut Option<FontMetricsService>, Option<&dyn DisplayHost>) -> R,
-    ) -> R {
-        f(self.font_metrics, self.output_render.display_host())
+        descriptor: &DisplayPropertyReplacementDescriptor,
+        source_text: &[u8],
+        active_face_state: &DisplayRowActiveFaceState,
+        current_x: f32,
+        content_x: f32,
+        params: &WindowParams,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+        start_position: DisplayRowPosition,
+    ) -> Option<DisplayPropertyReplacementRowRenderRequest> {
+        DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
+            descriptor,
+            source_text,
+            active_face_state,
+            self.font_metrics,
+            current_x,
+            content_x,
+            params,
+            self.output_render.display_host(),
+            glyph_y_offset,
+            fallback_metrics,
+            start_position,
+        )
     }
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
