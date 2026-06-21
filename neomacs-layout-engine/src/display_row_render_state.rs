@@ -107,7 +107,10 @@ impl RenderedDisplayRow {
     ) -> GlyphRow {
         let mut row = self.row.clone();
         self.apply_source_slot_bounds_to(&mut row);
-        glyph_row_writer::finalize_external_row(&mut row);
+        // Normalize only; the bidi reorder happens once at row install
+        // (window chrome via the `Complete` lifecycle, frame chrome via the
+        // finalizer in `MeasuredFrameChromeRowInstallRequest`).
+        glyph_row_writer::normalize_external_row(&mut row);
         row.pixel_y = pixel_y;
         row.height_px = height_px;
         row.ascent_px = ascent_px;
@@ -142,8 +145,10 @@ impl RenderedDisplayRow {
         self.row
     }
 
-    pub(crate) fn finalize_external_row(&mut self) {
-        glyph_row_writer::finalize_external_row(&mut self.row);
+    pub(crate) fn normalize_external_row(&mut self) {
+        // Normalize the freshly built logical-order row; the single bidi
+        // reorder happens at install (see `RenderedDisplayRow::materialize_output_row`).
+        glyph_row_writer::normalize_external_row(&mut self.row);
     }
 }
 

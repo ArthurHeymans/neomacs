@@ -255,6 +255,14 @@ impl OutputWindowBuildState {
 
 pub(crate) struct OutputWindowRowGrid {
     matrix: GlyphMatrix,
+    /// Per-row flag: has this matrix row already been bidi-finalized (reordered
+    /// to visual order) at install? Bidi reordering must happen exactly once per
+    /// row. Some buffer-text install flows issue a redundant `Finalize` for the
+    /// last row (the row-end path finalizes it, then `finish_output_rows`
+    /// finalizes the trailing row again); this flag makes that second
+    /// `Finalize` a true no-op instead of a double-reorder. Cleared whenever a
+    /// row's contents are (re)installed via `begin_row` / `replace_row`.
+    finalized_rows: Vec<bool>,
 }
 
 pub(crate) struct OutputWindowGridEntry {
@@ -269,6 +277,28 @@ impl OutputWindowRowGrid {
     pub(crate) fn new(nrows: usize, ncols: usize) -> Self {
         Self {
             matrix: GlyphMatrix::new(nrows, ncols),
+            finalized_rows: vec![false; nrows],
+        }
+    }
+
+    fn clear_finalized(&mut self, row: usize) {
+        if let Some(flag) = self.finalized_rows.get_mut(row) {
+            *flag = false;
+        }
+    }
+
+    /// Mark `row` finalized; returns true if it had NOT been finalized yet
+    /// (i.e. this is the reorder that should run).
+    fn take_unfinalized(&mut self, row: usize) -> bool {
+        match self.finalized_rows.get_mut(row) {
+            Some(flag) if !*flag => {
+                *flag = true;
+                true
+            }
+            // Out of range rows fall through to the finalizer (which itself
+            // bounds-checks); never been tracked, so treat as unfinalized.
+            None => true,
+            _ => false,
         }
     }
 
@@ -334,6 +364,7 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn replace_row(&mut self, row: usize, source: GlyphRow) {
+        self.clear_finalized(row);
         let Some(row) = self.row_mut(row) else {
             return;
         };
@@ -341,6 +372,7 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn begin_row(&mut self, begin: OutputRowBeginRequest) {
+        self.clear_finalized(begin.row);
         let Some(row) = self.row_mut(begin.row) else {
             return;
         };
@@ -354,6 +386,11 @@ impl OutputWindowRowGrid {
         pixel_bounds: Rect,
         phys_cursor: Option<&mut PhysCursor>,
     ) {
+        // Reorder exactly once per row. A redundant trailing-row `Finalize`
+        // (see `finalized_rows`) is a true no-op, not a second reorder.
+        if !self.take_unfinalized(row) {
+            return;
+        }
         let matrix_ncols = self.matrix.ncols;
         let Some(matrix_row) = self.row_mut(row) else {
             return;

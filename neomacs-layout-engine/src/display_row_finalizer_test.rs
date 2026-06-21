@@ -45,12 +45,15 @@ fn finalizes_matrix_row_with_bidi_reorder() {
     assert!(row.reversed_p);
 }
 
+/// A logical-order row that has only been normalized (NOT reordered) still
+/// reorders correctly at install. Reordering now happens exactly once, at
+/// install; there is no pre-pass reorder and no idempotency early-return.
 #[test]
-fn finalizing_pre_finalized_row_does_not_reorder_again() {
+fn normalized_but_unreordered_row_reorders_at_install() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     push_text(&mut row, "אב");
 
-    crate::glyph_row_writer::finalize_external_row(&mut row);
+    crate::glyph_row_writer::normalize_external_row(&mut row);
     GlyphRowFinalizationContext::new(1, 0, Rect::new(0.0, 0.0, 80.0, 16.0))
         .finalize_row(&mut row, 10, None);
 

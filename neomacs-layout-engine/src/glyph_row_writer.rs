@@ -406,15 +406,21 @@ pub(crate) fn push_stretch_to_area(
 }
 
 /// Normalize a standalone row built outside the window-matrix walker.
+///
+/// This keeps the non-reorder bookkeeping (currently `displays_text`) that a
+/// freshly built logical-order row needs. Bidi reordering is deliberately NOT
+/// done here: it happens exactly once, at row install, via `reorder_row_bidi`
+/// (see `display_row_finalizer`). GNU likewise commits a row in visual order a
+/// single time when the row is appended to the matrix (src/xdisp.c).
 pub(crate) fn normalize_external_row(row: &mut GlyphRow) {
     row.displays_text = !row.glyphs[GlyphArea::Text.index()].is_empty();
 }
 
-pub(crate) fn finalize_external_row(row: &mut GlyphRow) {
-    normalize_external_row(row);
-    let _ = reorder_row_bidi(row, None);
-}
-
+/// True once a row has already been reordered into visual order. Used only by a
+/// debug assertion guarding against a second reorder; reordering is no longer
+/// idempotent-by-early-return — every row reorders exactly once at install.
+/// (Reachability of the install reorder is enforced at the lifecycle level via
+/// `OutputWindowRowGrid::finalized_rows`.)
 fn has_bidi_finalization(row: &GlyphRow) -> bool {
     row.reversed_p
         || row.glyphs[GlyphArea::Text.index()]
@@ -423,9 +429,12 @@ fn has_bidi_finalization(row: &GlyphRow) -> bool {
 }
 
 pub(crate) fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>) -> Option<u16> {
-    if has_bidi_finalization(row) {
-        return None;
-    }
+    debug_assert!(
+        !has_bidi_finalization(row),
+        "reorder_row_bidi ran twice on the same row: rows must reorder exactly \
+         once at install (reversed_p={}, has bidi levels)",
+        row.reversed_p,
+    );
 
     let original_text = row.glyphs[GlyphArea::Text.index()].clone();
     if original_text.is_empty() {

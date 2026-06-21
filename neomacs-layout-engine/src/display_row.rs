@@ -749,7 +749,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut result = self.render_display_item_source_row_fragment_step_with_context(
             plan, source, state, context,
         )?;
-        result.finalize_external_row();
+        result.normalize_external_row();
         Some(result)
     }
 

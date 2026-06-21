@@ -1,7 +1,9 @@
 use super::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, SourceSpan};
-use crate::display_rendered_row_output_install::install_measured_window_display_row;
+use crate::display_rendered_row_output_install::{
+    install_measured_frame_chrome_display_row, install_measured_window_display_row,
+};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowItemMeasurement,
 };
@@ -2826,15 +2828,18 @@ fn display_row_lisp_chrome_roles_share_wide_and_cluster_builder() {
 
 #[test]
 fn display_row_tab_line_rtl_text_is_logical_order_at_render() {
-    // Complete typed row rendering finalizes bidi before the row reaches output
-    // install. Fragment/current-row append paths stay logical until the
-    // containing row is closed.
+    // Bidi reordering now happens exactly once, at row install — NOT during
+    // render. A freshly rendered typed (chrome) row is therefore still in
+    // LOGICAL order; `reversed_p` is not yet set and the glyphs read "אב".
+    // The reorder to visual "בא" is asserted at install by
+    // `frame_chrome_rtl_row_reorders_to_visual_order_at_install` and the
+    // `builder_reorders_status_line_rtl_row` chrome-install test.
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
 
     assert_eq!(row.role, GlyphRowRole::TabLine);
-    assert!(row.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&row), "בא");
+    assert!(!row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&row), "אב");
 }
 
 #[test]
@@ -2880,11 +2885,13 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     assert!(!fragment.reversed_p);
     assert_eq!(row_text_expanding_stretches(&fragment), "אב");
 
-    // A complete source-row render finalizes bidi immediately; only fragments
-    // are kept logical for later composition into the current row.
+    // A complete source-row render now keeps the row in LOGICAL order too: the
+    // single bidi reorder is deferred to install (see
+    // `frame_chrome_rtl_row_reorders_to_visual_order_at_install`). Both the
+    // fragment path and the complete-row path therefore read logical "אב" here.
     let step_path = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
-    assert!(step_path.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&step_path), "בא");
+    assert!(!step_path.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&step_path), "אב");
 }
 
 #[test]
@@ -3036,6 +3043,65 @@ fn measured_display_row_materializes_absolute_and_window_relative_output_rows() 
     assert_eq!(relative.height_px, 18.0);
     assert_eq!(absolute.ascent_px, 13.0);
     assert_eq!(relative.ascent_px, 13.0);
+}
+
+/// Regression guard: an RTL (Hebrew) FRAME-CHROME row (e.g. an RTL tab-bar
+/// string) must reorder to correct VISUAL order at install.
+///
+/// Frame chrome rows do NOT pass through the window-row `Complete` lifecycle —
+/// they materialize and install straight into `frame_chrome_rows`. That direct
+/// install is their SOLE reorder timing. The rendered row is built in LOGICAL
+/// order (only `normalize_external_row` ran; no pre-pass reorder), so if the
+/// install-time finalizer ever stops reordering, this Hebrew "אב" would render
+/// in logical (wrong) order and the assertions below would fail.
+#[test]
+fn frame_chrome_rtl_row_reorders_to_visual_order_at_install() {
+    // Logical-order Hebrew "אב". This is exactly what a freshly rendered
+    // (normalize-only) chrome row carries before install.
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.enabled = true;
+    row.height_px = 18.0;
+    row.ascent_px = 13.0;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('א', 5, 0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('ב', 5, 1));
+    crate::glyph_row_writer::normalize_external_row(&mut row);
+    // Sanity: the rendered row is still in LOGICAL order pre-install.
+    assert!(!row.reversed_p);
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Char { ch: 'א' }
+    );
+
+    let measured = MeasuredDisplayRow::new(
+        DisplayRowOwner::FrameChrome {
+            kind: FrameChromeKind::TabBar,
+        },
+        0,
+        Rect::new(0.0, 0.0, 160.0, 18.0),
+        RenderedDisplayRow::new(
+            row,
+            DisplayRowOutputProgress::new(0.0, 0, 0.0, 18.0),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+    );
+
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut frame_chrome_rows = Vec::new();
+    install_measured_frame_chrome_display_row(&mut builder, &mut frame_chrome_rows, &measured);
+
+    let installed = &frame_chrome_rows[0].row;
+    let glyphs = &installed.glyphs[GlyphArea::Text.index()];
+    // Reordered to visual "בא": the second logical char now comes first.
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
+    assert_eq!(glyphs[0].bidi_level, 1);
+    assert_eq!(glyphs[1].bidi_level, 1);
+    // RTL paragraph base direction is recorded on the installed row.
+    assert!(installed.reversed_p);
 }
 
 #[test]
