@@ -1,3 +1,4 @@
+use crate::display_buffer_source_item_append::BufferSourceActiveFaceRowMetrics;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
@@ -92,7 +93,6 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
         start_position: DisplayRowPosition,
     ) -> Self {
         let start_charpos = replacement.start_charpos();
-        let active_face_metrics = active_face_state.metrics();
         let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
             replacement,
             text_start_byte,
@@ -100,11 +100,11 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
             content_x,
             params,
             glyph_y_offset,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                active_face_metrics.char_width(),
+            BufferSourceActiveFaceRowMetrics::from_active_face_row(
+                active_face_state,
                 row_height_px,
-                active_face_metrics.ascent(),
-            ),
+            )
+            .fallback_metrics(),
             active_face_state,
         );
         Self {

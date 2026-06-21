@@ -30,6 +30,31 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::neovm_bridge::ResolvedFace;
 use neovm_core::buffer::BufferId;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferSourceActiveFaceRowMetrics {
+    fallback_metrics: DisplayRowFallbackMetrics,
+}
+
+impl BufferSourceActiveFaceRowMetrics {
+    pub(crate) fn from_active_face_row(
+        active_face: &DisplayRowActiveFaceState,
+        row_height_px: f32,
+    ) -> Self {
+        let active_face_metrics = active_face.metrics();
+        Self {
+            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(
+                active_face_metrics.char_width(),
+                row_height_px,
+                active_face_metrics.ascent(),
+            ),
+        }
+    }
+
+    pub(crate) fn fallback_metrics(self) -> DisplayRowFallbackMetrics {
+        self.fallback_metrics
+    }
+}
+
 impl DisplaySourceTextRequest {
     #[cfg(test)]
     pub(crate) fn append_request<B: LayoutBufferView + ?Sized>(
@@ -93,18 +118,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         glyph_y_offset: f32,
         row_height_px: f32,
     ) -> Self {
-        let active_face_metrics = active_face.metrics();
         Self::new(
             buffer,
             buffer_id,
             append_surface,
             active_face,
             glyph_y_offset,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                active_face_metrics.char_width(),
-                row_height_px,
-                active_face_metrics.ascent(),
-            ),
+            BufferSourceActiveFaceRowMetrics::from_active_face_row(active_face, row_height_px)
+                .fallback_metrics(),
         )
     }
 

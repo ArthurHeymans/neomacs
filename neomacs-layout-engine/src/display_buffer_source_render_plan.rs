@@ -224,6 +224,21 @@ impl BufferSourceDefaultFacePlan {
         self.metrics
     }
 
+    pub(crate) fn row_metrics_for_extents(
+        &self,
+        char_width: f32,
+        row_height: f32,
+    ) -> DisplayRowFallbackMetrics {
+        DisplayRowFallbackMetrics::from_default_face_extents(char_width, row_height, self.ascent())
+    }
+
+    pub(crate) fn row_metrics_for_default_width(
+        &self,
+        row_height: f32,
+    ) -> DisplayRowFallbackMetrics {
+        self.row_metrics_for_extents(self.metrics.char_width(), row_height)
+    }
+
     pub(crate) fn measurement_policy(&self) -> DisplayRowMeasurementPolicy {
         self.measurement_policy
     }
@@ -303,20 +318,13 @@ impl BufferSourceOutputSetup {
             has_overlays,
             output_window_id,
             append_surface,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                default_face.metrics().char_width(),
-                geometry.char_height,
-                default_face.ascent(),
-            ),
+            default_face.row_metrics_for_default_width(geometry.char_height),
             geometry.text_y,
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         );
-        let row_fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            geometry.char_width,
-            geometry.char_height,
-            default_face.ascent(),
-        );
+        let row_fallback_metrics =
+            default_face.row_metrics_for_extents(geometry.char_width, geometry.char_height);
         let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),

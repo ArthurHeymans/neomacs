@@ -211,11 +211,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             params.bounds.y,
             geometry.line_number_pixel_width,
             geometry.max_rows,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                geometry.char_width,
-                geometry.char_height,
-                default_face.ascent(),
-            ),
+            default_face.row_metrics_for_extents(geometry.char_width, geometry.char_height),
             params.wrap_mode,
             params.hscroll,
             params.word_wrap,

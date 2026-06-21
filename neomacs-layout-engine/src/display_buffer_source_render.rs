@@ -107,6 +107,37 @@ pub(crate) struct BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'f
 }
 
 impl<'a> BufferSourceItemRenderContext<'a> {
+    fn from_loop_context(
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+        loop_context: BufferSourceLoopRequestContext,
+        text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        params: &'a WindowParams,
+    ) -> Self {
+        Self::new(
+            layout_resolution_context,
+            text,
+            loop_context.text_start_byte(),
+            loop_context.buffer_id(),
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            0.0,
+            loop_context.char_height(),
+            loop_context.point_charpos(),
+            loop_context.row_visibility_limit(),
+            loop_context.content_x(),
+            loop_context.has_prefix(),
+            loop_context.row_geometry_defaults(),
+            loop_context.display_text_row_base(),
+            loop_context.max_rows(),
+            loop_context.row_limit(),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
@@ -997,25 +1028,14 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     {
         render_source_item_and_apply(
             source_item,
-            BufferSourceItemRenderContext::new(
+            BufferSourceItemRenderContext::from_loop_context(
                 layout_resolution_context,
+                self.loop_context,
                 self.text,
-                self.loop_context.text_start_byte(),
-                self.loop_context.buffer_id(),
                 self.state.append_surface,
                 self.state.overlay_context,
                 self.active_face_state,
                 self.params,
-                0.0,
-                self.loop_context.char_height(),
-                self.loop_context.point_charpos(),
-                self.loop_context.row_visibility_limit(),
-                self.loop_context.content_x(),
-                self.loop_context.has_prefix(),
-                self.loop_context.row_geometry_defaults(),
-                self.loop_context.display_text_row_base(),
-                self.loop_context.max_rows(),
-                self.loop_context.row_limit(),
             ),
             source_walk,
             buffer,
