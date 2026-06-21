@@ -658,21 +658,107 @@ pub(crate) fn builtin_window_configuration_frame(args: Vec<Value>) -> EvalResult
     })
 }
 
+/// GNU `compare_window_configurations` (`src/window.c:9012`) compares the
+/// *layout* of two configurations: selected frame, current buffer, window
+/// count, and -- per window, in order -- the current-window correspondence,
+/// buffer, and geometry/structure.  It deliberately ignores point and scroll.
+///
+/// neomacs stamps every `current-window-configuration` value with a unique
+/// serial, so a raw `equal' (the previous implementation) always returned nil
+/// for two distinct-but-identical configurations.  Compare the stored
+/// snapshots structurally instead.
+fn window_tree_layout_equal(a: &crate::window::Window, b: &crate::window::Window) -> bool {
+    use crate::window::Window;
+    match (a, b) {
+        (
+            Window::Leaf {
+                buffer_id: ba,
+                bounds: bounds_a,
+                ..
+            },
+            Window::Leaf {
+                buffer_id: bb,
+                bounds: bounds_b,
+                ..
+            },
+        ) => ba == bb && bounds_a == bounds_b,
+        (
+            Window::Internal {
+                direction: da,
+                children: ca,
+                bounds: bounds_a,
+                ..
+            },
+            Window::Internal {
+                direction: db,
+                children: cb,
+                bounds: bounds_b,
+                ..
+            },
+        ) => {
+            da == db
+                && bounds_a == bounds_b
+                && ca.len() == cb.len()
+                && ca
+                    .iter()
+                    .zip(cb.iter())
+                    .all(|(x, y)| window_tree_layout_equal(x, y))
+        }
+        _ => false,
+    }
+}
+
+fn window_snapshots_layout_equal(
+    a: &WindowConfigurationSnapshot,
+    b: &WindowConfigurationSnapshot,
+) -> bool {
+    a.frame_id == b.frame_id
+        && a.current_buffer == b.current_buffer
+        // The "current"/selected window must correspond between configurations.
+        && a.selected_window == b.selected_window
+        && a.minibuffer_window == b.minibuffer_window
+        && window_tree_layout_equal(&a.root_window, &b.root_window)
+        && match (&a.minibuffer_leaf, &b.minibuffer_leaf) {
+            (Some(x), Some(y)) => window_tree_layout_equal(x, y),
+            (None, None) => true,
+            _ => false,
+        }
+}
+
 pub(crate) fn builtin_window_configuration_equal_p(args: Vec<Value>) -> EvalResult {
     expect_args("window-configuration-equal-p", &args, 2)?;
-    if window_configuration_frame_from_value(&args[0]).is_none() {
+    let Some((_, serial_a)) = window_configuration_parts_from_value(&args[0]) else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("window-configuration-p"), args[0]],
         ));
-    }
-    if window_configuration_frame_from_value(&args[1]).is_none() {
+    };
+    let Some((_, serial_b)) = window_configuration_parts_from_value(&args[1]) else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("window-configuration-p"), args[1]],
         ));
+    };
+
+    // Identical object (or identical serial) is trivially equal.
+    if serial_a == serial_b {
+        return Ok(Value::T);
     }
-    Ok(Value::bool_val(equal_value(&args[0], &args[1], 0)))
+
+    let result = WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| {
+        let store = slot.borrow();
+        match (store.get(&serial_a), store.get(&serial_b)) {
+            (Some(a), Some(b)) => Some(window_snapshots_layout_equal(a, b)),
+            _ => None,
+        }
+    });
+
+    match result {
+        Some(equal) => Ok(Value::bool_val(equal)),
+        // Fall back to a structural value comparison if a snapshot was evicted
+        // from the bounded side table (very old configurations).
+        None => Ok(Value::bool_val(equal_value(&args[0], &args[1], 0))),
+    }
 }
 
 pub(crate) fn builtin_current_window_configuration(
