@@ -101,23 +101,26 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                     // matches on their car.
                     ValueKind::Cons => {
                         if lucid_event_type_list_p(item) {
-                            match super::kbd::key_events_from_designator(&Value::vector(vec![
-                                *item,
-                            ])) {
-                                Ok(ke) => {
-                                    for e in &ke {
-                                        events.push(key_event_to_emacs_event(e));
-                                    }
-                                }
-                                Err(super::kbd::KeyDesignatorError::Parse(msg)) => {
-                                    return Err(signal("error", vec![Value::string(msg)]));
-                                }
-                                Err(super::kbd::KeyDesignatorError::WrongType(other)) => {
-                                    return Err(signal(
-                                        "wrong-type-argument",
-                                        vec![Value::symbol("arrayp"), other],
-                                    ));
-                                }
+                            // GNU `Fdefine_key` converts a Lucid event type list
+                            // such as `(shift tab)` via `Fevent_convert_list`
+                            // (src/keymap.c:1156-1157, 1264-1265).  That routine
+                            // keeps a multi-character symbol base (e.g. `tab`) as
+                            // a SYMBOL and applies modifiers to produce `S-tab`,
+                            // whereas the kbd-designator path coerces `tab` to the
+                            // character 9 and yields the integer 33554441.  Use
+                            // the same conversion as `event-convert-list' so the
+                            // stored key matches GNU exactly.
+                            let mut list_items = Vec::new();
+                            let mut cursor = *item;
+                            while cursor.is_cons() {
+                                list_items.push(cursor.cons_car());
+                                cursor = cursor.cons_cdr();
+                            }
+                            match crate::emacs_core::keyboard::pure::convert_lucid_event_list(
+                                &list_items,
+                            ) {
+                                Some(event) => events.push(event),
+                                None => events.push(*item),
                             }
                         } else {
                             events.push(*item);
