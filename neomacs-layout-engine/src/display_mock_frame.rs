@@ -112,7 +112,12 @@ fn new_empty_mock_display_row(
         geometry.char_width().max(1.0),
         geometry.ascent().max(0.0).min(geometry.height().max(1.0)),
         RenderFaceRef::FaceId(base_face.face_id),
-        std::collections::HashMap::new(),
+        crate::display_pixel_calc::PixelCalcContext::for_chrome_row(
+            geometry.width(),
+            geometry.char_width().max(1.0),
+            geometry.height(),
+            std::collections::HashMap::new(),
+        ),
     ))
 }
 

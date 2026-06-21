@@ -1,4 +1,5 @@
-use crate::display_item::{DisplayLengthExpr, RenderFaceRef};
+use crate::display_item::RenderFaceRef;
+use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row_builder::{DisplayRowLayout, DisplayTabPolicy};
 use crate::hit_test::HitRow;
 use crate::window_output::{
@@ -92,18 +93,17 @@ impl DisplayRowGeometry {
         char_width_px: f32,
         ascent_px: f32,
         base_face: RenderFaceRef,
-        symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
+        pixel_calc: PixelCalcContext,
     ) -> DisplayRowLayout {
         DisplayRowLayout {
             role,
             y_px: self.y,
-            width_px: self.width.max(1.0),
             height_px: self.height,
             ascent_px,
             char_width_px,
             tab_policy: self.tab_policy.clone(),
             base_face,
-            symbol_values,
+            pixel_calc,
         }
     }
 }

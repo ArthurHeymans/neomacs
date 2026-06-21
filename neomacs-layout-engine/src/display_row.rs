@@ -2,7 +2,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::parse_display_length_expr;
+use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row_builder::{
     DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
@@ -825,10 +825,18 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .max(1.0);
         let mut row_faces = vec![row_face.clone()];
 
-        let parsed_symbol_values = symbol_values
-            .into_iter()
-            .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
-            .collect();
+        // Build the chrome row's pixel-calc context from its own geometry so
+        // `(space :width/:align-to …)` forms resolve through the single
+        // GNU-faithful evaluator (`calc_pixel_width_or_height`), the same
+        // authority the buffer text path uses. Region symbols (`text`,
+        // `right`, …) now reach real window-region positions instead of the
+        // 0.0 the retired `length_expr_pixels` evaluator returned.
+        let pixel_calc = PixelCalcContext::for_chrome_row(
+            geometry.width(),
+            char_width,
+            geometry.height(),
+            symbol_values,
+        );
         let row_ascent = row_face
             .metrics
             .ascent_px()
@@ -839,7 +847,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             char_width,
             row_ascent,
             RenderFaceRef::FaceId(row_face.face_id),
-            parsed_symbol_values,
+            pixel_calc,
         );
         let mut position = render_bounds.start();
         let mut source_slots = Vec::new();

@@ -184,6 +184,57 @@ pub struct PixelCalcContext {
 }
 
 impl PixelCalcContext {
+    /// Build the context for a chrome row (mode-line, header-line,
+    /// tab-line, tab-bar) from its row-local geometry.
+    ///
+    /// In GNU Emacs a mode/header/tab line is rendered across the full
+    /// window box; for `(space …)` purposes its text area spans the entire
+    /// row width with no fringes, margins or scroll bar inside it (those
+    /// areas are not part of the chrome row's own coordinate space). The
+    /// row's left edge is the origin, so `text_area_left == 0` and
+    /// `text_area_right == text_area_width == width_px`. This makes region
+    /// symbols (`text`, `left`, `right`, `center`) resolve to real
+    /// positions while fringe/margin/scroll-bar symbols resolve to 0 — the
+    /// same way GNU resolves them for a window with no fringes/margins
+    /// (e.g. on a TTY frame).
+    ///
+    /// `frame_column_width`/`face_font_width` are the row's character cell
+    /// width and `frame_line_height`/`face_font_height` its row height, so
+    /// bare numbers and the `width`/`height` symbols scale exactly as the
+    /// retired `length_expr_pixels` evaluator did.
+    pub fn for_chrome_row(
+        width_px: f32,
+        char_width_px: f32,
+        height_px: f32,
+        symbol_values: HashMap<String, Value>,
+    ) -> Self {
+        let width = f64::from(width_px.max(0.0));
+        let char_width = f64::from(char_width_px.max(1.0));
+        let height = f64::from(height_px.max(1.0));
+        Self {
+            frame_column_width: char_width,
+            frame_line_height: height,
+            frame_res_x: 96.0,
+            frame_res_y: 96.0,
+            face_font_height: height,
+            face_font_width: char_width,
+            text_area_left: 0.0,
+            text_area_right: width,
+            text_area_width: width,
+            left_margin_left: 0.0,
+            left_margin_width: 0.0,
+            right_margin_left: width,
+            right_margin_width: 0.0,
+            left_fringe_width: 0.0,
+            right_fringe_width: 0.0,
+            fringes_outside_margins: false,
+            scroll_bar_width: 0.0,
+            scroll_bar_on_left: false,
+            line_number_pixel_width: 0.0,
+            symbol_values,
+        }
+    }
+
     /// Zero-initialized context. Every field defaults to 0.0/false/etc.
     /// Useful as a starting point for tests; real call sites should
     /// fill in every field from their `WindowParams`/`FrameParams`.

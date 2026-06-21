@@ -1192,12 +1192,17 @@ fn display_row_geometry_builds_row_layout() {
         9.0,
         12.0,
         RenderFaceRef::FaceId(42),
-        std::collections::HashMap::new(),
+        crate::display_pixel_calc::PixelCalcContext::for_chrome_row(
+            120.0,
+            9.0,
+            16.0,
+            std::collections::HashMap::new(),
+        ),
     );
 
     assert_eq!(layout.role, GlyphRowRole::Text);
     assert_eq!(layout.y_px, 20.0);
-    assert_eq!(layout.width_px, 120.0);
+    assert_eq!(layout.pixel_calc.text_area_width, 120.0);
     assert_eq!(layout.height_px, 16.0);
     assert_eq!(layout.ascent_px, 12.0);
     assert_eq!(layout.char_width_px, 9.0);
@@ -2566,6 +2571,138 @@ fn display_row_baseline_header_line_align_to_symbol_values() {
 
     assert_eq!(row.role, GlyphRowRole::HeaderLine);
     assert_eq!(row_text_expanding_stretches(&row), "C");
+}
+
+/// Chrome `(space :align-to right)` must push the following stretch to the
+/// window's right region — the capability the now-retired `length_expr_pixels`
+/// could not provide for window-box symbols. The chrome row is 240px wide with
+/// an 8px cell (30 cols), so a stretch starting right after the leading "L"
+/// (1 col, 8px) must span the remaining 29 cols / 232px to reach the window's
+/// right edge at x=240.
+///
+/// `right` is resolved by the single GNU-faithful evaluator
+/// (`calc_pixel_width_or_height`, xdisp.c:30435) against the chrome row's
+/// `PixelCalcContext`, exactly as the buffer text path resolves it. Under the
+/// old chrome evaluator a region symbol could only reach `width_px` crudely;
+/// the unified path now resolves it through the same authority.
+#[test]
+fn mode_line_align_to_right_region_reaches_window_right_edge() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "L ",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("align-to"),
+                    Value::symbol("right"),
+                ]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::ModeLine);
+
+    assert_eq!(row.role, GlyphRowRole::ModeLine);
+    // The stretch fills from x=8 (after "L") to the text-area-right region at
+    // x=240: (240 - 8) / 8 = 29 cols / 232px. Reaching the right edge is the
+    // capability the unified evaluator unlocks for chrome rows.
+    let stretch = row.glyphs[1]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("align-to right should emit a stretch glyph");
+    assert_eq!(
+        stretch.glyph_type,
+        GlyphType::Stretch { width_cols: 29 },
+        "align-to right must reach the window-right region: {:?}",
+        row.glyphs[1]
+    );
+    assert_eq!(
+        stretch.pixel_width, 232.0,
+        "align-to right stretch must end at the window right edge (x=240)"
+    );
+}
+
+/// A window-region symbol the OLD `length_expr_pixels` evaluator zeroed out
+/// (`right-fringe` returned 0.0) must now resolve to a real window position
+/// through the unified evaluator. This pins the actual capability gain:
+///
+/// - OLD behavior: `right-fringe` → 0.0, so the stretch width is
+///   `max(0 - 8, 0) == 0` (a 0-col stretch); the `width_cols: 29` /
+///   `pixel_width: 232.0` assertions below would FAIL.
+/// - NEW behavior: the GNU-faithful resolver maps `right-fringe` to the chrome
+///   row's right edge (240px), producing a 29-col / 232px stretch.
+#[test]
+fn mode_line_align_to_fringe_region_now_resolves_to_window_edge() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "L ",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("align-to"),
+                    Value::symbol("right-fringe"),
+                ]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::ModeLine);
+
+    assert_eq!(row.role, GlyphRowRole::ModeLine);
+    let stretch = row.glyphs[1]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("align-to right-fringe should emit a stretch glyph");
+    // Would be a 0-col / 0px stretch under the retired `length_expr_pixels`
+    // (which returned 0.0 for right-fringe): this is the must-fail assertion.
+    assert_eq!(
+        stretch.glyph_type,
+        GlyphType::Stretch { width_cols: 29 },
+        "align-to right-fringe must reach the window edge, not stay at 0: {:?}",
+        row.glyphs[1]
+    );
+    assert_eq!(
+        stretch.pixel_width, 232.0,
+        "align-to right-fringe stretch must end at the window right edge (x=240)"
+    );
+}
+
+/// Buffer-path `(space :align-to N)` must be unchanged by the unification: the
+/// buffer text path already used `calc_pixel_width_or_height`, so this pins
+/// that path's output stays byte-identical. An `:align-to 4` over a single
+/// character produces a stretch filling columns 1..4 after the initial "X".
+#[test]
+fn buffer_align_to_number_unchanged_by_unification() {
+    let _eval = Context::new();
+    let row = render_buffer_display_row_with_property(
+        "X Y",
+        1,
+        2,
+        Value::symbol("display"),
+        Value::list(vec![
+            Value::symbol("space"),
+            Value::keyword("align-to"),
+            Value::fixnum(4),
+        ]),
+        GlyphRowRole::Text,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&row), "X   Y");
+    assert!(
+        row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 3 })),
+        "buffer align-to 4 should still emit a 3-col stretch: {:?}",
+        row.glyphs[1]
+    );
 }
 
 #[test]

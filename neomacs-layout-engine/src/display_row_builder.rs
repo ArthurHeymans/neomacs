@@ -2,11 +2,12 @@ use crate::composition::base_width_cols;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
-    DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
-    RenderFaceRef, SourceSpan, control_char_caret_char,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, control_char_caret_char,
 };
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
 use crate::display_row_append_context::{
     DisplayRowTextCharState, DisplayRowTextNaturalAdvanceKind, DisplayRowTextNaturalAdvancePolicy,
     DisplayRowTextNaturalAdvanceRequest,
@@ -20,17 +21,20 @@ use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct DisplayRowLayout {
     pub(crate) role: GlyphRowRole,
     pub(crate) y_px: f32,
-    pub(crate) width_px: f32,
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
     pub(crate) char_width_px: f32,
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: RenderFaceRef,
-    pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
+    /// Window/face/frame pixel state for the single GNU-faithful
+    /// `(space :width/:align-to …)` evaluator. Mode-line, header-line and
+    /// tab-line rows resolve region symbols (`text`, `right`, fringes, …)
+    /// through this context, the same authority the buffer text path uses.
+    pub(crate) pixel_calc: PixelCalcContext,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1522,11 +1526,35 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 Some((cols, pixels))
             }
             DisplayStretchWidth::AlignTo(expr) => {
-                let target = self.length_expr_pixels(expr)?;
-                let current = self.current_text_metrics().width_px();
-                let pixels = (target - current).max(0.0);
-                let cols = (pixels / self.layout.char_width_px.max(1.0)).round() as u16;
-                Some((cols, pixels))
+                // GNU `display_line`/`produce_stretch_glyph` (xdisp.c) feeds
+                // the `:align-to` operand to `calc_pixel_width_or_height` with
+                // `*align_to == -1`, then takes the difference from the current
+                // pen X. We mirror the buffer text path exactly (see
+                // `DisplayReplacementSpaceWidthPolicy::resolve`), substituting
+                // the chrome row's pen X as `current_x` and the row's left edge
+                // (`origin_x_px`) as `content_x`.
+                let prop = expr.to_lisp_value();
+                let mut align_to: i32 = -1;
+                let pixels = calc_pixel_width_or_height(
+                    &self.layout.pixel_calc,
+                    &prop,
+                    true,
+                    Some(&mut align_to),
+                )?;
+                let content_x = self.layout.tab_policy.origin_x_px;
+                let target_x = if align_to >= 0 {
+                    align_to as f32 + pixels as f32
+                } else {
+                    content_x + pixels as f32
+                };
+                let current =
+                    self.layout.tab_policy.origin_x_px + self.current_text_metrics().width_px();
+                let width_px = (target_x - current).max(0.0);
+                if !width_px.is_finite() {
+                    return None;
+                }
+                let cols = (width_px / self.layout.char_width_px.max(1.0)).round() as u16;
+                Some((cols, width_px))
             }
         }
     }
@@ -1536,47 +1564,18 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayLength::Columns(cols) => Some(f32::from(*cols) * self.layout.char_width_px),
             DisplayLength::Pixels(px) => Some(*px),
             DisplayLength::Em(em) => Some(*em * em_px.max(1.0)),
-            DisplayLength::Expr(expr) => self.length_expr_pixels(expr),
-        }
-        .filter(|pixels| pixels.is_finite() && *pixels >= 0.0)
-    }
-
-    fn length_expr_pixels(&self, expr: &DisplayLengthExpr) -> Option<f32> {
-        match expr {
-            DisplayLengthExpr::Pixels(px) => Some(*px),
-            DisplayLengthExpr::Em(em) => Some(*em * self.layout.char_width_px.max(1.0)),
-            DisplayLengthExpr::Symbol(symbol) => match symbol {
-                crate::display_item::DisplayLengthSymbol::Width => Some(self.layout.char_width_px),
-                crate::display_item::DisplayLengthSymbol::Height => Some(self.layout.height_px),
-                crate::display_item::DisplayLengthSymbol::Text
-                | crate::display_item::DisplayLengthSymbol::Left => Some(0.0),
-                crate::display_item::DisplayLengthSymbol::Right => Some(self.layout.width_px),
-                crate::display_item::DisplayLengthSymbol::Center => {
-                    Some(self.layout.width_px / 2.0)
-                }
-                crate::display_item::DisplayLengthSymbol::LeftFringe
-                | crate::display_item::DisplayLengthSymbol::RightFringe
-                | crate::display_item::DisplayLengthSymbol::LeftMargin
-                | crate::display_item::DisplayLengthSymbol::RightMargin
-                | crate::display_item::DisplayLengthSymbol::ScrollBar => Some(0.0),
-            },
-            DisplayLengthExpr::Variable(name) => self
-                .layout
-                .symbol_values
-                .get(name.as_ref())
-                .and_then(|expr| self.length_expr_pixels(expr)),
-            DisplayLengthExpr::Add(parts) => parts.iter().try_fold(0.0, |sum, part| {
-                self.length_expr_pixels(part).map(|value| sum + value)
-            }),
-            DisplayLengthExpr::Sub(parts) => {
-                let mut iter = parts.iter();
-                let first = self.length_expr_pixels(iter.next()?)?;
-                iter.try_fold(first, |sum, part| {
-                    self.length_expr_pixels(part).map(|value| sum - value)
-                })
+            // `:width`/`:height` arithmetic forms route through the single
+            // GNU-faithful evaluator. `em_px` (the caller's base unit) is the
+            // frame column/line size in the pixel-calc context already, so the
+            // authority scales bare numbers consistently with the explicit
+            // `Em` arm above.
+            DisplayLength::Expr(expr) => {
+                let prop = expr.to_lisp_value();
+                calc_pixel_width_or_height(&self.layout.pixel_calc, &prop, true, None)
+                    .map(|pixels| pixels as f32)
             }
         }
-        .filter(|pixels| pixels.is_finite())
+        .filter(|pixels| pixels.is_finite() && *pixels >= 0.0)
     }
 
     fn face_id(&self, face: RenderFaceRef) -> u32 {
