@@ -40,7 +40,6 @@ pub(crate) mod display_face_policy;
 pub(crate) mod display_face_ref;
 pub(crate) mod display_frame_output;
 pub(crate) mod display_item;
-pub mod display_iterator;
 pub(crate) mod display_media;
 pub(crate) mod display_mock_frame;
 pub(crate) mod display_origin;
