@@ -56,7 +56,7 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
     let align_value = Value::make_int(12);
     symbol_values.insert("align-to".to_string(), align_value);
 
-    let policy = ChromeLispStringRowRequest::new(
+    let snapshot = ChromeLispStringRowRequest::new(
         3.0,
         80.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
@@ -66,17 +66,16 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
         Value::string("mode"),
     )
     .with_symbol_values(symbol_values)
-    .into_source_request_policy();
-    let geometry = policy.geometry();
+    .into_test_snapshot();
 
-    assert_eq!(policy.role(), GlyphRowRole::ModeLine);
-    assert_eq!(geometry.y, 3.0);
-    assert_eq!(geometry.width, 80.0);
-    assert_eq!(geometry.height, 16.0);
-    assert_eq!(geometry.char_width, 8.0);
-    assert_eq!(geometry.ascent, 12.0);
+    assert_eq!(snapshot.role, GlyphRowRole::ModeLine);
+    assert_eq!(snapshot.y, 3.0);
+    assert_eq!(snapshot.width, 80.0);
+    assert_eq!(snapshot.height, 16.0);
+    assert_eq!(snapshot.char_width, 8.0);
+    assert_eq!(snapshot.ascent, 12.0);
     assert_eq!(
-        policy.symbol_values().get("align-to").copied(),
+        snapshot.symbol_values.get("align-to").copied(),
         Some(align_value)
     );
 }

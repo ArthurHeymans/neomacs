@@ -21,8 +21,6 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
-#[cfg(test)]
-use crate::display_row::DisplayRowSourceRequestPolicy;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowFallbackMetrics, DisplayRowLispStringSourceRenderRequest,
     DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest,
@@ -83,6 +81,18 @@ pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
     face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq)]
+struct ChromeLispStringRowRequestSnapshot {
+    y: f32,
+    width: f32,
+    height: f32,
+    char_width: f32,
+    ascent: f32,
+    role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
 }
 
 impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
@@ -322,35 +332,29 @@ impl<'face> ChromeLispStringRowRequest<'face> {
     }
 
     #[cfg(test)]
-    fn into_render_request_parts(
-        self,
-    ) -> (DisplayRowSourceRequestPolicy, &'face ResolvedFace, Value) {
+    fn into_test_snapshot(self) -> ChromeLispStringRowRequestSnapshot {
         let Self {
             y,
             width,
             metrics,
-            tab_policy,
+            tab_policy: _,
             origin,
-            base_face,
-            text,
+            base_face: _,
+            text: _,
             symbol_values,
         } = self;
-        let policy = DisplayRowSourceRequestPolicy::from_origin(
+        let role = origin
+            .glyph_row_role()
+            .expect("display row source origin must map to a glyph row role");
+        ChromeLispStringRowRequestSnapshot {
             y,
             width,
-            metrics.row_height(),
-            metrics.char_width(),
-            metrics.ascent(),
-            tab_policy,
-            origin,
-        )
-        .with_symbol_values(symbol_values);
-        (policy, base_face, text)
-    }
-
-    #[cfg(test)]
-    fn into_source_request_policy(self) -> DisplayRowSourceRequestPolicy {
-        self.into_render_request_parts().0
+            height: metrics.row_height(),
+            char_width: metrics.char_width(),
+            ascent: metrics.ascent(),
+            role,
+            symbol_values,
+        }
     }
 
     fn render_request(

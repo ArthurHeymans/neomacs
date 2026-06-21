@@ -1906,21 +1906,6 @@ impl DisplayRowSourceRequestPolicy {
         self
     }
 
-    #[cfg(test)]
-    pub(crate) fn role(&self) -> GlyphRowRole {
-        self.role
-    }
-
-    #[cfg(test)]
-    pub(crate) fn geometry(&self) -> DisplayRowGeometry {
-        self.geometry.clone().into_geometry()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn symbol_values(&self) -> &std::collections::HashMap<String, Value> {
-        &self.symbol_values
-    }
-
     pub(crate) fn source_request_from_base_face<'face>(
         self,
         face_ids: &mut FrameFaceIdAllocator,
