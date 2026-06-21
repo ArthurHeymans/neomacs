@@ -329,19 +329,14 @@ impl DisplayOutputBuilder {
         M: DisplayWindowRowMutation,
     {
         self.window_state
-            .edit_current_window_row_with_matrix_cols(row_idx, |row, matrix_cols| {
-                mutation.apply(row, matrix_cols)
-            })
+            .apply_current_window_row_mutation(row_idx, mutation)
     }
 
-    pub(crate) fn apply_last_window_rows_mutation<M>(&mut self, mut mutation: M)
+    pub(crate) fn apply_last_window_rows_mutation<M>(&mut self, mutation: M)
     where
         M: DisplayWindowRowsMutation,
     {
-        self.window_state
-            .edit_last_window_rows_with_matrix_cols(|row, matrix_cols| {
-                mutation.apply(row, matrix_cols);
-            });
+        self.window_state.apply_last_window_rows_mutation(mutation);
     }
 
     #[cfg(test)]
