@@ -4,7 +4,7 @@ use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
 use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_attempt::{
-    BufferSourceOutputState, BufferSourceRedisplayPublishRequest, BufferSourceRenderAttemptContext,
+    BufferSourceRedisplayPublishRequest, BufferSourceRenderAttemptContext,
     BufferSourceRenderAttemptOutcome, BufferSourceRetryPlan,
 };
 use crate::display_buffer_source_tail_render::{
@@ -278,14 +278,14 @@ impl BufferSourceOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let BufferSourceRenderAttemptContext {
+        let (
             mut output,
             font_metrics,
             face_resolver,
             frame_face_id_counter,
             hit_data,
             display_snapshots,
-        } = state;
+        ) = state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
         let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
 
@@ -418,10 +418,7 @@ impl BufferSourceOutputSetup {
             return BufferSourceRenderAttemptOutcome::Retry { window_start };
         }
 
-        let BufferSourceOutputState {
-            mut output,
-            evaluator,
-        } = output;
+        let (mut output, evaluator) = output.into_parts();
         let mut render_services =
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
         let mut output_emitter = output_emitter;

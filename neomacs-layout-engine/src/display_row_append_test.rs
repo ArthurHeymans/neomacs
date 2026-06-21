@@ -7821,16 +7821,17 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
             hit_rows,
         ),
     );
+    let (hit_data, snapshot) = finished.into_parts();
 
-    assert_eq!(finished.hit_data.window_id, 41);
-    assert_eq!(finished.hit_data.content_x, 12.0);
-    assert_eq!(finished.hit_data.char_w, 8.0);
-    assert_eq!(finished.hit_data.rows.len(), 1);
-    assert_eq!(finished.hit_data.rows[0].charpos_start, 3);
-    assert_eq!(finished.snapshot.text_area_left_offset, 2);
-    assert_eq!(finished.snapshot.mode_line_height, 11);
-    assert_eq!(finished.snapshot.header_line_height, 7);
-    assert_eq!(finished.snapshot.tab_line_height, 5);
+    assert_eq!(hit_data.window_id, 41);
+    assert_eq!(hit_data.content_x, 12.0);
+    assert_eq!(hit_data.char_w, 8.0);
+    assert_eq!(hit_data.rows.len(), 1);
+    assert_eq!(hit_data.rows[0].charpos_start, 3);
+    assert_eq!(snapshot.text_area_left_offset, 2);
+    assert_eq!(snapshot.mode_line_height, 11);
+    assert_eq!(snapshot.header_line_height, 7);
+    assert_eq!(snapshot.tab_line_height, 5);
 
     let state = builder.finish(5, 1, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);

@@ -80,7 +80,7 @@ where
         } = self;
         let mut state = context;
         let buf_access = RustBufferAccess::new(buffer);
-        state.output.install_cursor_effects(params);
+        state.output_mut().install_cursor_effects(params);
 
         let char_w = params.char_width;
         let char_h = params.char_height;
@@ -89,12 +89,14 @@ where
             DisplayRowFallbackMetrics::from_default_face_extents(char_w, char_h, font_ascent);
         let local_display_policy = BufferWindowLocalDisplayPolicy::from_buffer(buffer);
 
-        let default_face = BufferSourceDefaultFacePlan::new(
-            state.face_resolver,
-            &mut *state.font_metrics,
-            frame_params.window_system,
-            window_metrics,
-        );
+        let default_face = state.with_face_services(|face_resolver, font_metrics| {
+            BufferSourceDefaultFacePlan::new(
+                face_resolver,
+                font_metrics,
+                frame_params.window_system,
+                window_metrics,
+            )
+        });
         let default_resolved = default_face.face();
 
         tracing::debug!(
@@ -110,12 +112,9 @@ where
             char_h,
         );
 
-        let chrome_plan = WindowChromeRowsPlan::new(
-            params,
-            state.face_resolver,
-            &mut *state.font_metrics,
-            default_face.metrics(),
-        );
+        let chrome_plan = state.with_face_services(|face_resolver, font_metrics| {
+            WindowChromeRowsPlan::new(params, face_resolver, font_metrics, default_face.metrics())
+        });
         let chrome_heights = BufferWindowChromeHeights::new(
             chrome_plan.mode_line_height(),
             chrome_plan.header_line_height(),
@@ -124,9 +123,9 @@ where
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);
             if params.is_minibuffer() {
-                max_mini_window_lines_for_buffer(state.output.evaluator(), buffer, frame_rows)
+                max_mini_window_lines_for_buffer(state.output_mut().evaluator(), buffer, frame_rows)
             } else {
-                max_mini_window_lines(state.output.evaluator(), frame_rows)
+                max_mini_window_lines(state.output_mut().evaluator(), frame_rows)
             }
             .ceil()
             .max(1.0) as usize

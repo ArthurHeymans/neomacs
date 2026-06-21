@@ -23,17 +23,17 @@ use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 
 pub(crate) struct BufferSourceOutputState<'emit> {
-    pub(crate) output: TextWindowOutputTarget<'emit>,
-    pub(crate) evaluator: &'emit mut Context,
+    output: TextWindowOutputTarget<'emit>,
+    evaluator: &'emit mut Context,
 }
 
 pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
-    pub(crate) output: BufferSourceOutputState<'a>,
-    pub(crate) font_metrics: &'a mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
-    pub(crate) frame_face_id_counter: &'a mut u32,
-    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    output: BufferSourceOutputState<'a>,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    frame_face_id_counter: &'a mut u32,
+    hit_data: &'a mut Vec<WindowHitData>,
+    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +84,10 @@ impl<'emit> BufferSourceOutputState<'emit> {
 
     pub(crate) fn evaluator(&mut self) -> &mut Context {
         self.evaluator
+    }
+
+    pub(crate) fn into_parts(self) -> (TextWindowOutputTarget<'emit>, &'emit mut Context) {
+        (self.output, self.evaluator)
     }
 
     pub(crate) fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
@@ -155,6 +159,37 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             frame_face_id_counter,
             hit_data,
             display_snapshots,
+        )
+    }
+
+    pub(crate) fn output_mut(&mut self) -> &mut BufferSourceOutputState<'a> {
+        &mut self.output
+    }
+
+    pub(crate) fn with_face_services<R>(
+        &mut self,
+        f: impl FnOnce(&FaceResolver, &mut Option<FontMetricsService>) -> R,
+    ) -> R {
+        f(self.face_resolver, self.font_metrics)
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        BufferSourceOutputState<'a>,
+        &'a mut Option<FontMetricsService>,
+        &'face FaceResolver,
+        &'a mut u32,
+        &'a mut Vec<WindowHitData>,
+        &'a mut Vec<WindowDisplaySnapshot>,
+    ) {
+        (
+            self.output,
+            self.font_metrics,
+            self.face_resolver,
+            self.frame_face_id_counter,
+            self.hit_data,
+            self.display_snapshots,
         )
     }
 }

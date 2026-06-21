@@ -270,8 +270,14 @@ pub(crate) struct TextWindowFinishState<'a> {
 }
 
 pub(crate) struct TextWindowFinishOutput {
-    pub(crate) hit_data: WindowHitData,
-    pub(crate) snapshot: WindowDisplaySnapshot,
+    hit_data: WindowHitData,
+    snapshot: WindowDisplaySnapshot,
+}
+
+impl TextWindowFinishOutput {
+    pub(crate) fn into_parts(self) -> (WindowHitData, WindowDisplaySnapshot) {
+        (self.hit_data, self.snapshot)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

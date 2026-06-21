@@ -263,8 +263,9 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
         let finished_window = self.finish_request().finish_and_snapshot(finish_state);
-        hit_data.push(finished_window.hit_data);
-        display_snapshots.push(finished_window.snapshot);
+        let (finished_hit_data, finished_snapshot) = finished_window.into_parts();
+        hit_data.push(finished_hit_data);
+        display_snapshots.push(finished_snapshot);
     }
 }
 
