@@ -1859,6 +1859,20 @@ fn compile_bytecode_function_inner(
         // overhead. Keep it on the interpreter (cached as NotCompilable).
         return Err(CompileError::NotProfitable);
     }
+    // Typed-MIR Tier-2: for pure required-only functions, build the SSA MIR and
+    // lower it with fixnum UNBOXING (raw arithmetic, retag only at boundaries) —
+    // faster than the baseline's per-op untag/retag. Fall back to the baseline on
+    // any bail (calls, cons, optional/&rest args, ...). Restricted to no
+    // optional/&rest so the MIR's argument seeding matches `native_arity`.
+    if !has_rest && f.params.optional.is_empty() {
+        if let Ok(mir) = mir::build_mir(&f.ops, &f.constants, native_arity) {
+            if let Ok(mut leaf) = lower_mir_pure(&mir) {
+                leaf.required = required;
+                leaf.has_rest = has_rest;
+                return Ok(leaf);
+            }
+        }
+    }
     let mut leaf = lower_leaf_full(
         &f.ops,
         &f.constants,
