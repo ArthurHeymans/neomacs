@@ -34,6 +34,17 @@ impl DisplayRowCharWidthPolicy {
     pub(crate) fn advance_for_columns(self, columns: u8) -> f32 {
         self.fallback_char_width * f32::from(columns)
     }
+
+    pub(crate) fn advance_for_column_count(self, columns: usize) -> f32 {
+        self.fallback_char_width * columns as f32
+    }
+
+    pub(crate) fn columns_for_width(self, width: f32) -> usize {
+        if !width.is_finite() || width <= 0.0 {
+            return 0;
+        }
+        (width / self.fallback_char_width).floor() as usize
+    }
 }
 
 fn positive_row_width(value: f32) -> Option<f32> {

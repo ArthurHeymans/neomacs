@@ -1,6 +1,7 @@
 use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_row_lisp_string::DisplayRowPrefixValues;
 use crate::display_row_walk_state::LineNumberRenderState;
+use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::{
     LayoutBufferView, RustBufferAccess, buffer_display_line_numbers_mode, buffer_local_bool,
     buffer_local_int, buffer_local_value,
@@ -136,11 +137,13 @@ impl BufferWindowGeometryRequest {
 
     pub(crate) fn into_geometry(self, line_number_columns: i32) -> BufferWindowGeometry {
         let max_rows = self.visible_max_rows();
-        let line_number_pixel_width = line_number_columns as f32 * self.char_width;
+        let width_policy = DisplayRowCharWidthPolicy::new(self.char_width);
+        let line_number_pixel_width =
+            width_policy.advance_for_column_count(line_number_columns.max(0) as usize);
         let display_text_row_base = self.top_chrome_rows;
         let display_text_rows = max_rows.max(1);
         let mode_line_display_row = display_text_row_base + display_text_rows;
-        let cols = ((self.text_width - line_number_pixel_width) / self.char_width).floor() as usize;
+        let cols = width_policy.columns_for_width(self.text_width - line_number_pixel_width);
         let content_x = self.text_x + line_number_pixel_width;
 
         // For a minibuffer measured with the GNU `move_it_to(ZV)` policy, lift
