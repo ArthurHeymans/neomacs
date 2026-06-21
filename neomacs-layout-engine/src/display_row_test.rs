@@ -44,9 +44,13 @@ fn display_row_request_from_base_face<'a>(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
-        .with_symbol_values(symbol_values)
-        .source_request_from_base_face(face_ids, base_face)
+    DisplayRowSourceRenderRequest::from_display_row_geometry(
+        geometry,
+        face_ids,
+        base_face,
+        role,
+        symbol_values,
+    )
 }
 
 fn display_row_request_for_face<'a>(
@@ -55,8 +59,12 @@ fn display_row_request_for_face<'a>(
     base_face: &'a crate::neovm_bridge::ResolvedFace,
     role: GlyphRowRole,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
-        .source_request_for_base_face_id(base_face_id, base_face)
+    DisplayRowSourceRenderRequest::from_display_row_geometry_for_base_face_id(
+        geometry,
+        base_face_id,
+        base_face,
+        role,
+    )
 }
 
 fn render_lisp_string_row_with_context(
@@ -369,7 +377,7 @@ fn display_row_source_request_policy_builds_chrome_request() {
     let mut symbol_values = std::collections::HashMap::new();
     symbol_values.insert("tab-bar-tab-hscroll".to_string(), Value::fixnum(2));
 
-    let request = DisplayRowSourceRequestPolicy::from_origin(
+    let request = DisplayRowSourceRenderRequest::from_origin(
         6.0,
         144.0,
         22.0,
@@ -377,9 +385,10 @@ fn display_row_source_request_policy_builds_chrome_request() {
         16.0,
         DisplayTabPolicy::every(8),
         crate::display_origin::DisplayOrigin::TabBar,
-    )
-    .with_symbol_values(symbol_values.clone())
-    .source_request_from_base_face(&mut face_ids, &face);
+        &mut face_ids,
+        &face,
+        symbol_values.clone(),
+    );
 
     assert_eq!(
         request.geometry(),

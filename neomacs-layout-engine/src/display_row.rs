@@ -1847,7 +1847,7 @@ impl DisplayRowSourceGeometry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayRowSourceRequestPolicy {
+struct DisplayRowSourceRequestPolicy {
     geometry: DisplayRowSourceGeometry,
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
@@ -1872,10 +1872,7 @@ impl DisplayRowSourceRequestPolicy {
         }
     }
 
-    pub(crate) fn from_display_row_geometry(
-        geometry: DisplayRowGeometry,
-        role: GlyphRowRole,
-    ) -> Self {
+    fn from_display_row_geometry(geometry: DisplayRowGeometry, role: GlyphRowRole) -> Self {
         Self {
             geometry: DisplayRowSourceGeometry::from_display_row_geometry(geometry),
             role,
@@ -2001,6 +1998,40 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     ) -> Self {
         DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
             .source_request_for_base_face_id(base_face_id, base_face)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_display_row_geometry(
+        geometry: DisplayRowGeometry,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &'a ResolvedFace,
+        role: GlyphRowRole,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
+            .with_symbol_values(symbol_values)
+            .source_request_from_base_face(face_ids, base_face)
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_origin(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+        origin: DisplayOrigin,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &'a ResolvedFace,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        DisplayRowSourceRequestPolicy::from_origin(
+            y, width, height, char_width, ascent, tab_policy, origin,
+        )
+        .with_symbol_values(symbol_values)
+        .source_request_from_base_face(face_ids, base_face)
     }
 
     pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
