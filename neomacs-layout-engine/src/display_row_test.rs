@@ -1128,8 +1128,8 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     )
     .expect("rendered row");
 
-    assert_eq!(result.progress.end_x, 15.0);
-    assert_eq!(result.progress.end_col, 3);
+    assert_eq!(result.progress().end_x, 15.0);
+    assert_eq!(result.progress().end_col, 3);
     assert_eq!(row.glyphs[GlyphArea::Text.index()][0].pixel_width, 5.0);
 }
 
@@ -2929,9 +2929,9 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
         )
         .expect("row render fragment");
 
-    assert_eq!(result.stop, DisplayRowRenderStop::SourceExhausted);
+    assert_eq!(result.stop(), DisplayRowRenderStop::SourceExhausted);
     assert_eq!(
-        result.progress,
+        result.progress(),
         DisplayRowOutputProgress {
             end_x: 8.0,
             end_col: 1,

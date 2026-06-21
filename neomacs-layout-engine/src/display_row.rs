@@ -1721,14 +1721,62 @@ impl DisplayRowLispStringSourceSession {
 }
 
 pub(crate) struct DisplayRowRenderIntoRowResult {
-    pub(crate) progress: DisplayRowOutputProgress,
-    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
-    pub(crate) faces: Vec<Face>,
-    pub(crate) media: Vec<RenderedDisplayRowMedia>,
-    pub(crate) stop: DisplayRowRenderStop,
+    progress: DisplayRowOutputProgress,
+    source_slots: Vec<DisplayRowGlyphSlot>,
+    faces: Vec<Face>,
+    media: Vec<RenderedDisplayRowMedia>,
+    stop: DisplayRowRenderStop,
 }
 
 impl DisplayRowRenderIntoRowResult {
+    fn new(
+        progress: DisplayRowOutputProgress,
+        source_slots: Vec<DisplayRowGlyphSlot>,
+        faces: Vec<Face>,
+        media: Vec<RenderedDisplayRowMedia>,
+        stop: DisplayRowRenderStop,
+    ) -> Self {
+        Self {
+            progress,
+            source_slots,
+            faces,
+            media,
+            stop,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn progress(&self) -> DisplayRowOutputProgress {
+        self.progress
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
+        self.stop
+    }
+
+    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
+        &self.source_slots
+    }
+
+    pub(crate) fn into_current_row_parts(
+        self,
+    ) -> (
+        DisplayRowOutputProgress,
+        Vec<DisplayRowGlyphSlot>,
+        Vec<Face>,
+        Vec<RenderedDisplayRowMedia>,
+        DisplayRowRenderStop,
+    ) {
+        (
+            self.progress,
+            self.source_slots,
+            self.faces,
+            self.media,
+            self.stop,
+        )
+    }
+
     fn with_row(self, row: GlyphRow) -> DisplayRowRenderResult {
         DisplayRowRenderResult {
             rendered: RenderedDisplayRow {
@@ -2171,14 +2219,30 @@ impl DisplayRowRenderBounds {
 }
 
 pub(crate) struct CurrentTextRowRenderOutcome {
-    pub(crate) stop: DisplayRowRenderStop,
-    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
-    pub(crate) end: DisplayRowPosition,
-    pub(crate) row_height_px: f32,
-    pub(crate) row_ascent_px: f32,
+    stop: DisplayRowRenderStop,
+    source_slots: Vec<DisplayRowGlyphSlot>,
+    end: DisplayRowPosition,
+    row_height_px: f32,
+    row_ascent_px: f32,
 }
 
 impl CurrentTextRowRenderOutcome {
+    pub(crate) fn new(
+        stop: DisplayRowRenderStop,
+        source_slots: Vec<DisplayRowGlyphSlot>,
+        end: DisplayRowPosition,
+        row_height_px: f32,
+        row_ascent_px: f32,
+    ) -> Self {
+        Self {
+            stop,
+            source_slots,
+            end,
+            row_height_px,
+            row_ascent_px,
+        }
+    }
+
     pub(crate) fn stop(&self) -> DisplayRowRenderStop {
         self.stop
     }
@@ -2740,13 +2804,13 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .into_iter()
             .map(|face| face.render_face())
             .collect();
-        Some(DisplayRowRenderIntoRowResult {
+        Some(DisplayRowRenderIntoRowResult::new(
             progress,
             source_slots,
             faces,
             media,
             stop,
-        })
+        ))
     }
 }
 

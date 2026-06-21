@@ -5069,19 +5069,19 @@ fn render_face_ref_id_uses_fallback_for_inherit() {
 
 #[test]
 fn current_text_row_render_outcome_builds_append_progress() {
-    let outcome = CurrentTextRowRenderOutcome {
-        stop: DisplayRowRenderStop::Clipped,
-        source_slots: vec![DisplayRowGlyphSlot {
+    let outcome = CurrentTextRowRenderOutcome::new(
+        DisplayRowRenderStop::Clipped,
+        vec![DisplayRowGlyphSlot {
             source: DisplaySourcePosition::synthetic(9, 0),
             x_px: 8.0,
             col: 1,
             width_px: 16.0,
             width_cols: 2,
         }],
-        end: DisplayRowPosition { x_px: 24.0, col: 3 },
-        row_height_px: 18.0,
-        row_ascent_px: 13.0,
-    };
+        DisplayRowPosition { x_px: 24.0, col: 3 },
+        18.0,
+        13.0,
+    );
     let start = DisplayRowPosition { x_px: 8.0, col: 1 };
 
     let progress = outcome.into_append_progress(start);
@@ -9072,9 +9072,12 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         )
         .expect("first lisp source append");
 
-    assert_eq!(first.end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(
-        first.stop,
+        first.end_position(),
+        DisplayRowPosition { x_px: 8.0, col: 1 }
+    );
+    assert_eq!(
+        first.stop(),
         crate::display_row::DisplayRowRenderStop::RowBreak
     );
 
@@ -9093,9 +9096,12 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         )
         .expect("second lisp source append");
 
-    assert_eq!(second.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(
-        second.stop,
+        second.end_position(),
+        DisplayRowPosition { x_px: 16.0, col: 2 }
+    );
+    assert_eq!(
+        second.stop(),
         crate::display_row::DisplayRowRenderStop::SourceExhausted
     );
     builder

@@ -111,7 +111,7 @@ where
             &mut context,
             self.render_policy,
         )?;
-        merge_display_row_source_slot_bounds(row, &result.source_slots);
+        merge_display_row_source_slot_bounds(row, result.source_slots());
         Some((result, row.height_px, row.ascent_px))
     }
 }
@@ -129,7 +129,7 @@ where
             self.source,
             self.source_state,
         )?;
-        merge_display_row_source_slot_bounds(row, &result.source_slots);
+        merge_display_row_source_slot_bounds(row, result.source_slots());
         Some(result)
     }
 }
@@ -263,15 +263,15 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
 
 impl DisplayRowCurrentTextSourceStepResult {
     fn into_measure_outcome(self) -> CurrentTextRowRenderOutcome {
-        let end = display_row_output_end_position(self.result.progress);
-        let source_slots = self.result.source_slots;
-        CurrentTextRowRenderOutcome {
-            stop: self.result.stop,
+        let (progress, source_slots, _faces, _media, stop) = self.result.into_current_row_parts();
+        let end = display_row_output_end_position(progress);
+        CurrentTextRowRenderOutcome::new(
+            stop,
             source_slots,
             end,
-            row_height_px: self.row_height_px,
-            row_ascent_px: self.row_ascent_px,
-        }
+            self.row_height_px,
+            self.row_ascent_px,
+        )
     }
 }
 
@@ -441,24 +441,14 @@ impl<'a> TextRowOutputRenderState<'a> {
             row_height_px,
             row_ascent_px,
         } = result;
-        let end = display_row_output_end_position(result.progress);
-        self.output.install_rendered_fragment_assets(
-            role,
-            output.row,
-            &result.faces,
-            &result.media,
-        );
-        let source_slots = result.source_slots;
+        let (progress, source_slots, faces, media, stop) = result.into_current_row_parts();
+        let end = display_row_output_end_position(progress);
+        self.output
+            .install_rendered_fragment_assets(role, output.row, &faces, &media);
         let output_spans = output.spans_for_source_slots(&source_slots);
         self.output_emitter
             .emit_text_output_spans(self.evaluator, output, output_spans, end);
-        CurrentTextRowRenderOutcome {
-            stop: result.stop,
-            source_slots,
-            end,
-            row_height_px,
-            row_ascent_px,
-        }
+        CurrentTextRowRenderOutcome::new(stop, source_slots, end, row_height_px, row_ascent_px)
     }
 }
 
