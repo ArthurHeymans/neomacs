@@ -180,10 +180,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition {
-                        x_px: *progress.row.x,
-                        col: *progress.row.col,
-                    },
+                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -229,10 +226,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition {
-                        x_px: *progress.row.x,
-                        col: *progress.row.col,
-                    },
+                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
                 );
                 let continuation = word_wrap_action.apply_after_row_transition_and_prefix(
                     row_transition,
@@ -279,10 +273,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition {
-                        x_px: *progress.row.x,
-                        col: *progress.row.col,
-                    },
+                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -754,10 +745,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition {
-                        x_px: *progress.row.x,
-                        col: *progress.row.col,
-                    },
+                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -806,10 +794,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_range,
-                    DisplayRowPosition {
-                        x_px: *progress.row.x,
-                        col: *progress.row.col,
-                    },
+                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,

@@ -194,7 +194,7 @@ fn whole_text_run_render_decision<B: LayoutBufferView>(
         )
     };
     if measured_width
-        .map(|width| position.x_px + width <= right_edge_px + f32::EPSILON)
+        .map(|width| position.x_px() + width <= right_edge_px + f32::EPSILON)
         .unwrap_or(false)
     {
         WholeTextRunRenderDecision::Render
@@ -222,7 +222,7 @@ fn source_display_item_fits_text_row<B: LayoutBufferView>(
         )
     };
     measured_width
-        .map(|width| position.x_px + width <= right_edge_px + f32::EPSILON)
+        .map(|width| position.x_px() + width <= right_edge_px + f32::EPSILON)
         .unwrap_or(false)
 }
 
@@ -269,7 +269,7 @@ fn split_text_run_prefix_to_fit<B: LayoutBufferView>(
 }
 
 fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -> bool {
-    let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+    let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source() else {
         return false;
     };
     char_pos.get() as i64 == point_charpos
@@ -278,7 +278,7 @@ fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -
 fn buffer_slot_source_position(slot: &DisplayRowGlyphSlot) -> Option<(usize, i64)> {
     let DisplaySourcePosition::Buffer {
         char_pos, byte_pos, ..
-    } = slot.source
+    } = slot.source()
     else {
         return None;
     };
@@ -302,7 +302,7 @@ fn capture_whole_text_run_cursor_if_point(
     else {
         return;
     };
-    let DisplaySourcePosition::Buffer { byte_pos, .. } = slot.source else {
+    let DisplaySourcePosition::Buffer { byte_pos, .. } = slot.source() else {
         return;
     };
     capture_cursor_info(
@@ -310,8 +310,8 @@ fn capture_whole_text_run_cursor_if_point(
         CapturedCursorInfo::from_active_face_state(
             active_face_state,
             CapturedCursorPlacement::from_row_text_position(
-                geometry.text_position(slot.x_px, byte_pos.get(), slot.col),
-                CapturedCursorSlotWidth::Explicit(slot.width_px),
+                geometry.text_position(slot.x_px(), byte_pos.get(), slot.col()),
+                CapturedCursorSlotWidth::Explicit(slot.width_px()),
                 false,
             ),
         ),
@@ -328,7 +328,7 @@ fn apply_whole_text_run_trailing_whitespace_state(
         return;
     }
     for (ch, slot) in text.chars().zip(append_progress.slots()) {
-        trailing_whitespace.track_rendered_char(ch, geometry.start_marker_at_x(slot.x_px));
+        trailing_whitespace.track_rendered_char(ch, geometry.start_marker_at_x(slot.x_px()));
     }
 }
 
@@ -488,10 +488,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             active_face_metrics.ascent,
         ),
     );
-    let append_position = DisplayRowPosition {
-        x_px: *progress.row.x,
-        col: *progress.row.col,
-    };
+    let append_position = DisplayRowPosition::new(*progress.row.x, *progress.row.col);
     let append_geometry = *row_geometry;
 
     if let Some(source_end_charpos) = source_item.source_end_charpos()

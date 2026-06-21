@@ -245,7 +245,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
         DisplayRowSourceFragmentFrame::new(geometry, role, base_face.face_id, base_face)
             .render_request_for_area(
                 DisplayRowRenderBounds::new(
-                    DisplayRowPosition { x_px: 0.0, col: 0 },
+                    DisplayRowPosition::new(0.0, 0),
                     DisplayRowMaxX::Bounded(render_width),
                 ),
                 area,

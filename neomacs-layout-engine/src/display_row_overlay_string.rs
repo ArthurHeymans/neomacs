@@ -376,10 +376,8 @@ fn render_overlay_string<B: LayoutBufferView>(
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
     let row_break_context = OverlayStringRowBreakRenderContext::new(anchor_charpos, row_context);
-    let append_request = source_request.append_request(DisplayRowPosition {
-        x_px: *state.x,
-        col: *state.col,
-    });
+    let append_request =
+        source_request.append_request(DisplayRowPosition::new(*state.x, *state.col));
     let session_request = LispStringSourceAppendSessionRequest::new(
         append_request,
         base_face.face_id(),
@@ -408,10 +406,7 @@ fn render_overlay_string<B: LayoutBufferView>(
             &mut state.source_render,
             state.face_ids,
             state.geometry,
-            DisplayRowPosition {
-                x_px: *state.x,
-                col: *state.col,
-            },
+            DisplayRowPosition::new(*state.x, *state.col),
         ) else {
             break;
         };
@@ -429,8 +424,8 @@ fn render_overlay_string<B: LayoutBufferView>(
             );
         }
         let end = outcome.end_position();
-        *state.x = end.x_px;
-        *state.col = end.col;
+        *state.x = end.x_px();
+        *state.col = end.col();
 
         if stop == DisplayRowRenderStop::RowBreak {
             if !row_break_context.finish_row(state) {
@@ -473,19 +468,19 @@ fn capture_overlay_string_cursor_at_slot(
     display_row_offset: usize,
     visual_state: CapturedCursorVisualState,
 ) {
-    let Some(char_idx) = root_lisp_position_char(&slot.source) else {
+    let Some(char_idx) = root_lisp_position_char(&slot.source()) else {
         return;
     };
     capture_overlay_string_cursor(
         text_props,
         char_idx,
         cursor_info,
-        slot.x_px,
+        slot.x_px(),
         y,
-        slot.col,
+        slot.col(),
         display_row_offset,
         visual_state,
-        CapturedCursorSlotWidth::Explicit(slot.width_px),
+        CapturedCursorSlotWidth::Explicit(slot.width_px()),
     );
 }
 

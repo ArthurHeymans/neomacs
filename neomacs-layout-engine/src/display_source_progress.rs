@@ -12,10 +12,7 @@ impl<'emit> DisplaySourceRowProgressState<'emit> {
     }
 
     pub(crate) fn row_position(&self) -> DisplayRowPosition {
-        DisplayRowPosition {
-            x_px: *self.x,
-            col: *self.col,
-        }
+        DisplayRowPosition::new(*self.x, *self.col)
     }
 
     pub(crate) fn reborrow(&mut self) -> DisplaySourceRowProgressState<'_> {
@@ -26,8 +23,8 @@ impl<'emit> DisplaySourceRowProgressState<'emit> {
     }
 
     pub(crate) fn apply_position(&mut self, position: DisplayRowPosition) {
-        *self.x = position.x_px;
-        *self.col = position.col;
+        *self.x = position.x_px();
+        *self.col = position.col();
     }
 }
 

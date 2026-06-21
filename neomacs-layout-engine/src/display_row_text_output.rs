@@ -54,7 +54,7 @@ impl TextOutputSpanContext {
     }
 
     fn span_for_buffer_slot(self, slot: &DisplayRowGlyphSlot) -> Option<TextOutputSpan> {
-        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source() else {
             return None;
         };
         Some(TextOutputSpan {
@@ -63,14 +63,8 @@ impl TextOutputSpanContext {
             row_y: self.row_y,
             glyph_y: self.glyph_y,
             height: self.height,
-            start: DisplayRowPosition {
-                x_px: slot.x_px,
-                col: slot.col,
-            },
-            end: DisplayRowPosition {
-                x_px: slot.x_px + slot.width_px,
-                col: slot.col + slot.width_cols,
-            },
+            start: slot.start_position(),
+            end: slot.end_position(),
         })
     }
 

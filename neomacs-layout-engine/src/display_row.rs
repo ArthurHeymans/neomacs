@@ -1528,10 +1528,7 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
     ) -> DisplayRowSourceFragmentRenderRequest<'face> {
         let char_width = self.policy.geometry.char_width;
         self.render_request(DisplayRowRenderBounds::new(
-            DisplayRowPosition {
-                x_px: start_col as f32 * char_width,
-                col: start_col,
-            },
+            DisplayRowPosition::new(start_col as f32 * char_width, start_col),
             DisplayRowMaxX::Bounded(max_col as f32 * char_width),
         ))
     }
@@ -2385,7 +2382,7 @@ impl DisplayRowRenderBounds {
 
     pub(crate) fn whole_row(width_px: f32) -> Self {
         Self::new(
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             DisplayRowMaxX::Bounded(width_px.max(0.0)),
         )
     }
@@ -2478,16 +2475,16 @@ fn display_row_append_progress_from_render_result(
 pub(crate) fn display_row_output_end_position(
     progress: DisplayRowOutputProgress,
 ) -> DisplayRowPosition {
-    DisplayRowPosition {
-        x_px: progress.end_x(),
-        col: usize::try_from(progress.end_col().max(0)).unwrap_or(usize::MAX),
-    }
+    DisplayRowPosition::new(
+        progress.end_x(),
+        usize::try_from(progress.end_col().max(0)).unwrap_or(usize::MAX),
+    )
 }
 
 fn display_row_progress(end: DisplayRowPosition, y: f32, height: f32) -> DisplayRowOutputProgress {
     DisplayRowOutputProgress::new(
-        end.x_px.max(0.0),
-        end.col.min(i64::MAX as usize) as i64,
+        end.x_px().max(0.0),
+        end.col().min(i64::MAX as usize) as i64,
         y,
         height,
     )
@@ -2580,9 +2577,9 @@ impl DisplayMediaReplacement {
     fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
         RenderedDisplayRowMedia {
             kind: self.kind.into(),
-            x: start.x_px,
+            x: start.x_px(),
             y,
-            col: start.col.min(usize::from(u16::MAX)) as u16,
+            col: start.col().min(usize::from(u16::MAX)) as u16,
             width: self.width,
             height: self.height,
         }

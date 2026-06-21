@@ -189,20 +189,16 @@ fn display_progress_sink_emits_buffer_slots_from_row_builder_progress() {
             height: 16.0,
         },
         &DisplayRowAppendProgress::from_positions(
-            DisplayRowPosition { x_px: 8.0, col: 1 },
-            DisplayRowPosition { x_px: 24.0, col: 3 },
+            DisplayRowPosition::new(8.0, 1),
+            DisplayRowPosition::new(24.0, 3),
             DisplayRowAppendStatus::Complete,
-            vec![DisplayRowGlyphSlot {
-                source: DisplaySourcePosition::buffer(
-                    BufferId(7),
-                    CharPos0::new(0),
-                    EmacsBytePos::new(0),
-                ),
-                x_px: 8.0,
-                col: 1,
-                width_px: 16.0,
-                width_cols: 2,
-            }],
+            vec![DisplayRowGlyphSlot::new(
+                DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(0), EmacsBytePos::new(0)),
+                8.0,
+                1,
+                16.0,
+                2,
+            )],
         ),
     );
 
@@ -261,18 +257,18 @@ fn text_source_slot_emission_accepts_rendered_row_slots() {
         glyph_y: 0.0,
         height: 16.0,
     };
-    let slots = [DisplayRowGlyphSlot {
-        source: DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
-        x_px: 4.0,
-        col: 1,
-        width_px: 16.0,
-        width_cols: 2,
-    }];
+    let slots = [DisplayRowGlyphSlot::new(
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
+        4.0,
+        1,
+        16.0,
+        2,
+    )];
     emitter.emit_text_output_spans(
         &mut eval,
         output,
         output.spans_for_source_slots(&slots),
-        DisplayRowPosition { x_px: 20.0, col: 3 },
+        DisplayRowPosition::new(20.0, 3),
     );
 
     let display = eval
@@ -328,24 +324,12 @@ fn display_progress_sink_merges_contiguous_slots_for_same_buffer_position() {
             height: 16.0,
         },
         &DisplayRowAppendProgress::from_positions(
-            DisplayRowPosition { x_px: 8.0, col: 1 },
-            DisplayRowPosition { x_px: 24.0, col: 3 },
+            DisplayRowPosition::new(8.0, 1),
+            DisplayRowPosition::new(24.0, 3),
             DisplayRowAppendStatus::Complete,
             vec![
-                DisplayRowGlyphSlot {
-                    source: source.clone(),
-                    x_px: 8.0,
-                    col: 1,
-                    width_px: 8.0,
-                    width_cols: 1,
-                },
-                DisplayRowGlyphSlot {
-                    source,
-                    x_px: 16.0,
-                    col: 2,
-                    width_px: 8.0,
-                    width_cols: 1,
-                },
+                DisplayRowGlyphSlot::new(source.clone(), 8.0, 1, 8.0, 1),
+                DisplayRowGlyphSlot::new(source, 16.0, 2, 8.0, 1),
             ],
         ),
     );
@@ -387,16 +371,16 @@ fn display_progress_sink_advances_without_points_for_non_buffer_slots() {
             height: 16.0,
         },
         &DisplayRowAppendProgress::from_positions(
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            DisplayRowPosition { x_px: 24.0, col: 3 },
+            DisplayRowPosition::new(0.0, 0),
+            DisplayRowPosition::new(24.0, 3),
             DisplayRowAppendStatus::Complete,
-            vec![DisplayRowGlyphSlot {
-                source: DisplaySourcePosition::lisp_string(3, 0, 0),
-                x_px: 0.0,
-                col: 0,
-                width_px: 24.0,
-                width_cols: 3,
-            }],
+            vec![DisplayRowGlyphSlot::new(
+                DisplaySourcePosition::lisp_string(3, 0, 0),
+                0.0,
+                0,
+                24.0,
+                3,
+            )],
         ),
     );
 

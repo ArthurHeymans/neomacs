@@ -452,8 +452,36 @@ fn set_display_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: u
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DisplayRowPosition {
-    pub(crate) x_px: f32,
-    pub(crate) col: usize,
+    x_px: f32,
+    col: usize,
+}
+
+impl DisplayRowPosition {
+    pub(crate) const fn new(x_px: f32, col: usize) -> Self {
+        Self { x_px, col }
+    }
+
+    pub(crate) fn x_px(self) -> f32 {
+        self.x_px
+    }
+
+    pub(crate) fn col(self) -> usize {
+        self.col
+    }
+
+    pub(crate) fn advance_by(self, metrics: DisplayRowWriteMetrics) -> Self {
+        Self {
+            x_px: self.x_px + metrics.width_px,
+            col: self.col + metrics.width_cols,
+        }
+    }
+
+    pub(crate) fn saturating_width_to(self, end: Self) -> DisplayRowWriteMetrics {
+        DisplayRowWriteMetrics {
+            width_px: (end.x_px - self.x_px).max(0.0),
+            width_cols: end.col.saturating_sub(self.col),
+        }
+    }
 }
 
 fn append_start_position(
@@ -476,11 +504,60 @@ pub(crate) enum DisplayRowAppendStatus {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowGlyphSlot {
-    pub(crate) source: DisplaySourcePosition,
-    pub(crate) x_px: f32,
-    pub(crate) col: usize,
-    pub(crate) width_px: f32,
-    pub(crate) width_cols: usize,
+    source: DisplaySourcePosition,
+    x_px: f32,
+    col: usize,
+    width_px: f32,
+    width_cols: usize,
+}
+
+impl DisplayRowGlyphSlot {
+    pub(crate) fn new(
+        source: DisplaySourcePosition,
+        x_px: f32,
+        col: usize,
+        width_px: f32,
+        width_cols: usize,
+    ) -> Self {
+        Self {
+            source,
+            x_px,
+            col,
+            width_px,
+            width_cols,
+        }
+    }
+
+    pub(crate) fn source(&self) -> DisplaySourcePosition {
+        self.source.clone()
+    }
+
+    pub(crate) fn x_px(&self) -> f32 {
+        self.x_px
+    }
+
+    pub(crate) fn col(&self) -> usize {
+        self.col
+    }
+
+    pub(crate) fn width_px(&self) -> f32 {
+        self.width_px
+    }
+
+    pub(crate) fn width_cols(&self) -> usize {
+        self.width_cols
+    }
+
+    pub(crate) fn start_position(&self) -> DisplayRowPosition {
+        DisplayRowPosition::new(self.x_px(), self.col())
+    }
+
+    pub(crate) fn end_position(&self) -> DisplayRowPosition {
+        DisplayRowPosition::new(
+            self.x_px() + self.width_px(),
+            self.col() + self.width_cols(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -515,16 +592,7 @@ impl DisplayRowAppendProgress {
         status: DisplayRowAppendStatus,
         slots: Vec<DisplayRowGlyphSlot>,
     ) -> Self {
-        Self::new(
-            start,
-            end,
-            DisplayRowWriteMetrics {
-                width_px: (end.x_px - start.x_px).max(0.0),
-                width_cols: end.col.saturating_sub(start.col),
-            },
-            status,
-            slots,
-        )
+        Self::new(start, end, start.saturating_width_to(end), status, slots)
     }
 
     pub(crate) fn start(&self) -> DisplayRowPosition {
@@ -902,13 +970,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     );
                 }
                 if written.width_px > 0.0 || written.width_cols > 0 {
-                    slots.push(DisplayRowGlyphSlot {
-                        source: slot_source,
-                        x_px: slot_start.x_px,
-                        col: slot_start.col,
-                        width_px: written.width_px,
-                        width_cols: written.width_cols,
-                    });
+                    slots.push(DisplayRowGlyphSlot::new(
+                        slot_source,
+                        slot_start.x_px(),
+                        slot_start.col(),
+                        written.width_px,
+                        written.width_cols,
+                    ));
                 }
                 self.advance(written);
                 metrics.add(written);
@@ -959,13 +1027,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             );
             self.writer.apply_item_layout_since(before_len, item_layout);
             let written = self.metrics_since(before_len);
-            slots.push(DisplayRowGlyphSlot {
-                source: source_mapping.slot_source(&span.start, char_offset, byte_offset),
-                x_px: slot_start.x_px,
-                col: slot_start.col,
-                width_px: written.width_px,
-                width_cols: written.width_cols,
-            });
+            slots.push(DisplayRowGlyphSlot::new(
+                source_mapping.slot_source(&span.start, char_offset, byte_offset),
+                slot_start.x_px(),
+                slot_start.col(),
+                written.width_px,
+                written.width_cols,
+            ));
             self.advance(written);
             metrics.add(written);
             char_offset += 1;
@@ -986,8 +1054,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
     }
 
     fn advance(&mut self, metrics: DisplayRowWriteMetrics) {
-        self.position.x_px += metrics.width_px;
-        self.position.col += metrics.width_cols;
+        self.position = self.position.advance_by(metrics);
     }
 
     fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
@@ -1276,10 +1343,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
     fn current_text_position(&self) -> DisplayRowPosition {
         let metrics = self.current_text_metrics();
-        DisplayRowPosition {
-            x_px: self.layout.tab_policy.origin_x_px + metrics.width_px,
-            col: metrics.width_cols,
-        }
+        DisplayRowPosition::new(
+            self.layout.tab_policy.origin_x_px + metrics.width_px,
+            metrics.width_cols,
+        )
     }
 
     fn current_text_metrics(&self) -> DisplayRowWriteMetrics {

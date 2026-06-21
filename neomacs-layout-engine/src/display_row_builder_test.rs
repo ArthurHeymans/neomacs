@@ -130,14 +130,14 @@ fn display_row_progress_writer_skips_zero_width_glyphless_item() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowPosition::new(16.0, 2),
         80.0,
     );
 
     let progress = writer.push_item(glyphless_item('\u{200b}', GlyphlessMethod::ZeroWidth));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
     assert!(progress.slots().is_empty());
     assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
 }
@@ -146,16 +146,12 @@ fn display_row_progress_writer_skips_zero_width_glyphless_item() {
 fn display_row_progress_writer_uses_empty_box_glyphless_width() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
 
     let progress = writer.push_item(glyphless_item('\u{fffc}', GlyphlessMethod::EmptyBox));
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(8.0, 1));
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
     assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' });
     assert_eq!(glyph.pixel_width, 8.0);
@@ -165,18 +161,14 @@ fn display_row_progress_writer_uses_empty_box_glyphless_width() {
 fn display_row_progress_writer_uses_hex_code_glyphless_width() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
 
     let progress = writer.push_item(glyphless_item('\u{fff0}', GlyphlessMethod::HexCode));
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 48.0, col: 6 });
-    assert_eq!(progress.slots()[0].width_px, 48.0);
-    assert_eq!(progress.slots()[0].width_cols, 6);
+    assert_eq!(progress.end(), DisplayRowPosition::new(48.0, 6));
+    assert_eq!(progress.slots()[0].width_px(), 48.0);
+    assert_eq!(progress.slots()[0].width_cols(), 6);
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
     assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' });
     assert_eq!(glyph.pixel_width, 48.0);
@@ -186,16 +178,12 @@ fn display_row_progress_writer_uses_hex_code_glyphless_width() {
 fn display_row_progress_writer_uses_thin_space_glyphless_width() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
 
     let progress = writer.push_item(glyphless_item('\u{2009}', GlyphlessMethod::ThinSpace));
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 2.0, col: 1 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(2.0, 1));
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
     assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{2009}' });
     assert_eq!(glyph.pixel_width, 2.0);
@@ -208,14 +196,14 @@ fn display_row_progress_writer_clips_glyphless_before_row_mutation() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition { x_px: 40.0, col: 5 },
+        DisplayRowPosition::new(40.0, 5),
         80.0,
     );
 
     let progress = writer.push_item(glyphless_item('\u{fff0}', GlyphlessMethod::HexCode));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 40.0, col: 5 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(40.0, 5));
     assert!(progress.slots().is_empty());
     assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
     assert!(!row.displays_text);
@@ -228,14 +216,14 @@ fn display_row_progress_writer_clips_stretch_before_row_mutation() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition { x_px: 64.0, col: 8 },
+        DisplayRowPosition::new(64.0, 8),
         80.0,
     );
 
     let progress = writer.push_item(stretch_item(DisplayLength::Pixels(24.0)));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 64.0, col: 8 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(64.0, 8));
     assert!(progress.slots().is_empty());
     assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
     assert!(!row.displays_text);
@@ -268,20 +256,16 @@ fn display_row_builder_renders_delete_control_char_as_caret_question() {
 fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(8.0, 1), 80.0);
 
     let progress = writer.push_item(control_item('\u{0001}'));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.slots().len(), 1);
-    assert_eq!(progress.slots()[0].width_px, 16.0);
-    assert_eq!(progress.slots()[0].width_cols, 2);
+    assert_eq!(progress.slots()[0].width_px(), 16.0);
+    assert_eq!(progress.slots()[0].width_cols(), 2);
     assert_eq!(row_text(&row), "^A");
 }
 
@@ -296,13 +280,13 @@ fn append_display_item_to_current_text_row_returns_progress_and_updates_row() {
         &mut matrix,
         &row_layout,
         text_item("ab"),
-        DisplayRowPosition { x_px: 8.0, col: 1 },
+        DisplayRowPosition::new(8.0, 1),
         80.0,
     )
     .expect("append progress");
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 8.0, col: 1 });
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(8.0, 1));
+    assert_eq!(progress.end(), DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.slots().len(), 2);
     matrix
         .edit_current_row_for_test(|row| {
@@ -342,12 +326,12 @@ fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
         &row_layout,
         text_item("mi"),
         &mut measurer,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         80.0,
     )
     .expect("append progress");
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
     matrix
         .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
@@ -364,14 +348,14 @@ fn display_row_append_cursor_updates_position_after_append() {
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
-    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(8.0, 1), 80.0);
     let progress = cursor
         .append_item_to_current_text_row(&mut matrix, &row_layout, text_item("ab"))
         .expect("append progress");
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 8.0, col: 1 });
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 24.0, col: 3 });
-    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(8.0, 1));
+    assert_eq!(progress.end(), DisplayRowPosition::new(24.0, 3));
+    assert_eq!(cursor.position(), DisplayRowPosition::new(24.0, 3));
     matrix
         .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "ab");
@@ -386,14 +370,14 @@ fn display_row_append_cursor_updates_position_to_clipped_end() {
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
-    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 16.0);
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(8.0, 1), 16.0);
     let progress = cursor
         .append_item_to_current_text_row(&mut matrix, &row_layout, text_item("ab"))
         .expect("append progress");
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
+    assert_eq!(cursor.position(), DisplayRowPosition::new(16.0, 2));
     matrix
         .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "a");
@@ -411,7 +395,7 @@ fn display_row_append_cursor_uses_glyph_measurer() {
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
-    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(0.0, 0), 80.0);
     let progress = cursor
         .append_measured_item_to_current_text_row(
             &mut matrix,
@@ -421,8 +405,8 @@ fn display_row_append_cursor_uses_glyph_measurer() {
         )
         .expect("append progress");
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
+    assert_eq!(cursor.position(), DisplayRowPosition::new(16.0, 2));
     matrix
         .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
@@ -443,15 +427,15 @@ fn display_row_append_cursor_appends_explicit_source_item() {
         .expect("source");
     let mut context = DisplaySourceContext::empty();
 
-    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(8.0, 1), 80.0);
     let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
         .append_item_to_current_text_row(&mut matrix, &row_layout, item)
         .expect("append progress");
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 8.0, col: 1 });
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 32.0, col: 4 });
-    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 32.0, col: 4 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(8.0, 1));
+    assert_eq!(progress.end(), DisplayRowPosition::new(32.0, 4));
+    assert_eq!(cursor.position(), DisplayRowPosition::new(32.0, 4));
     matrix
         .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "abc");
@@ -473,14 +457,14 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
         .expect("source");
     let mut context = DisplaySourceContext::empty();
 
-    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(0.0, 0), 80.0);
     let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
         .append_measured_item_to_current_text_row(&mut matrix, &row_layout, item, &mut measurer)
         .expect("append progress");
 
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
+    assert_eq!(cursor.position(), DisplayRowPosition::new(16.0, 2));
     matrix
         .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
@@ -576,28 +560,24 @@ fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
 fn display_row_progress_writer_reports_source_mapped_text_slots_with_same_source() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(8.0, 1), 80.0);
 
     let progress = writer.push_item(mapped_text_item("\\-"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.slots().len(), 2);
     assert!(
         progress
             .slots
             .iter()
-            .all(|slot| slot.source == DisplaySourcePosition::lisp_string(1, 0, 0))
+            .all(|slot| slot.source() == DisplaySourcePosition::lisp_string(1, 0, 0))
     );
-    assert_eq!(progress.slots()[0].width_px, 8.0);
-    assert_eq!(progress.slots()[0].width_cols, 1);
-    assert_eq!(progress.slots()[1].width_px, 8.0);
-    assert_eq!(progress.slots()[1].width_cols, 1);
+    assert_eq!(progress.slots()[0].width_px(), 8.0);
+    assert_eq!(progress.slots()[0].width_cols(), 1);
+    assert_eq!(progress.slots()[1].width_px(), 8.0);
+    assert_eq!(progress.slots()[1].width_cols(), 1);
     assert_eq!(row_text(&row), "\\-");
 }
 
@@ -713,19 +693,15 @@ fn display_row_writer_reports_appended_metrics() {
 fn display_row_progress_writer_stops_text_before_right_limit() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        20.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 20.0);
 
     let progress = writer.push_item(text_item("abcd"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 0.0, col: 0 });
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(writer.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(0.0, 0));
+    assert_eq!(progress.end(), DisplayRowPosition::new(16.0, 2));
+    assert_eq!(writer.position(), DisplayRowPosition::new(16.0, 2));
     assert_eq!(row_text(&row), "ab");
 }
 
@@ -733,31 +709,27 @@ fn display_row_progress_writer_stops_text_before_right_limit() {
 fn display_row_progress_writer_reports_source_slots_for_text_run() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
-    let mut writer = DisplayRowProgressWriter::new(
-        &row_layout,
-        &mut row,
-        DisplayRowPosition { x_px: 4.0, col: 2 },
-        80.0,
-    );
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(4.0, 2), 80.0);
 
     let progress = writer.push_item(text_item("aé"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
     assert_eq!(progress.slots().len(), 2);
     assert_eq!(
-        progress.slots()[0].source,
+        progress.slots()[0].source(),
         DisplaySourcePosition::lisp_string(1, 0, 0)
     );
-    assert_eq!(progress.slots()[0].x_px, 4.0);
-    assert_eq!(progress.slots()[0].col, 2);
-    assert_eq!(progress.slots()[0].width_px, 8.0);
+    assert_eq!(progress.slots()[0].x_px(), 4.0);
+    assert_eq!(progress.slots()[0].col(), 2);
+    assert_eq!(progress.slots()[0].width_px(), 8.0);
     assert_eq!(
-        progress.slots()[1].source,
+        progress.slots()[1].source(),
         DisplaySourcePosition::lisp_string(1, 1, 1)
     );
-    assert_eq!(progress.slots()[1].x_px, 12.0);
-    assert_eq!(progress.slots()[1].col, 3);
-    assert_eq!(progress.slots()[1].width_px, 8.0);
+    assert_eq!(progress.slots()[1].x_px(), 12.0);
+    assert_eq!(progress.slots()[1].col(), 3);
+    assert_eq!(progress.slots()[1].width_px(), 8.0);
 }
 
 #[test]
@@ -798,19 +770,19 @@ fn display_row_progress_writer_uses_text_run_measurement_plan() {
         &row_layout,
         &mut row,
         &mut measurer,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         80.0,
     );
 
     let progress = writer.push_item(text_item("abc"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 30.0, col: 3 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(30.0, 3));
     assert_eq!(
         progress
             .slots
             .iter()
-            .map(|slot| slot.width_px)
+            .map(|slot| slot.width_px())
             .collect::<Vec<_>>(),
         vec![4.0, 20.0, 6.0]
     );
@@ -836,14 +808,14 @@ fn display_row_progress_writer_accepts_direct_text_run_measurement_plan() {
         &row_layout,
         &mut row,
         measurement,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         80.0,
     );
 
     let progress = writer.push_item(text_item("abc"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 30.0, col: 3 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(30.0, 3));
     assert_eq!(
         row.glyphs[GlyphArea::Text.index()]
             .iter()
@@ -928,14 +900,14 @@ fn display_row_progress_writer_uses_position_for_tabs() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowPosition::new(16.0, 2),
         80.0,
     );
 
     let progress = writer.push_item(text_item("\tb"));
 
     assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end(), DisplayRowPosition { x_px: 40.0, col: 5 });
+    assert_eq!(progress.end(), DisplayRowPosition::new(40.0, 5));
     assert_eq!(
         row.glyphs[GlyphArea::Text.index()][0].glyph_type,
         GlyphType::Stretch { width_cols: 2 }
@@ -950,10 +922,7 @@ fn display_row_progress_writer_uses_tab_policy_origin_for_pixel_tabs() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition {
-            x_px: 96.0 + 24.0,
-            col: 3,
-        },
+        DisplayRowPosition::new(96.0 + 24.0, 3),
         240.0,
     );
 
@@ -964,15 +933,9 @@ fn display_row_progress_writer_uses_tab_policy_origin_for_pixel_tabs() {
         row.glyphs[GlyphArea::Text.index()][0].glyph_type,
         GlyphType::Stretch { width_cols: 5 }
     );
-    assert_eq!(progress.slots()[0].x_px, 120.0);
-    assert_eq!(progress.slots()[0].width_px, 40.0);
-    assert_eq!(
-        progress.end(),
-        DisplayRowPosition {
-            x_px: 168.0,
-            col: 9
-        }
-    );
+    assert_eq!(progress.slots()[0].x_px(), 120.0);
+    assert_eq!(progress.slots()[0].width_px(), 40.0);
+    assert_eq!(progress.end(), DisplayRowPosition::new(168.0, 9));
 }
 
 #[test]
@@ -983,10 +946,7 @@ fn display_row_progress_writer_uses_tab_policy_explicit_stops() {
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition {
-            x_px: 100.0 + 24.0,
-            col: 3,
-        },
+        DisplayRowPosition::new(100.0 + 24.0, 3),
         240.0,
     );
 
@@ -997,15 +957,9 @@ fn display_row_progress_writer_uses_tab_policy_explicit_stops() {
         row.glyphs[GlyphArea::Text.index()][0].glyph_type,
         GlyphType::Stretch { width_cols: 1 }
     );
-    assert_eq!(progress.slots()[0].x_px, 124.0);
-    assert_eq!(progress.slots()[0].width_px, 8.0);
-    assert_eq!(
-        progress.end(),
-        DisplayRowPosition {
-            x_px: 140.0,
-            col: 5
-        }
-    );
+    assert_eq!(progress.slots()[0].x_px(), 124.0);
+    assert_eq!(progress.slots()[0].width_px(), 8.0);
+    assert_eq!(progress.end(), DisplayRowPosition::new(140.0, 5));
 }
 
 #[test]

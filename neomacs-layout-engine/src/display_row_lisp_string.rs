@@ -592,8 +592,8 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
             face_ids,
             self.position,
         );
-        *x = position.x_px;
-        *col = position.col;
+        *x = position.x_px();
+        *col = position.col();
     }
 }
 

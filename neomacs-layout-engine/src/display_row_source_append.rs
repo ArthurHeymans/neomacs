@@ -383,10 +383,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         content_x: f32,
     ) -> SyntheticTextAppendRequest {
         SyntheticTextAppendRequest::text_row_metrics_marker(
-            DisplayRowPosition {
-                x_px: content_x,
-                col: 0,
-            },
+            DisplayRowPosition::new(content_x, 0),
             SyntheticTextMarker::HscrollTruncation,
             BasicFaceId::Default.into(),
             &base_face,

@@ -577,10 +577,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
             .emit_line_break_then_row_start(
                 line_break_transition,
                 hit_range,
-                DisplayRowPosition {
-                    x_px: *x,
-                    col: *col,
-                },
+                DisplayRowPosition::new(*x, *col),
                 0.0,
                 DisplayRowTransitionRenderState::new(
                     prefix_request,
@@ -879,10 +876,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
         .emit_line_break_then_row_start(
             line_break_transition,
             hit_row_range.range_to(progress.charpos()),
-            DisplayRowPosition {
-                x_px: *progress.row.x,
-                col: *progress.row.col,
-            },
+            DisplayRowPosition::new(*progress.row.x, *progress.row.col),
             0.0,
             DisplayRowTransitionRenderState::new(
                 prefix_request,
@@ -1032,8 +1026,8 @@ impl BufferSourceInvisibleTextSkip {
             cursor_info,
             render_context.active_face(),
             row_geometry,
-            position.x_px,
-            position.col,
+            position.x_px(),
+            position.col(),
         );
 
         let Some(request) = self.ellipsis_append_request(position) else {
@@ -1575,10 +1569,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         .emit_line_break_then_row_start(
             line_break_transition,
             hit_row_range.range_to(progress.charpos()),
-            DisplayRowPosition {
-                x_px: *progress.row.x,
-                col: *progress.row.col,
-            },
+            DisplayRowPosition::new(*progress.row.x, *progress.row.col),
             line_break_action.line_spacing(),
             DisplayRowTransitionRenderState::new(
                 prefix_request,

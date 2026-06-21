@@ -209,7 +209,11 @@ impl BufferDisplayPropertyTextReplacementOutcome {
                 cursor_info,
                 self.cursor_info(
                     active_face_state,
-                    row_geometry.text_position(start_position.x_px, byte_idx, start_position.col),
+                    row_geometry.text_position(
+                        start_position.x_px(),
+                        byte_idx,
+                        start_position.col(),
+                    ),
                 ),
             );
         }

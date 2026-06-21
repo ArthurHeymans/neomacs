@@ -203,8 +203,8 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
     let rendered_media = render_item
         .rendered_media_for_progress(
             &DisplayRowAppendProgress::from_positions(
-                DisplayRowPosition { x_px: 8.0, col: 1 },
-                DisplayRowPosition { x_px: 50.0, col: 2 },
+                DisplayRowPosition::new(8.0, 1),
+                DisplayRowPosition::new(50.0, 2),
                 DisplayRowAppendStatus::Complete,
                 Vec::new(),
             ),
@@ -423,7 +423,7 @@ fn display_row_source_geometry_request_overrides_render_bounds() {
         tab_policy: DisplayTabPolicy::every(8),
     };
     let bounds = DisplayRowRenderBounds::new(
-        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowPosition::new(16.0, 2),
         DisplayRowMaxX::Bounded(40.0),
     );
 
@@ -467,7 +467,7 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_glyph_row() {
     assert_eq!(
         request.render_bounds(),
         DisplayRowRenderBounds::new(
-            DisplayRowPosition { x_px: 22.5, col: 3 },
+            DisplayRowPosition::new(22.5, 3),
             DisplayRowMaxX::Bounded(90.0),
         )
     );
@@ -503,7 +503,7 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_row_geometry() {
     assert_eq!(
         request.render_bounds(),
         DisplayRowRenderBounds::new(
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             DisplayRowMaxX::Bounded(45.0),
         )
     );
@@ -913,7 +913,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
         std::collections::HashMap::new(),
     )
     .with_render_bounds(DisplayRowRenderBounds::new(
-        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowPosition::new(16.0, 2),
         DisplayRowMaxX::Bounded(32.0),
     ));
 
@@ -929,8 +929,8 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     assert_eq!(row_text_expanding_stretches(rendered.row()), "AB");
     assert_eq!(rendered.progress().end_x(), 32.0);
     assert_eq!(rendered.progress().end_col(), 4);
-    assert_eq!(rendered.source_slots()[0].x_px, 16.0);
-    assert_eq!(rendered.source_slots()[0].col, 2);
+    assert_eq!(rendered.source_slots()[0].x_px(), 16.0);
+    assert_eq!(rendered.source_slots()[0].col(), 2);
 }
 
 #[test]
@@ -959,7 +959,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
         std::collections::HashMap::new(),
     )
     .with_render_bounds(DisplayRowRenderBounds::new(
-        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowPosition::new(16.0, 2),
         DisplayRowMaxX::Bounded(240.0),
     ));
 
@@ -977,8 +977,8 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     assert_eq!(glyphs[0].pixel_width, 16.0);
     assert_eq!(rendered.progress().end_x(), 40.0);
     assert_eq!(rendered.progress().end_col(), 5);
-    assert_eq!(rendered.source_slots()[0].x_px, 16.0);
-    assert_eq!(rendered.source_slots()[0].width_px, 16.0);
+    assert_eq!(rendered.source_slots()[0].x_px(), 16.0);
+    assert_eq!(rendered.source_slots()[0].width_px(), 16.0);
 }
 
 #[test]
@@ -1362,7 +1362,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
 
     assert_eq!(rendered.source_slots().len(), 5);
     assert_eq!(
-        rendered.source_slots()[0].source,
+        rendered.source_slots()[0].source(),
         crate::display_item::DisplaySourcePosition::buffer(
             buf_id,
             CharPos0::new(0),
@@ -1370,15 +1370,15 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         )
     );
     assert_eq!(
-        rendered.source_slots()[1].source,
+        rendered.source_slots()[1].source(),
         crate::display_item::DisplaySourcePosition::buffer(
             buf_id,
             CharPos0::new(1),
             EmacsBytePos::new(1)
         )
     );
-    assert_eq!(rendered.source_slots()[0].width_cols, 1);
-    assert_eq!(rendered.source_slots()[1].width_cols, 2);
+    assert_eq!(rendered.source_slots()[0].width_cols(), 1);
+    assert_eq!(rendered.source_slots()[1].width_cols(), 2);
 
     let row = rendered.into_row();
     let glyphs = &row.glyphs[1];
@@ -2903,7 +2903,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
         std::collections::HashMap::new(),
     )
     .with_render_bounds(DisplayRowRenderBounds::new(
-        DisplayRowPosition { x_px: 8.0, col: 1 },
+        DisplayRowPosition::new(8.0, 1),
         DisplayRowMaxX::Bounded(240.0),
     ));
     let base_face_id = request.base_face_id();

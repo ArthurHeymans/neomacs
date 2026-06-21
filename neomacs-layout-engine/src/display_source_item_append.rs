@@ -210,7 +210,7 @@ impl DisplaySourceTextCharPreparedAppend {
     ) -> DisplayRowTextOverflowDecision {
         DisplayRowTextOverflowDecision::for_char(
             ch,
-            self.plan.position.x_px,
+            self.plan.position.x_px(),
             self.advance_px(),
             right_edge_px,
             wrap_mode,
@@ -302,9 +302,9 @@ impl DisplaySourceTextCharAppendOutcome {
         col: &mut usize,
     ) {
         trailing_whitespace
-            .track_rendered_char(ch, geometry.start_marker_at_x(self.progress.start().x_px));
-        *x = self.progress.end().x_px;
-        *col = self.progress.end().col;
+            .track_rendered_char(ch, geometry.start_marker_at_x(self.progress.start().x_px()));
+        *x = self.progress.end().x_px();
+        *col = self.progress.end().col();
     }
 
     pub(crate) fn apply_rendered_char_to_walk_state(
@@ -557,8 +557,8 @@ impl DisplaySourceSpecialCharAppendOutcome {
         if self.append_policy.invalidates_face_after_append() {
             face_scan.invalidate();
         }
-        *x = self.progress.end().x_px;
-        *col = self.progress.end().col;
+        *x = self.progress.end().x_px();
+        *col = self.progress.end().col();
     }
 
     pub(crate) fn apply_rendered_special_char_to_walk_state(

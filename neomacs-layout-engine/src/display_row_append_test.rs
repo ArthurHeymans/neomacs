@@ -711,7 +711,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
             charpos_start: 3,
             charpos_end: 9,
         },
-        DisplayRowPosition { x_px: 48.0, col: 6 },
+        DisplayRowPosition::new(48.0, 6),
         4.0,
     )
     .emit_with_output(
@@ -752,7 +752,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
             charpos_start: 4,
             charpos_end: 10,
         },
-        DisplayRowPosition { x_px: 56.0, col: 7 },
+        DisplayRowPosition::new(56.0, 7),
     )
     .emit_with_output(
         &mut wrap_ctx.geometry,
@@ -806,7 +806,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
             charpos_start: 1,
             charpos_end: 5,
         },
-        DisplayRowPosition { x_px: 32.0, col: 4 },
+        DisplayRowPosition::new(32.0, 4),
         2.0,
     );
 
@@ -848,7 +848,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
             charpos_start: 2,
             charpos_end: 8,
         },
-        DisplayRowPosition { x_px: 64.0, col: 8 },
+        DisplayRowPosition::new(64.0, 8),
     );
 
     assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
@@ -900,7 +900,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
             charpos_start: 1,
             charpos_end: 5,
         },
-        DisplayRowPosition { x_px: 32.0, col },
+        DisplayRowPosition::new(32.0, col),
         2.0,
         DisplayRowTransitionRenderState::new(
             &mut prefix_request,
@@ -961,7 +961,7 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
             charpos_start: 2,
             charpos_end: 8,
         },
-        DisplayRowPosition { x_px: 64.0, col },
+        DisplayRowPosition::new(64.0, col),
         DisplayRowTransitionRenderState::new(
             &mut prefix_request,
             true,
@@ -1646,7 +1646,7 @@ fn buffer_invisible_text_skip_keeps_cursor_missing_when_point_is_visible() {
 #[test]
 fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
     let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, true);
-    let position = DisplayRowPosition { x_px: 16.0, col: 2 };
+    let position = DisplayRowPosition::new(16.0, 2);
 
     let request = hidden
         .ellipsis_append_request(position)
@@ -1665,7 +1665,7 @@ fn buffer_invisible_text_skip_omits_ellipsis_request_without_policy() {
 
     assert!(
         hidden
-            .ellipsis_append_request(DisplayRowPosition { x_px: 16.0, col: 2 })
+            .ellipsis_append_request(DisplayRowPosition::new(16.0, 2))
             .is_none()
     );
 }
@@ -1838,7 +1838,7 @@ fn buffer_selective_display_context_reports_carriage_return_tail_marker() {
 #[test]
 fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
     let marker = BufferSourceSelectiveDisplayLineTailMarker;
-    let position = DisplayRowPosition { x_px: 24.0, col: 3 };
+    let position = DisplayRowPosition::new(24.0, 3);
 
     let request = marker.ellipsis_append_request(position);
     let (request_position, source, face) = request.into_parts();
@@ -3330,10 +3330,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
                 DisplaySourceTextRange::single_char(CharPos0::new(21)),
                 DisplaySourceAppendItem::ControlChar { ch: '\n' },
             ),
-            DisplayRowPosition {
-                x_px: 80.0,
-                col: 10,
-            },
+            DisplayRowPosition::new(80.0, 10),
             buffer_display_item(
                 buf_id,
                 21,
@@ -3588,10 +3585,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
                 'a',
                 DisplaySourceAppendRenderPlan::resolved_advance(8.0),
             ),
-            DisplayRowPosition {
-                x_px: 80.0,
-                col: 10,
-            },
+            DisplayRowPosition::new(80.0, 10),
             buffer_source_mapped_display_item(buf_id, 21, 22, "a", RenderFaceRef::Inherit),
         ));
     let mut charpos = 21;
@@ -3899,7 +3893,7 @@ fn fallback_display_source_natural_measurement_uses_frame_tab_policy() {
         &mut font_metrics,
         &active_face,
         &frame,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
+        DisplayRowPosition::new(8.0, 1),
         '\t',
     );
 
@@ -3919,7 +3913,7 @@ fn fallback_display_source_natural_measurement_zeroes_cluster_continuation() {
         &mut font_metrics,
         &active_face,
         &frame,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
+        DisplayRowPosition::new(8.0, 1),
         '\u{301}',
     );
 
@@ -3939,7 +3933,7 @@ fn fallback_display_source_natural_measurement_uses_face_columns() {
         &mut font_metrics,
         &active_face,
         &frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         '中',
     );
 
@@ -4163,7 +4157,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
             DisplaySourceClusterState::for_char('x', None),
         ),
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &source_item,
     );
 
@@ -4214,7 +4208,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(1)),
             DisplaySourceClusterState::for_char('\u{0633}', None),
         ),
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &source_item,
     );
 
@@ -4334,19 +4328,19 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
                 &face_resolver,
             ),
             SyntheticTextAppendRequest::active_source(
-                DisplayRowPosition { x_px: 0.0, col: 0 },
+                DisplayRowPosition::new(0.0, 0),
                 SyntheticTextSource::new(99, "..."),
             ),
         )
         .expect("synthetic text progress");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(end, DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.metrics().width_px, 24.0);
     assert_eq!(progress.metrics().width_cols, 3);
     assert_eq!(progress.slots().len(), 3);
     assert_eq!(
-        progress.slots()[0].source,
+        progress.slots()[0].source(),
         DisplaySourcePosition::synthetic(99, 0)
     );
     builder
@@ -4426,12 +4420,12 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
             &face_resolver,
         ),
         &geometry,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         SyntheticTextMarker::InvisibleEllipsis,
     )
     .expect("active marker end position");
 
-    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(end, DisplayRowPosition::new(24.0, 3));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
@@ -4499,7 +4493,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
     )
     .expect("hscroll marker end position");
 
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(8.0, 1));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
@@ -4518,11 +4512,11 @@ fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
         .source_for_value(value, CharPos0::new(4))
         .expect("prefix source");
 
-    let request = source.append_request(DisplayRowPosition { x_px: 10.0, col: 2 });
+    let request = source.append_request(DisplayRowPosition::new(10.0, 2));
 
     assert_eq!(request.value, value);
     assert_eq!(request.source_id, LispStringSourceId::PREFIX);
-    assert_eq!(request.position, DisplayRowPosition { x_px: 10.0, col: 2 });
+    assert_eq!(request.position, DisplayRowPosition::new(10.0, 2));
 }
 
 #[test]
@@ -4592,11 +4586,11 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
         &snapshot,
         0,
         &mut face_ids,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
     );
 
     assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
@@ -4675,7 +4669,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
                 0.0,
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
-            DisplayRowPosition { x_px: x, col },
+            DisplayRowPosition::new(x, col),
         )
         .render_requested_with_source_state_and_apply(
             &mut prefix_request,
@@ -4743,13 +4737,13 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayRowPosition { x_px: 8.0, col: 1 },
+            DisplayRowPosition::new(8.0, 1),
             SyntheticTextSource::new(100, "\u{301}"),
         )
         .expect("combining fragment progress");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(8.0, 1));
     assert_eq!(progress.metrics().width_px, 0.0);
     assert_eq!(progress.metrics().width_cols, 0);
     builder
@@ -4934,7 +4928,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let position = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let position = DisplayRowPosition::new(8.0, 1);
     let request = frame.source_append_render_request(
         position,
         7,
@@ -4960,10 +4954,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         )
         .expect("current-row fragment outcome");
 
-    assert_eq!(
-        outcome.end_position(),
-        DisplayRowPosition { x_px: 8.0, col: 1 }
-    );
+    assert_eq!(outcome.end_position(), DisplayRowPosition::new(8.0, 1));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -5019,7 +5010,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     write_char_to_current_row_with_width(&mut builder, 'b', 7, 1, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let position = DisplayRowPosition { x_px: 0.0, col: 0 };
+    let position = DisplayRowPosition::new(0.0, 0);
     let request = frame.source_append_render_request(
         position,
         7,
@@ -5047,18 +5038,15 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
 
     assert_eq!(
         outcome.source_slots(),
-        &[DisplayRowGlyphSlot {
-            source: DisplaySourcePosition::lisp_string(101, 0, 0),
-            x_px: 16.0,
-            col: 2,
-            width_px: 8.0,
-            width_cols: 1,
-        }]
+        &[DisplayRowGlyphSlot::new(
+            DisplaySourcePosition::lisp_string(101, 0, 0),
+            16.0,
+            2,
+            8.0,
+            1
+        )]
     );
-    assert_eq!(
-        outcome.end_position(),
-        DisplayRowPosition { x_px: 24.0, col: 3 }
-    );
+    assert_eq!(outcome.end_position(), DisplayRowPosition::new(24.0, 3));
 }
 
 #[test]
@@ -5071,23 +5059,23 @@ fn render_face_ref_id_uses_fallback_for_inherit() {
 fn current_text_row_render_outcome_builds_append_progress() {
     let outcome = CurrentTextRowRenderOutcome::new(
         DisplayRowRenderStop::Clipped,
-        vec![DisplayRowGlyphSlot {
-            source: DisplaySourcePosition::synthetic(9, 0),
-            x_px: 8.0,
-            col: 1,
-            width_px: 16.0,
-            width_cols: 2,
-        }],
-        DisplayRowPosition { x_px: 24.0, col: 3 },
+        vec![DisplayRowGlyphSlot::new(
+            DisplaySourcePosition::synthetic(9, 0),
+            8.0,
+            1,
+            16.0,
+            2,
+        )],
+        DisplayRowPosition::new(24.0, 3),
         18.0,
         13.0,
     );
-    let start = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let start = DisplayRowPosition::new(8.0, 1);
 
     let progress = outcome.into_append_progress(start);
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(end, DisplayRowPosition::new(24.0, 3));
     assert_eq!(progress.start(), start);
     assert_eq!(progress.end(), end);
     assert_eq!(progress.metrics().width_px, 16.0);
@@ -5095,7 +5083,7 @@ fn current_text_row_render_outcome_builds_append_progress() {
     assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
     assert_eq!(progress.slots().len(), 1);
     assert_eq!(
-        progress.slots()[0].source,
+        progress.slots()[0].source(),
         DisplaySourcePosition::synthetic(9, 0)
     );
 }
@@ -5146,7 +5134,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             &base_face,
         )
         .render_request(DisplayRowRenderBounds::new(
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowPosition::new(16.0, 2),
             DisplayRowMaxX::Bounded(160.0),
         ))
         .render_fragment_step_with_display_host(
@@ -5184,7 +5172,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         },
     );
 
-    assert_eq!(end, DisplayRowPosition { x_px: 32.0, col: 4 });
+    assert_eq!(end, DisplayRowPosition::new(32.0, 4));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -5238,7 +5226,7 @@ fn display_row_append_surface_builds_positioned_source_requests() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
-    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
         42,
@@ -5287,7 +5275,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         },
         tab_policy,
     );
-    let position = DisplayRowPosition { x_px: 8.0, col: 0 };
+    let position = DisplayRowPosition::new(8.0, 0);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
@@ -5302,7 +5290,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let ordinary = ordinary.row_request();
     assert_eq!(
         ordinary.render_bounds().start(),
-        DisplayRowPosition { x_px: 8.0, col: 0 }
+        DisplayRowPosition::new(8.0, 0)
     );
     assert_eq!(
         ordinary.render_bounds().max_x(),
@@ -5472,7 +5460,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
         42,
@@ -5523,7 +5511,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
 
     let request = frame
         .source_append_render_request(
-            DisplayRowPosition { x_px: 18.0, col: 2 },
+            DisplayRowPosition::new(18.0, 2),
             42,
             base_face,
             DisplayRowAppendKind::SourceText,
@@ -5564,7 +5552,7 @@ fn display_row_append_frame_builds_source_measure_request() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
-    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let position = DisplayRowPosition::new(18.0, 2);
 
     let request = frame
         .source_append_measure_request(position, 42, base_face, DisplayRowAppendKind::SourceText)
@@ -5603,7 +5591,7 @@ fn display_row_source_append_render_request_uses_frame_policy() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
         42,
@@ -5648,7 +5636,7 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let position = DisplayRowPosition { x_px: 18.0, col: 2 };
+    let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
         42,
@@ -6130,11 +6118,11 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
             0,
             &mut face_ids,
             frame,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
     };
 
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
         builder.faces().get(&20).map(|face| face.foreground),
@@ -6199,7 +6187,7 @@ fn lisp_string_append_context_appends_fragment_items() {
     );
 
     let request = LispStringSourceAppendRequest::new(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         LispStringSourceId::PREFIX,
         Value::string("=>"),
     );
@@ -6216,7 +6204,7 @@ fn lisp_string_append_context_appends_fragment_items() {
         session_request,
     );
 
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -6299,7 +6287,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             &source_char,
             b"a",
             0,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             &source_item,
             None,
         )
@@ -7113,7 +7101,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
             &source_char,
             b"a",
             0,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             &source_item,
         )
         .into_text()
@@ -7972,7 +7960,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
-    let position = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let position = DisplayRowPosition::new(8.0, 1);
     let source_range = DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2));
     let source_item =
         buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
@@ -8035,7 +8023,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         .expect("appended buffer fragment");
     let end = appended.end();
 
-    assert_eq!(end.x_px - position.x_px, measured_width);
+    assert_eq!(end.x_px() - position.x_px(), measured_width);
     assert_eq!(appended.metrics().width_px, measured_width);
 }
 
@@ -8101,12 +8089,12 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
                 'a',
                 DisplaySourceAppendRenderPlan::resolved_advance(13.0),
             ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("appended resolved buffer fragment");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(13.0, 1));
     assert_eq!(progress.metrics().width_px, 13.0);
     builder
         .edit_current_row_for_test(|row| {
@@ -8180,12 +8168,12 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
                 '\u{301}',
                 DisplaySourceAppendRenderPlan::natural(0.0),
             ),
-            DisplayRowPosition { x_px: 8.0, col: 1 },
+            DisplayRowPosition::new(8.0, 1),
         )
         .expect("appended combining buffer char");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(8.0, 1));
     assert_eq!(progress.metrics().width_px, 0.0);
     assert_eq!(progress.metrics().width_cols, 0);
     builder
@@ -8254,7 +8242,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
                 &face_resolver,
             ),
             source_item.clone(),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("measured buffer text item fragment");
     builder
@@ -8271,7 +8259,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             DisplaySourceTextRange::new(CharPos0::new(0), CharPos0::new(0)),
             item.clone(),
         ),
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
     );
     let edge_width = append_context.measure_source_request_width_to_text_row(
         &mut text_row_source_measure_state(
@@ -8281,10 +8269,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             &face_resolver,
         ),
         source_item.clone(),
-        DisplayRowPosition {
-            x_px: 80.0,
-            col: 10,
-        },
+        DisplayRowPosition::new(80.0, 10),
     );
 
     let progress = append_context
@@ -8297,12 +8282,12 @@ fn buffer_text_item_append_context_builds_control_char_item() {
                 &face_resolver,
             ),
             source_item,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("appended buffer text item fragment");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     assert_eq!(measured_width, 16.0);
     assert_eq!(fallback_width, 16.0);
     assert_eq!(edge_width, 16.0);
@@ -8437,11 +8422,11 @@ fn buffer_text_source_char_names_range_and_precluster_policy() {
     );
     assert_eq!(
         request.append_plan_at(
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             buffer_special_request_display_item(&request),
         ),
         expected_request.append_plan_at(
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             buffer_special_request_display_item(&expected_request),
         )
     );
@@ -8463,7 +8448,7 @@ fn buffer_text_source_char_names_cluster_policy() {
         standalone_joiner
             .special_request(None)
             .map(|request| request.append_plan_at(
-                DisplayRowPosition { x_px: 0.0, col: 0 },
+                DisplayRowPosition::new(0.0, 0),
                 buffer_special_request_display_item(&request),
             )),
         DisplaySourceSpecialDisplay::for_cluster_state(DisplaySourceClusterState::for_char(
@@ -8472,7 +8457,7 @@ fn buffer_text_source_char_names_cluster_policy() {
         .map(|display| {
             let request = DisplaySpecialSourceCharRequest::new(&standalone_joiner, display);
             request.append_plan_at(
-                DisplayRowPosition { x_px: 0.0, col: 0 },
+                DisplayRowPosition::new(0.0, 0),
                 buffer_special_request_display_item(&request),
             )
         })
@@ -8644,7 +8629,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             &face_resolver,
         ),
         source_request,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &source_item,
     );
     assert_eq!(
@@ -8771,7 +8756,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
             &face_resolver,
         ),
         source_request,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &source_item,
     );
 
@@ -8854,7 +8839,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             &face_resolver,
         ),
         source_request,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &source_item,
     );
     assert_eq!(
@@ -8955,11 +8940,11 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
             7,
             &mut face_ids,
             frame,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
     };
 
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(8.0, 1));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -9015,7 +9000,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let second_geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
 
     let request = LispStringSourceAppendRequest::new(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         LispStringSourceId::OVERLAY_STRING,
         Value::string("a\nb"),
     );
@@ -9043,14 +9028,11 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
             ),
             &mut face_ids,
             &first_geometry,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("first lisp source append");
 
-    assert_eq!(
-        first.end_position(),
-        DisplayRowPosition { x_px: 8.0, col: 1 }
-    );
+    assert_eq!(first.end_position(), DisplayRowPosition::new(8.0, 1));
     assert_eq!(
         first.stop(),
         crate::display_row::DisplayRowRenderStop::RowBreak
@@ -9067,14 +9049,11 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
             ),
             &mut face_ids,
             &second_geometry,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("second lisp source append");
 
-    assert_eq!(
-        second.end_position(),
-        DisplayRowPosition { x_px: 16.0, col: 2 }
-    );
+    assert_eq!(second.end_position(), DisplayRowPosition::new(16.0, 2));
     assert_eq!(
         second.stop(),
         crate::display_row::DisplayRowRenderStop::SourceExhausted
@@ -9189,17 +9168,11 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
             7,
             &mut face_ids,
             frame,
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowPosition::new(16.0, 2),
         )
     };
 
-    assert_eq!(
-        end,
-        DisplayRowPosition {
-            x_px: 80.0,
-            col: 10
-        }
-    );
+    assert_eq!(end, DisplayRowPosition::new(80.0, 10));
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
@@ -9264,16 +9237,13 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
-    let snapshot = item.append_source_snapshot(DisplayRowPosition { x_px: 2.0, col: 1 });
+    let snapshot = item.append_source_snapshot(DisplayRowPosition::new(2.0, 1));
     assert_eq!(
         snapshot.source_id(),
         LispStringSourceId::display_replacement(9)
     );
     assert_eq!(snapshot.value(), value);
-    assert_eq!(
-        snapshot.position(),
-        DisplayRowPosition { x_px: 2.0, col: 1 }
-    );
+    assert_eq!(snapshot.position(), DisplayRowPosition::new(2.0, 1));
     assert_eq!(
         snapshot.origin(),
         DisplayOrigin::DisplayPropertyString {
@@ -9537,7 +9507,7 @@ fn display_property_replacement_row_render_request_keeps_item_policy_and_start_p
         item,
         -2.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
-        DisplayRowPosition { x_px: 24.0, col: 4 },
+        DisplayRowPosition::new(24.0, 4),
     );
 
     assert_eq!(
@@ -9547,10 +9517,7 @@ fn display_property_replacement_row_render_request_keeps_item_policy_and_start_p
             stretch_like: true,
         }
     );
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 24.0, col: 4 }
-    );
+    assert_eq!(request.start_position(), DisplayRowPosition::new(24.0, 4));
     let DisplayPropertyReplacementSourceItem::Stretch(item) = request.into_item() else {
         panic!("expected stretch replacement item");
     };
@@ -9596,7 +9563,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
         None,
         -2.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
-        DisplayRowPosition { x_px: 24.0, col: 4 },
+        DisplayRowPosition::new(24.0, 4),
     )
     .expect("display replacement row render request");
 
@@ -9607,10 +9574,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
             stretch_like: false,
         }
     );
-    assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 24.0, col: 4 }
-    );
+    assert_eq!(request.start_position(), DisplayRowPosition::new(24.0, 4));
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(20);
@@ -9653,8 +9617,8 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
 fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let outcome = BufferDisplayPropertyTextReplacementOutcome {
         replacement: DisplayPropertyReplacementAppendOutcome::new(
-            DisplayRowPosition { x_px: 4.0, col: 1 },
-            DisplayRowPosition { x_px: 12.0, col: 2 },
+            DisplayRowPosition::new(4.0, 1),
+            DisplayRowPosition::new(12.0, 2),
             DisplayPropertyReplacementCursorPolicy::FaceChar,
         ),
         skip_to: 4,
@@ -9769,7 +9733,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         None,
         -2.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
-        DisplayRowPosition { x_px: 24.0, col: 4 },
+        DisplayRowPosition::new(24.0, 4),
     )
     .expect("display replacement row render request");
     let outcome = request.render_to_text_row(
@@ -9787,20 +9751,14 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         &active_face,
     );
 
-    assert_eq!(
-        outcome.start_position(),
-        DisplayRowPosition { x_px: 24.0, col: 4 }
-    );
-    assert_eq!(
-        outcome.end_position(),
-        DisplayRowPosition { x_px: 40.0, col: 6 }
-    );
+    assert_eq!(outcome.start_position(), DisplayRowPosition::new(24.0, 4));
+    assert_eq!(outcome.end_position(), DisplayRowPosition::new(40.0, 6));
     let cursor = outcome.cursor_info(
         &active_face,
         geometry.text_position(
-            outcome.start_position().x_px,
+            outcome.start_position().x_px(),
             0,
-            outcome.start_position().col,
+            outcome.start_position().col(),
         ),
     );
     assert_eq!(cursor.x, 24.0);
@@ -9909,7 +9867,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
             &active_face,
         ),
         x,
-        DisplayRowPosition { x_px: x, col },
+        DisplayRowPosition::new(x, col),
     );
     let BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) = outcome else {
         panic!("expected rendered display replacement");
@@ -10267,8 +10225,8 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
         false,
     );
     let progress = DisplayRowAppendProgress::from_positions(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        DisplayRowPosition { x_px: 64.0, col: 8 },
+        DisplayRowPosition::new(0.0, 0),
+        DisplayRowPosition::new(64.0, 8),
         DisplayRowAppendStatus::Complete,
         Vec::new(),
     );
@@ -10358,11 +10316,11 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
         replacement_source,
         LispStringSourceId::display_replacement(1),
         value,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition::new(0.0, 0),
         &mut measurer,
     );
 
-    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(24.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
         builder.faces().get(&20).map(|face| face.foreground),
@@ -10434,13 +10392,13 @@ fn display_replacement_append_context_uses_face_fallback() {
                 height: Some(DisplayLength::Pixels(16.0)),
                 ascent: Some(DisplayLength::Pixels(12.0)),
             }),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 0.0, col: 0 });
-    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(0.0, 0));
+    assert_eq!(end, DisplayRowPosition::new(13.0, 2));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -10520,12 +10478,12 @@ fn display_replacement_append_context_advances_stretch_output() {
             ),
             &mut face_ids,
             DisplayReplacementStretchSourceItem::from_extents(13.0, 16.0, 12.0),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(13.0, 2));
     let display = eval
         .frame_manager()
         .get(frame_id)
@@ -10608,12 +10566,12 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
             ),
             &mut face_ids,
             DisplayReplacementSourceMappedTextItem::new("??"),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -10689,7 +10647,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
                 &face_resolver,
             ),
             SyntheticTextAppendRequest::text_row_metrics_source(
-                DisplayRowPosition { x_px: 0.0, col: 0 },
+                DisplayRowPosition::new(0.0, 0),
                 SyntheticTextSource::new(9, "x"),
                 7,
                 base_face,
@@ -10699,7 +10657,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition::new(8.0, 1));
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -10792,20 +10750,14 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             ),
             &mut face_ids,
             media_item,
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowPosition::new(16.0, 2),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
     assert_eq!(progress.metrics().width_px, 96.0);
-    assert_eq!(
-        end,
-        DisplayRowPosition {
-            x_px: 112.0,
-            col: 14
-        }
-    );
+    assert_eq!(end, DisplayRowPosition::new(112.0, 14));
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
@@ -10929,20 +10881,14 @@ fn display_replacement_append_context_installs_image_replacements() {
             &mut face_ids,
             replacement_source,
             DisplayItemKind::MediaReplacement(media_item.media()),
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowPosition::new(16.0, 2),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
     assert_eq!(progress.metrics().width_px, 64.0);
-    assert_eq!(
-        end,
-        DisplayRowPosition {
-            x_px: 80.0,
-            col: 10
-        }
-    );
+    assert_eq!(end, DisplayRowPosition::new(80.0, 10));
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
@@ -11068,20 +11014,14 @@ fn display_replacement_append_context_installs_video_replacements() {
             &mut face_ids,
             replacement_source,
             DisplayItemKind::MediaReplacement(media_item.media()),
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowPosition::new(16.0, 2),
         )
         .expect("append progress");
     let end = progress.end();
 
-    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.start(), DisplayRowPosition::new(16.0, 2));
     assert_eq!(progress.metrics().width_px, 80.0);
-    assert_eq!(
-        end,
-        DisplayRowPosition {
-            x_px: 96.0,
-            col: 12
-        }
-    );
+    assert_eq!(end, DisplayRowPosition::new(96.0, 12));
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];

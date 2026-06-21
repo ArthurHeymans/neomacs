@@ -898,7 +898,7 @@ impl WindowOutputEmitter {
         end: DisplayRowPosition,
     ) {
         if spans.is_empty() {
-            self.move_text_output_to(evaluator, output.row, end.col, output.row_y, end.x_px);
+            self.move_text_output_to(evaluator, output.row, end.col(), output.row_y, end.x_px());
             return;
         }
         for span in spans {
@@ -1100,12 +1100,12 @@ impl WindowOutputEmitter {
             span.buffer_pos,
             span.row,
             span.row_y,
-            span.start.x_px,
+            span.start.x_px(),
             span.glyph_y,
-            span.end.x_px - span.start.x_px,
+            span.end.x_px() - span.start.x_px(),
             span.height,
-            span.start.col,
-            span.end.col,
+            span.start.col(),
+            span.end.col(),
         );
     }
 
