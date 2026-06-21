@@ -1,8 +1,8 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::parse_display_length_expr;
@@ -11,7 +11,7 @@ use crate::display_row_builder::{
     DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
+pub(crate) use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
 #[cfg(test)]
 pub(crate) use crate::display_row_measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
@@ -513,86 +513,6 @@ impl DisplayRowLispStringSourceSession {
             &mut self.state,
             context,
         )
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayRowGeometry {
-    y: f32,
-    width: f32,
-    height: f32,
-    char_width: f32,
-    ascent: f32,
-    tab_policy: DisplayTabPolicy,
-}
-
-impl DisplayRowGeometry {
-    pub(crate) fn new(
-        y: f32,
-        width: f32,
-        height: f32,
-        char_width: f32,
-        ascent: f32,
-        tab_policy: DisplayTabPolicy,
-    ) -> Self {
-        Self {
-            y,
-            width,
-            height,
-            char_width,
-            ascent,
-            tab_policy,
-        }
-    }
-
-    pub(crate) fn y(&self) -> f32 {
-        self.y
-    }
-
-    pub(crate) fn width(&self) -> f32 {
-        self.width
-    }
-
-    pub(crate) fn height(&self) -> f32 {
-        self.height
-    }
-
-    pub(crate) fn char_width(&self) -> f32 {
-        self.char_width
-    }
-
-    pub(crate) fn ascent(&self) -> f32 {
-        self.ascent
-    }
-
-    pub(crate) fn tab_policy(&self) -> &DisplayTabPolicy {
-        &self.tab_policy
-    }
-
-    pub(crate) fn with_char_width(mut self, char_width: f32) -> Self {
-        self.char_width = char_width;
-        self
-    }
-
-    pub(crate) fn to_layout(
-        &self,
-        role: GlyphRowRole,
-        char_width_px: f32,
-        ascent_px: f32,
-        base_face: RenderFaceRef,
-        symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
-    ) -> DisplayRowLayout {
-        DisplayRowLayout {
-            role,
-            y_px: self.y,
-            width_px: self.width.max(1.0),
-            height_px: self.height,
-            ascent_px,
-            char_width_px,
-            tab_policy: self.tab_policy.clone(),
-            base_face,
-            symbol_values,
-        }
     }
 }
 

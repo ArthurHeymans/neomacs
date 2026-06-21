@@ -1,8 +1,11 @@
+use crate::display_item::{DisplayLengthExpr, RenderFaceRef};
+use crate::display_row_builder::{DisplayRowLayout, DisplayTabPolicy};
 use crate::hit_test::HitRow;
 use crate::window_output::{
     DisplayTextRowBegin, DisplayTextRowGeometryTransition, DisplayTextRowMetrics,
     RowMetricsSnapshot,
 };
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 
 /// Horizontal append limit for a display row.
 ///
@@ -21,6 +24,86 @@ impl DisplayRowMaxX {
         match self {
             Self::Unbounded => f32::INFINITY,
             Self::Bounded(x) => x,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowGeometry {
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) tab_policy: DisplayTabPolicy,
+}
+
+impl DisplayRowGeometry {
+    pub(crate) fn new(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+    ) -> Self {
+        Self {
+            y,
+            width,
+            height,
+            char_width,
+            ascent,
+            tab_policy,
+        }
+    }
+
+    pub(crate) fn y(&self) -> f32 {
+        self.y
+    }
+
+    pub(crate) fn width(&self) -> f32 {
+        self.width
+    }
+
+    pub(crate) fn height(&self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn char_width(&self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn tab_policy(&self) -> &DisplayTabPolicy {
+        &self.tab_policy
+    }
+
+    pub(crate) fn with_char_width(mut self, char_width: f32) -> Self {
+        self.char_width = char_width;
+        self
+    }
+
+    pub(crate) fn to_layout(
+        &self,
+        role: GlyphRowRole,
+        char_width_px: f32,
+        ascent_px: f32,
+        base_face: RenderFaceRef,
+        symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
+    ) -> DisplayRowLayout {
+        DisplayRowLayout {
+            role,
+            y_px: self.y,
+            width_px: self.width.max(1.0),
+            height_px: self.height,
+            ascent_px,
+            char_width_px,
+            tab_policy: self.tab_policy.clone(),
+            base_face,
+            symbol_values,
         }
     }
 }

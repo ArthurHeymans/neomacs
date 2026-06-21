@@ -5,11 +5,9 @@ use crate::display_item::{
 };
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_install_request::OutputFrameStateInstallRequest;
-use crate::display_row::{
-    DisplayRowGeometry, DisplayRowRenderExecutor, DisplayRowSourceFragmentFrame,
-};
+use crate::display_row::{DisplayRowRenderExecutor, DisplayRowSourceFragmentFrame};
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
-use crate::display_row_geometry::DisplayRowMaxX;
+use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
 use crate::display_row_render_state::DisplayRowRenderBounds;
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
