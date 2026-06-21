@@ -23,11 +23,13 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
 pub(crate) use crate::display_row::DisplayRowFaceRealizer;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringSourceRenderRequest, DisplayRowOwner,
-    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, FrameChromeKind,
-    MeasuredDisplayRow, WindowChromeKind,
+    DisplayRowLispStringSourceRenderRequest, DisplayRowRenderExecutor,
+    DisplayRowSourceFragmentRenderRequest,
 };
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
+use crate::display_row_measured_state::{
+    DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
+};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
 use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};

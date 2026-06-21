@@ -2,7 +2,9 @@ use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID
 use crate::display_output_install_request::{
     OutputFrameStateInstallRequest, OutputMediaInstallRequest, ResolvedOutputMediaInstallTarget,
 };
-use crate::display_row::{DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind};
+use crate::display_row_measured_state::{
+    DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
+};
 use crate::display_row_render_state::{
     RenderedDisplayRow, RenderedDisplayRowMedia, RenderedDisplayRowMediaKind,
 };
