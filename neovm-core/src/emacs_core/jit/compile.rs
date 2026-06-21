@@ -1944,10 +1944,18 @@ fn compile_bytecode_function_inner(
                 (n > 0).then_some(armed)
             });
             if let Ok(mut leaf) = lower_mir_pure(&mir) {
-                leaf.required = required;
-                leaf.has_rest = has_rest;
-                leaf.inline_epoch = inline_epoch;
-                return Ok(leaf);
+                // Tier gate: a call-bearing MIR leaf (has_side_effects) only earns
+                // the MIR tier when it INLINED something — that's the one case the
+                // MIR tier beats the baseline (cross-boundary unboxing/elision).
+                // For a plain non-inlined call the baseline is strictly better
+                // (spec-call native-to-native speculation + battle-tested), so let
+                // it fall through. Pure (call-free) leaves always take the MIR tier.
+                if !leaf.has_side_effects || inline_epoch.is_some() {
+                    leaf.required = required;
+                    leaf.has_rest = has_rest;
+                    leaf.inline_epoch = inline_epoch;
+                    return Ok(leaf);
+                }
             }
         }
     }
@@ -2405,7 +2413,6 @@ fn mir_as_tagged(
 /// writing back), this clears the raw mask so every LATER use and every
 /// deopt-framestate snapshot sees the tagged form — no stale raw alias survives
 /// the safepoint. The MIR analogue of the baseline's `stack_force_tagged`.
-#[allow(dead_code)] // wired by the calls-slice (next increment)
 fn mir_force_tagged(
     fb: &mut FunctionBuilder,
     cval: &mut [Option<ClifValue>],
@@ -2432,7 +2439,6 @@ fn mir_force_tagged(
 /// which would re-execute a call's side effect (the loop-back-edge hole the
 /// adversarial critique caught). In a pure body it is the shared rerun-from-start
 /// block (STATUS_DEOPT), created lazily.
-#[allow(dead_code)] // wired by the calls-slice (next increment)
 fn mir_deopt_block(
     fb: &mut FunctionBuilder,
     precise: bool,
@@ -2585,11 +2591,51 @@ fn raw_fixnum_maxmin(fb: &mut FunctionBuilder, is_min: bool, av: ClifValue, bv: 
 pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
 
-    let builder = JITBuilder::new(default_libcall_names())
+    // The MIR tier handles a CALL (MirOp::Opaque{Call/Apply}) via PRECISE deopt:
+    // such a body threads vmctx + the runtime shims and routes EVERY guard to a
+    // per-site STATUS_DEOPT_AT (all-precise — a call-bearing body must never
+    // rerun-from-start, which would re-execute the call's side effect).
+    let has_call = m.blocks.iter().any(|b| {
+        b.insts
+            .iter()
+            .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::Call(_) | Op::Apply(_), .. }))
+    });
+
+    let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
+    if has_call {
+        // Only the shims the calls-slice references; declare_rt_refs declares the
+        // full import set but Cranelift resolves only referenced symbols.
+        builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
+        builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
+        builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
+        builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
+        builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
+    }
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
+
+    // Precise-deopt spill buffer + cells, sized to the deepest pre-op operand stack
+    // (the framestate a post-call guard spills). Empty/inert for pure bodies (which
+    // keep the rerun-from-start STATUS_DEOPT path).
+    let max_depth = m
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter())
+        .map(|i| i.pre_stack.len())
+        .max()
+        .unwrap_or(0);
+    let deopt_spill: Box<[core::cell::Cell<i64>]> = if has_call {
+        (0..max_depth).map(|_| core::cell::Cell::new(0)).collect()
+    } else {
+        Box::from([])
+    };
+    let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
+        pc: core::cell::Cell::new(0),
+        depth: core::cell::Cell::new(0),
+        handlers: core::cell::Cell::new(0),
+    });
 
     // ABI identical to lower_leaf: fn(vmctx, args, out) -> status.
     let mut sig = Signature::new(call_conv);
@@ -2616,6 +2662,55 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             })
             .collect();
 
+        // Runtime context for calls (vmctx + shims + arg/result slots), built only
+        // when the body has a call. declare_rt_refs declares the full import set;
+        // only the referenced shims (call/apply/gc_*) are resolved at finalize.
+        let rt = if has_call {
+            let refs = declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
+            let vmctx_var = fb.declare_var(ptr_ty);
+            let max_call_args = m
+                .blocks
+                .iter()
+                .flat_map(|b| b.insts.iter())
+                .filter_map(|i| match &i.op {
+                    MirOp::Opaque { op: Op::Call(n) | Op::Apply(n), .. } => Some(*n as usize),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0);
+            let call_args_slot = fb.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                (max_call_args.max(1) * 8) as u32,
+                3,
+            ));
+            let call_result_slot =
+                fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            Some(RtCtx {
+                refs,
+                vmctx_var,
+                ptr_ty,
+                call_args_slot,
+                call_result_slot,
+            })
+        } else {
+            None
+        };
+        // Baked addresses of the deopt buffers for the per-site STATUS_DEOPT_AT
+        // blocks (inert unless `precise`).
+        let deopt_refs = DeoptRefs {
+            spill_base: deopt_spill.as_ptr() as i64,
+            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64> as i64,
+            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64> as i64,
+            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64> as i64,
+        };
+        // ALL-PRECISE deopt for call-bearing bodies (see mir_deopt_block): never
+        // rerun-from-start after a call. Pure bodies keep the shared rerun block.
+        let precise = has_call;
+        let mut pending: Vec<PendingDeopt> = Vec::new();
+        // Shared signal-propagation block (returns STATUS_SIGNAL), created lazily by
+        // the first call lowering.
+        let mut signal_exit: Option<Block> = None;
+
         // Map every MIR value to its CLIF value (filled in dominance order: a
         // single forward pass works because the MIR is SSA and block params
         // carry all cross-block values).
@@ -2636,6 +2731,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         let entry = fb.create_block();
         fb.append_block_params_for_function_params(entry);
         fb.switch_to_block(entry);
+        let vmctx_param = fb.block_params(entry)[0];
+        if let Some(rt) = &rt {
+            fb.def_var(rt.vmctx_var, vmctx_param);
+        }
         let args_ptr = fb.block_params(entry)[1];
         let out_ptr = fb.block_params(entry)[2];
         let arg_vals: Vec<BlockArg> = (0..m.arity)
@@ -2674,7 +2773,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         }
                     }
                     MirOp::Bin(kind, a, b) => {
-                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let d = mir_deopt_block(
+                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                        )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
                         let res = match kind {
@@ -2695,7 +2796,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             MU::Sub1 => UnaryKind::Sub1,
                             MU::Negate => UnaryKind::Negate,
                         };
-                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let d = mir_deopt_block(
+                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                        )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         cval[r] = Some(raw_fixnum_unop(&mut fb, d, k, av));
                         cval_raw[r] = true;
@@ -2708,7 +2811,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             CmpKind::Le => IntCC::SignedLessThanOrEqual,
                             CmpKind::Ge => IntCC::SignedGreaterThanOrEqual,
                         };
-                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let d = mir_deopt_block(
+                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                        )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
                         let cond = fb.ins().icmp(cc, av, bv);
@@ -2732,16 +2837,82 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         let d = if *safe {
                             None
                         } else {
-                            Some(*deopt.get_or_insert_with(|| fb.create_block()))
+                            Some(mir_deopt_block(
+                                &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                            )?)
                         };
                         let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *arg)?;
                         cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
+                    }
+                    // A CALL: a GC safepoint + a side effect. Force-tag every value
+                    // that survives it (a raw fixnum cannot cross the safepoint —
+                    // the GC would trace the untagged i64 as a pointer), root the
+                    // live-across-call residual, dispatch the GENERIC shim (no spec
+                    // plumbing in the MIR tier), propagate a signal, and on STATUS_OK
+                    // push the tagged result. The body's guards are all precise
+                    // (`precise == has_call`), so no rerun-from-start re-runs this.
+                    MirOp::Opaque { op, args } if matches!(op, Op::Call(_) | Op::Apply(_)) => {
+                        let rt = rt
+                            .as_ref()
+                            .ok_or(CompileError::UnsupportedOp("mir-call-no-rt"))?;
+                        let n = match op {
+                            Op::Call(n) | Op::Apply(n) => *n as usize,
+                            _ => unreachable!("guarded to Call/Apply"),
+                        };
+                        let is_apply = matches!(op, Op::Apply(_));
+                        if args.len() != n + 1 {
+                            return Err(CompileError::UnsupportedOp("mir-call-arity"));
+                        }
+                        // Marshal the n args (args[1..]) tagged into the call buffer.
+                        for (i, a) in args[1..].iter().enumerate() {
+                            let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *a)?;
+                            fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                        }
+                        let func_val = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, args[0])?;
+                        // Residual = operand-stack values live ACROSS the call (the
+                        // pre-op stack below func+args). Root them (force-tagged) so a
+                        // GC inside the callee can trace them.
+                        let residual_len = inst.pre_stack.len().saturating_sub(n + 1);
+                        let saved = if residual_len == 0 {
+                            None
+                        } else {
+                            let c = fb.ins().call(rt.refs.gc_save, &[]);
+                            let s = fb.inst_results(c)[0];
+                            for k in 0..residual_len {
+                                let rv = inst.pre_stack[k];
+                                let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
+                                fb.ins().call(rt.refs.gc_push, &[v]);
+                            }
+                            Some(s)
+                        };
+                        let vmctx = fb.use_var(rt.vmctx_var);
+                        let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+                        let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+                        let n_val = fb.ins().iconst(types::I64, n as i64);
+                        let shim = if is_apply { rt.refs.apply } else { rt.refs.call };
+                        let call = fb
+                            .ins()
+                            .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
+                        let status = fb.inst_results(call)[0];
+                        if let Some(s) = saved {
+                            fb.ins().call(rt.refs.gc_restore, &[s]);
+                        }
+                        // STATUS_OK -> continue; anything else is STATUS_SIGNAL.
+                        let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+                        let cont = fb.create_block();
+                        let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+                        fb.ins().brif(ok, cont, &[], se, &[]);
+                        fb.switch_to_block(cont);
+                        fb.seal_block(cont);
+                        let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+                        cval[r] = Some(result);
+                        cval_raw[r] = false;
                     }
                     // Shim-using / allocating ops, deferred: `eq` needs the
                     // symbols-with-position slow-path shim (vmctx) so plain
                     // tagged-bits comparison would diverge when
                     // symbols-with-pos-enabled; `cons` allocates (GC safepoint);
-                    // `opaque` = calls.
+                    // other `opaque` (VarRef/builtins/...) are not yet ported.
                     MirOp::Eq(..) | MirOp::Cons(..) | MirOp::Opaque { .. } => {
                         return Err(CompileError::UnsupportedOp("mir-pure-shim-op"));
                     }
@@ -2802,6 +2973,21 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             fb.ins().return_(&[code]);
         }
 
+        // Per-site precise-deopt blocks (call-bearing bodies): spill the captured
+        // framestate (retagging raw slots in the cold block) + return STATUS_DEOPT_AT.
+        // No-op for pure bodies (pending is empty).
+        emit_pending_deopts(&mut fb, deopt_refs, &mut pending);
+
+        // Signal propagation from a call: return STATUS_SIGNAL (the Flow is stashed
+        // in the Context by the shim). No binds/handlers to unwind — build_mir bails
+        // on those, so a MIR leaf never registers any.
+        if let Some(se) = signal_exit {
+            fb.switch_to_block(se);
+            fb.seal_block(se);
+            let code = fb.ins().iconst(types::I64, STATUS_SIGNAL);
+            fb.ins().return_(&[code]);
+        }
+
         fb.seal_all_blocks();
         fb.finalize();
     }
@@ -2828,15 +3014,12 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         has_handlers: false,
         // Set by compile_bytecode_function_inner after a successful inline pass.
         inline_epoch: None,
-        // Set by the calls-slice when a call is lowered ahead of a precise deopt.
-        has_side_effects: false,
+        // A call-bearing body runs a side effect ahead of its (precise) deopts, so
+        // it must never rerun-from-start (the refuse-to-rerun guard).
+        has_side_effects: has_call,
         spec_slots: Box::from([]),
-        deopt_spill: Box::from([]),
-        deopt_meta: Box::new(DeoptCells {
-            pc: core::cell::Cell::new(0),
-            depth: core::cell::Cell::new(0),
-            handlers: core::cell::Cell::new(0),
-        }),
+        deopt_spill,
+        deopt_meta,
         entry,
         _module: module,
     })
@@ -6613,6 +6796,138 @@ mod tests {
     }
 
     #[test]
+    fn mir_call_lowering_runs_a_non_inlined_call() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::SymId;
+        // C = identity; F = (1+ (C a)). The MIR has a NON-inlined Opaque{Call(C)}
+        // plus a post-call 1+ guard. lower_mir_pure now lowers the call (generic
+        // shim, vmctx-threaded) and routes the 1+ guard to PRECISE deopt. Verify
+        // F(5) = 1+(id 5) = 6 end-to-end with a REAL Context (the precise-deopt
+        // resume path is exercised by the NEOVM_JIT_FORCE_DEOPT gate).
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let c_sym = Value::symbol("jit-mir-call-c");
+        let crate::emacs_core::value::ValueKind::Symbol(c_id) = c_sym.kind() else {
+            panic!("symbol");
+        };
+        let mut c = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        c.lexical = true;
+        c.ops = vec![Op::StackRef(0), Op::Return];
+        c.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(c_id, Value::make_bytecode(c));
+        let f_ops = [
+            Op::Constant(0),
+            Op::StackRef(1),
+            Op::Call(1),
+            Op::Add1,
+            Op::Return,
+        ];
+        let f_consts = [c_sym];
+        let m = mir::build_mir(&f_ops, &f_consts, 1).expect("F builds");
+        let leaf = lower_mir_pure(&m).expect("F lowers (non-inlined call + precise deopt)");
+        assert!(
+            leaf.has_side_effects,
+            "a call-bearing MIR leaf is side-effecting (must never rerun-from-start)"
+        );
+        match leaf.call(ctx as *mut u8, &[Value::make_int(5)]) {
+            NativeRun::Ok(bits) => {
+                assert_eq!(bits, Value::make_int(6).bits(), "1+(id 5) = 6")
+            }
+            other => panic!("F(5): expected Ok(6), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_plus_residual_call_takes_mir_tier() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::SymId;
+        // F = (g (sq a)): sq = (* x x) [inlinable pure single-block]; g = a 2-block
+        // (if y (1+ y) 0) [non-inlinable]. The inliner splices sq, leaving a residual
+        // Call(g) + inline_epoch=Some, so the tier gate routes F to the MIR tier's
+        // calls-slice (sq's arithmetic unboxed up to the g-call boundary). Verifies
+        // the production compile path end-to-end: inlined + a residual call.
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let mk_sym = |name: &str| {
+            let s = Value::symbol(name);
+            let crate::emacs_core::value::ValueKind::Symbol(id) = s.kind() else {
+                panic!("symbol");
+            };
+            (s, id)
+        };
+        let (sq_sym, sq_id) = mk_sym("jit-ir-sq");
+        let (g_sym, g_id) = mk_sym("jit-ir-g");
+        let mut sq = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        sq.lexical = true;
+        sq.ops = vec![Op::Dup, Op::Mul, Op::Return];
+        sq.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(sq_id, Value::make_bytecode(sq));
+        let mut g = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        g.lexical = true;
+        // (if y (1+ y) 0) — two basic blocks, so callee_inlinable refuses it.
+        g.ops = vec![
+            Op::StackRef(0),
+            Op::GotoIfNil(5),
+            Op::StackRef(0),
+            Op::Add1,
+            Op::Return,
+            Op::Constant(0),
+            Op::Return,
+        ];
+        g.constants = vec![Value::make_int(0)];
+        g.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(g_id, Value::make_bytecode(g));
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(3)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::Constant(0), // g
+            Op::Constant(1), // sq
+            Op::StackRef(2), // a
+            Op::Call(1),     // (sq a)
+            Op::Call(1),     // (g (sq a))
+            Op::Return,
+        ];
+        f.constants = vec![g_sym, sq_sym];
+        f.max_stack = 16;
+        let leaf =
+            compile_bytecode_function_with(&f, Some(&ev.obarray)).expect("F compiles");
+        assert!(
+            leaf.inline_epoch().is_some(),
+            "F inlined sq -> took the MIR tier (not the baseline)"
+        );
+        assert!(
+            leaf.has_side_effects,
+            "F has a residual non-inlined call (g) lowered in the MIR tier"
+        );
+        // F(3) = g(sq(3)) = g(9) = 1+9 = 10.
+        match leaf.call(ctx as *mut u8, &[Value::make_int(3)]) {
+            NativeRun::Ok(bits) => {
+                assert_eq!(bits, Value::make_int(10).bits(), "g(sq(3)) = 1+9 = 10")
+            }
+            other => panic!("F(3): expected Ok(10), got {other:?}"),
+        }
+    }
+
+    #[test]
     fn backedge_polls_quit_like_the_interpreter() {
         use crate::emacs_core::bytecode::Vm;
         use crate::emacs_core::eval::Context;
@@ -7186,14 +7501,24 @@ mod tests {
         );
     }
 
-    /// Shim-using ops (a call) are out of the pure-subset scope: bail.
+    /// A CALL now LOWERS in the MIR tier (the calls-slice handles it via precise
+    /// deopt + the generic shim) where it previously bailed to the baseline. Other
+    /// shim ops (Eq) remain out of scope and still bail.
     #[test]
-    fn mir_pure_lowering_bails_on_calls() {
-        // (lambda () (foo)) — has a Call (opaque) -> pure lowering refuses.
+    fn mir_pure_lowering_handles_a_call() {
+        // (lambda () (foo)) — has a Call (opaque) -> now lowered (was a bail).
         let ops = vec![Op::Constant(0), Op::Call(0), Op::Return];
         let mir = mir::build_mir(&ops, &[Value::symbol("foo")], 0).expect("MIR builds");
+        let leaf = lower_mir_pure(&mir).expect("a call now lowers via the calls-slice");
+        assert!(
+            leaf.has_side_effects,
+            "a call-bearing leaf is side-effecting (no rerun-from-start)"
+        );
+        // (lambda (a b) (eq a b)) — Eq still bails (needs the symbols-with-pos shim).
+        let eq_ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Eq, Op::Return];
+        let eq_mir = mir::build_mir(&eq_ops, &[], 2).expect("eq MIR builds");
         assert!(matches!(
-            lower_mir_pure(&mir),
+            lower_mir_pure(&eq_mir),
             Err(CompileError::UnsupportedOp("mir-pure-shim-op"))
         ));
     }
