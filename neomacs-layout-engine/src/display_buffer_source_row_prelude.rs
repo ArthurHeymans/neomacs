@@ -8,9 +8,7 @@ use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
-use crate::display_row_lisp_string::{
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest, DisplayRowPrefixValues,
-};
+use crate::display_row_lisp_string::{BufferLinePrefixRenderRequest, DisplayRowPrefixValues};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,14 +63,12 @@ impl BufferSourceRowPreludeRequestContext {
         position: DisplayRowPosition,
     ) -> BufferLinePrefixRenderRequest<'a> {
         BufferLinePrefixRenderRequest::new(
-            BufferLinePrefixRenderContext::new(
-                self.prefix_values,
-                append_surface,
-                row_geometry,
-                active_face_state,
-                glyph_y_offset,
-                self.fallback_metrics,
-            ),
+            self.prefix_values,
+            append_surface,
+            row_geometry,
+            active_face_state,
+            glyph_y_offset,
+            self.fallback_metrics,
             position,
         )
     }

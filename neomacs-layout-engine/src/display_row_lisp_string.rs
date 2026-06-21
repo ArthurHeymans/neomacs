@@ -14,7 +14,7 @@ use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::CurrentTextRowRenderOutcome;
-use crate::display_row_source_append::DisplayItemSourceAppendContext;
+use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
@@ -117,9 +117,9 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let append_context = DisplayItemSourceAppendContext::new(base_face, base_face_id, frame);
+    let append_context = SingleDisplayItemAppendContext::new(base_face, base_face_id, frame);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    append_context.render_with_policy(
+    append_context.render_source_with_policy(
         state,
         face_ids,
         source,
@@ -127,49 +127,8 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         position,
         DisplayRowAppendKind::SourceText,
         &mut render_policy,
+        base_face_id,
     )
-}
-
-pub(crate) struct LispStringSourceAppendContext<'a> {
-    source: &'a mut LispStringSourceCursor,
-    source_state: &'a mut DisplayRowSourceState,
-    base_face_id: u32,
-    base_face: &'a ResolvedFace,
-}
-
-impl<'a> LispStringSourceAppendContext<'a> {
-    pub(crate) fn new(
-        source: &'a mut LispStringSourceCursor,
-        source_state: &'a mut DisplayRowSourceState,
-        base_face_id: u32,
-        base_face: &'a ResolvedFace,
-    ) -> Self {
-        Self {
-            source,
-            source_state,
-            base_face_id,
-            base_face,
-        }
-    }
-
-    pub(crate) fn render_to_text_row_and_emit(
-        &mut self,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        frame: DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        render_lisp_string_source_append_to_text_row_and_emit(
-            state,
-            self.source,
-            self.source_state,
-            self.base_face,
-            self.base_face_id,
-            face_ids,
-            frame,
-            position,
-        )
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -243,15 +202,6 @@ impl<'a> LispStringSourceAppendSession<'a> {
         })
     }
 
-    fn append_context(&mut self) -> LispStringSourceAppendContext<'_> {
-        LispStringSourceAppendContext::new(
-            &mut self.source,
-            &mut self.source_state,
-            self.base_face_id,
-            self.base_face,
-        )
-    }
-
     fn render_to_text_row_and_emit(
         &mut self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -259,8 +209,16 @@ impl<'a> LispStringSourceAppendSession<'a> {
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        self.append_context()
-            .render_to_text_row_and_emit(state, face_ids, frame, position)
+        render_lisp_string_source_append_to_text_row_and_emit(
+            state,
+            &mut self.source,
+            &mut self.source_state,
+            self.base_face,
+            self.base_face_id,
+            face_ids,
+            frame,
+            position,
+        )
     }
 
     fn discard_pending_until_row_break(&mut self) -> bool {
@@ -488,21 +446,18 @@ impl DisplayRowPrefixSource {
     }
 }
 
-pub(crate) struct BufferLinePrefixRenderContext<'a> {
+pub(crate) struct BufferLinePrefixRenderRequest<'a> {
     values: DisplayRowPrefixValues,
     append_surface: &'a DisplayRowAppendSurface,
     row_geometry: &'a DisplayRowGeometryState,
     active_face_state: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
-}
-
-pub(crate) struct BufferLinePrefixRenderRequest<'a> {
-    context: BufferLinePrefixRenderContext<'a>,
     position: DisplayRowPosition,
 }
 
-impl<'a> BufferLinePrefixRenderContext<'a> {
+impl<'a> BufferLinePrefixRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         values: DisplayRowPrefixValues,
         append_surface: &'a DisplayRowAppendSurface,
@@ -510,6 +465,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
+        position: DisplayRowPosition,
     ) -> Self {
         Self {
             values,
@@ -518,6 +474,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             active_face_state,
             glyph_y_offset,
             fallback_metrics,
+            position,
         }
     }
 
@@ -528,8 +485,8 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
         buffer: &B,
         anchor_charpos: i64,
         face_ids: &mut FrameFaceIdAllocator,
-        position: DisplayRowPosition,
     ) -> DisplayRowPosition {
+        let position = self.position;
         if !request.is_requested() {
             return position;
         }
@@ -564,15 +521,6 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             position,
         )
     }
-}
-
-impl<'a> BufferLinePrefixRenderRequest<'a> {
-    pub(crate) fn new(
-        context: BufferLinePrefixRenderContext<'a>,
-        position: DisplayRowPosition,
-    ) -> Self {
-        Self { context, position }
-    }
 
     pub(crate) fn render_requested_with_source_state_and_apply<B: LayoutBufferView>(
         self,
@@ -584,39 +532,15 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         x: &mut f32,
         col: &mut usize,
     ) {
-        let position = self.context.render_requested_to_text_row_and_emit(
+        let position = self.render_requested_to_text_row_and_emit(
             request,
             source_render,
             buffer,
             anchor_charpos,
             face_ids,
-            self.position,
         );
         *x = position.x_px();
         *col = position.col();
-    }
-}
-
-pub(crate) struct LispStringSourceRowAppendContext<'a> {
-    source_context: LispStringSourceAppendContext<'a>,
-    append_surface: &'a DisplayRowAppendSurface,
-    glyph_y_offset: f32,
-    metrics: DisplayRowAppendMetrics,
-}
-
-impl<'a> LispStringSourceRowAppendContext<'a> {
-    pub(crate) fn render_to_text_row_and_emit(
-        &mut self,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        geometry: &DisplayRowGeometryState,
-        position: DisplayRowPosition,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        let frame = self
-            .metrics
-            .text_row_frame(self.append_surface, geometry, self.glyph_y_offset);
-        self.source_context
-            .render_to_text_row_and_emit(state, face_ids, frame, position)
     }
 }
 
@@ -670,15 +594,6 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         })
     }
 
-    fn append_context(&mut self) -> LispStringSourceRowAppendContext<'_> {
-        LispStringSourceRowAppendContext {
-            source_context: self.source_session.append_context(),
-            append_surface: self.append_surface,
-            glyph_y_offset: self.glyph_y_offset,
-            metrics: self.metrics,
-        }
-    }
-
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -686,8 +601,11 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        self.append_context()
-            .render_to_text_row_and_emit(state, face_ids, geometry, position)
+        let frame = self
+            .metrics
+            .text_row_frame(self.append_surface, geometry, self.glyph_y_offset);
+        self.source_session
+            .render_to_text_row_and_emit(state, face_ids, frame, position)
     }
 
     pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {

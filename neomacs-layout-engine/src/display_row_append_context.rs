@@ -538,10 +538,6 @@ pub(crate) struct DisplayRowAppendSourceRenderRequest<'face> {
     output: TextRowOutput,
 }
 
-pub(crate) struct DisplayRowAppendSourceMeasureRequest<'face> {
-    row_request: DisplayRowSourceRenderRequest<'face>,
-}
-
 impl<'face> DisplayRowAppendSourceRenderRequest<'face> {
     fn new(row_request: DisplayRowSourceRenderRequest<'face>, output: TextRowOutput) -> Self {
         Self {
@@ -565,24 +561,6 @@ impl<'face> DisplayRowAppendSourceRenderRequest<'face> {
         render: impl FnOnce(DisplayRowSourceRenderRequest<'face>) -> R,
     ) -> (R, TextRowOutput) {
         (render(self.row_request), self.output)
-    }
-}
-
-impl<'face> DisplayRowAppendSourceMeasureRequest<'face> {
-    fn new(row_request: DisplayRowSourceRenderRequest<'face>) -> Self {
-        Self { row_request }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn row_request(self) -> DisplayRowSourceRenderRequest<'face> {
-        self.row_request
-    }
-
-    pub(crate) fn measure_with_row_request<R>(
-        self,
-        measure: impl FnOnce(DisplayRowSourceRenderRequest<'face>) -> R,
-    ) -> R {
-        measure(self.row_request)
     }
 }
 
@@ -682,11 +660,9 @@ impl DisplayRowAppendFrame {
         face_id: u32,
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
-    ) -> DisplayRowAppendSourceMeasureRequest<'face> {
-        DisplayRowAppendSourceMeasureRequest::new(
-            self.source_render_request(position, face_id, base_face, kind)
-                .with_render_bounds(DisplayRowRenderBounds::unbounded_from(position)),
-        )
+    ) -> DisplayRowSourceRenderRequest<'face> {
+        self.source_render_request(position, face_id, base_face, kind)
+            .with_render_bounds(DisplayRowRenderBounds::unbounded_from(position))
     }
 
     fn source_render_request<'face>(

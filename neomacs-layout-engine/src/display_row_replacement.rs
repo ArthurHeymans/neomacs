@@ -133,6 +133,7 @@ impl DisplayReplacementStringSourceAppendRequest {
             position,
             DisplayRowAppendKind::DisplayReplacementString,
             &mut render_policy,
+            append_context.single_item.face_id(),
         ) else {
             return position;
         };
@@ -1118,6 +1119,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             position,
             DisplayRowAppendKind::DisplayReplacement,
             &mut render_policy,
+            self.single_item.face_id(),
         )?;
         Some(outcome.into_append_progress(position))
     }

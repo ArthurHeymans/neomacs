@@ -89,13 +89,6 @@ impl PreparedSingleDisplayItemSourceAppend {
 }
 
 #[derive(Clone)]
-pub(crate) struct DisplayItemSourceAppendContext<'face> {
-    base_face: &'face ResolvedFace,
-    face_id: u32,
-    frame: DisplayRowAppendFrame,
-}
-
-#[derive(Clone)]
 pub(crate) struct SingleDisplayItemAppendContext<'face> {
     base_face: &'face ResolvedFace,
     face_id: u32,
@@ -405,72 +398,6 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     }
 }
 
-impl<'face> DisplayItemSourceAppendContext<'face> {
-    pub(crate) fn new(
-        base_face: &'face ResolvedFace,
-        face_id: u32,
-        frame: DisplayRowAppendFrame,
-    ) -> Self {
-        Self {
-            base_face,
-            face_id,
-            frame,
-        }
-    }
-
-    pub(crate) fn render_with_policy<S, P>(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        position: DisplayRowPosition,
-        kind: DisplayRowAppendKind,
-        render_policy: &mut P,
-    ) -> Option<CurrentTextRowRenderOutcome>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    {
-        let row_request =
-            self.frame
-                .source_append_render_request(position, self.face_id, self.base_face, kind);
-        state.render_display_item_source_into_current_text_row_and_emit(
-            face_ids,
-            source,
-            source_state,
-            row_request,
-            render_policy,
-        )
-    }
-
-    fn measure_with_policy<S, P>(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        source: &mut S,
-        source_state: &mut DisplayRowSourceState,
-        position: DisplayRowPosition,
-        kind: DisplayRowAppendKind,
-        render_policy: &mut P,
-    ) -> Option<CurrentTextRowRenderOutcome>
-    where
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    {
-        let row_request =
-            self.frame
-                .source_append_measure_request(position, self.face_id, self.base_face, kind);
-        state.measure_display_item_source_against_current_text_row(
-            face_ids,
-            source,
-            source_state,
-            row_request,
-            render_policy,
-        )
-    }
-}
-
 impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn new(
         base_face: &'face ResolvedFace,
@@ -493,10 +420,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         &self.frame
     }
 
-    fn source_context(&self) -> DisplayItemSourceAppendContext<'face> {
-        DisplayItemSourceAppendContext::new(self.base_face, self.face_id, self.frame.clone())
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_source_with_policy<S, P>(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -506,24 +430,50 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
         render_policy: &mut P,
+        face_id: u32,
     ) -> Option<CurrentTextRowRenderOutcome>
     where
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        self.source_context().render_with_policy(
-            state,
+        let row_request =
+            self.frame
+                .source_append_render_request(position, face_id, self.base_face, kind);
+        state.render_display_item_source_into_current_text_row_and_emit(
             face_ids,
             source,
             source_state,
-            position,
-            kind,
+            row_request,
             render_policy,
         )
     }
 
-    fn source_context_for_face(&self, face_id: u32) -> DisplayItemSourceAppendContext<'face> {
-        DisplayItemSourceAppendContext::new(self.base_face, face_id, self.frame.clone())
+    #[allow(clippy::too_many_arguments)]
+    fn measure_source_with_policy<S, P>(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+        face_id: u32,
+    ) -> Option<CurrentTextRowRenderOutcome>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        let row_request =
+            self.frame
+                .source_append_measure_request(position, face_id, self.base_face, kind);
+        state.measure_display_item_source_against_current_text_row(
+            face_ids,
+            source,
+            source_state,
+            row_request,
+            render_policy,
+        )
     }
 
     fn prepare_item(
@@ -548,7 +498,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
-        let outcome = self.source_context_for_face(face_id).render_with_policy(
+        let outcome = self.render_source_with_policy(
             state,
             &mut face_ids,
             &mut source,
@@ -556,6 +506,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             position,
             kind,
             render_policy,
+            face_id,
         )?;
         Some(outcome.into_append_progress(position))
     }
@@ -584,7 +535,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
-        let outcome = self.source_context_for_face(face_id).measure_with_policy(
+        let outcome = self.measure_source_with_policy(
             state,
             &mut face_ids,
             &mut source,
@@ -592,6 +543,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             position,
             kind,
             render_policy,
+            face_id,
         )?;
         Some(outcome.into_append_progress(position).metrics().width_px())
     }
@@ -633,9 +585,9 @@ fn append_synthetic_text_to_display_row(
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let context = DisplayItemSourceAppendContext::new(base_face, face_id, frame);
+    let context = SingleDisplayItemAppendContext::new(base_face, face_id, frame);
     let mut source_state = DisplayRowSourceState::default();
-    let outcome = context.render_with_policy(
+    let outcome = context.render_source_with_policy(
         state,
         &mut face_ids,
         &mut source,
@@ -643,6 +595,7 @@ fn append_synthetic_text_to_display_row(
         position,
         DisplayRowAppendKind::SourceText,
         &mut render_policy,
+        face_id,
     )?;
     Some(outcome.into_append_progress(start))
 }

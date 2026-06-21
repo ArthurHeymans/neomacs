@@ -51,8 +51,8 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, LispStringRowAppendContext, LispStringSourceAppendRequest,
+    BufferLinePrefixRenderRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    LispStringRowAppendContext, LispStringSourceAppendRequest,
     LispStringSourceAppendSessionRequest, LispStringSourceId, LispStringSourceRowAppendSession,
     LispStringSourceRowAppendSessionRequest, append_lisp_string_to_text_row,
     apply_pending_display_source_faces,
@@ -4470,13 +4470,14 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let values = DisplayRowPrefixValues::default_values(Some(Value::string("=>")), None);
     let mut prefix_request = DisplayRowPrefixRequest::Line;
 
-    let end = BufferLinePrefixRenderContext::new(
+    let end = BufferLinePrefixRenderRequest::new(
         values,
         &surface,
         &geometry,
         &active_face,
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        DisplayRowPosition::new(0.0, 0),
     )
     .render_requested_to_text_row_and_emit(
         &mut prefix_request,
@@ -4490,7 +4491,6 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
         &snapshot,
         0,
         &mut face_ids,
-        DisplayRowPosition::new(0.0, 0),
     );
 
     assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
@@ -4560,14 +4560,12 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
             &face_resolver,
         );
         BufferLinePrefixRenderRequest::new(
-            BufferLinePrefixRenderContext::new(
-                values,
-                &surface,
-                &geometry,
-                &active_face,
-                0.0,
-                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-            ),
+            values,
+            &surface,
+            &geometry,
+            &active_face,
+            0.0,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             DisplayRowPosition::new(x, col),
         )
         .render_requested_with_source_state_and_apply(
@@ -5406,9 +5404,12 @@ fn display_row_append_frame_builds_source_measure_request() {
     let base_face = resolver.default_face();
     let position = DisplayRowPosition::new(18.0, 2);
 
-    let request = frame
-        .source_append_measure_request(position, 42, base_face, DisplayRowAppendKind::SourceText)
-        .row_request();
+    let request = frame.source_append_measure_request(
+        position,
+        42,
+        base_face,
+        DisplayRowAppendKind::SourceText,
+    );
 
     assert_eq!(request.render_bounds().start(), position);
     assert_eq!(request.render_bounds().max_x(), DisplayRowMaxX::Unbounded);

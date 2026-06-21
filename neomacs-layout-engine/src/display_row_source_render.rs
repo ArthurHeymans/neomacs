@@ -15,9 +15,7 @@ use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
 };
-use crate::display_row_append_context::{
-    DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
-};
+use crate::display_row_append_context::DisplayRowAppendSourceRenderRequest;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
@@ -794,19 +792,17 @@ impl<'a> TextRowSourceMeasureState<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        request: DisplayRowAppendSourceMeasureRequest<'_>,
+        row_request: DisplayRowSourceRenderRequest<'_>,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut state = current_text_measure_state(self, face_ids);
-        request.measure_with_row_request(|row_request| {
-            measure_display_item_source_against_current_text_row(
-                &mut state,
-                source,
-                source_state,
-                row_request,
-                render_policy,
-            )
-        })
+        measure_display_item_source_against_current_text_row(
+            &mut state,
+            source,
+            source_state,
+            row_request,
+            render_policy,
+        )
     }
 }
 
