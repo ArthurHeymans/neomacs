@@ -2986,15 +2986,21 @@ struct PendingDeopt {
     pc: usize,
     handlers_len: usize,
     stack: Vec<ClifValue>,
+    /// Per-slot raw mask snapshot (cross-op unboxing): `true` slots hold an
+    /// untagged i64 and must be retagged in the cold deopt block before the
+    /// framestate spill, since `run_resumed_frame` reads them back as tagged
+    /// `Value`s.
+    stack_raw: Vec<bool>,
 }
 
 /// Queue (and return) the precise-deopt block for the guard-emitting op at
-/// bytecode index `pc`, capturing the pre-op operand stack.
+/// bytecode index `pc`, capturing the pre-op operand stack + its raw mask.
 fn deopt_site(
     fb: &mut FunctionBuilder,
     pc: usize,
     handlers_len: usize,
     stack: &[ClifValue],
+    stack_raw: &[bool],
     pending: &mut Vec<PendingDeopt>,
 ) -> Block {
     let block = fb.create_block();
@@ -3003,6 +3009,7 @@ fn deopt_site(
         pc,
         handlers_len,
         stack: stack.to_vec(),
+        stack_raw: stack_raw.to_vec(),
     });
     block
 }
@@ -3027,7 +3034,14 @@ fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut 
         fb.seal_block(pd.block);
         let base = fb.ins().iconst(types::I64, refs.spill_base);
         for (j, &v) in pd.stack.iter().enumerate() {
-            fb.ins().store(MemFlags::trusted(), v, base, (j * 8) as i32);
+            // Retag raw fixnum slots in the COLD deopt block (zero hot-path cost):
+            // the framestate is read back as tagged Values by run_resumed_frame.
+            let tagged = if pd.stack_raw[j] {
+                retag_fixnum(fb, v)
+            } else {
+                v
+            };
+            fb.ins().store(MemFlags::trusted(), tagged, base, (j * 8) as i32);
         }
         let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
         let a = fb.ins().iconst(types::I64, refs.meta_pc);
@@ -3149,10 +3163,66 @@ fn emit_pending_dispatches(
     Ok(())
 }
 
+/// Get model-stack slot `k` as a RAW (untagged) fixnum i64 for arithmetic. If the
+/// slot is already raw (a prior fixnum arithmetic result in this block), return it
+/// directly — the cross-op fast path: no re-guard, no re-untag. Otherwise guard it
+/// is a fixnum (deopt else, honoring the cross-block `known` elision) and untag once.
+fn stack_as_raw(
+    fb: &mut FunctionBuilder,
+    deopt: Block,
+    stack: &[ClifValue],
+    stack_raw: &[bool],
+    k: usize,
+    known: &HashSet<ClifValue>,
+) -> ClifValue {
+    if stack_raw[k] {
+        stack[k]
+    } else {
+        guard_fixnum(fb, deopt, stack[k], known);
+        fb.ins().sshr_imm(stack[k], FIXNUM_SHIFT as i64)
+    }
+}
+
+/// Retag model-stack slot `k` to a tagged `Value` if it currently holds a raw
+/// fixnum, clearing its raw flag. Used at every boundary where a value escapes the
+/// in-flight arithmetic (returns, predicates, car/cdr, calls/gc roots, cross-block
+/// edges, deopt/signal snapshots).
+fn stack_force_tagged(fb: &mut FunctionBuilder, stack: &mut [ClifValue], stack_raw: &mut [bool], k: usize) {
+    if stack_raw[k] {
+        stack[k] = retag_fixnum(fb, stack[k]);
+        stack_raw[k] = false;
+    }
+}
+
+/// Force every raw slot in the model stack back to a tagged `Value`. Called before
+/// any op/terminator that gc_pushes, calls a shim, snapshots the stack for signal
+/// dispatch, or writes the stack to `vars` (cross-block) — so nothing raw ever
+/// escapes the block or reaches the tracer.
+fn retag_all_raw(fb: &mut FunctionBuilder, stack: &mut [ClifValue], stack_raw: &mut [bool]) {
+    for k in 0..stack.len() {
+        stack_force_tagged(fb, stack, stack_raw, k);
+    }
+}
+
+/// Ops that participate in cross-op fixnum unboxing: they maintain `stack_raw`
+/// themselves (arithmetic produces raw results, comparisons consume raw operands,
+/// stack shuffles move the raw flags). EVERY OTHER op force-tags the stack first
+/// (so its gc_push / signal snapshot / shim args never observe a raw slot) and has
+/// its mask re-synced by the caller.
+fn op_preserves_raw(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem
+            | Op::Add1 | Op::Sub1 | Op::Negate | Op::Max | Op::Min
+            | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq
+            | Op::Constant(_) | Op::Nil | Op::True
+            | Op::Pop | Op::Dup | Op::StackRef(_) | Op::StackSet(_) | Op::DiscardN(_)
+    )
+}
+
 /// Lower one non-control-flow opcode, updating the compile-time operand `stack`
 /// (the live CLIF SSA values within the current basic block). Terminators
 /// (`Return`/`Goto`/`GotoIf*`) are handled by the block lowerer before this.
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn lower_simple_op(
     fb: &mut FunctionBuilder,
@@ -3161,6 +3231,8 @@ fn lower_simple_op(
     signal_exit: &mut Option<Block>,
     constants: &[Value],
     stack: &mut Vec<ClifValue>,
+    // Per-slot raw mask (cross-op unboxing), kept in lockstep with `stack`.
+    stack_raw: &mut Vec<bool>,
     rt: Option<&RtCtx>,
     handlers: &[HandlerStatic],
     pending: &mut Vec<PendingDispatch>,
@@ -3171,21 +3243,37 @@ fn lower_simple_op(
     // guards for members.
     known: &HashSet<ClifValue>,
 ) -> Result<(), CompileError> {
+    // Non-unboxing ops must see only tagged Values: force-tag the whole stack so
+    // their gc_push / signal snapshot / shim args never observe a raw slot (closes
+    // the GC-root + dispatch-snapshot soundness holes in one place).
+    if !op_preserves_raw(op) {
+        retag_all_raw(fb, stack, stack_raw);
+    }
     match op {
         Op::Constant(idx) => {
             let v = constants
                 .get(*idx as usize)
                 .ok_or(CompileError::BadOperand)?;
             stack.push(fb.ins().iconst(types::I64, v.bits() as i64));
+            stack_raw.push(false);
         }
-        Op::Nil => stack.push(fb.ins().iconst(types::I64, Value::NIL.bits() as i64)),
-        Op::True => stack.push(fb.ins().iconst(types::I64, Value::T.bits() as i64)),
+        Op::Nil => {
+            stack.push(fb.ins().iconst(types::I64, Value::NIL.bits() as i64));
+            stack_raw.push(false);
+        }
+        Op::True => {
+            stack.push(fb.ins().iconst(types::I64, Value::T.bits() as i64));
+            stack_raw.push(false);
+        }
         Op::Pop => {
             stack.pop().ok_or(CompileError::StackUnderflow)?;
+            stack_raw.pop();
         }
         Op::Dup => {
             let top = *stack.last().ok_or(CompileError::StackUnderflow)?;
+            let top_raw = *stack_raw.last().ok_or(CompileError::StackUnderflow)?;
             stack.push(top);
+            stack_raw.push(top_raw);
         }
         Op::StackRef(n) => {
             // 0 = top of stack, 1 = one below, ...
@@ -3195,17 +3283,20 @@ fn lower_simple_op(
                 .checked_sub(1 + n)
                 .ok_or(CompileError::StackUnderflow)?;
             stack.push(stack[idx]);
+            stack_raw.push(stack_raw[idx]);
         }
         Op::StackSet(n) => {
             // Assign TOS into the slot N below TOS, then pop TOS (N = 0 == pop).
             let n = *n as usize;
             let top = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let top_raw = stack_raw.pop().ok_or(CompileError::StackUnderflow)?;
             if n != 0 {
                 let idx = stack
                     .len()
                     .checked_sub(n)
                     .ok_or(CompileError::StackUnderflow)?;
                 stack[idx] = top;
+                stack_raw[idx] = top_raw;
             }
         }
         Op::DiscardN(raw) => {
@@ -3218,31 +3309,54 @@ fn lower_simple_op(
                 if preserve_tos {
                     let target = len.checked_sub(1 + n).ok_or(CompileError::StackUnderflow)?;
                     stack[target] = stack[len - 1];
+                    stack_raw[target] = stack_raw[len - 1];
                 } else if n > len {
                     return Err(CompileError::StackUnderflow);
                 }
                 stack.truncate(len - n);
+                stack_raw.truncate(len - n);
             }
         }
         Op::Add | Op::Sub => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let n = stack.len();
+            if n < 2 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let b = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 2, known);
+            stack.truncate(n - 2);
+            stack_raw.truncate(n - 2);
             let is_sub = matches!(op, Op::Sub);
-            stack.push(lower_fixnum_binop(fb, dsite, is_sub, a, b, known));
+            stack.push(raw_fixnum_addsub(fb, dsite, is_sub, a, b));
+            stack_raw.push(true);
         }
         Op::Mul => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            stack.push(lower_fixnum_mul(fb, dsite, a, b, known));
+            let n = stack.len();
+            if n < 2 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let b = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 2, known);
+            stack.truncate(n - 2);
+            stack_raw.truncate(n - 2);
+            stack.push(raw_fixnum_mul(fb, dsite, a, b));
+            stack_raw.push(true);
         }
         Op::Div | Op::Rem => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let n = stack.len();
+            if n < 2 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let b = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 2, known);
+            stack.truncate(n - 2);
+            stack_raw.truncate(n - 2);
             let is_rem = matches!(op, Op::Rem);
-            stack.push(lower_fixnum_divrem(fb, dsite, is_rem, a, b, known));
+            stack.push(raw_fixnum_divrem(fb, dsite, is_rem, a, b));
+            stack_raw.push(true);
         }
         Op::Eq => {
             // Bit-equal -> t natively; differing bits -> the read-only slow-path
@@ -3307,20 +3421,33 @@ fn lower_simple_op(
             stack.push(fb.use_var(res));
         }
         Op::Add1 | Op::Sub1 | Op::Negate => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let n = stack.len();
+            if n < 1 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            stack.truncate(n - 1);
+            stack_raw.truncate(n - 1);
             let kind = match op {
                 Op::Add1 => UnaryKind::Add1,
                 Op::Sub1 => UnaryKind::Sub1,
                 Op::Negate => UnaryKind::Negate,
                 _ => unreachable!("matched Add1/Sub1/Negate above"),
             };
-            stack.push(lower_fixnum_unop(fb, dsite, kind, a, known));
+            stack.push(raw_fixnum_unop(fb, dsite, kind, a));
+            stack_raw.push(true);
         }
         Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let n = stack.len();
+            if n < 2 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let b = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 2, known);
+            stack.truncate(n - 2);
+            stack_raw.truncate(n - 2);
             let cc = match op {
                 Op::Eqlsign => IntCC::Equal,
                 Op::Lss => IntCC::SignedLessThan,
@@ -3329,7 +3456,12 @@ fn lower_simple_op(
                 Op::Geq => IntCC::SignedGreaterThanOrEqual,
                 _ => unreachable!("matched comparison ops above"),
             };
-            stack.push(lower_fixnum_compare(fb, dsite, cc, a, b, known));
+            // Operands raw, result is a tagged t/nil (a sink, not raw).
+            let cond = fb.ins().icmp(cc, a, b);
+            let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+            let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+            stack.push(fb.ins().select(cond, t, nil));
+            stack_raw.push(false);
         }
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -3343,7 +3475,9 @@ fn lower_simple_op(
             stack.push(lower_predicate(fb, kind, a));
         }
         Op::Car | Op::Cdr => {
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
+            // Non-raw: the top-of-fn retag_all_raw already tagged the stack; the
+            // deopt snapshot's mask is all-false (cold retag is a no-op here).
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_cdr = matches!(op, Op::Cdr);
             stack.push(lower_car_cdr(fb, Some(dsite), is_cdr, false, a));
@@ -3354,24 +3488,20 @@ fn lower_simple_op(
             stack.push(lower_car_cdr(fb, None, is_cdr, true, a));
         }
         Op::Max | Op::Min => {
-            // Both fixnum -> keep the original tagged operand selected by the
-            // untagged comparison (exact interpreter parity: fixnum_ge ->
-            // a-else-b for max, fixnum_le -> a-else-b for min); otherwise deopt
-            // to the interpreter's number-coercing builtin.
-            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
-            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            guard_fixnum(fb, dsite, a, known);
-            guard_fixnum(fb, dsite, b, known);
-            let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
-            let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
-            let cc = if matches!(op, Op::Max) {
-                IntCC::SignedGreaterThanOrEqual
-            } else {
-                IntCC::SignedLessThanOrEqual
-            };
-            let keep_a = fb.ins().icmp(cc, av, bv);
-            stack.push(fb.ins().select(keep_a, a, b));
+            // Both fixnum -> select the larger/smaller RAW operand (one of the two
+            // valid raw inputs, so the result stays raw); otherwise deopt to the
+            // interpreter's number-coercing builtin.
+            let n = stack.len();
+            if n < 2 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+            let b = stack_as_raw(fb, dsite, stack, stack_raw, n - 1, known);
+            let a = stack_as_raw(fb, dsite, stack, stack_raw, n - 2, known);
+            stack.truncate(n - 2);
+            stack_raw.truncate(n - 2);
+            stack.push(raw_fixnum_maxmin(fb, matches!(op, Op::Min), a, b));
+            stack_raw.push(true);
         }
         Op::Integerp | Op::Numberp => {
             // Fixnum tag -> t natively; anything else (bignum/float/non-number)
@@ -5079,6 +5209,10 @@ pub fn lower_leaf_full(
             // Materialize the incoming operand stack from the slot variables.
             let depth = cfg.entry_depth[&l];
             let mut stack: Vec<ClifValue> = (0..depth).map(|k| fb.use_var(vars[k])).collect();
+            // Cross-op unboxing: incoming slots are tagged (loaded from vars). Raw
+            // (untagged) fixnums live only WITHIN a block; the mask resets to
+            // all-tagged at each block entry (no cross-block raw in this increment).
+            let mut stack_raw: Vec<bool> = vec![false; depth];
             // Cross-block known-fixnum operands at this block's entry: each slot
             // the dataflow analysis proved fixnum maps to its just-materialized
             // ClifValue. StackRef/Dup keep the same ClifValue, so the set stays
@@ -5105,6 +5239,26 @@ pub fn lower_leaf_full(
             let mut terminated = false;
             for (off, op) in ops[l..end].iter().enumerate() {
                 let i = l + off;
+                // Terminators consume / snapshot / spill the operand stack as tagged
+                // Values; force-tag any raw slots first (the block's raw state is
+                // discarded after the terminator, so no per-pop lockstep is needed
+                // past this point).
+                if matches!(
+                    op,
+                    Op::Return
+                        | Op::Throw
+                        | Op::Goto(_)
+                        | Op::GotoIfNil(_)
+                        | Op::GotoIfNotNil(_)
+                        | Op::GotoIfNilElsePop(_)
+                        | Op::GotoIfNotNilElsePop(_)
+                        | Op::Switch
+                        | Op::PushConditionCase(_)
+                        | Op::PushConditionCaseRaw(_)
+                        | Op::PushCatch(_)
+                ) {
+                    retag_all_raw(&mut fb, &mut stack, &mut stack_raw);
+                }
                 match op {
                     Op::Return => {
                         let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -5391,19 +5545,33 @@ pub fn lower_leaf_full(
                             &mut signal_exit,
                             constants,
                             &mut stack,
+                            &mut stack_raw,
                             rt.as_ref(),
                             &handlers,
                             &mut pending,
                             spec,
                             other,
                             &known_fixnum,
-                        )?
+                        )?;
+                        // Re-sync the raw mask after the op: raw-preserving ops keep
+                        // it in lockstep (assert); every other op force-tagged the
+                        // stack at the top, so reset the mask to all-tagged here.
+                        if op_preserves_raw(other) {
+                            debug_assert_eq!(
+                                stack.len(),
+                                stack_raw.len(),
+                                "raw-preserving op left stack_raw desynced"
+                            );
+                        } else {
+                            stack_raw.resize(stack.len(), false);
+                        }
                     }
                 }
             }
             if !terminated {
                 // Fall through into the next leader block (analyze guaranteed it
-                // exists and is < n).
+                // exists and is < n). vars carry tagged Values across the edge.
+                retag_all_raw(&mut fb, &mut stack, &mut stack_raw);
                 write_stack_to_vars(&mut fb, &vars, &stack);
                 fb.ins().jump(block_for[&end], &[]);
             }
@@ -7652,18 +7820,24 @@ mod tests {
 
     #[test]
     fn div_wrap_case_matches_interpreter() {
-        // MOST_NEGATIVE_FIXNUM / -1 wraps through the interpreter's retag; the
-        // JIT's sdiv + retag must produce the identical bits.
+        // MOST_NEGATIVE_FIXNUM / -1 overflows fixnum range (= 2^60). The interpreter
+        // wraps it; the unboxed JIT (raw_fixnum_divrem) range-checks and DEOPTS
+        // rather than keep an out-of-range raw value, then a precise-deopt resume
+        // reruns Op::Div in the interpreter and wraps to the same bits. Resume-value
+        // parity is covered by the THRESHOLD=1 differential gate + the straight-line
+        // fuzz (which generates Div over these boundary constants); here we assert
+        // the deopt itself (call_for_test returns None on deopt).
         let ops = [Op::Constant(0), Op::Constant(1), Op::Div, Op::Return];
         let consts = [
             Value::make_int(Value::MOST_NEGATIVE_FIXNUM),
             Value::make_int(-1),
         ];
-        let want = interp_nullary(&ops, &consts).bits();
-        let got = lower_nullary_leaf(&ops, &consts)
-            .unwrap()
-            .call_for_test(&[]);
-        assert_eq!(got, Some(want));
+        let leaf = lower_nullary_leaf(&ops, &consts).unwrap();
+        assert_eq!(
+            leaf.call_for_test(&[]),
+            None,
+            "fixnum-overflow division must deopt to the interpreter, not native-wrap"
+        );
     }
 
     #[test]
