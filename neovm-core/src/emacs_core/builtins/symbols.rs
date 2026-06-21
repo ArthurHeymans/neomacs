@@ -2746,17 +2746,6 @@ pub(crate) fn builtin_optimize_char_table(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_overlay_lists(args: Vec<Value>) -> EvalResult {
-    expect_args("overlay-lists", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_overlay_recenter(args: Vec<Value>) -> EvalResult {
-    expect_args("overlay-recenter", &args, 1)?;
-    let _ = expect_integer_or_marker(&args[0])?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_profiler_cpu_log(args: Vec<Value>) -> EvalResult {
     expect_args("profiler-cpu-log", &args, 0)?;
     Ok(Value::NIL)

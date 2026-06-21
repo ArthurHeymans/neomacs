@@ -86,6 +86,24 @@ impl Itree {
         Self::overlays_at_node(&self.root, pos, out);
     }
 
+    /// Collect every overlay in the tree in ascending `begin` (start) order.
+    ///
+    /// GNU's `Foverlay_lists` walks `current_buffer->overlays` with
+    /// `ITREE_FOREACH (node, ..., BEG, Z, DESCENDING)` and conses each node
+    /// onto the result, which reverses the descending walk back into ascending
+    /// `begin` order. An in-order (left, self, right) traversal of this
+    /// `begin`-keyed BST yields the same ascending sequence directly.
+    fn all_overlays_ascending(&self, out: &mut Vec<Value>) {
+        Self::all_overlays_ascending_node(&self.root, out);
+    }
+
+    fn all_overlays_ascending_node(node: &Option<Box<ItreeNode>>, out: &mut Vec<Value>) {
+        let Some(n) = node.as_ref() else { return };
+        Self::all_overlays_ascending_node(&n.left, out);
+        out.push(n.overlay);
+        Self::all_overlays_ascending_node(&n.right, out);
+    }
+
     /// Collect all overlays overlapping `start..end` in GNU's interval-tree
     /// ascending traversal order.
     fn overlays_in_region(
@@ -392,6 +410,20 @@ impl OverlayList {
 
     pub fn overlays_in_emacs_byte_range(&self, range: EmacsByteRange) -> Vec<Value> {
         self.overlays_in_accessible_emacs_byte_range(range, range.end())
+    }
+
+    /// Return every live overlay of this buffer in GNU's `overlay-lists` order.
+    ///
+    /// Mirrors `Foverlay_lists` (buffer.c): the buffer's interval tree is
+    /// walked `BEG..Z` descending and consed, producing all overlays in
+    /// ascending `begin` order. Used to build the `(BEFORE . AFTER)` pair that
+    /// `overlay-lists` returns; since Emacs 29.1 the "overlay center" is gone,
+    /// so every overlay lands in the `BEFORE` (car) list and the `AFTER` (cdr)
+    /// list is always empty.
+    pub fn overlays_in_gnu_lists_order(&self) -> Vec<Value> {
+        let mut overlays = Vec::with_capacity(self.overlays.len());
+        self.itree.all_overlays_ascending(&mut overlays);
+        overlays
     }
 
     pub fn overlays_in_accessible_emacs_byte_range(

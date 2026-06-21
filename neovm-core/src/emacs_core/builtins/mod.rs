@@ -5747,13 +5747,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "overlay-lists",
-        |_ctx, args| builtin_overlay_lists(args),
+        super::textprop::builtin_overlay_lists,
         0,
         Some(0),
     );
     ctx.defsubr(
         "overlay-recenter",
-        |_ctx, args| builtin_overlay_recenter(args),
+        super::textprop::builtin_overlay_recenter,
         1,
         Some(1),
     );

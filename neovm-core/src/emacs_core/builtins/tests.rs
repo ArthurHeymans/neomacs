@@ -5870,10 +5870,14 @@ fn pure_dispatch_open_overlay_placeholders_match_compat_contracts() {
     .expect("builtin optimize-char-table should evaluate");
     assert!(optimized.is_nil());
 
+    // GNU `Foverlay_lists` always returns the `(BEFORE . AFTER)` pair; with no
+    // overlays that pair is `(nil)` (`(cons nil nil)`), never bare `nil`.
     let overlays = dispatch_builtin_pure("overlay-lists", vec![])
         .expect("builtin overlay-lists should resolve")
         .expect("builtin overlay-lists should evaluate");
-    assert!(overlays.is_nil());
+    assert!(overlays.is_cons());
+    assert!(overlays.cons_car().is_nil());
+    assert!(overlays.cons_cdr().is_nil());
 
     let recentered = dispatch_builtin_pure("overlay-recenter", vec![Value::fixnum(0)])
         .expect("builtin overlay-recenter should resolve")

@@ -3022,6 +3022,51 @@ pub(crate) fn builtin_overlays_in_in_buffers(
     Ok(Value::list(ids))
 }
 
+/// (overlay-lists)
+///
+/// Mirrors GNU `Foverlay_lists` (buffer.c). Returns `(BEFORE . AFTER)`: the
+/// car holds every overlay of the current buffer, the cdr is always empty.
+/// GNU's docstring still describes the pair as the overlays before/after the
+/// "overlay center", but since Emacs 29.1 (commit moving overlays to the
+/// `itree` interval tree) that center no longer exists: `Foverlay_lists`
+/// conses every node of `current_buffer->overlays` (walked `BEG..Z`
+/// DESCENDING, which reverses back to ascending `begin` order) into a single
+/// list and returns `(cons overlays Qnil)`. Even for an empty buffer GNU
+/// returns `(nil)` (i.e. `(cons nil nil)`), never bare `nil`.
+pub(crate) fn builtin_overlay_lists(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_overlay_lists_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_lists_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-lists", &args, 0)?;
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    let before = Value::list(buf.overlays.overlays_in_gnu_lists_order());
+    Ok(Value::cons(before, Value::NIL))
+}
+
+/// (overlay-recenter POS)
+///
+/// Mirrors GNU `Foverlay_recenter` (buffer.c): since Emacs 29.1 this is a
+/// no-op (overlay lookup is fast at any position with the `itree` store), but
+/// it still type-checks POS as a fixnum-or-marker and returns nil.
+pub(crate) fn builtin_overlay_recenter(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-recenter", &args, 1)?;
+    let _ = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
+    Ok(Value::NIL)
+}
+
 /// (move-overlay OVERLAY BEG END &optional BUFFER)
 pub(crate) fn builtin_move_overlay(
     eval: &mut super::eval::Context,
