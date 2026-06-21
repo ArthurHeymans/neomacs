@@ -1139,3 +1139,156 @@ fn parse_zone_rule_accepts_raw_unibyte_string_without_panicking() {
         other => panic!("expected TzString, got {other:?}"),
     }
 }
+
+// -----------------------------------------------------------------------
+// Exact (TICKS . HZ) rational time core — byte-exact vs GNU Emacs 31.0.50.
+// Each assertion was reproduced against
+// `/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs --batch`.
+// -----------------------------------------------------------------------
+
+#[test]
+fn float_time_reads_back_bignum_ticks_hz_from_encode_time_float() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (float-time (encode-time 30.5 30 14 16 6 2026 nil)) => 1781634630.5
+    // The encode-time result has bignum TICKS at HZ=2**48; the old i64 path
+    // signalled `wrong-type-argument integerp <bignum>` instead of decoding it.
+    let results = bootstrap_eval(
+        r#"
+        (float-time (encode-time 30.5 30 14 16 6 2026 nil))
+        (float-time (encode-time 30.0 30 14 16 6 2026 nil))
+        "#,
+    );
+    assert_eq!(results[0], "OK 1781634630.5");
+    assert_eq!(results[1], "OK 1781634630.0");
+}
+
+#[test]
+fn float_time_of_symbol_t_signals_invalid_time_specification() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (float-time t) => (error "Invalid time specification"); previously
+    // Neomacs raised `wrong-type-argument`.
+    let results = bootstrap_eval(
+        r#"
+        (condition-case e (float-time t) (error (car e)))
+        (condition-case e (float-time t) (error (car (cdr e))))
+        "#,
+    );
+    assert_eq!(results[0], "OK error");
+    assert_eq!(results[1], "OK \"Invalid time specification\"");
+}
+
+#[test]
+fn time_add_mixed_resolutions_uses_exact_rational() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (time-add 0.5 '(1 . 3)) => (5 . 6); the lossy microsecond path
+    // produced a garbage high-HZ pair.
+    let results = bootstrap_eval(
+        r#"
+        (time-add 0.5 '(1 . 3))
+        (time-add '(3 . 4) '(1 . 8))
+        "#,
+    );
+    assert_eq!(results[0], "OK (5 . 6)");
+    assert_eq!(results[1], "OK (7 . 8)");
+}
+
+#[test]
+fn time_arith_collapses_to_integer_for_whole_second_lists() {
+    crate::test_utils::init_test_tracing();
+    // GNU collapses HZ back to 1 when the result is whole seconds:
+    // (time-add (encode-time 0 0 0 1 1 2024 nil) (seconds-to-time 86400))
+    //   => 1704171600 (a plain integer, NOT a (HI LO ...) list).
+    let results = bootstrap_eval(
+        r#"
+        (let ((t1 (encode-time 0 0 0 1 1 2024 nil)))
+          (time-add t1 (seconds-to-time 86400)))
+        (let ((t1 (encode-time 0 0 0 1 1 2024 nil)))
+          (time-add t1 (seconds-to-time 3600)))
+        (let ((t1 (encode-time 0 0 0 2 1 2024 nil))
+              (t2 (encode-time 0 0 0 1 1 2024 nil)))
+          (time-subtract t1 t2))
+        "#,
+    );
+    assert_eq!(results[0], "OK 1704171600");
+    assert_eq!(results[1], "OK 1704088800");
+    assert_eq!(results[2], "OK 86400");
+}
+
+#[test]
+fn time_add_preserves_hi_lo_us_ps_list_form() {
+    crate::test_utils::init_test_tracing();
+    // GNU keeps the (HI LO US PS) form when sub-second precision survives and
+    // neither input is a (TICKS . HZ) cons.
+    let results = bootstrap_eval(
+        r#"
+        (time-add '(0 1 0 0) '(0 2 0 0))
+        (time-add '(0 1 5 0) '(0 2 0 7))
+        "#,
+    );
+    assert_eq!(results[0], "OK (0 3 0 0)");
+    assert_eq!(results[1], "OK (0 3 5 7)");
+}
+
+#[test]
+fn time_less_p_and_equal_p_on_encode_time_values() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval(
+        r#"
+        (let ((t1 (encode-time 0 0 0 1 1 2024 nil))
+              (t2 (encode-time 0 0 0 2 1 2024 nil)))
+          (list (time-less-p t1 t2) (time-less-p t2 t1) (time-equal-p t1 t1)))
+        "#,
+    );
+    assert_eq!(results[0], "OK (t nil t)");
+}
+
+#[test]
+fn float_time_list_form_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (float-time '(1 2 3 4)) => 65538.00000300001
+    let results = bootstrap_eval(r#"(float-time '(1 2 3 4))"#);
+    assert_eq!(results[0], "OK 65538.00000300001");
+}
+
+#[test]
+fn format_time_string_subsecond_from_cons_second() {
+    crate::test_utils::init_test_tracing();
+    // GNU: encode-time with a cons SECOND (30 0 0) (= (HIGH LOW USEC)) yields a
+    // (... . 1000000) timestamp; %3N/%6N read its sub-second field exactly.
+    let results = bootstrap_eval(
+        r#"
+        (encode-time '(30 0 0) 0 12 15 6 2024 nil)
+        (let ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 nil)))
+          (list (format-time-string "%S.%3N" t0 t)
+                (format-time-string "%S.%6N" t0 t)))
+        "#,
+    );
+    assert_eq!(results[0], "OK (1720433280000000 . 1000000)");
+    assert_eq!(results[1], "OK (\"00.000\" \"00.000000\")");
+}
+
+#[test]
+fn time_convert_accepts_bignum_ticks_hz_for_all_forms() {
+    crate::test_utils::init_test_tracing();
+    // Regression: timer arithmetic on a float delay (e.g. (run-with-timer 0.1
+    // ...)) produces a (TICKS . HZ) cons with a *bignum* TICKS, which
+    // timer--time-setter then feeds to `(time-convert TIME 'list)`. The old
+    // fixnum-only decoder signalled `wrong-type-argument integerp <bignum>`.
+    // All forms verified byte-exact vs GNU Emacs 31.0.50.
+    let big = "1003201560221054835793619586101";
+    let results = bootstrap_eval(&format!(
+        r#"
+        (time-convert '({big} . 562949953421312000000) 'list)
+        (time-convert '({big} . 562949953421312000000) 'integer)
+        (time-convert '({big} . 562949953421312000000) t)
+        (time-convert '({big} . 562949953421312000000) 1000000)
+        "#
+    ));
+    assert_eq!(results[0], "OK (27191 54576 795673 0)");
+    assert_eq!(results[1], "OK 1782043952");
+    assert_eq!(
+        results[2],
+        "OK (1003201560221054835793619586101 . 562949953421312000000)"
+    );
+    assert_eq!(results[3], "OK (1782043952795673 . 1000000)");
+}
