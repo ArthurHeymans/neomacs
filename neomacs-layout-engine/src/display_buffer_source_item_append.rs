@@ -1,5 +1,5 @@
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
+use crate::display_row::DisplayRowActiveFaceState;
 #[cfg(test)]
 use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_append_context::{
@@ -7,6 +7,7 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 #[cfg(test)]

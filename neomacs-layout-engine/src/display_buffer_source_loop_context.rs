@@ -7,11 +7,12 @@ use crate::display_buffer_source_row_lifecycle::{
     BufferSourceLineBreakRenderContext, BufferSourceLineBreakRenderRequest,
     BufferSourceSelectiveDisplayTailRenderContext, BufferSourceSelectiveDisplayTailRenderRequest,
 };
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
 };
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_source::DisplaySourceStepChar;
 use crate::types::WindowParams;

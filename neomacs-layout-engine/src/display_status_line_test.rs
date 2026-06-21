@@ -1,5 +1,6 @@
 use super::*;
-use crate::display_row::{DisplayRowFace, DisplayRowFallbackMetrics};
+use crate::display_row::DisplayRowFace;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::face::FaceTable;
 
@@ -101,7 +102,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         display_row_index: 3,
         output: ChromeRowOutput::new(3, 24.0),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 24.0, 96.0, 16.0),
-        metrics: crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(
+        metrics: crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
             8.0, 16.0, 12.0,
         ),
         tab_policy: DisplayTabPolicy::every(4),

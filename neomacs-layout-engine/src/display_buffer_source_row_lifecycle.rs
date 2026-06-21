@@ -11,13 +11,14 @@ use crate::display_cursor::{
     capture_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowFallbackMetrics};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowYPositions,
 };
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_append::{
     BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,

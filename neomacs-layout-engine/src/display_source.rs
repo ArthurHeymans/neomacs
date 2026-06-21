@@ -9,9 +9,9 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
-use crate::display_row::DisplayRowFallbackMetrics;
 use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };

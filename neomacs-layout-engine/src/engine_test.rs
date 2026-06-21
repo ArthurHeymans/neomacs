@@ -766,7 +766,7 @@ fn captured_cursor_info_builds_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row::DisplayRowFallbackMetrics {
+        crate::display_row_metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,
@@ -819,7 +819,7 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row::DisplayRowFallbackMetrics {
+        crate::display_row_metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,
@@ -874,7 +874,7 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row::DisplayRowFallbackMetrics {
+        crate::display_row_metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,

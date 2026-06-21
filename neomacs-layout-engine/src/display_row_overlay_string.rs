@@ -10,7 +10,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
-use crate::display_row::{DisplayRowFallbackMetrics, DisplayRowRenderStop};
+use crate::display_row::DisplayRowRenderStop;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
@@ -21,6 +21,7 @@ use crate::display_row_lisp_string::{
     LispStringSourceAppendRequest, LispStringSourceAppendSessionRequest, LispStringSourceId,
     LispStringSourceRowAppendSession, LispStringSourceRowAppendSessionRequest,
 };
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowLineBreakTransitionRequest;
 use crate::display_row_walk_state::HitRowRangeTracker;

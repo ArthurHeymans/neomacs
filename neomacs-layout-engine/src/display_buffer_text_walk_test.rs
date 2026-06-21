@@ -2,7 +2,7 @@ use super::*;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_plan::BufferSourceOutputSetup;
-use crate::display_row::DisplayRowFallbackMetrics;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};

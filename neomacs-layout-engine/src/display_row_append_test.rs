@@ -5698,7 +5698,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
             &face_resolver,
             0,
             base_face,
-            crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(
+            crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                 8.0, 16.0, 12.0,
             ),
         ),
@@ -5731,8 +5731,9 @@ fn display_source_resolve_params_are_built_from_typed_face_basis() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let fallback =
-        crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0);
+    let fallback = crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
+        8.0, 16.0, 12.0,
+    );
     let basis = crate::display_source_resolver::DisplaySourceFaceBasis::new(
         &face_resolver,
         7,
@@ -5782,7 +5783,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
                 &face_resolver,
                 0,
                 base_face,
-                crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(
+                crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                     8.0, 16.0, 12.0,
                 ),
             ),
@@ -5831,7 +5832,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
                 &face_resolver,
                 0,
                 base_face,
-                crate::display_row::DisplayRowFallbackMetrics::from_default_face_extents(
+                crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                     8.0, 16.0, 12.0,
                 ),
             ),

@@ -1,4 +1,4 @@
-use crate::display_row::DisplayRowFallbackMetrics;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::ResolvedFace;
 

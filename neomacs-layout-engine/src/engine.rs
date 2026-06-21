@@ -42,13 +42,13 @@ use crate::display_frame_output::{
 };
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
-use crate::display_row::DisplayRowFallbackMetrics;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
 use crate::display_row_lisp_string::DisplayRowPrefixRequest;
 #[cfg(test)]
 use crate::display_row_lisp_string::DisplayRowPrefixValues;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 #[cfg(test)]
 use crate::display_row_overlay_string::OverlayStringRenderSource;
 #[cfg(test)]

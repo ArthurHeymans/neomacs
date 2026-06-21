@@ -1,7 +1,7 @@
 use crate::display_item::{
     DisplayImageItem, DisplayMediaReplacement, DisplayVideoItem, DisplayXwidgetItem,
 };
-use crate::display_row::DisplayRowFallbackMetrics;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_spec::{
     parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,

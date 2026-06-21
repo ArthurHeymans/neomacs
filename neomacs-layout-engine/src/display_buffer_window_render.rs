@@ -13,7 +13,7 @@ use crate::display_buffer_window_geometry::{
     BufferWindowLocalDisplayPolicy,
 };
 use crate::display_buffer_window_source::BufferWindowSourceReadRequest;
-use crate::display_row::DisplayRowFallbackMetrics;
+use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
 };
