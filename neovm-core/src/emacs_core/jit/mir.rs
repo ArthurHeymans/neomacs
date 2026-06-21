@@ -752,6 +752,176 @@ impl fmt::Display for MirFunction {
     }
 }
 
+/// Apply `f` to every `MirValue` operand of `op`, in place. Used for value
+/// renumbering during inline-splicing and for inlined-call result substitution.
+fn map_op_operands(op: &mut MirOp, mut f: impl FnMut(MirValue) -> MirValue) {
+    match op {
+        MirOp::Arg(_) | MirOp::Const(_) => {}
+        MirOp::Bin(_, a, b) | MirOp::Cmp(_, a, b) | MirOp::Eq(a, b) | MirOp::Cons(a, b) => {
+            *a = f(*a);
+            *b = f(*b);
+        }
+        MirOp::Unary(_, a) | MirOp::Pred(_, a) => *a = f(*a),
+        MirOp::CarCdr { arg, .. } => *arg = f(*arg),
+        MirOp::Opaque { args, .. } => {
+            for a in args.iter_mut() {
+                *a = f(*a);
+            }
+        }
+    }
+}
+
+/// Apply `f` to every `MirValue` operand of a terminator, in place.
+fn map_term_operands(term: &mut MirTerm, mut f: impl FnMut(MirValue) -> MirValue) {
+    match term {
+        MirTerm::Return(v) => *v = f(*v),
+        MirTerm::Goto { args, .. } => {
+            for a in args.iter_mut() {
+                *a = f(*a);
+            }
+        }
+        MirTerm::Branch {
+            cond,
+            taken_args,
+            fallthrough_args,
+            ..
+        } => {
+            *cond = f(*cond);
+            for a in taken_args.iter_mut() {
+                *a = f(*a);
+            }
+            for a in fallthrough_args.iter_mut() {
+                *a = f(*a);
+            }
+        }
+    }
+}
+
+/// A callee is inlinable into a pure MIR iff it is a single block ending in
+/// `Return`, contains no opaque/allocating/identity ops (so the splice keeps the
+/// caller in `lower_mir_pure`'s pure subset), and is within the size budget.
+fn callee_inlinable(c: &MirFunction, max_insts: usize) -> bool {
+    c.blocks.len() == 1
+        && matches!(c.blocks[0].term, MirTerm::Return(_))
+        && c.blocks[0]
+            .insts
+            .iter()
+            .all(|i| !matches!(i.op, MirOp::Opaque { .. } | MirOp::Eq(..) | MirOp::Cons(..)))
+        && c.blocks[0]
+            .insts
+            .iter()
+            .filter(|i| !matches!(i.op, MirOp::Arg(_)))
+            .count()
+            <= max_insts
+}
+
+/// Inline pure single-block callees at `Opaque{Op::Call(n)}` sites whose function
+/// operand is a compile-time `Const` resolving (via `resolve`) to an inlinable
+/// MIR. Splices the callee's body in place of the call: the callee's params map to
+/// the call's args, its other values are renumbered into the caller's value space,
+/// and the call's result is substituted with the callee's return value.
+///
+/// The spliced result stays a PURE MIR (the call is gone), so `lower_mir_pure`
+/// lowers it with sound rerun-from-start deopt — and unboxing/guard-elision then
+/// flow ACROSS the former call boundary (the optimization the per-pc baseline
+/// cannot do). Returns the number of sites inlined.
+///
+/// NOTE: redefinition is NOT guarded here — a caller that lowers + runs an inlined
+/// result MUST first emit an epoch guard (deopt if the callee changed; a later
+/// wiring increment). Until then this is an unwired transform exercised by tests.
+pub fn inline_pure_single_block_callees(
+    m: &mut MirFunction,
+    resolve: &impl Fn(Value) -> Option<MirFunction>,
+    max_insts: usize,
+) -> usize {
+    let mut inlined = 0usize;
+    let mut subs: Vec<(MirValue, MirValue)> = Vec::new();
+
+    for bi in 0..m.blocks.len() {
+        // Within-block map from a value to the constant defining it (a call's
+        // function operand is a `Const` symbol pushed just before its args).
+        let consts: HashMap<MirValue, Value> = m.blocks[bi]
+            .insts
+            .iter()
+            .filter_map(|i| match &i.op {
+                MirOp::Const(v) => Some((i.result, *v)),
+                _ => None,
+            })
+            .collect();
+
+        let old_insts = std::mem::take(&mut m.blocks[bi].insts);
+        let mut new_insts: Vec<MirInst> = Vec::with_capacity(old_insts.len());
+
+        for inst in old_insts {
+            let resolved = match &inst.op {
+                MirOp::Opaque {
+                    op: Op::Call(n),
+                    args,
+                } if args.len() == *n as usize + 1 => consts
+                    .get(&args[0])
+                    .and_then(|sym| resolve(*sym))
+                    .filter(|c| c.arity == *n as usize && callee_inlinable(c, max_insts))
+                    .map(|c| (c, args[1..].to_vec())),
+                _ => None,
+            };
+
+            let Some((callee, arg_vals)) = resolved else {
+                new_insts.push(inst);
+                continue;
+            };
+
+            // Splice the callee's single block: params -> the call's args; other
+            // values -> fresh caller values.
+            let cblk = &callee.blocks[0];
+            let mut remap: HashMap<MirValue, MirValue> = HashMap::new();
+            for (i, &p) in cblk.params.iter().enumerate() {
+                remap.insert(p, arg_vals[i]);
+            }
+            for cinst in &cblk.insts {
+                if matches!(cinst.op, MirOp::Arg(_)) {
+                    continue; // params already mapped to the call's args
+                }
+                let new_v = MirValue(m.value_types.len() as u32);
+                m.value_types.push(cinst.ty);
+                remap.insert(cinst.result, new_v);
+                let mut op = cinst.op.clone();
+                map_op_operands(&mut op, |v| remap.get(&v).copied().unwrap_or(v));
+                new_insts.push(MirInst {
+                    result: new_v,
+                    op,
+                    ty: cinst.ty,
+                    effect: cinst.effect,
+                    // The inlined body shares the call's framestate anchor (unused
+                    // by pure rerun-from-start lowering).
+                    pc: inst.pc,
+                    pre_stack: inst.pre_stack.clone(),
+                });
+            }
+            let MirTerm::Return(rv) = &cblk.term else {
+                unreachable!("callee_inlinable guarantees a Return terminator");
+            };
+            let new_result = remap.get(rv).copied().unwrap_or(*rv);
+            subs.push((inst.result, new_result));
+            inlined += 1;
+        }
+
+        m.blocks[bi].insts = new_insts;
+    }
+
+    // Substitute each inlined call's old result with the callee's return value
+    // across the whole function (later uses + terminators).
+    for (old, new) in &subs {
+        for blk in &mut m.blocks {
+            for inst in &mut blk.insts {
+                map_op_operands(&mut inst.op, |v| if v == *old { *new } else { v });
+            }
+            map_term_operands(&mut blk.term, |v| if v == *old { *new } else { v });
+        }
+    }
+
+    inlined
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

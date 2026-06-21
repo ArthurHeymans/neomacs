@@ -6378,6 +6378,38 @@ mod tests {
     }
 
     #[test]
+    fn inline_pure_callee_lowers_and_runs() {
+        // Caller (lambda (a) (sq a)) with sq = (lambda (x) (* x x)). build_mir(caller)
+        // has an Opaque{Call} (so lower_mir_pure alone would bail); inlining sq's
+        // pure body turns the caller into (* a a) — a pure MIR lower_mir_pure
+        // handles — proving cross-call-boundary inlining + unboxing.
+        let sq_sym = Value::symbol("jit-inline-sq");
+        let sq_ops = [Op::Dup, Op::Mul, Op::Return];
+        let caller_ops = [Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        let caller_consts = [sq_sym];
+        let mut m = mir::build_mir(&caller_ops, &caller_consts, 1).expect("caller MIR builds");
+        let n = mir::inline_pure_single_block_callees(
+            &mut m,
+            &|v| (v.bits() == sq_sym.bits()).then(|| mir::build_mir(&sq_ops, &[], 1).expect("sq builds")),
+            16,
+        );
+        assert_eq!(n, 1, "sq must be inlined (the call replaced by its body)");
+        let leaf = lower_mir_pure(&m).expect("inlined (now pure) MIR lowers");
+        for a in [3i64, 7, -4, 0] {
+            let arg = Value::make_int(a);
+            match leaf.call(std::ptr::null_mut(), &[arg]) {
+                NativeRun::Ok(bits) => assert_eq!(
+                    bits,
+                    Value::make_int(a * a).bits(),
+                    "inlined (* a a) for a={a}"
+                ),
+                NativeRun::Deopt | NativeRun::DeoptAt { .. } => {}
+                other => panic!("a={a}: unexpected {other:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn backedge_polls_quit_like_the_interpreter() {
         use crate::emacs_core::bytecode::Vm;
         use crate::emacs_core::eval::Context;
