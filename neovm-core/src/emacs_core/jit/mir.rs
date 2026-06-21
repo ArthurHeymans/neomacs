@@ -330,7 +330,16 @@ pub fn build_mir(
     let mut block_params: HashMap<usize, Vec<MirValue>> = HashMap::new();
     for (bid, &leader) in cfg.leaders.iter().enumerate() {
         block_for.insert(leader, MirBlockId(bid as u32));
-        let depth = cfg.entry_depth[&leader];
+        // `analyze_cfg` propagates entry depths forward from block 0, so an
+        // UNREACHABLE leader (dead code — e.g. a block after an unconditional
+        // jump that nothing targets) has no entry depth. The baseline tolerates
+        // this (`entry_depth.get(&l).unwrap_or(0)` — depth-0 dead code); the MIR
+        // builder bails instead, so such bodies fall back to the baseline rather
+        // than build a CFG with a malformed (depthless) block.
+        let depth = match cfg.entry_depth.get(&leader) {
+            Some(&d) => d,
+            None => return Err(CompileError::UnsupportedOp("mir-unreachable-block")),
+        };
         let params: Vec<MirValue> = (0..depth)
             .map(|i| {
                 if leader == 0 {
@@ -835,5 +844,26 @@ mod tests {
         // not buildable, which is all Phase 4a needs.
         let sw = vec![Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return];
         assert!(build_mir(&sw, &[], 0).is_err());
+    }
+
+    #[test]
+    fn bails_on_unreachable_block() {
+        // index 2 is a block leader (it follows the unconditional Goto), but
+        // nothing targets it -> unreachable, so analyze_cfg assigns it no entry
+        // depth. build_mir must bail (the body falls back to the baseline), not
+        // panic indexing the missing entry depth. (Regression: wiring lower_mir_pure
+        // panicked here on a real module-path function with dead code.)
+        let ops = vec![
+            Op::Constant(0),
+            Op::Goto(4),
+            Op::Constant(0), // unreachable leader
+            Op::Return,
+            Op::Return,
+        ];
+        let constants = vec![Value::make_int(7)];
+        assert!(matches!(
+            build_mir(&ops, &constants, 0),
+            Err(CompileError::UnsupportedOp("mir-unreachable-block"))
+        ));
     }
 }
