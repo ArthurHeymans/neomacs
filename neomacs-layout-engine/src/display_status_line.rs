@@ -21,12 +21,12 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
-pub(crate) use crate::display_row::DisplayRowFaceRealizer;
 use crate::display_row::{
     DisplayRowLispStringSourceRenderRequest, DisplayRowRenderExecutor,
     DisplayRowSourceFragmentRenderRequest,
 };
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
+pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
 use crate::display_row_measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
 };

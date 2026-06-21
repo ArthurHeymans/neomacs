@@ -24,7 +24,7 @@ use crate::display_output_row_request::{
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_output_window_state::OutputWindowBuildState;
 #[cfg(test)]
-use crate::display_row::resolved_display_row_face;
+use crate::display_row_face_state::resolved_display_row_face;
 #[cfg(test)]
 use crate::font_metrics::FontMetrics;
 #[cfg(test)]

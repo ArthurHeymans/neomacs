@@ -2,9 +2,9 @@ use crate::display_buffer_source_item_append::BufferSourceActiveFaceRowMetrics;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_replacement::{

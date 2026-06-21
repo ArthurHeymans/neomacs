@@ -11,8 +11,8 @@ use crate::display_buffer_source_row_lifecycle::{
 };
 use crate::display_buffer_source_text_run::BufferSourceTextRunRenderRequest;
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
 };

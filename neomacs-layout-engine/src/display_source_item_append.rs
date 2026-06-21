@@ -4,9 +4,9 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};

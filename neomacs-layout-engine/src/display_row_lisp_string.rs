@@ -5,12 +5,12 @@ use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendMetrics, DisplayRowAppendSurface,
 };
 use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::CurrentTextRowRenderOutcome;

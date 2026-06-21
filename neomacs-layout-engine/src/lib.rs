@@ -57,6 +57,7 @@ pub(crate) mod display_rendered_row_output_install;
 pub(crate) mod display_row;
 pub(crate) mod display_row_append_context;
 pub(crate) mod display_row_builder;
+pub(crate) mod display_row_face_state;
 pub(crate) mod display_row_finalizer;
 pub(crate) mod display_row_geometry;
 pub(crate) mod display_row_line_number_margin;

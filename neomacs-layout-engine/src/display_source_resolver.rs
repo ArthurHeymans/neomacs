@@ -8,7 +8,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
 };
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::display_source::{

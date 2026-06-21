@@ -1,10 +1,9 @@
 use crate::composition::{
     base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
-use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowSourceRenderRequest,
-};
+use crate::display_row::{DisplayRowGeometry, DisplayRowSourceRenderRequest};
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
 use crate::display_row_metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
 use crate::display_row_render_state::DisplayRowRenderBounds;

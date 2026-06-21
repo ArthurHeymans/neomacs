@@ -8,7 +8,7 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_with_fallback;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
+use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_render::TextRowSourceRenderState;

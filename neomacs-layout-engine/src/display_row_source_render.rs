@@ -12,15 +12,17 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplayPropertyReplacementDescriptor;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowRenderContext,
-    DisplayRowRenderExecutor, DisplayRowRenderPolicy, DisplayRowRenderer,
-    DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentFrame,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest,
+    DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderPolicy, DisplayRowRenderer,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceFragmentRenderRequest,
+    DisplayRowSourceRenderRequest,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_face_state::{
+    DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
+};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::{

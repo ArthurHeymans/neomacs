@@ -8,11 +8,11 @@ use crate::display_cursor::{
     capture_cursor_info,
 };
 use crate::display_item::DisplaySourcePosition;
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
 };
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;

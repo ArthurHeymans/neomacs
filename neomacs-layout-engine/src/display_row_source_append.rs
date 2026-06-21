@@ -1,12 +1,13 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowRenderPolicy};
+use crate::display_row::DisplayRowRenderPolicy;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendSurface,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::CurrentTextRowRenderOutcome;

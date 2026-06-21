@@ -3,7 +3,7 @@
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };

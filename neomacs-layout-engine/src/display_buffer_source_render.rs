@@ -13,7 +13,7 @@ use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;

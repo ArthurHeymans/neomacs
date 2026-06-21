@@ -15,8 +15,8 @@ use crate::display_buffer_window_geometry::{
 };
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_append_context::DisplayRowAppendSurface;
+use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;

@@ -1,5 +1,5 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowTextPosition;
 use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_source::DisplayPropertyReplacementCursorPolicy;

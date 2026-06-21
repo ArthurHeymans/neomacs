@@ -10,7 +10,7 @@ use crate::display_buffer_source_row_lifecycle::{
 };
 use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_buffer_source_walk::*;
-use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;

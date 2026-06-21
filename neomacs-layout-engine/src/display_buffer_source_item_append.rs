@@ -1,11 +1,11 @@
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_row::DisplayRowActiveFaceState;
 #[cfg(test)]
 use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendKind, DisplayRowAppendSurface,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_append::SingleDisplayItemAppendContext;

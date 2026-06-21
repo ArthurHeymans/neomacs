@@ -7,7 +7,7 @@ use crate::display_output_row_request::{
     OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
 };
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
-use crate::display_row::resolved_display_row_face;
+use crate::display_row_face_state::resolved_display_row_face;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;

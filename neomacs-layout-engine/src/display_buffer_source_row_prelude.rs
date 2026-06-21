@@ -3,9 +3,9 @@
 //! Converts local display policy into the line-number and prefix requests
 //! emitted before ordinary buffer source items.
 
-use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
