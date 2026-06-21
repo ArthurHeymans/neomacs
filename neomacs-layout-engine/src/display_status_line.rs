@@ -36,7 +36,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::buffer::BufferId;
@@ -142,6 +142,33 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
             &mut *self.face_ids,
         );
         render_executor.render_item_source_fragment_into_row(request, row, source, source_state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_item_source_fragment_from_glyph_row_columns(
+        &mut self,
+        row: &mut GlyphRow,
+        source: &mut impl DisplayItemSource,
+        source_state: &mut DisplayRowSourceState,
+        matrix_cols: usize,
+        char_width: f32,
+        role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
+        face_id: u32,
+        base_face: &ResolvedFace,
+        start_col: usize,
+        max_col: usize,
+        area: GlyphArea,
+    ) -> Option<crate::display_row::DisplayRowRenderIntoRowResult> {
+        let request = crate::display_row::DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+            row,
+            matrix_cols,
+            char_width,
+            role,
+            face_id,
+            base_face,
+        )
+        .render_request_from_column_for_area(start_col, max_col, area);
+        self.render_item_source_fragment_into_row(request, row, source, source_state)
     }
 }
 

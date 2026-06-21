@@ -4,7 +4,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
+use crate::display_row::DisplayRowSourceState;
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
     trim_display_row_text_to_total_glyph_count,
@@ -159,16 +159,19 @@ fn render_right_edge_marker_source(
 ) {
     let start_col = display_row_total_glyph_count(row);
     let mut source_state = DisplayRowSourceState::default();
-    let request = DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+    render_services.render_item_source_fragment_from_glyph_row_columns(
         row,
+        source,
+        &mut source_state,
         matrix_cols,
         char_width,
         GlyphRowRole::Text,
         face_id,
         base_face,
-    )
-    .render_request_from_column(start_col, matrix_cols);
-    render_services.render_item_source_fragment_into_row(request, row, source, &mut source_state);
+        start_col,
+        matrix_cols,
+        GlyphArea::Text,
+    );
 }
 
 fn install_right_edge_marker_from_source_request(
@@ -261,20 +264,18 @@ fn render_right_border_text(
     }
     let mut source = right_border_text_source(request.text, request.face_id, request.source_offset);
     let mut source_state = DisplayRowSourceState::default();
-    let row_request = DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+    render_services.render_item_source_fragment_from_glyph_row_columns(
         row,
+        &mut source,
+        &mut source_state,
         request.matrix_cols,
         request.char_width,
         GlyphRowRole::Text,
         request.face_id,
         request.base_face,
-    )
-    .render_request_from_column_for_area(request.start_col, request.matrix_cols, request.area);
-    render_services.render_item_source_fragment_into_row(
-        row_request,
-        row,
-        &mut source,
-        &mut source_state,
+        request.start_col,
+        request.matrix_cols,
+        request.area,
     );
 }
 
