@@ -42,6 +42,11 @@ pub(crate) struct OverlayStringRenderSource {
     kind: OverlayStringKind,
 }
 
+pub(crate) struct OverlayStringRenderRequest<'a> {
+    source: OverlayStringRenderSource,
+    row_context: OverlayStringRenderRowContext<'a>,
+}
+
 impl OverlayStringRenderSource {
     pub(crate) fn new(
         overlay_string: OverlayDisplayString,
@@ -82,6 +87,26 @@ impl OverlayStringRenderSource {
         position: DisplayRowPosition,
     ) -> LispStringSourceAppendRequest {
         LispStringSourceAppendRequest::new(position, LispStringSourceId::OVERLAY_STRING, self.value)
+    }
+}
+
+impl<'a> OverlayStringRenderRequest<'a> {
+    pub(crate) fn new(
+        source: OverlayStringRenderSource,
+        row_context: OverlayStringRenderRowContext<'a>,
+    ) -> Self {
+        Self {
+            source,
+            row_context,
+        }
+    }
+
+    pub(crate) fn render<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: &mut OverlayStringRenderState<'_>,
+    ) {
+        render_overlay_string(buffer, self.source, self.row_context, state);
     }
 }
 
@@ -257,16 +282,15 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             } else {
                 OverlayStringKind::Before
             };
-            render_overlay_string(
-                buffer,
+            OverlayStringRenderRequest::new(
                 OverlayStringRenderSource::new(
                     overlay_string,
                     CharPos0::new(anchor_charpos as usize),
                     kind,
                 ),
                 row_context,
-                state,
-            );
+            )
+            .render(buffer, state);
         }
     }
 
@@ -332,7 +356,7 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
     }
 }
 
-pub(crate) fn render_overlay_string<B: LayoutBufferView>(
+fn render_overlay_string<B: LayoutBufferView>(
     buffer: &B,
     source_request: OverlayStringRenderSource,
     row_context: OverlayStringRenderRowContext<'_>,
