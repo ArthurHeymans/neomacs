@@ -24,6 +24,7 @@ pub(crate) mod display_buffer_source_render_plan;
 pub(crate) mod display_buffer_source_row_lifecycle;
 pub(crate) mod display_buffer_source_row_prelude;
 pub(crate) mod display_buffer_source_tail_render;
+pub(crate) mod display_buffer_source_text_run;
 pub(crate) mod display_buffer_source_walk;
 pub(crate) mod display_buffer_text_source;
 pub(crate) mod display_buffer_window_geometry;
