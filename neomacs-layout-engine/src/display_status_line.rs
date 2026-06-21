@@ -570,10 +570,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 kind: WindowChromeKind::TabLine,
                 selected: params.selected,
                 display_row_index: 0,
-                output: ChromeRowOutput {
-                    row: 0,
-                    y: tab_line_y,
-                },
+                output: ChromeRowOutput::new(0, tab_line_y),
                 bounds: Rect::new(
                     params.bounds.x,
                     tab_line_y,
@@ -605,10 +602,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 kind: WindowChromeKind::HeaderLine,
                 selected: params.selected,
                 display_row_index: usize::from(self.tab_line_height > 0.0),
-                output: ChromeRowOutput {
-                    row: i64::from(self.tab_line_height > 0.0),
-                    y: header_line_y,
-                },
+                output: ChromeRowOutput::new(i64::from(self.tab_line_height > 0.0), header_line_y),
                 bounds: Rect::new(
                     params.bounds.x,
                     header_line_y,
@@ -651,10 +645,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 kind: WindowChromeKind::ModeLine,
                 selected: params.selected,
                 display_row_index: self.mode_line_display_row,
-                output: ChromeRowOutput {
-                    row: self.mode_line_display_row as i64,
-                    y: mode_line_y,
-                },
+                output: ChromeRowOutput::new(self.mode_line_display_row as i64, mode_line_y),
                 bounds: Rect::new(
                     params.bounds.x,
                     mode_line_y,

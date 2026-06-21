@@ -108,19 +108,41 @@ struct CurrentRowProgress {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ChromeRowOutput {
-    pub(crate) row: i64,
-    pub(crate) y: f32,
+    row: i64,
+    y: f32,
+}
+
+impl ChromeRowOutput {
+    pub(crate) fn new(row: i64, y: f32) -> Self {
+        Self { row, y }
+    }
+
+    pub(crate) fn row(self) -> i64 {
+        self.row
+    }
+
+    pub(crate) fn y(self) -> f32 {
+        self.y
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ChromeRowProgress {
-    pub(crate) output: ChromeRowOutput,
-    pub(crate) progress: DisplayRowOutputProgress,
+    output: ChromeRowOutput,
+    progress: DisplayRowOutputProgress,
 }
 
 impl ChromeRowProgress {
     pub(crate) fn new(output: ChromeRowOutput, progress: DisplayRowOutputProgress) -> Self {
         Self { output, progress }
+    }
+
+    pub(crate) fn output(self) -> ChromeRowOutput {
+        self.output
+    }
+
+    pub(crate) fn progress(self) -> DisplayRowOutputProgress {
+        self.progress
     }
 }
 
@@ -917,9 +939,10 @@ impl DisplayProgressSink for WindowOutputEmitter {
     }
 
     fn emit_chrome_progress(&mut self, evaluator: &mut Context, progress: ChromeRowProgress) {
-        self.begin_chrome_row(evaluator, progress.output.row, progress.output.y);
-        self.move_chrome_output_to(evaluator, progress.output.row, progress.progress);
-        self.push_chrome_row_progress(progress.progress);
+        let output = progress.output();
+        self.begin_chrome_row(evaluator, output.row(), output.y());
+        self.move_chrome_output_to(evaluator, output.row(), progress.progress());
+        self.push_chrome_row_progress(progress.progress());
     }
 }
 

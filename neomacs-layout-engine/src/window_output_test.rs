@@ -401,7 +401,7 @@ fn display_progress_sink_records_chrome_row_progress() {
         .selected_window;
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    let output = ChromeRowOutput { row: 2, y: 18.0 };
+    let output = ChromeRowOutput::new(2, 18.0);
     let progress = DisplayRowOutputProgress::new(40.0, 5, 18.0, 14.0);
 
     emitter.emit_chrome_progress(&mut eval, ChromeRowProgress::new(output, progress));
