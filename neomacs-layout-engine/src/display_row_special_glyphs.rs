@@ -85,6 +85,18 @@ impl<'a> TextWindowRightEdgeMarkers<'a> {
     }
 }
 
+fn prepare_special_glyph_row(
+    row: &mut GlyphRow,
+    matrix_cols: usize,
+    target_col: usize,
+) -> Option<usize> {
+    if matrix_cols == 0 {
+        return None;
+    }
+    row.enabled = true;
+    Some(target_col.min(matrix_cols - 1))
+}
+
 fn right_border_text_source(
     text: impl Into<Box<str>>,
     face_id: u32,
@@ -184,11 +196,9 @@ fn install_right_edge_marker_from_source_request(
     matrix_cols: usize,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
 ) {
-    if matrix_cols == 0 {
+    let Some(clamped_col) = prepare_special_glyph_row(row, matrix_cols, target_col) else {
         return;
-    }
-    row.enabled = true;
-    let clamped_col = target_col.min(matrix_cols - 1);
+    };
     trim_display_row_text_to_total_glyph_count(row, clamped_col);
 
     let padding_cols = clamped_col.saturating_sub(display_row_total_glyph_count(row));
@@ -287,13 +297,10 @@ fn install_right_border_from_source_request(
     matrix_cols: usize,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
 ) {
-    if matrix_cols == 0 {
+    let Some(target_col) = prepare_special_glyph_row(row, matrix_cols, target_col) else {
         return;
-    }
-
+    };
     let prior_displays_text = row.displays_text;
-    row.enabled = true;
-    let target_col = target_col.min(matrix_cols - 1);
     let preserved_trailing = pop_display_row_trailing_text_char(row, '$');
     let preserved_cols = usize::from(preserved_trailing.is_some());
     let before_final_cols = target_col.saturating_sub(preserved_cols);
@@ -406,12 +413,9 @@ pub(crate) fn install_text_window_right_border_rows(
     base_face: &ResolvedFace,
 ) {
     edit_last_text_output_rows(output_builder, |row, matrix_cols| {
-        if matrix_cols == 0 {
-            return;
-        }
         install_right_border_from_source_request(
             row,
-            matrix_cols - 1,
+            matrix_cols.saturating_sub(1),
             request,
             base_face,
             matrix_cols,
