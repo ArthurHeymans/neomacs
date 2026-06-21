@@ -678,12 +678,12 @@ impl DisplayRowAppendFrame {
     }
 
     fn text_row_output(&self, kind: DisplayRowAppendKind) -> TextRowOutput {
-        TextRowOutput {
-            row: self.row,
-            row_y: self.geometry.y(),
-            glyph_y: self.glyph_y,
-            height: kind.output_height(self),
-        }
+        TextRowOutput::new(
+            self.row,
+            self.geometry.y(),
+            self.glyph_y,
+            kind.output_height(self),
+        )
     }
 }
 

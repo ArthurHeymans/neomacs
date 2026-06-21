@@ -168,7 +168,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     rendered: &RenderedDisplayRow,
     output: TextRowOutput,
 ) -> DisplayRowPosition {
-    let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
+    let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row());
     output_emitter.emit_text_output_spans(
         evaluator,
         output,

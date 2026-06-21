@@ -5089,12 +5089,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         &mut output_emitter,
         &mut eval,
         &rendered,
-        crate::display_row_text_output::TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
+        crate::display_row_text_output::TextRowOutput::new(0, 0.0, 0.0, 16.0),
     );
 
     assert_eq!(end, DisplayRowPosition::new(32.0, 4));
@@ -5167,10 +5162,10 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         *request.geometry(),
         DisplayRowGeometry::new(20.0, 120.0, 16.0, 9.0, 11.0, tab_policy)
     );
-    assert_eq!(output.row, 3);
-    assert_eq!(output.row_y, 20.0);
-    assert_eq!(output.glyph_y, 22.0);
-    assert_eq!(output.height, 16.0);
+    assert_eq!(output.row(), 3);
+    assert_eq!(output.row_y(), 20.0);
+    assert_eq!(output.glyph_y(), 22.0);
+    assert_eq!(output.height(), 16.0);
 }
 
 #[test]
@@ -5212,10 +5207,10 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(ordinary.geometry().char_width(), 9.0);
-    assert_eq!(ordinary_output.row, 3);
-    assert_eq!(ordinary_output.row_y, 20.0);
-    assert_eq!(ordinary_output.glyph_y, 22.0);
-    assert_eq!(ordinary_output.height, 16.0);
+    assert_eq!(ordinary_output.row(), 3);
+    assert_eq!(ordinary_output.row_y(), 20.0);
+    assert_eq!(ordinary_output.glyph_y(), 22.0);
+    assert_eq!(ordinary_output.height(), 16.0);
 
     let tab =
         frame.source_append_render_request(position, 42, base_face, DisplayRowAppendKind::Tab);
@@ -5223,7 +5218,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let tab = tab.row_request();
     assert_eq!(tab.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
     assert_eq!(tab.geometry().char_width(), 7.0);
-    assert_eq!(tab_output.height, 14.0);
+    assert_eq!(tab_output.height(), 14.0);
 
     let control = frame.source_append_render_request(
         position,
@@ -5238,7 +5233,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(control.geometry().char_width(), 9.0);
-    assert_eq!(control_output.height, 14.0);
+    assert_eq!(control_output.height(), 14.0);
 
     let mapped = frame.source_append_render_request(
         position,
@@ -5252,7 +5247,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         mapped.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(mapped_output.height, 14.0);
+    assert_eq!(mapped_output.height(), 14.0);
 
     let glyphless = frame.source_append_render_request(
         position,
@@ -5266,7 +5261,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         glyphless.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(glyphless_output.height, 16.0);
+    assert_eq!(glyphless_output.height(), 16.0);
 
     let replacement = frame.source_append_render_request(
         position,
@@ -5281,7 +5276,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement.geometry().char_width(), 9.0);
-    assert_eq!(replacement_output.height, 16.0);
+    assert_eq!(replacement_output.height(), 16.0);
 
     let replacement_string = frame.source_append_render_request(
         position,
@@ -5296,7 +5291,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement_string.geometry().char_width(), 7.0);
-    assert_eq!(replacement_string_output.height, 16.0);
+    assert_eq!(replacement_string_output.height(), 16.0);
 }
 
 #[test]
@@ -5384,8 +5379,8 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y(), 20.0);
     assert_eq!(request.geometry().char_width(), 9.0);
-    assert_eq!(output.row, 3);
-    assert_eq!(output.height, 16.0);
+    assert_eq!(output.row(), 3);
+    assert_eq!(output.height(), 16.0);
 }
 
 #[test]
@@ -5498,7 +5493,7 @@ fn display_row_source_append_render_request_uses_frame_policy() {
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.geometry().height(), 16.0);
-    assert_eq!(output.height, 14.0);
+    assert_eq!(output.height(), 14.0);
 }
 
 #[test]
@@ -5538,8 +5533,8 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(output.row, 3);
-    assert_eq!(output.height, 14.0);
+    assert_eq!(output.row(), 3);
+    assert_eq!(output.height(), 14.0);
 }
 
 #[test]

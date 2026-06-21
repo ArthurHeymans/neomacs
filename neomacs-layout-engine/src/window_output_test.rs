@@ -182,12 +182,7 @@ fn display_progress_sink_emits_buffer_slots_from_row_builder_progress() {
     emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
     emitter.emit_text_progress(
         &mut eval,
-        TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
+        TextRowOutput::new(0, 0.0, 0.0, 16.0),
         &DisplayRowAppendProgress::from_positions(
             DisplayRowPosition::new(8.0, 1),
             DisplayRowPosition::new(24.0, 3),
@@ -251,12 +246,7 @@ fn text_source_slot_emission_accepts_rendered_row_slots() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     emitter.begin_text_row(&mut eval, 0, 1, 0.0, 4.0);
-    let output = TextRowOutput {
-        row: 0,
-        row_y: 0.0,
-        glyph_y: 0.0,
-        height: 16.0,
-    };
+    let output = TextRowOutput::new(0, 0.0, 0.0, 16.0);
     let slots = [DisplayRowGlyphSlot::new(
         DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
         4.0,
@@ -317,12 +307,7 @@ fn display_progress_sink_merges_contiguous_slots_for_same_buffer_position() {
     let source = DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(0), EmacsBytePos::new(0));
     emitter.emit_text_progress(
         &mut eval,
-        TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
+        TextRowOutput::new(0, 0.0, 0.0, 16.0),
         &DisplayRowAppendProgress::from_positions(
             DisplayRowPosition::new(8.0, 1),
             DisplayRowPosition::new(24.0, 3),
@@ -364,12 +349,7 @@ fn display_progress_sink_advances_without_points_for_non_buffer_slots() {
     emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
     emitter.emit_text_progress(
         &mut eval,
-        TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
+        TextRowOutput::new(0, 0.0, 0.0, 16.0),
         &DisplayRowAppendProgress::from_positions(
             DisplayRowPosition::new(0.0, 0),
             DisplayRowPosition::new(24.0, 3),

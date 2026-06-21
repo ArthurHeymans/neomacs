@@ -13,10 +13,10 @@ pub(crate) struct TextOutputSpanContext {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextRowOutput {
-    pub(crate) row: usize,
-    pub(crate) row_y: f32,
-    pub(crate) glyph_y: f32,
-    pub(crate) height: f32,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,8 +31,33 @@ pub(crate) struct TextOutputSpan {
 }
 
 impl TextRowOutput {
+    pub(crate) fn new(row: usize, row_y: f32, glyph_y: f32, height: f32) -> Self {
+        Self {
+            row,
+            row_y,
+            glyph_y,
+            height,
+        }
+    }
+
+    pub(crate) fn row(self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn row_y(self) -> f32 {
+        self.row_y
+    }
+
+    pub(crate) fn glyph_y(self) -> f32 {
+        self.glyph_y
+    }
+
+    pub(crate) fn height(self) -> f32 {
+        self.height
+    }
+
     pub(crate) fn span_context(self) -> TextOutputSpanContext {
-        TextOutputSpanContext::new(self.row, self.row_y, self.glyph_y, self.height)
+        TextOutputSpanContext::new(self.row(), self.row_y(), self.glyph_y(), self.height())
     }
 
     pub(crate) fn spans_for_source_slots(
