@@ -4918,6 +4918,72 @@ pub(crate) fn init_event_symbol_properties(obarray: &mut Obarray) {
     ] {
         init_standard_event_symbol(obarray, name, None);
     }
+
+    // Modifier-prefixed *function-key* symbols that GNU's dump seeds with an
+    // `event-symbol-elements' property because they appear in preloaded
+    // keymaps/menus (e.g. `M-RET', `C-<left>', `S-<tab>').  `event-basic-type'
+    // reads this property directly and returns nil for a symbol that lacks it,
+    // so without these entries `(event-basic-type 'M-return)' wrongly yielded
+    // nil instead of `return' (oracle test cx124).  The exact set mirrors the
+    // non-keypad, non-dead-key modified function keys present in a fresh `-Q'
+    // GNU build; element values are computed name-wise by
+    // `cache_event_symbol_properties_in_obarray', matching GNU's
+    // `apply_modifiers'.  Keypad (`kp-*') and dead-key variants are display
+    // specific and intentionally omitted.
+    for name in [
+        "C-M-backspace",
+        "C-M-delete",
+        "C-M-down",
+        "C-M-end",
+        "C-M-home",
+        "C-M-left",
+        "C-M-right",
+        "C-M-up",
+        "C-S-backspace",
+        "C-backspace",
+        "C-delete",
+        "C-down",
+        "C-end",
+        "C-f10",
+        "C-home",
+        "C-insert",
+        "C-insertchar",
+        "C-left",
+        "C-next",
+        "C-prior",
+        "C-right",
+        "C-tab",
+        "C-up",
+        "M-backspace",
+        "M-begin",
+        "M-clear",
+        "M-delete",
+        "M-down",
+        "M-end",
+        "M-escape",
+        "M-f10",
+        "M-home",
+        "M-left",
+        "M-linefeed",
+        "M-next",
+        "M-prior",
+        "M-return",
+        "M-right",
+        "M-tab",
+        "M-up",
+        "S-delete",
+        "S-f10",
+        "S-insert",
+        "S-insertchar",
+        "S-iso-lefttab",
+        "S-left",
+        "S-right",
+        "S-tab",
+    ] {
+        // GNU leaves `event-kind' nil on these modified function keys in a
+        // fresh `-Q' session, so seed only `event-symbol-elements'.
+        init_standard_event_symbol(obarray, name, None);
+    }
 }
 
 fn init_standard_event_symbol(obarray: &mut Obarray, name: &str, kind: Option<&str>) {
