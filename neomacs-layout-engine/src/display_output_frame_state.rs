@@ -1,0 +1,316 @@
+//! Mutable non-row frame output state owned while layout builds a frame snapshot.
+
+use crate::display_output_install_request::{
+    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
+    OutputMediaInstallKind, OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
+};
+use neomacs_display_protocol::effect_config::EffectsConfig;
+use neomacs_display_protocol::face::Face;
+use neomacs_display_protocol::frame_glyphs::{
+    PhysCursor, StipplePattern, WindowEffectHint, WindowInfo, WindowTransitionHint,
+};
+use neomacs_display_protocol::glyph_matrix::{
+    BackgroundItem, BorderItem, CursorItem, FrameDisplayState, ImageItem, ScrollBarItem, VideoItem,
+    XwidgetItem,
+};
+use neomacs_display_protocol::types::Color;
+use std::collections::HashMap;
+
+pub(crate) struct OutputFrameBuildState {
+    backgrounds: Vec<BackgroundItem>,
+    borders: Vec<BorderItem>,
+    cursors: Vec<CursorItem>,
+    images: Vec<ImageItem>,
+    videos: Vec<VideoItem>,
+    xwidgets: Vec<XwidgetItem>,
+    scroll_bars: Vec<ScrollBarItem>,
+    phys_cursor: Option<PhysCursor>,
+    cursor_effects_by_window: HashMap<i64, EffectsConfig>,
+    faces: HashMap<u32, Face>,
+    stipple_patterns: HashMap<i32, StipplePattern>,
+    window_infos: Vec<WindowInfo>,
+    transition_hints: Vec<WindowTransitionHint>,
+    effect_hints: Vec<WindowEffectHint>,
+    background_color: Color,
+    font_pixel_size: f32,
+    frame_id: u64,
+    parent_id: u64,
+    parent_x: f32,
+    parent_y: f32,
+    z_order: i32,
+    undecorated: bool,
+    border_width: f32,
+    border_color: Color,
+    background_alpha: f32,
+    no_accept_focus: bool,
+}
+
+impl OutputFrameBuildState {
+    pub(crate) fn new() -> Self {
+        Self {
+            backgrounds: Vec::new(),
+            borders: Vec::new(),
+            cursors: Vec::new(),
+            images: Vec::new(),
+            videos: Vec::new(),
+            xwidgets: Vec::new(),
+            scroll_bars: Vec::new(),
+            phys_cursor: None,
+            cursor_effects_by_window: HashMap::new(),
+            faces: HashMap::new(),
+            stipple_patterns: HashMap::new(),
+            window_infos: Vec::new(),
+            transition_hints: Vec::new(),
+            effect_hints: Vec::new(),
+            background_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            font_pixel_size: 0.0,
+            frame_id: 0,
+            parent_id: 0,
+            parent_x: 0.0,
+            parent_y: 0.0,
+            z_order: 0,
+            undecorated: false,
+            border_width: 0.0,
+            border_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            background_alpha: 1.0,
+            no_accept_focus: false,
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.backgrounds.clear();
+        self.borders.clear();
+        self.cursors.clear();
+        self.images.clear();
+        self.videos.clear();
+        self.xwidgets.clear();
+        self.scroll_bars.clear();
+        self.phys_cursor = None;
+        self.cursor_effects_by_window.clear();
+        self.faces.clear();
+        self.stipple_patterns.clear();
+        self.window_infos.clear();
+        self.transition_hints.clear();
+        self.effect_hints.clear();
+        self.background_color = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
+        self.font_pixel_size = 0.0;
+        self.frame_id = 0;
+        self.parent_id = 0;
+        self.parent_x = 0.0;
+        self.parent_y = 0.0;
+        self.z_order = 0;
+        self.undecorated = false;
+        self.border_width = 0.0;
+        self.border_color = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
+        self.background_alpha = 1.0;
+        self.no_accept_focus = false;
+    }
+
+    pub(crate) fn install_window_metadata(&mut self, request: OutputWindowMetadataInstallRequest) {
+        match request {
+            OutputWindowMetadataInstallRequest::TextDisplayRange(range) => {
+                if let Some(info) = self.window_infos.last_mut()
+                    && info.window_id == range.window_id
+                {
+                    info.window_start = range.window_start;
+                    info.window_end = range.window_end;
+                }
+            }
+            OutputWindowMetadataInstallRequest::RestoreRetryCheckpoint(checkpoint) => {
+                self.transition_hints
+                    .truncate(checkpoint.transition_hints_len);
+                self.effect_hints.truncate(checkpoint.effect_hints_len);
+            }
+        }
+    }
+
+    pub(crate) fn install_artifact(&mut self, request: OutputFrameArtifactInstallRequest) {
+        match request {
+            OutputFrameArtifactInstallRequest::Background { bounds, color } => {
+                self.backgrounds.push(BackgroundItem { bounds, color });
+            }
+            OutputFrameArtifactInstallRequest::Border {
+                window_id,
+                x,
+                y,
+                width,
+                height,
+                color,
+            } => {
+                self.borders.push(BorderItem {
+                    window_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                    color,
+                });
+            }
+            OutputFrameArtifactInstallRequest::ScrollBar(item) => self.scroll_bars.push(item),
+            OutputFrameArtifactInstallRequest::WindowInfo(info) => self.window_infos.push(info),
+            OutputFrameArtifactInstallRequest::TransitionHint(hint) => {
+                self.transition_hints.push(hint);
+            }
+            OutputFrameArtifactInstallRequest::EffectHint(hint) => self.effect_hints.push(hint),
+            OutputFrameArtifactInstallRequest::PhysCursor(cursor) => {
+                self.phys_cursor = Some(cursor)
+            }
+        }
+    }
+
+    pub(crate) fn install_cursor(&mut self, request: OutputCursorInstallRequest) {
+        self.cursors.push(request.cursor_item());
+    }
+
+    pub(crate) fn install_media(&mut self, request: OutputMediaInstallRequest) {
+        let target = request.target;
+        match request.kind {
+            OutputMediaInstallKind::Image { image_id } => self.images.push(ImageItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                image_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            }),
+            OutputMediaInstallKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => self.videos.push(VideoItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                video_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+                loop_count,
+                autoplay,
+            }),
+            OutputMediaInstallKind::Xwidget { xwidget_id } => self.xwidgets.push(XwidgetItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                xwidget_id,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            }),
+        }
+    }
+
+    pub(crate) fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
+        match request {
+            OutputFrameStateInstallRequest::Identity(identity) => {
+                self.frame_id = identity.frame_id;
+                self.parent_id = identity.parent_id;
+                self.parent_x = identity.parent_x;
+                self.parent_y = identity.parent_y;
+                self.z_order = identity.z_order;
+                self.undecorated = identity.undecorated;
+                self.border_width = identity.border_width;
+                self.border_color = identity.border_color;
+                self.background_alpha = identity.background_alpha;
+                self.no_accept_focus = identity.no_accept_focus;
+            }
+            OutputFrameStateInstallRequest::BackgroundColor(color) => self.background_color = color,
+            OutputFrameStateInstallRequest::FontPixelSize(size) => self.font_pixel_size = size,
+            OutputFrameStateInstallRequest::Face { id, face } => {
+                self.faces.insert(id, face);
+            }
+            OutputFrameStateInstallRequest::CursorEffects { window_id, effects } => {
+                self.cursor_effects_by_window.insert(window_id, effects);
+            }
+        }
+    }
+
+    pub(crate) fn phys_cursor_mut(&mut self) -> Option<&mut PhysCursor> {
+        self.phys_cursor.as_mut()
+    }
+
+    pub(crate) fn window_infos(&self) -> &[WindowInfo] {
+        &self.window_infos
+    }
+
+    pub(crate) fn transition_hints(&self) -> &[WindowTransitionHint] {
+        &self.transition_hints
+    }
+
+    pub(crate) fn effect_hints(&self) -> &[WindowEffectHint] {
+        &self.effect_hints
+    }
+
+    pub(crate) fn background_color(&self) -> &Color {
+        &self.background_color
+    }
+
+    #[cfg(test)]
+    pub(crate) fn faces(&self) -> &HashMap<u32, Face> {
+        &self.faces
+    }
+
+    pub(crate) fn cursors(&self) -> &[CursorItem] {
+        &self.cursors
+    }
+
+    pub(crate) fn phys_cursor(&self) -> Option<&PhysCursor> {
+        self.phys_cursor.as_ref()
+    }
+
+    pub(crate) fn install_into(self, state: &mut FrameDisplayState) {
+        state.backgrounds = self.backgrounds;
+        state.borders = self.borders;
+        state.cursors = self.cursors;
+        state.images = self.images;
+        state.videos = self.videos;
+        state.xwidgets = self.xwidgets;
+        state.scroll_bars = self.scroll_bars;
+        state.phys_cursor = self.phys_cursor;
+        state.cursor_effects_by_window = self.cursor_effects_by_window;
+        state.faces = self.faces;
+        state.stipple_patterns = self.stipple_patterns;
+        state.window_infos = self.window_infos;
+        state.transition_hints = self.transition_hints;
+        state.effect_hints = self.effect_hints;
+        state.background = self.background_color;
+        state.font_pixel_size = self.font_pixel_size;
+        state.frame_id = self.frame_id;
+        state.parent_id = self.parent_id;
+        state.parent_x = self.parent_x;
+        state.parent_y = self.parent_y;
+        state.z_order = self.z_order;
+        state.undecorated = self.undecorated;
+        state.border_width = self.border_width;
+        state.border_color = self.border_color;
+        state.background_alpha = self.background_alpha;
+        state.no_accept_focus = self.no_accept_focus;
+    }
+}
