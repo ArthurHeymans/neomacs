@@ -2009,8 +2009,50 @@ pub(crate) fn builtin_princ_impl(
     Ok(args[0])
 }
 
+/// GNU `print_object`/`print_preprocess` build `Vprint_number_table` (a real
+/// `eq` hash table) inside the printer when `print-circle' is set, and -- when
+/// `print-continuous-numbering' is also set -- keep it (and `print_number_index`)
+/// alive across successive print calls so shared structure retains its `#N='
+/// labels (src/print.c:1296-1322, 1444-1445).  The neomacs printer only takes
+/// the persistent (Lisp-variable) path when `print-number-table' is already a
+/// hash table; otherwise it uses a throwaway internal table.  To match GNU,
+/// materialize and bind the table here -- before printing -- whenever both
+/// variables are active and the variable does not yet hold a hash table.  The
+/// table's *contents* then persist automatically (it is a shared heap object),
+/// so the next call in the same `print-continuous-numbering' scope reuses the
+/// existing `#N#' references instead of re-emitting `#N=' prefixes.
+pub(crate) fn ensure_continuous_print_number_table(ctx: &mut crate::emacs_core::eval::Context) {
+    let continuous = ctx
+        .obarray
+        .symbol_value("print-continuous-numbering")
+        .is_some_and(|v| v.is_truthy());
+    let circle = ctx
+        .obarray
+        .symbol_value("print-circle")
+        .is_some_and(|v| v.is_truthy());
+    if !(continuous && circle) {
+        return;
+    }
+    let already_table = ctx
+        .obarray
+        .symbol_value("print-number-table")
+        .is_some_and(|v| v.is_hash_table());
+    if already_table {
+        return;
+    }
+    ctx.set_variable(
+        "print-number-table",
+        Value::hash_table(crate::emacs_core::value::HashTableTest::Eq),
+    );
+    // GNU `print_object' resets `print_number_index' to 0 whenever it (re)builds
+    // a nil `Vprint_number_table' (src/print.c:1300-1305).  Mirror that so the
+    // first shared object in this continuous-numbering scope is labelled `#1='.
+    crate::emacs_core::print::reset_print_number_index();
+}
+
 pub(crate) fn builtin_prin1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
+    ensure_continuous_print_number_table(eval);
     let options = print_options_from_overrides(eval, args.get(2))?;
     let target = resolve_print_target(eval, args.get(1));
     if print_target_is_direct(target) {
@@ -2032,6 +2074,7 @@ pub(crate) fn builtin_prin1_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
+    ensure_continuous_print_number_table(ctx);
     let options = print_options_from_overrides(ctx, args.get(2))?;
     // Issue #131: emit canonical Emacs bytes so a real Private-Use glyph in the
     // printed output is inserted as itself, not decoded as a raw byte.
@@ -2044,6 +2087,7 @@ pub(crate) fn builtin_prin1_to_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    ensure_continuous_print_number_table(eval);
     builtin_prin1_to_string_impl(eval, args)
 }
 
@@ -2060,6 +2104,7 @@ pub(crate) fn builtin_prin1_to_string_impl(
 
 pub(crate) fn builtin_print(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("print", &args, 1)?;
+    ensure_continuous_print_number_table(eval);
     let target = resolve_print_target(eval, args.get(1));
     if print_target_is_direct(target) {
         return builtin_print_impl(eval, args);
@@ -2083,6 +2128,7 @@ pub(crate) fn builtin_print_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("print", &args, 1)?;
+    ensure_continuous_print_number_table(ctx);
     // Issue #131: emit canonical Emacs bytes (see `builtin_prin1_impl`).
     let mut bytes = Vec::new();
     bytes.push(b'\n');

@@ -162,7 +162,7 @@ thread_local! {
     static PRINT_CALL_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
-fn reset_print_number_index() {
+pub(crate) fn reset_print_number_index() {
     PRINT_NUMBER_INDEX.with(|index| index.set(0));
 }
 
