@@ -1205,7 +1205,7 @@ fn render_lisp_display_row_with_symbols(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> GlyphRow {
-    render_lisp_display_row_output_with_symbols(rendered, role, symbol_values).row
+    render_lisp_display_row_output_with_symbols(rendered, role, symbol_values).into_row()
 }
 
 fn render_lisp_display_row_output(rendered: Value, role: GlyphRowRole) -> RenderedDisplayRow {
@@ -1316,7 +1316,7 @@ fn render_buffer_display_row_with_properties(
     DisplayRowItemSourceRenderRequest::new(request)
         .render(&mut renderer, &mut source, &resolver, &mut face_ids)
         .expect("buffer display source row")
-        .row
+        .into_row()
 }
 
 #[test]
@@ -2459,7 +2459,7 @@ fn display_row_baseline_tab_bar_preserves_lisp_string_height_property() {
         "height display property should realize a separate face like GNU face_with_height"
     );
     let raised_face = rendered
-        .faces
+        .faces()
         .iter()
         .find(|face| face.id == glyphs[1].face_id)
         .expect("height-adjusted face");
@@ -2660,7 +2660,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 
     let row = render_lisp_string_row(&mut renderer, spec, rendered, &resolver, &mut face_ids)
         .expect("display source row")
-        .row;
+        .into_row();
     let glyphs = &row.glyphs[1];
 
     assert_eq!(glyphs.len(), 2);

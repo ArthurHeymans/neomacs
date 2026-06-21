@@ -2,9 +2,9 @@ use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID
 use crate::display_output_install_request::{
     OutputFrameStateInstallRequest, OutputMediaInstallRequest, ResolvedOutputMediaInstallTarget,
 };
-use crate::display_row::{
-    DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
+use crate::display_row::{DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind};
+use crate::display_row_render_state::{
+    RenderedDisplayRow, RenderedDisplayRowMedia, RenderedDisplayRowMediaKind,
 };
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};

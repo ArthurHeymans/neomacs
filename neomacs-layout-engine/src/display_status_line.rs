@@ -21,14 +21,16 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
+pub(crate) use crate::display_row::DisplayRowFaceRealizer;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringSourceRenderRequest, DisplayRowOwner,
     DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceState,
-    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
 };
-pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
+pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
+use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
@@ -144,7 +146,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         row: &mut GlyphRow,
         source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,
-    ) -> Option<crate::display_row::DisplayRowRenderIntoRowResult> {
+    ) -> Option<DisplayRowRenderIntoRowResult> {
         let mut render_executor = DisplayRowRenderExecutor::new(
             &mut *self.font_metrics,
             self.face_resolver,
@@ -168,7 +170,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         start_col: usize,
         max_col: usize,
         area: GlyphArea,
-    ) -> Option<crate::display_row::DisplayRowRenderIntoRowResult> {
+    ) -> Option<DisplayRowRenderIntoRowResult> {
         let request = crate::display_row::DisplayRowSourceFragmentFrame::from_glyph_row_columns(
             row,
             matrix_cols,

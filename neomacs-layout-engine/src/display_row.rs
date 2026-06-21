@@ -2,21 +2,28 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
-    DisplayMediaReplacementKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
-    RenderFaceRef, SourceSpan,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
+    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
     DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
-    DisplayTabPolicy, apply_display_row_source_slot_bounds, merge_display_row_source_slot_bounds,
-    new_display_row_for_role,
+    DisplayTabPolicy, new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
 pub(crate) use crate::display_row_metrics::{
     DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics,
+};
+#[cfg(test)]
+pub(crate) use crate::display_row_render_state::{
+    CurrentTextRowRenderOutcome, RenderedDisplayRowMediaKind,
+};
+pub(crate) use crate::display_row_render_state::{
+    DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderIntoRowResult,
+    DisplayRowRenderResult, DisplayRowRenderStop, RenderedDisplayRow, RenderedDisplayRowMedia,
+    display_row_progress,
 };
 use crate::display_row_width::DisplayRowCharWidthPolicy;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
@@ -32,7 +39,6 @@ use crate::display_text_run_measurement::{
 };
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
-use crate::glyph_row_writer;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
@@ -986,136 +992,6 @@ impl DisplayRowActiveFaceState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct DisplayRowOutputProgress {
-    end_x: f32,
-    end_col: i64,
-    y: f32,
-    height: f32,
-}
-
-impl DisplayRowOutputProgress {
-    pub(crate) fn new(end_x: f32, end_col: i64, y: f32, height: f32) -> Self {
-        Self {
-            end_x,
-            end_col,
-            y,
-            height,
-        }
-    }
-
-    pub(crate) fn end_x(self) -> f32 {
-        self.end_x
-    }
-
-    pub(crate) fn end_col(self) -> i64 {
-        self.end_col
-    }
-
-    pub(crate) fn y(self) -> f32 {
-        self.y
-    }
-
-    pub(crate) fn height(self) -> f32 {
-        self.height
-    }
-
-    pub(crate) fn with_y(self, y: f32) -> Self {
-        Self { y, ..self }
-    }
-
-    pub(crate) fn with_height(self, height: f32) -> Self {
-        Self { height, ..self }
-    }
-}
-
-pub(crate) struct RenderedDisplayRow {
-    row: GlyphRow,
-    progress: DisplayRowOutputProgress,
-    source_slots: Vec<DisplayRowGlyphSlot>,
-    faces: Vec<Face>,
-    media: Vec<RenderedDisplayRowMedia>,
-}
-
-impl RenderedDisplayRow {
-    pub(crate) fn new(
-        row: GlyphRow,
-        progress: DisplayRowOutputProgress,
-        source_slots: Vec<DisplayRowGlyphSlot>,
-        faces: Vec<Face>,
-        media: Vec<RenderedDisplayRowMedia>,
-    ) -> Self {
-        Self {
-            row,
-            progress,
-            source_slots,
-            faces,
-            media,
-        }
-    }
-
-    pub(crate) fn row(&self) -> &GlyphRow {
-        &self.row
-    }
-
-    pub(crate) fn progress(&self) -> DisplayRowOutputProgress {
-        self.progress
-    }
-
-    #[cfg(test)]
-    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
-        &self.source_slots
-    }
-
-    pub(crate) fn apply_source_slot_bounds_to(&self, row: &mut GlyphRow) {
-        apply_display_row_source_slot_bounds(row, &self.source_slots);
-    }
-
-    pub(crate) fn materialize_output_row(
-        &self,
-        pixel_y: f32,
-        height_px: f32,
-        ascent_px: f32,
-    ) -> GlyphRow {
-        let mut row = self.row.clone();
-        self.apply_source_slot_bounds_to(&mut row);
-        glyph_row_writer::finalize_external_row(&mut row);
-        row.pixel_y = pixel_y;
-        row.height_px = height_px;
-        row.ascent_px = ascent_px;
-        row
-    }
-
-    #[cfg(test)]
-    pub(crate) fn append_fragment_to_current_row(&self, row: &mut GlyphRow) -> DisplayRowPosition {
-        let rendered_row = self.row();
-        row.enabled = true;
-        row.role = rendered_row.role;
-        row.mode_line = matches!(rendered_row.role, GlyphRowRole::ModeLine);
-        row.displays_text |=
-            rendered_row.displays_text || !rendered_row.glyphs[GlyphArea::Text.index()].is_empty();
-        row.glyphs[GlyphArea::Text.index()]
-            .extend(rendered_row.glyphs[GlyphArea::Text.index()].iter().cloned());
-        crate::display_row_builder::DisplayRowVerticalMetrics::from_row(rendered_row)
-            .include_in_row(row);
-        merge_display_row_source_slot_bounds(row, &self.source_slots);
-        display_row_output_end_position(self.progress())
-    }
-
-    pub(crate) fn faces(&self) -> &[Face] {
-        &self.faces
-    }
-
-    pub(crate) fn media(&self) -> &[RenderedDisplayRowMedia] {
-        &self.media
-    }
-
-    #[cfg(test)]
-    pub(crate) fn into_row(self) -> GlyphRow {
-        self.row
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum WindowChromeKind {
     TabLine,
@@ -1384,13 +1260,6 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplayRowRenderStop {
-    SourceExhausted,
-    Clipped,
-    RowBreak,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowRenderClipBehavior {
     PreserveRemainderAndStop,
     Stop,
@@ -1419,29 +1288,6 @@ pub(crate) trait DisplayRowRenderPolicy {
 struct NaturalDisplayRowRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
-
-pub(crate) struct DisplayRowRenderResult {
-    rendered: RenderedDisplayRow,
-}
-
-impl DisplayRowRenderResult {
-    fn new(rendered: RenderedDisplayRow) -> Self {
-        Self { rendered }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rendered(&self) -> &RenderedDisplayRow {
-        &self.rendered
-    }
-
-    pub(crate) fn into_rendered(self) -> RenderedDisplayRow {
-        self.rendered
-    }
-
-    fn finalize_external_row(&mut self) {
-        glyph_row_writer::finalize_external_row(&mut self.rendered.row);
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DisplayRowLispStringSourceId(u64);
@@ -1879,103 +1725,6 @@ impl DisplayRowLispStringSourceSession {
     }
 }
 
-pub(crate) struct DisplayRowRenderIntoRowResult {
-    progress: DisplayRowOutputProgress,
-    source_slots: Vec<DisplayRowGlyphSlot>,
-    faces: Vec<Face>,
-    media: Vec<RenderedDisplayRowMedia>,
-    stop: DisplayRowRenderStop,
-}
-
-impl DisplayRowRenderIntoRowResult {
-    fn new(
-        progress: DisplayRowOutputProgress,
-        source_slots: Vec<DisplayRowGlyphSlot>,
-        faces: Vec<Face>,
-        media: Vec<RenderedDisplayRowMedia>,
-        stop: DisplayRowRenderStop,
-    ) -> Self {
-        Self {
-            progress,
-            source_slots,
-            faces,
-            media,
-            stop,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn progress(&self) -> DisplayRowOutputProgress {
-        self.progress
-    }
-
-    #[cfg(test)]
-    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
-        self.stop
-    }
-
-    fn merge_source_slot_bounds_into(&self, row: &mut GlyphRow) {
-        merge_display_row_source_slot_bounds(row, &self.source_slots);
-    }
-
-    pub(crate) fn apply_current_row_effects_to(&self, row: &mut GlyphRow) {
-        self.merge_source_slot_bounds_into(row);
-    }
-
-    pub(crate) fn into_current_row_parts(
-        self,
-    ) -> (
-        DisplayRowOutputProgress,
-        Vec<DisplayRowGlyphSlot>,
-        Vec<Face>,
-        Vec<RenderedDisplayRowMedia>,
-        DisplayRowRenderStop,
-    ) {
-        (
-            self.progress,
-            self.source_slots,
-            self.faces,
-            self.media,
-            self.stop,
-        )
-    }
-
-    fn with_row(self, row: GlyphRow) -> DisplayRowRenderResult {
-        DisplayRowRenderResult::new(RenderedDisplayRow::new(
-            row,
-            self.progress,
-            self.source_slots,
-            self.faces,
-            self.media,
-        ))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RenderedDisplayRowMedia {
-    pub(crate) kind: RenderedDisplayRowMediaKind,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) col: u16,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum RenderedDisplayRowMediaKind {
-    Image {
-        image_id: u32,
-    },
-    Video {
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-    },
-    Xwidget {
-        xwidget_id: u32,
-    },
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowGeometry {
     y: f32,
@@ -2404,127 +2153,6 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayRowRenderBounds {
-    start: DisplayRowPosition,
-    max_x: DisplayRowMaxX,
-}
-
-impl DisplayRowRenderBounds {
-    pub(crate) fn new(start: DisplayRowPosition, max_x: DisplayRowMaxX) -> Self {
-        Self { start, max_x }
-    }
-
-    pub(crate) fn whole_row(width_px: f32) -> Self {
-        Self::new(
-            DisplayRowPosition::new(0.0, 0),
-            DisplayRowMaxX::Bounded(width_px.max(0.0)),
-        )
-    }
-
-    pub(crate) fn unbounded_from(start: DisplayRowPosition) -> Self {
-        Self::new(start, DisplayRowMaxX::Unbounded)
-    }
-
-    pub(crate) fn start(self) -> DisplayRowPosition {
-        self.start
-    }
-
-    pub(crate) fn max_x(self) -> DisplayRowMaxX {
-        self.max_x
-    }
-}
-
-pub(crate) struct CurrentTextRowRenderOutcome {
-    stop: DisplayRowRenderStop,
-    source_slots: Vec<DisplayRowGlyphSlot>,
-    end: DisplayRowPosition,
-    row_height_px: f32,
-    row_ascent_px: f32,
-}
-
-impl CurrentTextRowRenderOutcome {
-    pub(crate) fn new(
-        stop: DisplayRowRenderStop,
-        source_slots: Vec<DisplayRowGlyphSlot>,
-        end: DisplayRowPosition,
-        row_height_px: f32,
-        row_ascent_px: f32,
-    ) -> Self {
-        Self {
-            stop,
-            source_slots,
-            end,
-            row_height_px,
-            row_ascent_px,
-        }
-    }
-
-    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
-        self.stop
-    }
-
-    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
-        &self.source_slots
-    }
-
-    pub(crate) fn end_position(&self) -> DisplayRowPosition {
-        self.end
-    }
-
-    pub(crate) fn include_vertical_metrics(&self, geometry: &mut DisplayRowGeometryState) {
-        geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
-    }
-
-    pub(crate) fn into_append_progress(
-        self,
-        start: DisplayRowPosition,
-    ) -> DisplayRowAppendProgress {
-        display_row_append_progress_from_render_result(
-            start,
-            self.end,
-            self.stop,
-            self.source_slots,
-        )
-    }
-}
-
-fn display_row_append_progress_from_render_result(
-    start: DisplayRowPosition,
-    end: DisplayRowPosition,
-    stop: DisplayRowRenderStop,
-    slots: Vec<DisplayRowGlyphSlot>,
-) -> DisplayRowAppendProgress {
-    DisplayRowAppendProgress::from_positions(
-        start,
-        end,
-        match stop {
-            DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
-            DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
-            DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
-        },
-        slots,
-    )
-}
-
-pub(crate) fn display_row_output_end_position(
-    progress: DisplayRowOutputProgress,
-) -> DisplayRowPosition {
-    DisplayRowPosition::new(
-        progress.end_x(),
-        usize::try_from(progress.end_col().max(0)).unwrap_or(usize::MAX),
-    )
-}
-
-fn display_row_progress(end: DisplayRowPosition, y: f32, height: f32) -> DisplayRowOutputProgress {
-    DisplayRowOutputProgress::new(
-        end.x_px().max(0.0),
-        end.col().min(i64::MAX as usize) as i64,
-        y,
-        height,
-    )
-}
-
 fn clipped_display_item_remainder(
     item: DisplayItem,
     progress: &crate::display_row_builder::DisplayRowAppendProgress,
@@ -2672,24 +2300,6 @@ impl DisplayRowRenderItem {
 
     fn clipped_remainder(self, progress: &DisplayRowAppendProgress) -> Option<DisplayItem> {
         clipped_display_item_remainder(self.source_item, progress)
-    }
-}
-
-impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
-    fn from(kind: DisplayMediaReplacementKind) -> Self {
-        match kind {
-            DisplayMediaReplacementKind::Image { image_id } => Self::Image { image_id },
-            DisplayMediaReplacementKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => Self::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            },
-            DisplayMediaReplacementKind::Xwidget { xwidget_id } => Self::Xwidget { xwidget_id },
-        }
     }
 }
 

@@ -16,11 +16,12 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
-use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
+use crate::display_row::MeasuredDisplayRow;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
+use crate::display_row_render_state::RenderedDisplayRowMedia;
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };

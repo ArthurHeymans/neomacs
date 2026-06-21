@@ -6,9 +6,9 @@ pub(crate) use crate::display_output_row_request::DisplayCurrentRowMutation;
 #[cfg(test)]
 use crate::display_rendered_row_output_install::install_rendered_display_row_fragment_assets;
 #[cfg(test)]
-use crate::display_row::RenderedDisplayRow;
-#[cfg(test)]
 use crate::display_row_builder::DisplayRowPosition;
+#[cfg(test)]
+use crate::display_row_render_state::RenderedDisplayRow;
 #[cfg(test)]
 use crate::display_row_text_output::TextRowOutput;
 #[cfg(test)]
