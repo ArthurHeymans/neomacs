@@ -2255,6 +2255,96 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
     lower_leaf(ops, constants, 0)
 }
 
+/// Get MIR value `v` as a RAW (untagged) fixnum i64 for arithmetic. If `cval_raw`
+/// marks it already raw (a prior fixnum arithmetic result or fixnum constant in
+/// this block), use it directly — no re-guard, no re-untag (the unboxing fast
+/// path: chained fixnum arithmetic stays raw). Otherwise guard it is a fixnum
+/// (deopt else) and untag.
+fn mir_as_raw(
+    fb: &mut FunctionBuilder,
+    cval: &[Option<ClifValue>],
+    cval_raw: &[bool],
+    v: mir::MirValue,
+    deopt: Block,
+) -> Result<ClifValue, CompileError> {
+    let i = v.0 as usize;
+    let cv = cval[i].ok_or(CompileError::BadOperand)?;
+    if cval_raw[i] {
+        Ok(cv)
+    } else {
+        guard_fixnum(fb, deopt, cv, &HashSet::new());
+        Ok(fb.ins().sshr_imm(cv, FIXNUM_SHIFT as i64))
+    }
+}
+
+/// Get MIR value `v` as a TAGGED `Value` (for boundaries: returns, predicates,
+/// car/cdr, cross-block block args). Retags a raw fixnum; passes a tagged value
+/// through unchanged.
+fn mir_as_tagged(
+    fb: &mut FunctionBuilder,
+    cval: &[Option<ClifValue>],
+    cval_raw: &[bool],
+    v: mir::MirValue,
+) -> Result<ClifValue, CompileError> {
+    let i = v.0 as usize;
+    let cv = cval[i].ok_or(CompileError::BadOperand)?;
+    if cval_raw[i] {
+        Ok(retag_fixnum(fb, cv))
+    } else {
+        Ok(cv)
+    }
+}
+
+/// Raw fixnum add/sub: operands and result are untagged i64 (no untag/retag), with
+/// the interpreter's fixnum-range check (deopt on overflow). The unboxed analogue
+/// of [`lower_fixnum_binop`].
+fn raw_fixnum_addsub(
+    fb: &mut FunctionBuilder,
+    deopt: Block,
+    is_sub: bool,
+    av: ClifValue,
+    bv: ClifValue,
+) -> ClifValue {
+    let res = if is_sub {
+        fb.ins().isub(av, bv)
+    } else {
+        fb.ins().iadd(av, bv)
+    };
+    let ge_lo = fb.ins().icmp_imm(
+        IntCC::SignedGreaterThanOrEqual,
+        res,
+        Value::MOST_NEGATIVE_FIXNUM,
+    );
+    let le_hi = fb
+        .ins()
+        .icmp_imm(IntCC::SignedLessThanOrEqual, res, Value::MOST_POSITIVE_FIXNUM);
+    let in_range = fb.ins().band(ge_lo, le_hi);
+    emit_guard(fb, deopt, in_range);
+    res
+}
+
+/// Raw fixnum 1+/1-/negate: untagged in, untagged out, with the interpreter's
+/// boundary check (deopt on the single out-of-range input). Unboxed analogue of
+/// [`lower_fixnum_unop`].
+fn raw_fixnum_unop(
+    fb: &mut FunctionBuilder,
+    deopt: Block,
+    kind: UnaryKind,
+    av: ClifValue,
+) -> ClifValue {
+    let bound = match kind {
+        UnaryKind::Add1 => Value::MOST_POSITIVE_FIXNUM,
+        UnaryKind::Sub1 | UnaryKind::Negate => Value::MOST_NEGATIVE_FIXNUM,
+    };
+    let in_range = fb.ins().icmp_imm(IntCC::NotEqual, av, bound);
+    emit_guard(fb, deopt, in_range);
+    match kind {
+        UnaryKind::Add1 => fb.ins().iadd_imm(av, 1),
+        UnaryKind::Sub1 => fb.ins().iadd_imm(av, -1),
+        UnaryKind::Negate => fb.ins().ineg(av),
+    }
+}
+
 /// **MIR Tier-2, Phase 4b (pure subset).** Lower a [`mir::MirFunction`] to a
 /// [`CompiledLeaf`] by driving CLIF emission from the MIR instead of a bytecode
 /// walk — the first proof that the bytecode→MIR→CLIF pipeline produces runnable
@@ -2307,6 +2397,12 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // single forward pass works because the MIR is SSA and block params
         // carry all cross-block values).
         let mut cval: Vec<Option<ClifValue>> = vec![None; m.value_types.len()];
+        // Per-value form: true if `cval` holds an UNTAGGED raw fixnum (unboxing).
+        // Fixnum arithmetic results + fixnum constants stay raw WITHIN a block (no
+        // intermediate retag/untag/re-guard); boundaries (returns, predicates,
+        // car/cdr, cross-block args) retag. Block params/args + non-fixnum values
+        // are tagged (false) — no raw phis (the simpler, sound scope).
+        let mut cval_raw: Vec<bool> = vec![false; m.value_types.len()];
 
         // Shared deopt landing block: pure bodies rerun the interpreter from the
         // start (STATUS_DEOPT), created lazily on the first guard.
@@ -2329,11 +2425,6 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             .collect();
         fb.ins().jump(clif_blocks[0], &arg_vals);
 
-        let map =
-            |cval: &[Option<ClifValue>], v: mir::MirValue| -> Result<ClifValue, CompileError> {
-                cval[v.0 as usize].ok_or(CompileError::BadOperand)
-            };
-
         for (bi, blk) in m.blocks.iter().enumerate() {
             let cb = clif_blocks[bi];
             fb.switch_to_block(cb);
@@ -2350,7 +2441,14 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         // The param already holds the argument (bound above).
                     }
                     MirOp::Const(v) => {
-                        cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
+                        if (v.bits() & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE {
+                            // Fixnum constant -> keep raw (untagged integer).
+                            cval[r] =
+                                Some(fb.ins().iconst(types::I64, (v.bits() as i64) >> FIXNUM_SHIFT));
+                            cval_raw[r] = true;
+                        } else {
+                            cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
+                        }
                     }
                     MirOp::Bin(kind, a, b) => {
                         let is_sub = match kind {
@@ -2361,9 +2459,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             _ => return Err(CompileError::UnsupportedOp("mir-pure-binop")),
                         };
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
-                        let a = map(&cval, *a)?;
-                        let b = map(&cval, *b)?;
-                        cval[r] = Some(lower_fixnum_binop(&mut fb, d, is_sub, a, b, &HashSet::new()));
+                        let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
+                        let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
+                        cval[r] = Some(raw_fixnum_addsub(&mut fb, d, is_sub, av, bv));
+                        cval_raw[r] = true;
                     }
                     MirOp::Unary(kind, a) => {
                         let k = match kind {
@@ -2372,8 +2471,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             MU::Negate => UnaryKind::Negate,
                         };
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
-                        let a = map(&cval, *a)?;
-                        cval[r] = Some(lower_fixnum_unop(&mut fb, d, k, a, &HashSet::new()));
+                        let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
+                        cval[r] = Some(raw_fixnum_unop(&mut fb, d, k, av));
+                        cval_raw[r] = true;
                     }
                     MirOp::Cmp(kind, a, b) => {
                         let cc = match kind {
@@ -2384,9 +2484,12 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             CmpKind::Ge => IntCC::SignedGreaterThanOrEqual,
                         };
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
-                        let a = map(&cval, *a)?;
-                        let b = map(&cval, *b)?;
-                        cval[r] = Some(lower_fixnum_compare(&mut fb, d, cc, a, b, &HashSet::new()));
+                        let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
+                        let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
+                        let cond = fb.ins().icmp(cc, av, bv);
+                        let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+                        let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+                        cval[r] = Some(fb.ins().select(cond, t, nil));
                     }
                     MirOp::Pred(kind, a) => {
                         let k = match kind {
@@ -2397,7 +2500,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             // Symbolp/Integerp/Numberp use shims; deferred.
                             _ => return Err(CompileError::UnsupportedOp("mir-pure-pred")),
                         };
-                        let a = map(&cval, *a)?;
+                        let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *a)?;
                         cval[r] = Some(lower_predicate(&mut fb, k, a));
                     }
                     MirOp::CarCdr { cdr, safe, arg } => {
@@ -2406,7 +2509,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         } else {
                             Some(*deopt.get_or_insert_with(|| fb.create_block()))
                         };
-                        let a = map(&cval, *arg)?;
+                        let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *arg)?;
                         cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
                     }
                     // Shim-using ops (calls / cons / eq / opaque): deferred.
@@ -2419,18 +2522,19 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             // Terminator.
             match &blk.term {
                 MirTerm::Return(v) => {
-                    let rv = map(&cval, *v)?;
+                    let rv = mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?;
                     let out = out_ptr;
                     fb.ins().store(MemFlags::trusted(), rv, out, 0);
                     let ok = fb.ins().iconst(types::I64, STATUS_OK);
                     fb.ins().return_(&[ok]);
                 }
                 MirTerm::Goto { target, args } => {
-                    let a: Result<Vec<BlockArg>, _> = args
-                        .iter()
-                        .map(|v| map(&cval, *v).map(BlockArg::Value))
-                        .collect();
-                    fb.ins().jump(clif_blocks[target.0 as usize], &a?);
+                    // Cross-block args are tagged (block params are tagged).
+                    let mut a: Vec<BlockArg> = Vec::with_capacity(args.len());
+                    for v in args {
+                        a.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                    }
+                    fb.ins().jump(clif_blocks[target.0 as usize], &a);
                 }
                 MirTerm::Branch {
                     cond,
@@ -2441,16 +2545,16 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                     fallthrough_args,
                     ..
                 } => {
-                    let c = map(&cval, *cond)?;
+                    let c = mir_as_tagged(&mut fb, &cval, &cval_raw, *cond)?;
                     let is_nil = fb.ins().icmp_imm(IntCC::Equal, c, Value::NIL.bits() as i64);
-                    let ta: Vec<BlockArg> = taken_args
-                        .iter()
-                        .map(|v| map(&cval, *v).map(BlockArg::Value))
-                        .collect::<Result<_, _>>()?;
-                    let fa: Vec<BlockArg> = fallthrough_args
-                        .iter()
-                        .map(|v| map(&cval, *v).map(BlockArg::Value))
-                        .collect::<Result<_, _>>()?;
+                    let mut ta: Vec<BlockArg> = Vec::with_capacity(taken_args.len());
+                    for v in taken_args {
+                        ta.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                    }
+                    let mut fa: Vec<BlockArg> = Vec::with_capacity(fallthrough_args.len());
+                    for v in fallthrough_args {
+                        fa.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                    }
                     let tb = clif_blocks[taken.0 as usize];
                     let fbk = clif_blocks[fallthrough.0 as usize];
                     // brif takes the `then` block when the condition is true.
