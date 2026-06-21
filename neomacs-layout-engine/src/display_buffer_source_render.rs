@@ -85,6 +85,13 @@ enum WholeTextRunFallbackReason {
     DoesNotFit,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferSourceTextRunFastPath {
+    right_edge_px: f32,
+    position: DisplayRowPosition,
+    geometry: DisplayRowGeometryState,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceItemRenderOutcome {
     Rendered,
@@ -179,6 +186,72 @@ impl<'a> BufferSourceItemRenderContext<'a> {
             max_rows,
             row_limit,
         }
+    }
+}
+
+impl BufferSourceTextRunFastPath {
+    fn new(
+        right_edge_px: f32,
+        position: DisplayRowPosition,
+        geometry: DisplayRowGeometryState,
+    ) -> Self {
+        Self {
+            right_edge_px,
+            position,
+            geometry,
+        }
+    }
+
+    fn render_if_fits_and_apply<B: LayoutBufferView>(
+        self,
+        source_item: DisplaySourceStepItem,
+        context: &BufferSourceItemRenderContext<'_>,
+        buffer: &B,
+        active_face_state: &DisplayRowActiveFaceState,
+        append_context: &BufferSourceRowAppendContext<'_, '_, B>,
+        cursor_info: &mut CursorCaptureState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        word_wrap: &mut WordWrapRenderState,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        progress: &mut DisplaySourceProgressState<'_>,
+    ) -> Option<BufferSourceItemRenderOutcome> {
+        if whole_text_run_render_decision(
+            &source_item,
+            context,
+            buffer,
+            self.right_edge_px,
+            self.position,
+            append_context,
+            &self.geometry,
+            source_render,
+        ) != WholeTextRunRenderDecision::Render
+        {
+            return None;
+        }
+
+        let output_display_point_start = source_render.output_emitter().display_point_len();
+        let output_row_positions_start = source_render
+            .output_emitter()
+            .current_row_display_positions();
+        let source_end_charpos = source_item.source_end_charpos();
+        let source_end_byte_idx = source_item.source_end_byte_idx();
+        Some(render_whole_text_run_and_apply(
+            source_item,
+            source_end_charpos,
+            source_end_byte_idx,
+            active_face_state,
+            append_context,
+            &self.geometry,
+            self.position,
+            context.point_charpos,
+            cursor_info,
+            trailing_whitespace,
+            word_wrap,
+            output_display_point_start,
+            output_row_positions_start,
+            source_render,
+            progress,
+        ))
     }
 }
 
@@ -516,6 +589,11 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     );
     let append_position = progress.row_position();
     let append_geometry = *row_geometry;
+    let text_run_fast_path = BufferSourceTextRunFastPath::new(
+        context.append_surface.right_edge(),
+        append_position,
+        append_geometry,
+    );
 
     if let Some(source_end_charpos) = source_item.source_end_charpos()
         && let Some(first_overlay_charpos) = context
@@ -533,40 +611,19 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         source_item = prefix;
     }
 
-    if whole_text_run_render_decision(
-        &source_item,
+    if let Some(outcome) = text_run_fast_path.render_if_fits_and_apply(
+        source_item.clone(),
         &context,
         buffer,
-        context.append_surface.right_edge(),
-        append_position,
+        &active_face_state,
         &buffer_row_append_context,
-        &append_geometry,
+        cursor_info,
+        trailing_whitespace,
+        word_wrap,
         &mut source_render,
-    ) == WholeTextRunRenderDecision::Render
-    {
-        let output_display_point_start = source_render.output_emitter().display_point_len();
-        let output_row_positions_start = source_render
-            .output_emitter()
-            .current_row_display_positions();
-        let source_end_charpos = source_item.source_end_charpos();
-        let source_end_byte_idx = source_item.source_end_byte_idx();
-        return render_whole_text_run_and_apply(
-            source_item,
-            source_end_charpos,
-            source_end_byte_idx,
-            &active_face_state,
-            &buffer_row_append_context,
-            &append_geometry,
-            append_position,
-            context.point_charpos,
-            cursor_info,
-            trailing_whitespace,
-            word_wrap,
-            output_display_point_start,
-            output_row_positions_start,
-            &mut source_render,
-            &mut progress,
-        );
+        &mut progress,
+    ) {
+        return outcome;
     }
 
     if let Some((prefix, suffix)) = split_text_run_prefix_to_fit(
