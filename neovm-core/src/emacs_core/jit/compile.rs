@@ -2359,6 +2359,67 @@ fn raw_fixnum_unop(
     }
 }
 
+/// Raw fixnum `*`: untagged in/out, widen to i128 for the product + the
+/// interpreter's fixnum-range check (deopt on overflow). Unboxed analogue of
+/// [`lower_fixnum_mul`].
+fn raw_fixnum_mul(fb: &mut FunctionBuilder, deopt: Block, av: ClifValue, bv: ClifValue) -> ClifValue {
+    let a128 = fb.ins().sextend(types::I128, av);
+    let b128 = fb.ins().sextend(types::I128, bv);
+    let prod = fb.ins().imul(a128, b128);
+    let lo = fb.ins().iconst(types::I64, Value::MOST_NEGATIVE_FIXNUM);
+    let hi = fb.ins().iconst(types::I64, Value::MOST_POSITIVE_FIXNUM);
+    let lo128 = fb.ins().sextend(types::I128, lo);
+    let hi128 = fb.ins().sextend(types::I128, hi);
+    let ge = fb.ins().icmp(IntCC::SignedGreaterThanOrEqual, prod, lo128);
+    let le = fb.ins().icmp(IntCC::SignedLessThanOrEqual, prod, hi128);
+    let in_range = fb.ins().band(ge, le);
+    emit_guard(fb, deopt, in_range);
+    fb.ins().ireduce(types::I64, prod)
+}
+
+/// Raw fixnum `/`/`%`: untagged in/out. Deopts on a zero divisor (interpreter
+/// signals arith-error). Operands are <= 61-bit so `sdiv`/`srem` cannot trap.
+/// For `/`, the only out-of-fixnum-range result is MOST_NEGATIVE_FIXNUM / -1 (a
+/// wrap in the interpreter); deopt on it for parity rather than keep an
+/// out-of-range raw value (`%` is always in range). Unboxed analogue of
+/// [`lower_fixnum_divrem`].
+fn raw_fixnum_divrem(
+    fb: &mut FunctionBuilder,
+    deopt: Block,
+    is_rem: bool,
+    av: ClifValue,
+    bv: ClifValue,
+) -> ClifValue {
+    let nonzero = fb.ins().icmp_imm(IntCC::NotEqual, bv, 0);
+    emit_guard(fb, deopt, nonzero);
+    if is_rem {
+        fb.ins().srem(av, bv)
+    } else {
+        let res = fb.ins().sdiv(av, bv);
+        let ge = fb
+            .ins()
+            .icmp_imm(IntCC::SignedGreaterThanOrEqual, res, Value::MOST_NEGATIVE_FIXNUM);
+        let le = fb
+            .ins()
+            .icmp_imm(IntCC::SignedLessThanOrEqual, res, Value::MOST_POSITIVE_FIXNUM);
+        let in_range = fb.ins().band(ge, le);
+        emit_guard(fb, deopt, in_range);
+        res
+    }
+}
+
+/// Raw fixnum `max`/`min`: untagged in/out, a branchless `select` of the two
+/// already-range-valid operands (no overflow, no deopt of its own).
+fn raw_fixnum_maxmin(fb: &mut FunctionBuilder, is_min: bool, av: ClifValue, bv: ClifValue) -> ClifValue {
+    let cc = if is_min {
+        IntCC::SignedLessThan
+    } else {
+        IntCC::SignedGreaterThan
+    };
+    let cond = fb.ins().icmp(cc, av, bv);
+    fb.ins().select(cond, av, bv)
+}
+
 /// **MIR Tier-2, Phase 4b (pure subset).** Lower a [`mir::MirFunction`] to a
 /// [`CompiledLeaf`] by driving CLIF emission from the MIR instead of a bytecode
 /// walk — the first proof that the bytecode→MIR→CLIF pipeline produces runnable
@@ -2465,17 +2526,19 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         }
                     }
                     MirOp::Bin(kind, a, b) => {
-                        let is_sub = match kind {
-                            BinKind::Add => false,
-                            BinKind::Sub => true,
-                            // Mul/Div/Rem/Max/Min need their own helpers / the
-                            // shim path; deferred past the pure subset.
-                            _ => return Err(CompileError::UnsupportedOp("mir-pure-binop")),
-                        };
                         let d = *deopt.get_or_insert_with(|| fb.create_block());
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
-                        cval[r] = Some(raw_fixnum_addsub(&mut fb, d, is_sub, av, bv));
+                        let res = match kind {
+                            BinKind::Add => raw_fixnum_addsub(&mut fb, d, false, av, bv),
+                            BinKind::Sub => raw_fixnum_addsub(&mut fb, d, true, av, bv),
+                            BinKind::Mul => raw_fixnum_mul(&mut fb, d, av, bv),
+                            BinKind::Div => raw_fixnum_divrem(&mut fb, d, false, av, bv),
+                            BinKind::Rem => raw_fixnum_divrem(&mut fb, d, true, av, bv),
+                            BinKind::Max => raw_fixnum_maxmin(&mut fb, false, av, bv),
+                            BinKind::Min => raw_fixnum_maxmin(&mut fb, true, av, bv),
+                        };
+                        cval[r] = Some(res);
                         cval_raw[r] = true;
                     }
                     MirOp::Unary(kind, a) => {
@@ -2526,7 +2589,11 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *arg)?;
                         cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
                     }
-                    // Shim-using ops (calls / cons / eq / opaque): deferred.
+                    // Shim-using / allocating ops, deferred: `eq` needs the
+                    // symbols-with-position slow-path shim (vmctx) so plain
+                    // tagged-bits comparison would diverge when
+                    // symbols-with-pos-enabled; `cons` allocates (GC safepoint);
+                    // `opaque` = calls.
                     MirOp::Eq(..) | MirOp::Cons(..) | MirOp::Opaque { .. } => {
                         return Err(CompileError::UnsupportedOp("mir-pure-shim-op"));
                     }
