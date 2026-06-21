@@ -150,7 +150,7 @@ fn whole_text_run_can_render<B: LayoutBufferView>(
     geometry: &DisplayRowGeometryState,
     source_render: &mut TextRowSourceRenderState<'_>,
 ) -> bool {
-    if source_item.ascii_text_run().is_none() {
+    if source_item.text_run().is_none() {
         return false;
     }
     let Some(source_end_charpos) = source_item.source_end_charpos() else {
@@ -417,7 +417,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &append_geometry,
         &mut source_render,
     ) {
-        let source_text = source_item.ascii_text_run().unwrap_or_default().to_owned();
+        let source_text = source_item.text_run().unwrap_or_default().to_owned();
         let output_display_point_start = source_render.output_emitter().display_point_len();
         let output_row_positions_start = source_render
             .output_emitter()

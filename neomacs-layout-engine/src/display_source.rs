@@ -446,7 +446,7 @@ impl DisplaySourceStepItem {
         chars.next().is_some() && chars.next().is_some()
     }
 
-    pub(crate) fn ascii_text_run(&self) -> Option<&str> {
+    pub(crate) fn text_run(&self) -> Option<&str> {
         let DisplayItemKind::TextRun(run) = &self.item.kind else {
             return None;
         };
@@ -455,7 +455,7 @@ impl DisplaySourceStepItem {
         chars.next()?;
         chars.next()?;
         text.chars()
-            .all(|ch| ch.is_ascii_graphic() || ch == ' ')
+            .all(|ch| !matches!(ch, '\n' | '\r' | '\t' | '\u{00A0}' | '\u{00AD}'))
             .then_some(text)
     }
 

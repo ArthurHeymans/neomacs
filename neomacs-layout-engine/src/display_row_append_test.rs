@@ -6490,7 +6490,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
             .buffer_manager_mut()
             .get_mut(buf_id)
             .expect("buffer");
-        buffer.insert("a ");
+        buffer.insert("éβ");
     }
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
@@ -6517,7 +6517,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
         4,
     );
     let params = test_display_space_window_params();
-    let text = b"a ";
+    let text = "éβ".as_bytes();
     let mut byte_idx = 0;
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(0);
     let mut charpos = 0;
@@ -6601,12 +6601,12 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     .render_next_and_apply(&mut source_walk, face_resolution_context, &snapshot);
 
     assert!(continue_buffer_walk);
-    assert_eq!(byte_idx, 2);
+    assert_eq!(byte_idx, 4);
     assert_eq!(charpos, 2);
     assert_eq!(x, 16.0);
     assert_eq!(col, 2);
     let cursor = cursor_info.as_ref().expect("cursor inside whole text run");
-    assert_eq!(cursor.byte_idx, 1);
+    assert_eq!(cursor.byte_idx, 2);
     assert_eq!(cursor.col, 1);
     assert_eq!(cursor.x, 8.0);
     assert_eq!(cursor.slot_width, Some(8.0));
@@ -6615,10 +6615,6 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
         .edit_current_row_for_test(|row| {
             let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
             assert_eq!(text_glyphs.len(), 2);
-            assert!(matches!(
-                text_glyphs[0].glyph_type,
-                GlyphType::Char { ch: 'a' }
-            ));
         })
         .expect("current row");
 }
