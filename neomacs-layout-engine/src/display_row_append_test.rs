@@ -4702,7 +4702,6 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
-    let active_face = test_active_face_state(7, 8.0);
     let render_context = BufferOverlayStringTextRowRenderContext::new(
         false,
         1,
@@ -4740,7 +4739,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut ctx.row_y_positions,
             &mut face_ids,
         );
-        render_context.render_at(&buffer, 5, &active_face, &mut state);
+        render_context.render_at(&buffer, 5, &mut state);
     }
 
     assert_eq!(x, 24.0);

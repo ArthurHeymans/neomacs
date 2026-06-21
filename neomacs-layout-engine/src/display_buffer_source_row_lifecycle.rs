@@ -379,7 +379,6 @@ impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
             context.overlay_context.render_at_text_row(
                 buffer,
                 context.charpos,
-                context.active_face_state,
                 source_render.reborrow(),
                 x,
                 col,
@@ -1090,7 +1089,6 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
         context.overlay_context.render_at_text_row(
             buffer,
             overlay_charpos,
-            context.active_face_state,
             source_render.reborrow(),
             x,
             col,
@@ -1505,7 +1503,6 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             context.overlay_context.render_at_text_row(
                 buffer,
                 overlay_charpos,
-                context.active_face_state,
                 source_render.reborrow(),
                 x,
                 col,

@@ -10,9 +10,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
-use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowRenderStop,
-};
+use crate::display_row::{DisplayRowFallbackMetrics, DisplayRowRenderStop};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
@@ -268,7 +266,6 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         self,
         buffer: &B,
         anchor_charpos: i64,
-        _active_face_state: &DisplayRowActiveFaceState,
         state: &mut OverlayStringRenderState<'_>,
     ) {
         if !self.enabled {
@@ -299,7 +296,6 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         self,
         buffer: &B,
         anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
         col: &mut usize,
@@ -321,12 +317,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             row_y_positions,
             face_ids,
         );
-        self.render_at(
-            buffer,
-            anchor_charpos,
-            active_face_state,
-            &mut overlay_state,
-        );
+        self.render_at(buffer, anchor_charpos, &mut overlay_state);
     }
 
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {

@@ -265,7 +265,6 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
             self.overlay_context.render_at_text_row(
                 buffer,
                 overlay_charpos,
-                active_face_state,
                 source_render.reborrow(),
                 x,
                 col,
