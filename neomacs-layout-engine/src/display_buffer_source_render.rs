@@ -296,7 +296,7 @@ fn capture_whole_text_run_cursor_if_point(
         return;
     }
     let Some(slot) = append_progress
-        .slots
+        .slots()
         .iter()
         .find(|slot| buffer_slot_matches_charpos(slot, point_charpos))
     else {
@@ -327,7 +327,7 @@ fn apply_whole_text_run_trailing_whitespace_state(
     if !trailing_whitespace.is_enabled() {
         return;
     }
-    for (ch, slot) in text.chars().zip(&append_progress.slots) {
+    for (ch, slot) in text.chars().zip(append_progress.slots()) {
         trailing_whitespace.track_rendered_char(ch, geometry.start_marker_at_x(slot.x_px));
     }
 }
@@ -344,7 +344,7 @@ fn apply_whole_text_run_word_wrap_state(
     }
     let mut first_run_charpos = output_row_positions_start.0;
     let mut previous_charpos = output_row_positions_start.1;
-    for (char_offset, (ch, slot)) in text.chars().zip(&append_progress.slots).enumerate() {
+    for (char_offset, (ch, slot)) in text.chars().zip(append_progress.slots()).enumerate() {
         if let Some((byte_idx, charpos)) = buffer_slot_source_position(slot) {
             let row_first =
                 first_run_charpos.or_else(|| Some(layout_i64_char_pos_to_lisp_char_pos(charpos)));
@@ -415,7 +415,7 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         output_row_positions_start,
         &append_progress,
     );
-    progress.row.apply_position(append_progress.end);
+    progress.row.apply_position(append_progress.end());
     if let Some(end_charpos) = source_end_charpos {
         *progress.charpos = (*progress.charpos).max(end_charpos);
     }

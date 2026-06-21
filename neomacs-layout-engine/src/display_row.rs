@@ -2503,7 +2503,7 @@ fn clipped_display_item_remainder(
         kind,
         layout,
     } = item;
-    let emitted_chars = progress.slots.len();
+    let emitted_chars = progress.slots().len();
     match kind {
         DisplayItemKind::TextRun(run) => {
             let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
@@ -2633,8 +2633,9 @@ impl DisplayRowRenderItem {
         y: f32,
     ) -> Option<RenderedDisplayRowMedia> {
         let descriptor = self.media_descriptor?;
-        (progress.status == DisplayRowAppendStatus::Complete && progress.metrics.width_px > 0.0)
-            .then(|| descriptor.rendered_media(progress.start, y))
+        progress
+            .is_complete_with_positive_width()
+            .then(|| descriptor.rendered_media(progress.start(), y))
     }
 
     fn clipped_remainder(self, progress: &DisplayRowAppendProgress) -> Option<DisplayItem> {
@@ -2953,14 +2954,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     row_writer.push_item(render_item.row_item_for_write())
                 }
             };
-            position = progress.end;
-            source_slots.extend(progress.slots.iter().cloned());
+            position = progress.end();
+            source_slots.extend(progress.slots().iter().cloned());
             if let Some(rendered) =
                 render_item.rendered_media_for_progress(&progress, row_layout.y_px)
             {
                 media.push(rendered);
             }
-            match progress.status {
+            match progress.status() {
                 DisplayRowAppendStatus::Complete => {}
                 DisplayRowAppendStatus::Clipped => {
                     match policy.clipped_behavior(render_item.source_item()) {

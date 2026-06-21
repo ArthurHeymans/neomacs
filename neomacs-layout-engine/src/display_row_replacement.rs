@@ -17,7 +17,7 @@ use crate::display_row_append_context::{
     DisplayRowAppendPlacement, DisplayRowAppendSurface,
 };
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowPosition,
+    DisplayRowAppendProgress, DisplayRowItemMeasurement, DisplayRowPosition,
 };
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 #[cfg(test)]
@@ -498,12 +498,11 @@ impl DisplayReplacementItemAppendTemplate {
             height_px,
             ascent_px,
         } = geometry_update
-            && progress.status == DisplayRowAppendStatus::Complete
-            && progress.metrics.width_px > 0.0
+            && progress.is_complete_with_positive_width()
         {
             row_geometry.include_row_extents(height_px, ascent_px);
         }
-        progress.end
+        progress.end()
     }
 }
 
@@ -894,7 +893,7 @@ impl DisplayReplacementMediaSourceItem {
         self,
         progress: &DisplayRowAppendProgress,
     ) -> Option<(f32, f32)> {
-        if progress.status == DisplayRowAppendStatus::Complete && progress.metrics.width_px > 0.0 {
+        if progress.is_complete_with_positive_width() {
             Some((self.display_height_px(), self.display_ascent_px()))
         } else {
             None

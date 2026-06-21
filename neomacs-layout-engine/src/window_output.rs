@@ -877,8 +877,8 @@ impl DisplayProgressSink for WindowOutputEmitter {
         self.emit_text_output_spans(
             evaluator,
             output,
-            output.spans_for_source_slots(&progress.slots),
-            progress.end,
+            output.spans_for_source_slots(progress.slots()),
+            progress.end(),
         );
     }
 

@@ -42,7 +42,7 @@ use crate::display_row::{
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
-    DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
+    DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
@@ -4339,14 +4339,14 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
             ),
         )
         .expect("synthetic text progress");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
-    assert_eq!(progress.metrics.width_px, 24.0);
-    assert_eq!(progress.metrics.width_cols, 3);
-    assert_eq!(progress.slots.len(), 3);
+    assert_eq!(progress.metrics().width_px, 24.0);
+    assert_eq!(progress.metrics().width_cols, 3);
+    assert_eq!(progress.slots().len(), 3);
     assert_eq!(
-        progress.slots[0].source,
+        progress.slots()[0].source,
         DisplaySourcePosition::synthetic(99, 0)
     );
     builder
@@ -4747,11 +4747,11 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
             SyntheticTextSource::new(100, "\u{301}"),
         )
         .expect("combining fragment progress");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
-    assert_eq!(progress.metrics.width_px, 0.0);
-    assert_eq!(progress.metrics.width_cols, 0);
+    assert_eq!(progress.metrics().width_px, 0.0);
+    assert_eq!(progress.metrics().width_cols, 0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -5085,17 +5085,17 @@ fn current_text_row_render_outcome_builds_append_progress() {
     let start = DisplayRowPosition { x_px: 8.0, col: 1 };
 
     let progress = outcome.into_append_progress(start);
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
-    assert_eq!(progress.start, start);
-    assert_eq!(progress.end, end);
-    assert_eq!(progress.metrics.width_px, 16.0);
-    assert_eq!(progress.metrics.width_cols, 2);
-    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
-    assert_eq!(progress.slots.len(), 1);
+    assert_eq!(progress.start(), start);
+    assert_eq!(progress.end(), end);
+    assert_eq!(progress.metrics().width_px, 16.0);
+    assert_eq!(progress.metrics().width_cols, 2);
+    assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.slots().len(), 1);
     assert_eq!(
-        progress.slots[0].source,
+        progress.slots()[0].source,
         DisplaySourcePosition::synthetic(9, 0)
     );
 }
@@ -8033,10 +8033,10 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             position,
         )
         .expect("appended buffer fragment");
-    let end = appended.end;
+    let end = appended.end();
 
     assert_eq!(end.x_px - position.x_px, measured_width);
-    assert_eq!(appended.metrics.width_px, measured_width);
+    assert_eq!(appended.metrics().width_px, measured_width);
 }
 
 #[test]
@@ -8104,10 +8104,10 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended resolved buffer fragment");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
-    assert_eq!(progress.metrics.width_px, 13.0);
+    assert_eq!(progress.metrics().width_px, 13.0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -8183,11 +8183,11 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
             DisplayRowPosition { x_px: 8.0, col: 1 },
         )
         .expect("appended combining buffer char");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
-    assert_eq!(progress.metrics.width_px, 0.0);
-    assert_eq!(progress.metrics.width_cols, 0);
+    assert_eq!(progress.metrics().width_px, 0.0);
+    assert_eq!(progress.metrics().width_cols, 0);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -8300,13 +8300,13 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended buffer text item fragment");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(measured_width, 16.0);
     assert_eq!(fallback_width, 16.0);
     assert_eq!(edge_width, 16.0);
-    assert_eq!(progress.metrics.width_px, measured_width);
+    assert_eq!(progress.metrics().width_px, measured_width);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
@@ -10266,7 +10266,7 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
         active_face.metrics().ascent,
         false,
     );
-    let mut progress = DisplayRowAppendProgress::from_positions(
+    let progress = DisplayRowAppendProgress::from_positions(
         DisplayRowPosition { x_px: 0.0, col: 0 },
         DisplayRowPosition { x_px: 64.0, col: 8 },
         DisplayRowAppendStatus::Complete,
@@ -10275,12 +10275,25 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
 
     assert_eq!(item.row_extents_after_append(&progress), Some((10.0, 10.0)));
 
-    progress.status = DisplayRowAppendStatus::Clipped;
-    assert_eq!(item.row_extents_after_append(&progress), None);
+    let clipped_progress = DisplayRowAppendProgress::from_positions(
+        progress.start(),
+        progress.end(),
+        DisplayRowAppendStatus::Clipped,
+        Vec::new(),
+    );
+    assert_eq!(item.row_extents_after_append(&clipped_progress), None);
 
-    progress.status = DisplayRowAppendStatus::Complete;
-    progress.metrics.width_px = 0.0;
-    assert_eq!(item.row_extents_after_append(&progress), None);
+    let zero_width_progress = DisplayRowAppendProgress::new(
+        progress.start(),
+        progress.end(),
+        DisplayRowWriteMetrics {
+            width_px: 0.0,
+            width_cols: progress.metrics().width_cols,
+        },
+        DisplayRowAppendStatus::Complete,
+        Vec::new(),
+    );
+    assert_eq!(item.row_extents_after_append(&zero_width_progress), None);
 }
 
 #[test]
@@ -10424,9 +10437,9 @@ fn display_replacement_append_context_uses_face_fallback() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
-    assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
+    assert_eq!(progress.start(), DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
     builder
         .edit_current_row_for_test(|row| {
@@ -10510,7 +10523,7 @@ fn display_replacement_append_context_advances_stretch_output() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
     let display = eval
@@ -10598,7 +10611,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
@@ -10684,7 +10697,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
             ),
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -10782,10 +10795,10 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
-    assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(progress.metrics.width_px, 96.0);
+    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.metrics().width_px, 96.0);
     assert_eq!(
         end,
         DisplayRowPosition {
@@ -10919,10 +10932,10 @@ fn display_replacement_append_context_installs_image_replacements() {
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
-    assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(progress.metrics.width_px, 64.0);
+    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.metrics().width_px, 64.0);
     assert_eq!(
         end,
         DisplayRowPosition {
@@ -11058,10 +11071,10 @@ fn display_replacement_append_context_installs_video_replacements() {
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
-    let end = progress.end;
+    let end = progress.end();
 
-    assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(progress.metrics.width_px, 80.0);
+    assert_eq!(progress.start(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.metrics().width_px, 80.0);
     assert_eq!(
         end,
         DisplayRowPosition {

@@ -485,11 +485,11 @@ pub(crate) struct DisplayRowGlyphSlot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendProgress {
-    pub(crate) start: DisplayRowPosition,
-    pub(crate) end: DisplayRowPosition,
-    pub(crate) metrics: DisplayRowWriteMetrics,
-    pub(crate) status: DisplayRowAppendStatus,
-    pub(crate) slots: Vec<DisplayRowGlyphSlot>,
+    start: DisplayRowPosition,
+    end: DisplayRowPosition,
+    metrics: DisplayRowWriteMetrics,
+    status: DisplayRowAppendStatus,
+    slots: Vec<DisplayRowGlyphSlot>,
 }
 
 impl DisplayRowAppendProgress {
@@ -525,6 +525,30 @@ impl DisplayRowAppendProgress {
             status,
             slots,
         )
+    }
+
+    pub(crate) fn start(&self) -> DisplayRowPosition {
+        self.start
+    }
+
+    pub(crate) fn end(&self) -> DisplayRowPosition {
+        self.end
+    }
+
+    pub(crate) fn metrics(&self) -> DisplayRowWriteMetrics {
+        self.metrics
+    }
+
+    pub(crate) fn status(&self) -> DisplayRowAppendStatus {
+        self.status
+    }
+
+    pub(crate) fn slots(&self) -> &[DisplayRowGlyphSlot] {
+        &self.slots
+    }
+
+    pub(crate) fn is_complete_with_positive_width(&self) -> bool {
+        self.status == DisplayRowAppendStatus::Complete && self.metrics.width_px > 0.0
     }
 }
 
@@ -607,7 +631,7 @@ impl DisplayRowAppendCursor {
             self.position,
             self.max_x_px,
         )?;
-        self.position = progress.end;
+        self.position = progress.end();
         Some(progress)
     }
 
@@ -626,7 +650,7 @@ impl DisplayRowAppendCursor {
             self.position,
             self.max_x_px,
         )?;
-        self.position = progress.end;
+        self.position = progress.end();
         Some(progress)
     }
 }

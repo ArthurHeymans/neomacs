@@ -374,7 +374,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             geometry,
             SyntheticTextAppendRequest::active_marker(position, marker),
         )
-        .map(|progress| progress.end)
+        .map(|progress| progress.end())
     }
 
     pub(crate) fn hscroll_truncation_request(
@@ -403,7 +403,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     ) -> Option<DisplayRowPosition> {
         let request = self.hscroll_truncation_request(state.default_face(), content_x);
         self.render_request_to_text_row(state, geometry, request)
-            .map(|progress| progress.end)
+            .map(|progress| progress.end())
     }
 }
 
@@ -595,7 +595,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             kind,
             render_policy,
         )?;
-        Some(outcome.into_append_progress(position).metrics.width_px)
+        Some(outcome.into_append_progress(position).metrics().width_px)
     }
 
     pub(crate) fn measure_width_naturally(

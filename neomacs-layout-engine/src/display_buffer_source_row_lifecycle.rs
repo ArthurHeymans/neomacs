@@ -1781,7 +1781,7 @@ pub(crate) fn append_synthetic_request_to_text_row<'ctx>(
     else {
         return;
     };
-    row_progress.apply_position(progress.end);
+    row_progress.apply_position(progress.end());
 }
 
 pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
