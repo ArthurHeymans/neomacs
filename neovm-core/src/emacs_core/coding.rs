@@ -287,6 +287,29 @@ fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
     }
 }
 
+/// Validate a coding-system hook argument exactly as GNU `CHECK_SYMBOL` does for
+/// `:post-read-conversion` / `:pre-write-conversion`: `nil` and any symbol are
+/// accepted (`nil` yields `None`, i.e. "no hook"); any other value — most often
+/// a `lambda` — signals `wrong-type-argument (symbolp VALUE)`.  GNU performs
+/// this check unconditionally in both `Fdefine_coding_system_internal`
+/// (src/coding.c:11083, 11087) and `Fcoding_system_put` (11562, 11567).  neomacs
+/// previously coerced a non-symbol silently to `None` via `non_nil_symbol_id`,
+/// so e.g. `(define-coding-system … :post-read-conversion (lambda …))` defined
+/// without error and then ignored the hook, whereas GNU rejects it at
+/// definition time.
+fn check_symbol_hook_arg(value: &Value) -> Result<Option<SymId>, Flow> {
+    if value.is_nil() {
+        Ok(None)
+    } else if let Some(id) = value.as_symbol_id() {
+        Ok(Some(id))
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("symbolp"), *value],
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CodingSystemInfo
 // ---------------------------------------------------------------------------
@@ -1851,6 +1874,19 @@ pub(crate) fn builtin_coding_system_put(
 
     if let Some(prop_id) = args[1].as_symbol_id() {
         let prop_name = resolve_sym(prop_id);
+        // GNU `Fcoding_system_put` validates the conversion hooks with
+        // CHECK_SYMBOL (src/coding.c:11562, 11567): a non-symbol (e.g. a lambda)
+        // is rejected with `wrong-type-argument (symbolp …)`, just as at
+        // definition time.
+        if matches!(
+            prop_name,
+            ":post-read-conversion"
+                | "post-read-conversion"
+                | ":pre-write-conversion"
+                | "pre-write-conversion"
+        ) {
+            check_symbol_hook_arg(&val)?;
+        }
         // GNU coerces a `:mnemonic` string to its first character (coding.c
         // `Fcoding_system_put`), and the stored value is the coerced one.
         let stored_val = if matches!(prop_name, ":mnemonic" | "mnemonic") {
@@ -2359,11 +2395,11 @@ pub(crate) fn builtin_define_coding_system_internal(
     // arg[5]: decode-translation-table (ignored for now)
     // arg[6]: encode-translation-table (ignored for now)
 
-    // arg[7]: post-read-conversion
-    let post_read_conversion = non_nil_symbol_id(&args[7]);
+    // arg[7]: post-read-conversion (GNU `CHECK_SYMBOL`, coding.c:11083)
+    let post_read_conversion = check_symbol_hook_arg(&args[7])?;
 
-    // arg[8]: pre-write-conversion
-    let pre_write_conversion = non_nil_symbol_id(&args[8]);
+    // arg[8]: pre-write-conversion (GNU `CHECK_SYMBOL`, coding.c:11087)
+    let pre_write_conversion = check_symbol_hook_arg(&args[8])?;
 
     // arg[9]: default-char
     let default_char = match args[9].kind() {
