@@ -13,6 +13,14 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_install_request::{
+    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
+    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
+};
+use crate::display_output_row_request::{
+    OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
+};
+use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
@@ -28,15 +36,9 @@ use crate::display_row_special_glyphs::{
 use crate::display_row_text_output::{TextOutputSpan, TextRowOutput};
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_text_output_install::{
-    DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
-    DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
-    TextWindowRowDecorationRequest, begin_text_output_row, begin_text_output_window,
-    end_text_output_window, finalize_text_output_row, finish_text_output_row,
-    install_output_resolved_face, install_text_output_cursor_artifact,
-    install_text_output_cursor_effects, install_text_output_display_range,
-    install_text_output_row_cursor, install_text_output_row_decoration,
-    install_text_output_row_metrics, restore_text_output_retry_checkpoint,
-    store_text_output_phys_cursor,
+    DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
+    DisplayOutputTextWindowBeginInstallRequest, TextWindowRowDecorationRequest,
+    install_output_resolved_face,
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
@@ -285,19 +287,22 @@ pub(crate) fn begin_text_window_output(
     mut output: TextWindowOutputTarget<'_>,
     request: TextWindowOutputBegin,
 ) {
-    begin_text_output_window(output.builder(), request.into_output_install_request());
+    request
+        .into_output_install_request()
+        .install(output.builder());
 }
 
 pub(crate) fn record_text_window_display_range(
     mut output: TextWindowOutputTarget<'_>,
     range: TextWindowDisplayRange,
 ) {
-    install_text_output_display_range(
-        output.builder(),
-        range.window_id as i64,
-        range.window_start.as_i64(),
-        range.window_end.as_i64(),
-    );
+    output
+        .builder()
+        .install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
+            range.window_id as i64,
+            range.window_start.as_i64(),
+            range.window_end.as_i64(),
+        ));
 }
 
 fn record_text_window_redisplay_positions(
@@ -312,7 +317,15 @@ fn install_text_window_row_decoration(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowRowDecorationRequest,
 ) {
-    install_text_output_row_decoration(output_builder, request);
+    match request {
+        TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft => {
+            output_builder.install_output_row_lifecycle(
+                OutputRowLifecycleRequest::current_decoration(
+                    OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
+                ),
+            );
+        }
+    }
 }
 
 pub(crate) fn install_text_window_row_decoration_request(
@@ -326,7 +339,12 @@ fn begin_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     begin: DisplayTextRowBegin,
 ) -> usize {
-    begin_text_output_row(output_builder, begin.display_row_index)
+    output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::begin(
+        begin.display_row_index,
+        GlyphRowRole::Text,
+        false,
+    ));
+    begin.display_row_index
 }
 
 fn finish_display_text_row(
@@ -334,10 +352,8 @@ fn finish_display_text_row(
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
-    let matrix_metrics = install_text_output_row_metrics(
-        output_builder,
-        display_text_row_metrics_request(display_row_index, metrics),
-    );
+    let matrix_metrics =
+        display_text_row_metrics_request(display_row_index, metrics).install(output_builder);
     DisplayTextRowFinish {
         display_row_index,
         metrics: matrix_metrics,
@@ -345,7 +361,8 @@ fn finish_display_text_row(
 }
 
 fn finalize_display_text_row(output_builder: &mut DisplayOutputBuilder, display_row_index: usize) {
-    finalize_text_output_row(output_builder, display_row_index);
+    output_builder
+        .install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(display_row_index));
 }
 
 pub(crate) fn begin_text_window_row(
@@ -383,10 +400,12 @@ pub(crate) fn finish_and_end_text_window_row(
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let matrix_metrics = finish_text_output_row(
-        output.builder(),
-        display_text_row_metrics_request(display_row_index, metrics),
-    );
+    let request = display_text_row_metrics_request(display_row_index, metrics);
+    let output_builder = output.builder();
+    let matrix_metrics = request.install(output_builder);
+    output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(
+        request.display_row_index(),
+    ));
     output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
     DisplayTextRowFinish {
         display_row_index,
@@ -478,7 +497,9 @@ pub(crate) fn render_window_chrome_rows(
 }
 
 pub(crate) fn close_text_window_output(mut output: TextWindowOutputTarget<'_>) {
-    end_text_output_window(output.builder());
+    output
+        .builder()
+        .install_output_window_lifecycle(OutputWindowLifecycleRequest::end());
 }
 
 pub(crate) fn install_text_window_finished_rows(
@@ -502,11 +523,12 @@ pub(crate) fn restore_text_window_retry_checkpoint(
     mut output: TextWindowOutputTarget<'_>,
     checkpoint: TextWindowOutputRetryCheckpoint,
 ) {
-    restore_text_output_retry_checkpoint(
-        output.builder(),
-        checkpoint.transition_hints_len,
-        checkpoint.effect_hints_len,
-    );
+    output
+        .builder()
+        .install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+            checkpoint.transition_hints_len,
+            checkpoint.effect_hints_len,
+        ));
 }
 
 fn display_text_row_metrics_request(
@@ -708,7 +730,12 @@ pub(crate) fn install_text_window_cursor_effects(
     mut output: TextWindowOutputTarget<'_>,
     request: TextWindowCursorEffects,
 ) {
-    install_text_output_cursor_effects(output.builder(), request.window_id, request.effects);
+    output
+        .builder()
+        .install_output_frame_state(OutputFrameStateInstallRequest::cursor_effects(
+            request.window_id,
+            request.effects,
+        ));
 }
 
 pub(crate) fn publish_text_window_decorative_cursor(
@@ -743,23 +770,21 @@ fn install_text_window_cursor_artifact(
     output_builder: &mut DisplayOutputBuilder,
     cursor: TextWindowCursorArtifact,
 ) {
-    install_text_output_cursor_artifact(
-        output_builder,
-        DisplayOutputCursorArtifactInstallRequest::new(
-            cursor.window_id,
-            cursor.slot_id,
-            cursor.x,
-            cursor.y,
-            cursor.width,
-            cursor.height,
-            cursor.style,
-            cursor.color,
-        ),
-    );
+    output_builder.install_output_cursor(OutputCursorInstallRequest::new(
+        cursor.window_id,
+        cursor.slot_id,
+        cursor.x,
+        cursor.y,
+        cursor.width,
+        cursor.height,
+        cursor.style,
+        cursor.color,
+    ));
 }
 
 fn store_text_window_phys_cursor(output_builder: &mut DisplayOutputBuilder, cursor: PhysCursor) {
-    store_text_output_phys_cursor(output_builder, cursor);
+    output_builder
+        .install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
 }
 
 fn install_text_window_row_cursor(
@@ -768,7 +793,8 @@ fn install_text_window_row_cursor(
     row_col: u16,
     style: CursorStyle,
 ) {
-    install_text_output_row_cursor(output_builder, row, row_col, style);
+    output_builder
+        .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(row, row_col, style));
 }
 
 #[derive(Clone, Debug, PartialEq)]

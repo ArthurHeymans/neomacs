@@ -1,21 +1,12 @@
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_install_request::{
-    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
-    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
-};
-use crate::display_output_row_request::{
-    OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
-};
+use crate::display_output_install_request::OutputFrameStateInstallRequest;
+use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_row_face_state::resolved_display_row_face;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
-};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Rect;
 
 pub(crate) struct DisplayRowOutputInstall<'a> {
     display_row_index: usize,
@@ -45,18 +36,6 @@ pub(crate) struct DisplayOutputTextWindowBeginInstallRequest {
     bounds: Rect,
     text_bounds: Rect,
     selected: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayOutputCursorArtifactInstallRequest {
-    window_id: i64,
-    slot_id: DisplaySlotId,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    style: CursorStyle,
-    color: Color,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,7 +81,7 @@ impl DisplayOutputTextWindowBeginInstallRequest {
         }
     }
 
-    fn install(self, builder: &mut DisplayOutputBuilder) {
+    pub(crate) fn install(self, builder: &mut DisplayOutputBuilder) {
         builder.install_output_window_lifecycle(OutputWindowLifecycleRequest::begin(
             self.window_id,
             self.rows,
@@ -110,44 +89,6 @@ impl DisplayOutputTextWindowBeginInstallRequest {
             self.bounds,
             self.text_bounds,
             self.selected,
-        ));
-    }
-}
-
-impl DisplayOutputCursorArtifactInstallRequest {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        style: CursorStyle,
-        color: Color,
-    ) -> Self {
-        Self {
-            window_id,
-            slot_id,
-            x,
-            y,
-            width,
-            height,
-            style,
-            color,
-        }
-    }
-
-    fn install(self, builder: &mut DisplayOutputBuilder) {
-        builder.install_output_cursor(OutputCursorInstallRequest::new(
-            self.window_id,
-            self.slot_id,
-            self.x,
-            self.y,
-            self.width,
-            self.height,
-            self.style,
-            self.color,
         ));
     }
 }
@@ -196,7 +137,10 @@ impl DisplayOutputTextRowMetricsInstallRequest {
         )
     }
 
-    fn install(self, builder: &mut DisplayOutputBuilder) -> DisplayOutputRowStoredMetrics {
+    pub(crate) fn install(
+        self,
+        builder: &mut DisplayOutputBuilder,
+    ) -> DisplayOutputRowStoredMetrics {
         let metrics = self.stored_metrics(builder);
         builder.install_output_row_lifecycle(OutputRowLifecycleRequest::metrics(
             self.display_row_index,
@@ -206,128 +150,6 @@ impl DisplayOutputTextRowMetricsInstallRequest {
         ));
         metrics
     }
-}
-
-pub(crate) fn begin_text_output_window(
-    builder: &mut DisplayOutputBuilder,
-    request: DisplayOutputTextWindowBeginInstallRequest,
-) {
-    request.install(builder);
-}
-
-pub(crate) fn end_text_output_window(builder: &mut DisplayOutputBuilder) {
-    builder.install_output_window_lifecycle(OutputWindowLifecycleRequest::end());
-}
-
-pub(crate) fn install_text_output_display_range(
-    builder: &mut DisplayOutputBuilder,
-    window_id: i64,
-    window_start: i64,
-    window_end: i64,
-) {
-    builder.install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
-        window_id,
-        window_start,
-        window_end,
-    ));
-}
-
-pub(crate) fn restore_text_output_retry_checkpoint(
-    builder: &mut DisplayOutputBuilder,
-    transition_hints_len: usize,
-    effect_hints_len: usize,
-) {
-    builder.install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
-        transition_hints_len,
-        effect_hints_len,
-    ));
-}
-
-pub(crate) fn install_text_output_row_decoration(
-    builder: &mut DisplayOutputBuilder,
-    request: TextWindowRowDecorationRequest,
-) {
-    match request {
-        TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft => {
-            builder.install_output_row_lifecycle(OutputRowLifecycleRequest::current_decoration(
-                OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
-            ));
-        }
-    }
-}
-
-pub(crate) fn install_text_output_cursor_effects(
-    builder: &mut DisplayOutputBuilder,
-    window_id: i64,
-    effects: EffectsConfig,
-) {
-    builder.install_output_frame_state(OutputFrameStateInstallRequest::cursor_effects(
-        window_id, effects,
-    ));
-}
-
-pub(crate) fn install_text_output_cursor_artifact(
-    builder: &mut DisplayOutputBuilder,
-    request: DisplayOutputCursorArtifactInstallRequest,
-) {
-    request.install(builder);
-}
-
-pub(crate) fn install_text_output_row_cursor(
-    builder: &mut DisplayOutputBuilder,
-    display_row_index: usize,
-    col: u16,
-    style: CursorStyle,
-) {
-    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
-        display_row_index,
-        col,
-        style,
-    ));
-}
-
-pub(crate) fn store_text_output_phys_cursor(
-    builder: &mut DisplayOutputBuilder,
-    cursor: PhysCursor,
-) {
-    builder.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
-}
-
-pub(crate) fn begin_text_output_row(
-    builder: &mut DisplayOutputBuilder,
-    display_row_index: usize,
-) -> usize {
-    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::begin(
-        display_row_index,
-        GlyphRowRole::Text,
-        false,
-    ));
-    display_row_index
-}
-
-pub(crate) fn install_text_output_row_metrics(
-    builder: &mut DisplayOutputBuilder,
-    request: DisplayOutputTextRowMetricsInstallRequest,
-) -> DisplayOutputRowStoredMetrics {
-    request.install(builder)
-}
-
-pub(crate) fn finish_text_output_row(
-    builder: &mut DisplayOutputBuilder,
-    request: DisplayOutputTextRowMetricsInstallRequest,
-) -> DisplayOutputRowStoredMetrics {
-    let metrics = install_text_output_row_metrics(builder, request);
-    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(
-        request.display_row_index(),
-    ));
-    metrics
-}
-
-pub(crate) fn finalize_text_output_row(
-    builder: &mut DisplayOutputBuilder,
-    display_row_index: usize,
-) {
-    builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(display_row_index));
 }
 
 pub(crate) fn install_display_row(

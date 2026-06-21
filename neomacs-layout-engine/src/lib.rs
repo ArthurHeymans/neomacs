@@ -45,7 +45,6 @@ pub(crate) mod display_origin;
 pub(crate) mod display_output_builder;
 pub(crate) mod display_output_frame_state;
 pub(crate) mod display_output_install_request;
-pub(crate) mod display_output_row_grid;
 pub(crate) mod display_output_row_request;
 pub(crate) mod display_output_window_request;
 pub(crate) mod display_output_window_state;

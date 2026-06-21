@@ -17,54 +17,8 @@ use neomacs_display_protocol::glyph_matrix::GlyphRow;
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
 
-struct DisplayRowCurrentRowInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
 pub(crate) struct DisplayRowCurrentRowOutput<'builder> {
-    installer: DisplayRowCurrentRowInstaller<'builder>,
-}
-
-impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn reborrow(&mut self) -> DisplayRowCurrentRowInstaller<'_> {
-        DisplayRowCurrentRowInstaller {
-            builder: self.builder,
-        }
-    }
-
-    fn current_row_snapshot(&self) -> Option<GlyphRow> {
-        self.builder.current_row_for_render().cloned()
-    }
-
-    fn apply_current_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
-    where
-        M: DisplayCurrentRowMutation,
-    {
-        self.builder.apply_current_output_row_mutation(mutation)
-    }
-
-    fn apply_current_row_scratch_mutation<M>(&self, mutation: M) -> Option<M::Output>
-    where
-        M: DisplayCurrentRowMutation,
-    {
-        let mut row = self.current_row_snapshot()?;
-        Some(mutation.apply(&mut row))
-    }
-
-    #[cfg(test)]
-    fn append_rendered_fragment(
-        &mut self,
-        rendered: &RenderedDisplayRow,
-    ) -> Option<DisplayRowPosition> {
-        self.builder
-            .apply_current_output_row_mutation(AppendRenderedDisplayRowFragmentMutation {
-                rendered,
-            })
-    }
+    builder: &'builder mut DisplayOutputBuilder,
 }
 
 #[cfg(test)]
@@ -82,37 +36,48 @@ impl DisplayCurrentRowMutation for AppendRenderedDisplayRowFragmentMutation<'_> 
 }
 
 impl<'builder> DisplayRowCurrentRowOutput<'builder> {
-    fn from_installer(installer: DisplayRowCurrentRowInstaller<'builder>) -> Self {
-        Self { installer }
-    }
-
     pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self::from_installer(DisplayRowCurrentRowInstaller::new(builder))
+        Self { builder }
     }
 
     pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowOutput<'_> {
         DisplayRowCurrentRowOutput {
-            installer: self.installer.reborrow(),
+            builder: self.builder,
         }
+    }
+
+    fn current_row_snapshot(&self) -> Option<GlyphRow> {
+        self.builder.current_row_for_render().cloned()
     }
 
     pub(crate) fn apply_current_row_mutation<M>(&mut self, mutation: M) -> Option<M::Output>
     where
         M: DisplayCurrentRowMutation,
     {
-        self.installer.apply_current_row_mutation(mutation)
+        self.builder.apply_current_output_row_mutation(mutation)
     }
 
     pub(crate) fn apply_current_row_scratch_mutation<M>(&self, mutation: M) -> Option<M::Output>
     where
         M: DisplayCurrentRowMutation,
     {
-        self.installer.apply_current_row_scratch_mutation(mutation)
+        let mut row = self.current_row_snapshot()?;
+        Some(mutation.apply(&mut row))
+    }
+
+    #[cfg(test)]
+    fn append_rendered_fragment(
+        &mut self,
+        rendered: &RenderedDisplayRow,
+    ) -> Option<DisplayRowPosition> {
+        self.builder
+            .apply_current_output_row_mutation(AppendRenderedDisplayRowFragmentMutation {
+                rendered,
+            })
     }
 
     pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
-        self.installer
-            .current_row_snapshot()
+        self.current_row_snapshot()
             .as_ref()
             .and_then(last_text_cluster_tail_in_row)
     }
@@ -130,7 +95,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             face.clone(),
         ));
     }
-    let end = DisplayRowCurrentRowInstaller::new(builder)
+    let end = DisplayRowCurrentRowOutput::from_output_builder(builder)
         .append_rendered_fragment(rendered)
         .expect("current row");
     install_rendered_display_row_fragment_assets(
