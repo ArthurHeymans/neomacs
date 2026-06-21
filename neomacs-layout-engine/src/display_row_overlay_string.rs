@@ -294,6 +294,41 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_at_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        anchor_charpos: i64,
+        active_face_state: &DisplayRowActiveFaceState,
+        source_render: TextRowSourceRenderState<'_>,
+        x: &mut f32,
+        col: &mut usize,
+        geometry: &mut DisplayRowGeometryState,
+        cursor_info: &mut CursorCaptureState,
+        hit_rows: &mut Vec<HitRow>,
+        hit_row_range: &mut HitRowRangeTracker,
+        row_y_positions: &mut DisplayRowYPositions,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) {
+        let mut overlay_state = OverlayStringRenderState::from_source_render(
+            source_render,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+        );
+        self.render_at(
+            buffer,
+            anchor_charpos,
+            active_face_state,
+            &mut overlay_state,
+        );
+    }
+
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {
         self.enabled && row_geometry.is_within_row_limit(self.row_context_row_limit())
     }

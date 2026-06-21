@@ -18,9 +18,7 @@ use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowYPositions,
 };
-use crate::display_row_overlay_string::{
-    BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
-};
+use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_append::{
     BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,
 };
@@ -337,16 +335,6 @@ impl BufferSourceEndOfBufferTailAction {
         self.cursor
             .capture_cursor_if_point(target, active_face_state, row_geometry, x, col);
     }
-
-    pub(crate) fn render_overlay_strings<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        render_context: BufferOverlayStringTextRowRenderContext<'_>,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        render_context.render_at(buffer, self.cursor.charpos, active_face_state, state);
-    }
 }
 
 impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
@@ -388,7 +376,10 @@ impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
 
         if context.overlay_context.should_render(row_geometry) {
             let (x, col) = row_progress.coordinates_mut();
-            let mut overlay_state = OverlayStringRenderState::from_source_render(
+            context.overlay_context.render_at_text_row(
+                buffer,
+                context.charpos,
+                context.active_face_state,
                 source_render.reborrow(),
                 x,
                 col,
@@ -398,12 +389,6 @@ impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
-            );
-            tail.render_overlay_strings(
-                buffer,
-                context.overlay_context,
-                context.active_face_state,
-                &mut overlay_state,
             );
         }
 
@@ -1102,7 +1087,10 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
 
         let overlay_charpos = progress.charpos();
         let (x, col) = progress.row_progress_mut().coordinates_mut();
-        let mut overlay_state = OverlayStringRenderState::from_source_render(
+        context.overlay_context.render_at_text_row(
+            buffer,
+            overlay_charpos,
+            context.active_face_state,
             source_render.reborrow(),
             x,
             col,
@@ -1112,12 +1100,6 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-        );
-        context.overlay_context.render_at(
-            buffer,
-            overlay_charpos,
-            context.active_face_state,
-            &mut overlay_state,
         );
         BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
     }
@@ -1520,7 +1502,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         {
             let overlay_charpos = progress.charpos();
             let (x, col) = progress.row_progress_mut().coordinates_mut();
-            let mut overlay_state = OverlayStringRenderState::from_source_render(
+            context.overlay_context.render_at_text_row(
+                buffer,
+                overlay_charpos,
+                context.active_face_state,
                 source_render.reborrow(),
                 x,
                 col,
@@ -1530,12 +1515,6 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
-            );
-            context.overlay_context.render_at(
-                buffer,
-                overlay_charpos,
-                context.active_face_state,
-                &mut overlay_state,
             );
         }
         let row_position = progress.row_position();

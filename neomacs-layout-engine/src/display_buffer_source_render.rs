@@ -28,9 +28,7 @@ use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
 };
-use crate::display_row_overlay_string::{
-    BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
-};
+use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
@@ -421,7 +419,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     {
         let overlay_charpos = progress.charpos();
         let (x, col) = progress.row_progress_mut().coordinates_mut();
-        let mut overlay_state = OverlayStringRenderState::from_source_render(
+        context.overlay_context.render_at_text_row(
+            buffer,
+            overlay_charpos,
+            &active_face_state,
             source_render.reborrow(),
             x,
             col,
@@ -431,12 +432,6 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             hit_row_range,
             row_y_positions,
             face_ids,
-        );
-        context.overlay_context.render_at(
-            buffer,
-            overlay_charpos,
-            &active_face_state,
-            &mut overlay_state,
         );
     }
 
