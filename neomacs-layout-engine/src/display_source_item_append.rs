@@ -4,7 +4,7 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
@@ -331,16 +331,13 @@ impl DisplaySourceAppendRenderPlanResolver {
         let ch = request.cluster().ch();
         match request.measurement_kind() {
             DisplaySourceAppendMeasurementKind::ResolvedComplexRun => {
-                let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
-                    active_face_state,
+                let advance_px = active_face_state.complex_text_run_advance(
                     state.font_metrics(),
-                );
-                let advance_px = self.complex_run.advance_for_char(
+                    &mut self.complex_run,
                     request.text(),
                     request.byte_idx(),
                     ch,
                     request.cluster().is_cluster_continuation(),
-                    &mut policy,
                 );
                 DisplaySourceAppendRenderPlan::resolved_advance(advance_px)
             }

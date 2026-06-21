@@ -23,8 +23,8 @@ use crate::display_source_resolver::{
     ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
 use crate::display_text_run_measurement::{
-    ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
-    DisplayTextRunMeasurementPlan,
+    ComplexTextRunAdvancePolicy, ComplexTextRunAdvanceResolver, DisplayTextRunAdvance,
+    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
 };
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -864,13 +864,13 @@ pub(crate) struct DisplayRowActiveFaceState {
     measurement: DisplayRowActiveFaceMeasurementState,
 }
 
-pub(crate) struct DisplayRowComplexTextRunAdvancePolicy<'a> {
+struct DisplayRowComplexTextRunAdvancePolicy<'a> {
     active_face_state: &'a DisplayRowActiveFaceState,
     font_metrics: &'a mut Option<FontMetricsService>,
 }
 
 impl<'a> DisplayRowComplexTextRunAdvancePolicy<'a> {
-    pub(crate) fn new(
+    fn new(
         active_face_state: &'a DisplayRowActiveFaceState,
         font_metrics: &'a mut Option<FontMetricsService>,
     ) -> Self {
@@ -969,6 +969,19 @@ impl DisplayRowActiveFaceState {
         source_char: char,
     ) -> f32 {
         self.advance_for_char(font_metrics, source_char, self.metrics().char_width)
+    }
+
+    pub(crate) fn complex_text_run_advance(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        resolver: &mut ComplexTextRunAdvanceResolver,
+        text: &[u8],
+        byte_idx: usize,
+        ch: char,
+        is_cluster_continuation: bool,
+    ) -> f32 {
+        let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(self, font_metrics);
+        resolver.advance_for_char(text, byte_idx, ch, is_cluster_continuation, &mut policy)
     }
 
     pub(crate) fn text_run_measurement(
