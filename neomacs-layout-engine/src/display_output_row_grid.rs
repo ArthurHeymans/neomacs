@@ -75,9 +75,7 @@ impl OutputWindowRowGrid {
         let Some(row) = self.row_mut(row) else {
             return;
         };
-        row.pixel_y = metrics.pixel_y;
-        row.height_px = metrics.height_px.max(0.0);
-        row.ascent_px = metrics.ascent_px.max(0.0).min(row.height_px.max(0.0));
+        metrics.apply_to_row(row);
     }
 
     pub(crate) fn write_row_cursor(

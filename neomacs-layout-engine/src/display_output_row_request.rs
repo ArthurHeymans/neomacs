@@ -21,9 +21,9 @@ pub(crate) struct OutputCompleteRowInstallRequest {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OutputRowMetricsRequest {
     /// Stored row Y, relative to the window matrix origin.
-    pub(crate) pixel_y: f32,
-    pub(crate) height_px: f32,
-    pub(crate) ascent_px: f32,
+    pixel_y: f32,
+    height_px: f32,
+    ascent_px: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +83,24 @@ impl OutputRowMetricsRequest {
             height_px,
             ascent_px,
         }
+    }
+
+    pub(crate) fn pixel_y(self) -> f32 {
+        self.pixel_y
+    }
+
+    pub(crate) fn height_px(self) -> f32 {
+        self.height_px.max(0.0)
+    }
+
+    pub(crate) fn ascent_px(self) -> f32 {
+        self.ascent_px.max(0.0).min(self.height_px())
+    }
+
+    pub(crate) fn apply_to_row(self, row: &mut GlyphRow) {
+        row.pixel_y = self.pixel_y();
+        row.height_px = self.height_px();
+        row.ascent_px = self.ascent_px();
     }
 }
 

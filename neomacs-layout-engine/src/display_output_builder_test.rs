@@ -223,6 +223,22 @@ fn builder_stores_row_metrics_as_provided() {
 }
 
 #[test]
+fn builder_normalizes_row_metrics_during_install() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 20.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.set_current_row_metrics(5.0, -4.0, 9.0);
+    builder.end_row();
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.pixel_y, 5.0);
+    assert_eq!(row.height_px, 0.0);
+    assert_eq!(row.ascent_px, 0.0);
+}
+
+#[test]
 fn builder_tracks_wide_chars() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 5, 20, Rect::new(0.0, 0.0, 160.0, 80.0), true);
