@@ -315,14 +315,9 @@ impl DisplaySourceTextCharAppendOutcome {
         geometry: &DisplayRowGeometryState,
         progress: &mut DisplaySourceProgressState<'_>,
     ) {
-        self.apply_to_text_row_state(
-            trailing_whitespace,
-            ch,
-            geometry,
-            progress.row.x,
-            progress.row.col,
-        );
-        *progress.charpos += 1;
+        let (x, col) = progress.row_progress_mut().coordinates_mut();
+        self.apply_to_text_row_state(trailing_whitespace, ch, geometry, x, col);
+        progress.advance_charpos_by_one();
         word_wrap.allow_after_current_char(ch);
     }
 }
@@ -567,8 +562,9 @@ impl DisplaySourceSpecialCharAppendOutcome {
         word_wrap: &mut WordWrapRenderState,
         progress: &mut DisplaySourceProgressState<'_>,
     ) {
-        self.apply_to_text_row_state(face_scan, progress.row.x, progress.row.col);
-        *progress.charpos += 1;
+        let (x, col) = progress.row_progress_mut().coordinates_mut();
+        self.apply_to_text_row_state(face_scan, x, col);
+        progress.advance_charpos_by_one();
         word_wrap.disallow_after_current_char();
     }
 }

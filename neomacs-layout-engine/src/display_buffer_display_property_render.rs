@@ -257,10 +257,10 @@ impl BufferDisplayPropertyTextReplacementOutcome {
             row_geometry,
             point_charpos,
             start_charpos,
-            *progress.byte_idx,
+            progress.byte_idx(),
         );
         let walk_update = self.walk_update(text, progress.source_position());
-        progress.row.apply_position(walk_update.row_position());
+        progress.apply_row_position(walk_update.row_position());
         progress.apply_source_position(walk_update.source_position());
     }
 }

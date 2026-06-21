@@ -2,8 +2,8 @@ use crate::display_row_builder::DisplayRowPosition;
 use crate::display_source::DisplaySourceTextPosition;
 
 pub(crate) struct DisplaySourceRowProgressState<'emit> {
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
+    x: &'emit mut f32,
+    col: &'emit mut usize,
 }
 
 impl<'emit> DisplaySourceRowProgressState<'emit> {
@@ -13,6 +13,26 @@ impl<'emit> DisplaySourceRowProgressState<'emit> {
 
     pub(crate) fn row_position(&self) -> DisplayRowPosition {
         DisplayRowPosition::new(*self.x, *self.col)
+    }
+
+    pub(crate) fn x(&self) -> f32 {
+        *self.x
+    }
+
+    pub(crate) fn col(&self) -> usize {
+        *self.col
+    }
+
+    pub(crate) fn x_mut(&mut self) -> &mut f32 {
+        self.x
+    }
+
+    pub(crate) fn col_mut(&mut self) -> &mut usize {
+        self.col
+    }
+
+    pub(crate) fn coordinates_mut(&mut self) -> (&mut f32, &mut usize) {
+        (self.x, self.col)
     }
 
     pub(crate) fn reborrow(&mut self) -> DisplaySourceRowProgressState<'_> {
@@ -29,9 +49,9 @@ impl<'emit> DisplaySourceRowProgressState<'emit> {
 }
 
 pub(crate) struct DisplaySourceProgressState<'emit> {
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) row: DisplaySourceRowProgressState<'emit>,
+    byte_idx: &'emit mut usize,
+    charpos: &'emit mut i64,
+    row: DisplaySourceRowProgressState<'emit>,
 }
 
 impl<'emit> DisplaySourceProgressState<'emit> {
@@ -52,12 +72,44 @@ impl<'emit> DisplaySourceProgressState<'emit> {
         self.row.row_position()
     }
 
+    pub(crate) fn row_progress(&self) -> &DisplaySourceRowProgressState<'emit> {
+        &self.row
+    }
+
+    pub(crate) fn row_progress_mut(&mut self) -> &mut DisplaySourceRowProgressState<'emit> {
+        &mut self.row
+    }
+
     pub(crate) fn charpos(&self) -> i64 {
         *self.charpos
     }
 
+    pub(crate) fn set_charpos(&mut self, charpos: i64) {
+        *self.charpos = charpos;
+    }
+
+    pub(crate) fn advance_charpos_by_one(&mut self) {
+        *self.charpos += 1;
+    }
+
+    pub(crate) fn max_charpos(&mut self, charpos: i64) {
+        *self.charpos = (*self.charpos).max(charpos);
+    }
+
+    pub(crate) fn byte_idx(&self) -> usize {
+        *self.byte_idx
+    }
+
+    pub(crate) fn set_byte_idx(&mut self, byte_idx: usize) {
+        *self.byte_idx = byte_idx;
+    }
+
     pub(crate) fn source_position(&self) -> DisplaySourceTextPosition {
         DisplaySourceTextPosition::new(*self.byte_idx, *self.charpos)
+    }
+
+    pub(crate) fn apply_row_position(&mut self, position: DisplayRowPosition) {
+        self.row.apply_position(position);
     }
 
     pub(crate) fn apply_source_position(&mut self, position: DisplaySourceTextPosition) {

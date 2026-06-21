@@ -29,7 +29,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     ) where
         'surface: 'request,
     {
-        while *self.progress.byte_idx < text.len()
+        while self.progress.byte_idx() < text.len()
             && self
                 .row_geometry
                 .current_row_is_visible(loop_context.row_visibility_limit())
@@ -103,22 +103,25 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 context.char_width(),
             );
 
+        let row_position = self.progress.row_position();
+        let charpos = self.progress.charpos();
+        let (x, col) = self.progress.row_progress_mut().coordinates_mut();
         context
             .line_prefix_request(
                 self.append_surface,
                 self.row_geometry,
                 active_face_state,
                 0.0,
-                self.progress.row_position(),
+                row_position,
             )
             .render_requested_with_source_state_and_apply(
                 self.prefix_request,
                 &mut self.source_render,
                 buffer,
-                self.progress.charpos(),
+                charpos,
                 self.face_ids,
-                self.progress.row.x,
-                self.progress.row.col,
+                x,
+                col,
             );
     }
 
@@ -188,7 +191,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             self.row_geometry,
             self.row_extend,
             self.box_face,
-            *self.progress.row.x,
+            self.progress.row_progress().x(),
             self.progress.charpos(),
         );
     }

@@ -367,7 +367,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
         row_y_positions: &mut DisplayRowYPositions,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferSourceEndOfBufferTailRenderOutcome {
-        let DisplaySourceRowProgressState { x, col } = row_progress;
+        let mut row_progress = row_progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -382,11 +382,12 @@ impl<'a> BufferSourceEndOfBufferTailRenderRequest<'a> {
             cursor_info,
             context.active_face_state,
             row_geometry,
-            *x,
-            *col,
+            row_progress.x(),
+            row_progress.col(),
         );
 
         if context.overlay_context.should_render(row_geometry) {
+            let (x, col) = row_progress.coordinates_mut();
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
                 x,
@@ -547,18 +548,15 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
         else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
-        let DisplaySourceProgressState {
-            row: DisplaySourceRowProgressState { x, col },
-            ..
-        } = progress;
 
         if hscroll_action.is_line_break() {
             hscroll_action.apply_line_break_before_row_transition(
                 row_extend,
                 source_render.output_emitter(),
-                x,
+                progress.row_progress_mut().x_mut(),
                 context.content_x,
             );
+            let row_position = progress.row_position();
             let line_break_transition = DisplayRowLineBreakTransitionPlan::hscroll_line_break();
             let hit_range = hscroll_action
                 .line_break_hit_range(hit_row_range)
@@ -577,7 +575,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
             .emit_line_break_then_row_start(
                 line_break_transition,
                 hit_range,
-                DisplayRowPosition::new(*x, *col),
+                row_position,
                 0.0,
                 DisplayRowTransitionRenderState::new(
                     prefix_request,
@@ -587,7 +585,7 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
                     word_wrap,
                     trailing_whitespace,
                 ),
-                col,
+                progress.row_progress_mut().coordinates_mut().1,
             );
             return hscroll_action.apply_after_line_break_row_transition(
                 row_transition,
@@ -595,8 +593,8 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
                 context.active_face_state,
                 row_geometry,
                 context.point_charpos,
-                *x,
-                *col,
+                row_position.x_px(),
+                row_position.col(),
                 context.metrics.row_height(),
             );
         }
@@ -610,16 +608,17 @@ impl<'a> BufferSourceHscrollSkipRenderRequest<'a> {
             ),
             row_geometry,
             &mut source_render.reborrow(),
-            DisplaySourceRowProgressState::new(x, col),
+            progress.row_progress_mut().reborrow(),
             context.content_x,
         );
+        let row_position = progress.row_position();
         hscroll_action.capture_text_cursor_if_point(
             cursor_info,
             context.active_face_state,
             row_geometry,
             context.point_charpos,
-            *x,
-            *col,
+            row_position.x_px(),
+            row_position.col(),
         );
         DisplayRowTransitionContinuation::Continue
     }
@@ -844,7 +843,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             ),
             row_geometry,
             &mut source_render.reborrow(),
-            progress.row.reborrow(),
+            progress.row_progress_mut().reborrow(),
         );
 
         let tail_action = source_walk
@@ -859,8 +858,9 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             row_extend,
             box_face,
             context.content_x,
-            progress.row.x,
+            progress.row_progress_mut().x_mut(),
         );
+        let row_position = progress.row_position();
         let line_break_transition = DisplayRowLineBreakTransitionPlan::hidden_line_break();
         let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
             context.row_geometry_defaults,
@@ -876,7 +876,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
         .emit_line_break_then_row_start(
             line_break_transition,
             hit_row_range.range_to(progress.charpos()),
-            DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+            row_position,
             0.0,
             DisplayRowTransitionRenderState::new(
                 prefix_request,
@@ -886,7 +886,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
                 word_wrap,
                 trailing_whitespace,
             ),
-            progress.row.col,
+            progress.row_progress_mut().coordinates_mut().1,
         );
         let synced_charpos = buffer
             .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
@@ -1086,7 +1086,7 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
             return BufferSourceInvisibleTextRenderOutcome::Visible;
         };
 
-        let mut row_progress = progress.row.reborrow();
+        let mut row_progress = progress.row_progress_mut().reborrow();
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -1101,10 +1101,11 @@ impl<'a> BufferSourceInvisibleTextRenderRequest<'a> {
         );
 
         let overlay_charpos = progress.charpos();
+        let (x, col) = progress.row_progress_mut().coordinates_mut();
         let mut overlay_state = OverlayStringRenderState::from_source_render(
             source_render.reborrow(),
-            progress.row.x,
-            progress.row.col,
+            x,
+            col,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -1518,10 +1519,11 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         );
         {
             let overlay_charpos = progress.charpos();
+            let (x, col) = progress.row_progress_mut().coordinates_mut();
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
-                progress.row.x,
-                progress.row.col,
+                x,
+                col,
                 row_geometry,
                 cursor_info,
                 hit_rows,
@@ -1536,13 +1538,14 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 &mut overlay_state,
             );
         }
+        let row_position = progress.row_position();
         line_break_action.capture_cursor_if_point(
             cursor_info,
             context.active_face_state,
             row_geometry,
             context.point_charpos,
-            *progress.row.x,
-            *progress.row.col,
+            row_position.x_px(),
+            row_position.col(),
         );
         line_break_action.apply_before_row_transition(
             row_geometry,
@@ -1569,7 +1572,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         .emit_line_break_then_row_start(
             line_break_transition,
             hit_row_range.range_to(progress.charpos()),
-            DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+            progress.row_position(),
             line_break_action.line_spacing(),
             DisplayRowTransitionRenderState::new(
                 prefix_request,
@@ -1579,7 +1582,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 word_wrap,
                 trailing_whitespace,
             ),
-            progress.row.col,
+            progress.row_progress_mut().col_mut(),
         );
 
         let synced_charpos = buffer
@@ -1683,8 +1686,8 @@ impl BufferSourceLineBreakSourceAction {
         trailing_whitespace.reset_after_row_transition();
         row_extend.clear();
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
-        *progress.charpos = self.next_charpos();
-        *progress.row.x = content_x;
+        progress.set_charpos(self.next_charpos());
+        *progress.row_progress_mut().x_mut() = content_x;
         output_emitter.note_display_buffer_pos(LispCharPos1::new(progress.charpos()));
     }
 

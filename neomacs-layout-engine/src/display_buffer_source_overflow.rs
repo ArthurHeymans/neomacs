@@ -6,7 +6,6 @@
 
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
-use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowVisibilityLimit,
@@ -163,9 +162,10 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
-                    progress.row.x,
+                    progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
+                let row_position = progress.row_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -180,7 +180,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+                    row_position,
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -189,7 +189,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    progress.row.col,
+                    progress.row_progress_mut().col_mut(),
                 );
                 BufferSourceOverflowRenderOutcome::Transition(
                     truncation_skip.transition_continuation(row_transition),
@@ -201,12 +201,13 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
             } => {
                 let word_wrap_action = BufferSourceWordWrapAction::new(wrap_break);
                 let mut source_position = progress.source_position();
+                let (x, col) = progress.row_progress_mut().coordinates_mut();
                 word_wrap_action.apply_before_row_transition(
                     source_render.output_emitter(),
                     &mut source_position,
-                    progress.row.col,
+                    col,
                     row_extend,
-                    progress.row.x,
+                    x,
                     context.content_x,
                 );
                 source_walk
@@ -226,7 +227,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+                    progress.row_position(),
                 );
                 let continuation = word_wrap_action.apply_after_row_transition_and_prefix(
                     row_transition,
@@ -255,10 +256,11 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     BufferSourceCharacterWrapAction::from_source_step_char(self.source_step_char);
                 character_wrap_action.apply_before_row_transition(
                     row_extend,
-                    progress.row.x,
+                    progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
                 let mut source_position = progress.source_position();
+                let row_position = progress.row_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -273,7 +275,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+                    row_position,
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -282,7 +284,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    progress.row.col,
+                    progress.row_progress_mut().col_mut(),
                 );
                 let continuation = character_wrap_action.apply_after_visible_row_transition(
                     row_transition,
@@ -728,9 +730,10 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
-                    progress.row.x,
+                    progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
+                let row_position = progress.row_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -745,7 +748,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_row_range.range_to(progress.charpos()),
-                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+                    row_position,
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -754,7 +757,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    progress.row.col,
+                    progress.row_progress_mut().col_mut(),
                 );
                 let synced_charpos = buffer
                     .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
@@ -776,10 +779,11 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 let special_wrap_action = BufferSourceSpecialWrapAction::new(progress.charpos());
                 special_wrap_action.apply_before_row_transition(
                     row_extend,
-                    progress.row.x,
+                    progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
                 let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
+                let row_position = progress.row_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -794,7 +798,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 .emit_overflow_then_row_start(
                     transition,
                     hit_range,
-                    DisplayRowPosition::new(*progress.row.x, *progress.row.col),
+                    row_position,
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
                         context.has_prefix,
@@ -803,7 +807,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                     ),
-                    progress.row.col,
+                    progress.row_progress_mut().col_mut(),
                 );
                 BufferSourceSpecialOverflowRenderOutcome::AppendPrepared(
                     special_wrap_action.transition_continuation(

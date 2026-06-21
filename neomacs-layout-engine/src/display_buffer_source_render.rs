@@ -415,12 +415,12 @@ fn render_whole_text_run_and_apply<B: LayoutBufferView + ?Sized>(
         output_row_positions_start,
         &append_progress,
     );
-    progress.row.apply_position(append_progress.end());
+    progress.apply_row_position(append_progress.end());
     if let Some(end_charpos) = source_end_charpos {
-        *progress.charpos = (*progress.charpos).max(end_charpos);
+        progress.max_charpos(end_charpos);
     }
     if let Some(end_byte_idx) = source_end_byte_idx {
-        *progress.byte_idx = end_byte_idx;
+        progress.set_byte_idx(end_byte_idx);
     }
     BufferSourceItemRenderOutcome::Rendered
 }
@@ -488,7 +488,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             active_face_metrics.ascent,
         ),
     );
-    let append_position = DisplayRowPosition::new(*progress.row.x, *progress.row.col);
+    let append_position = progress.row_position();
     let append_geometry = *row_geometry;
 
     if let Some(source_end_charpos) = source_item.source_end_charpos()
@@ -611,7 +611,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                 BufferSourceSpecialOverflowRenderContext::new(
                     context.text,
                     context.text_start_byte,
-                    *progress.row.x,
+                    progress.row_progress().x(),
                     context.append_surface.full_text_right_edge(),
                     context.params.wrap_mode,
                     context.row_visibility_limit,
@@ -672,7 +672,7 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
                 return BufferSourceItemRenderOutcome::Stop;
             }
             if let Some(end_byte_idx) = source_end_byte_idx {
-                *progress.byte_idx = end_byte_idx;
+                progress.set_byte_idx(end_byte_idx);
             }
             return BufferSourceItemRenderOutcome::ContinueBufferWalk;
         }
@@ -732,10 +732,12 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
     }
 
     {
+        let overlay_charpos = progress.charpos();
+        let (x, col) = progress.row_progress_mut().coordinates_mut();
         let mut overlay_state = OverlayStringRenderState::from_source_render(
             source_render.reborrow(),
-            progress.row.x,
-            progress.row.col,
+            x,
+            col,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -745,26 +747,27 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         );
         context.overlay_context.render_at(
             buffer,
-            *progress.charpos,
+            overlay_charpos,
             &active_face_state,
             &mut overlay_state,
         );
     }
 
+    let row_position = progress.row_position();
     prepared_append.capture_cursor_info_for_main_char_if_point(
         cursor_info,
         &active_face_state,
         row_geometry,
-        *progress.row.x,
+        row_position.x_px(),
         source_step_char.start_byte_idx(),
-        *progress.row.col,
+        row_position.col(),
         ch == '\t',
-        *progress.charpos,
+        progress.charpos(),
         context.point_charpos,
     );
     if cursor_info.is_missing()
         && source_end_charpos.is_some_and(|end| {
-            context.point_charpos > *progress.charpos && context.point_charpos < end
+            context.point_charpos > progress.charpos() && context.point_charpos < end
         })
     {
         capture_cursor_info(
@@ -772,9 +775,9 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
             prepared_append.cursor_info_for_main_char(
                 &active_face_state,
                 row_geometry.text_position(
-                    *progress.row.x,
+                    row_position.x_px(),
                     source_step_char.start_byte_idx(),
-                    *progress.row.col,
+                    row_position.col(),
                 ),
                 ch == '\t',
             ),
@@ -796,10 +799,10 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         return BufferSourceItemRenderOutcome::Stop;
     }
     if let Some(end_charpos) = source_end_charpos {
-        *progress.charpos = (*progress.charpos).max(end_charpos);
+        progress.max_charpos(end_charpos);
     }
     if let Some(end_byte_idx) = source_end_byte_idx {
-        *progress.byte_idx = end_byte_idx;
+        progress.set_byte_idx(end_byte_idx);
     }
 
     BufferSourceItemRenderOutcome::Rendered
@@ -880,7 +883,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             ),
             self.active_face_state,
         );
-        let current_x = *self.state.progress.row.x;
+        let current_x = self.state.progress.row_progress().x();
         let start_position = self.state.progress.row_position();
         match request.render(
             buffer,
@@ -942,7 +945,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         let end_byte_idx = source_item.source_end_byte_idx();
         if is_explicit_line_break {
             if let Some(end_byte_idx) = end_byte_idx {
-                *self.state.progress.byte_idx = end_byte_idx;
+                self.state.progress.set_byte_idx(end_byte_idx);
             }
             if self
                 .render_line_break_for_context(source_walk, source_step_char, buffer)
