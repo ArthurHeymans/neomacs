@@ -39,10 +39,10 @@ impl DisplayRowAppendPlacement {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendArea {
-    pub(crate) content_x: f32,
-    pub(crate) width: f32,
-    pub(crate) text_width: f32,
-    pub(crate) line_number_width: f32,
+    content_x: f32,
+    width: f32,
+    text_width: f32,
+    line_number_width: f32,
 }
 
 impl DisplayRowAppendArea {
@@ -59,13 +59,25 @@ impl DisplayRowAppendArea {
         self.content_x
     }
 
+    pub(crate) fn width(self) -> f32 {
+        self.width
+    }
+
+    pub(crate) fn text_width(self) -> f32 {
+        self.text_width
+    }
+
+    pub(crate) fn line_number_width(self) -> f32 {
+        self.line_number_width
+    }
+
     pub(crate) fn right_edge(self) -> f32 {
-        self.content_x + self.width
+        self.content_x() + self.width()
     }
 
     fn full_text_width(self) -> Self {
         Self {
-            width: (self.text_width - self.line_number_width).max(0.0),
+            width: (self.text_width() - self.line_number_width()).max(0.0),
             ..self
         }
     }
@@ -605,16 +617,16 @@ impl DisplayRowAppendFrame {
             glyph_y: placement.glyph_y,
             geometry: DisplayRowGeometry::new(
                 placement.y,
-                area.width,
+                area.width(),
                 metrics.height(),
                 metrics.char_width(),
                 metrics.ascent(),
                 tab_policy,
             ),
             default_row_height: metrics.fallback_metrics().row_height(),
-            content_x: area.content_x,
-            text_width: area.text_width,
-            line_number_width: area.line_number_width,
+            content_x: area.content_x(),
+            text_width: area.text_width(),
+            line_number_width: area.line_number_width(),
             face_space_width: metrics.space_width(),
         }
     }

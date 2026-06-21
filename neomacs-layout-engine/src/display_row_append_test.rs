@@ -1116,12 +1116,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let mut byte_idx = 0;
@@ -1385,12 +1380,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -1705,12 +1695,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -2728,12 +2713,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -2891,12 +2871,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let text = b"a\rb\nc";
@@ -3838,12 +3813,7 @@ fn test_append_frame(
         0,
         0.0,
         0.0,
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -3870,12 +3840,7 @@ fn test_append_frame_at(
 
 fn test_advance_resolution_surface() -> DisplayRowAppendSurface {
     DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     )
 }
@@ -4240,12 +4205,7 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
 fn display_row_append_frame_builds_from_geometry_state() {
     let geometry = DisplayRowGeometryState::new(2, 40.0, 0.0, 18.0, 13.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 10.0,
-            width: 90.0,
-            text_width: 120.0,
-            line_number_width: 6.0,
-        },
+        DisplayRowAppendArea::new(10.0, 90.0, 120.0, 6.0),
         DisplayTabPolicy::every(4),
     );
 
@@ -4302,12 +4262,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -4395,12 +4350,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -4464,12 +4414,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -4554,12 +4499,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -4638,12 +4578,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -4769,12 +4704,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
         .id();
     let buffer = current_buffer_snapshot(&ctx.eval, buf_id);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let active_face = test_active_face_state(7, 8.0);
@@ -4830,12 +4760,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
 fn overlay_string_row_break_context_finishes_current_row() {
     let mut ctx = RowTransitionTestContext::new("overlay-row-break-context");
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let row_context = OverlayStringRenderRowContext::new(
@@ -5202,12 +5127,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
 fn display_row_append_surface_builds_positioned_source_requests() {
     let tab_policy = DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         tab_policy.clone(),
     );
 
@@ -5260,12 +5180,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5390,12 +5305,7 @@ fn display_row_append_kind_names_width_clip_and_output_policy() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5441,12 +5351,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5490,12 +5395,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5534,12 +5434,7 @@ fn display_row_append_frame_builds_source_measure_request() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5572,12 +5467,7 @@ fn display_row_source_append_render_request_uses_frame_policy() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5617,12 +5507,7 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -5661,12 +5546,7 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
 fn display_row_append_surface_builds_frames_with_shared_area() {
     let tab_policy = DisplayTabPolicy::every(4);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         tab_policy.clone(),
     );
 
@@ -5705,12 +5585,7 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
 #[test]
 fn display_row_text_append_context_builds_text_frame_from_shared_surface() {
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayTabPolicy::every(4),
     );
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
@@ -5755,12 +5630,7 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayTabPolicy::every(4),
     );
 
@@ -5800,12 +5670,7 @@ fn display_row_append_frame_preserves_geometry_and_area() {
         3,
         20.0,
         22.0,
-        DisplayRowAppendArea {
-            content_x: 8.0,
-            width: 120.0,
-            text_width: 150.0,
-            line_number_width: 10.0,
-        },
+        DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
         DisplayRowAppendMetrics::new(
             16.0,
             11.0,
@@ -6169,12 +6034,7 @@ fn lisp_string_append_context_appends_fragment_items() {
     builder.begin_row(0, GlyphRowRole::Text);
     let active_face = test_active_face_state(0, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -6252,12 +6112,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -6454,12 +6309,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -6598,12 +6448,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -6753,12 +6598,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -6908,12 +6748,7 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 32.0,
-            text_width: 32.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 32.0, 32.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -7064,12 +6899,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -7167,12 +6997,7 @@ fn buffer_end_of_buffer_tail_action_reports_cursor_state() {
 #[test]
 fn buffer_overlay_string_context_reports_render_gate() {
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
@@ -7240,12 +7065,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
@@ -8591,12 +8411,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -8801,12 +8616,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -8988,12 +8798,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let first_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -9136,12 +8941,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
         0,
         0.0,
         6.0,
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 160.0,
-            text_width: 160.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -9689,12 +9489,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let mut geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -9801,12 +9596,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let mut geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -10439,12 +10229,7 @@ fn display_replacement_append_context_advances_stretch_output() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -10527,12 +10312,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -10616,12 +10396,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let active_face = test_active_face_state(3, 8.0);
@@ -10701,12 +10476,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     );
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 160.0,
-            text_width: 160.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 4.0, 0.0, 16.0, 12.0);
@@ -10832,12 +10602,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         0,
         4.0,
         6.0,
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 160.0,
-            text_width: 160.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -10963,12 +10728,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         0,
         4.0,
         6.0,
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 160.0,
-            text_width: 160.0,
-            line_number_width: 0.0,
-        },
+        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
