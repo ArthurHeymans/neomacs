@@ -2130,6 +2130,43 @@ impl TempCreateKind {
     }
 }
 
+/// Build the `OpenOptions` used to create a temporary file exclusively.
+///
+/// GNU's `make-temp-file-internal` (src/fileio.c) calls gnulib `gen_tempname`
+/// (lib/tempname.c), whose `try_file` opens with
+/// `open(..., O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)`, i.e. mode 0600
+/// before umask.  The docstring guarantees the file is "created with access
+/// mode bits that limit access to the current user."  On Unix we replicate the
+/// explicit 0600 mode so the resulting file is private (subject to umask, just
+/// like GNU); other platforms keep the libstd default.
+fn private_temp_file_open_options() -> fs::OpenOptions {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+}
+
+/// Create a temporary directory with GNU's private mode bits.
+///
+/// gnulib `gen_tempname` `try_dir` calls `mkdir(..., S_IRWXU)`, i.e. mode 0700
+/// before umask.  On Unix we mirror that explicit 0700 mode; other platforms
+/// fall back to `fs::create_dir`.
+fn create_private_temp_dir(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new().mode(0o700).create(path)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir(path)
+    }
+}
+
 fn make_temp_file_internal_impl(
     prefix: &crate::heap_types::LispString,
     kind: TempCreateKind,
@@ -2149,7 +2186,7 @@ fn make_temp_file_internal_impl(
         let candidate_display = crate::emacs_core::emacs_char::to_utf8_lossy(candidate.as_bytes());
 
         match kind {
-            TempCreateKind::Directory => match fs::create_dir(&candidate_path) {
+            TempCreateKind::Directory => match create_private_temp_dir(&candidate_path) {
                 Ok(()) => {
                     return Ok(candidate);
                 }
@@ -2162,30 +2199,24 @@ fn make_temp_file_internal_impl(
                     ));
                 }
             },
-            TempCreateKind::File => {
-                match fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&candidate_path)
-                {
-                    Ok(mut file) => {
-                        if let Some(contents) = text {
-                            file.write_all(contents).map_err(|err| {
-                                signal_file_io_path(err, "Writing to", &candidate_display)
-                            })?;
-                        }
-                        return Ok(candidate);
+            TempCreateKind::File => match private_temp_file_open_options().open(&candidate_path) {
+                Ok(mut file) => {
+                    if let Some(contents) = text {
+                        file.write_all(contents).map_err(|err| {
+                            signal_file_io_path(err, "Writing to", &candidate_display)
+                        })?;
                     }
-                    Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
-                    Err(err) => {
-                        return Err(signal_file_io_path(
-                            err,
-                            kind.error_action(),
-                            &candidate_display,
-                        ));
-                    }
+                    return Ok(candidate);
                 }
-            }
+                Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
+                Err(err) => {
+                    return Err(signal_file_io_path(
+                        err,
+                        kind.error_action(),
+                        &candidate_display,
+                    ));
+                }
+            },
             TempCreateKind::NoCreate => match fs::symlink_metadata(&candidate_path) {
                 Ok(_) => continue,
                 Err(err) if err.kind() == ErrorKind::NotFound => return Ok(candidate),

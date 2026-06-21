@@ -1722,6 +1722,46 @@ fn test_builtin_make_temp_file_core_paths() {
     delete_file(&text_path).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn test_builtin_make_temp_file_private_unix_mode_bits() {
+    // GNU's `make-temp-file-internal` routes through gnulib `gen_tempname`,
+    // which creates files via `open(..., O_CREAT|O_EXCL, S_IRUSR|S_IWUSR)`
+    // (mode 0600) and directories via `mkdir(..., S_IRWXU)` (mode 0700),
+    // regardless of the process umask.  The docstring promises "the
+    // file/directory is created with access mode bits that limit access to
+    // the current user."  Neomacs previously created temp files/dirs with the
+    // umask-derived 0644/0755, leaking world-readable temp files.
+    use std::os::unix::fs::MetadataExt;
+    crate::test_utils::init_test_tracing();
+
+    let file = call_fileio_builtin!(
+        builtin_make_temp_file,
+        vec![Value::string("neovm-mtf-mode-")]
+    )
+    .unwrap();
+    let file_path = file.as_utf8_str().unwrap().to_string();
+    let file_mode = fs::metadata(&file_path).unwrap().mode() & 0o7777;
+    assert_eq!(
+        file_mode, 0o600,
+        "temp file should be created with private mode 0600, got {file_mode:o}"
+    );
+    delete_file(&file_path).unwrap();
+
+    let dir = call_fileio_builtin!(
+        builtin_make_temp_file,
+        vec![Value::string("neovm-mtf-mode-dir-"), Value::T]
+    )
+    .unwrap();
+    let dir_path = dir.as_utf8_str().unwrap().to_string();
+    let dir_mode = fs::metadata(&dir_path).unwrap().mode() & 0o7777;
+    assert_eq!(
+        dir_mode, 0o700,
+        "temp directory should be created with private mode 0700, got {dir_mode:o}"
+    );
+    fs::remove_dir(&dir_path).unwrap();
+}
+
 #[test]
 fn test_builtin_make_temp_file_validation() {
     crate::test_utils::init_test_tracing();
