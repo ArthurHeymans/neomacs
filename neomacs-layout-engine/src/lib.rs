@@ -65,6 +65,8 @@ pub(crate) mod display_row_lisp_string;
 pub(crate) mod display_row_measured_state;
 pub(crate) mod display_row_metrics;
 pub(crate) mod display_row_overlay_string;
+pub(crate) mod display_row_render_item;
+pub(crate) mod display_row_render_policy;
 pub(crate) mod display_row_render_state;
 pub(crate) mod display_row_replacement;
 pub(crate) mod display_row_source_append;

@@ -1,14 +1,11 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
-use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
-};
+use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout,
-    DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
+    DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition,
+    DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
@@ -19,13 +16,20 @@ pub(crate) use crate::display_row_measured_state::{
 pub(crate) use crate::display_row_metrics::DisplayRowFallbackMetrics;
 #[cfg(test)]
 pub(crate) use crate::display_row_metrics::DisplayRowMeasuredFaceMetrics;
+use crate::display_row_render_item::DisplayRowRenderItem;
+use crate::display_row_render_policy::NaturalDisplayRowRenderPolicy;
+pub(crate) use crate::display_row_render_policy::{
+    DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
+};
+#[cfg(test)]
+pub(crate) use crate::display_row_render_state::RenderedDisplayRowMedia;
 #[cfg(test)]
 pub(crate) use crate::display_row_render_state::{
     CurrentTextRowRenderOutcome, DisplayRowOutputProgress, RenderedDisplayRowMediaKind,
 };
 pub(crate) use crate::display_row_render_state::{
     DisplayRowRenderBounds, DisplayRowRenderIntoRowResult, DisplayRowRenderResult,
-    DisplayRowRenderStop, RenderedDisplayRow, RenderedDisplayRowMedia, display_row_progress,
+    DisplayRowRenderStop, RenderedDisplayRow, display_row_progress,
 };
 pub(crate) use crate::display_row_source_state::DisplayRowSourceState;
 #[cfg(test)]
@@ -37,7 +41,6 @@ use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
-use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 
@@ -49,36 +52,6 @@ pub(crate) use crate::display_row_face_state::{
 pub(crate) use crate::display_row_face_state::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowGlyphMeasurer,
 };
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplayRowRenderClipBehavior {
-    PreserveRemainderAndStop,
-    Stop,
-    Continue,
-}
-
-pub(crate) trait DisplayRowRenderPolicy {
-    fn stop_before_item(&mut self, _item: &DisplayItem) -> bool {
-        false
-    }
-
-    fn measurement_for(
-        &mut self,
-        _item: &DisplayItem,
-        _face_id: u32,
-        _font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement {
-        DisplayRowItemMeasurement::Default
-    }
-
-    fn clipped_behavior(&mut self, _item: &DisplayItem) -> DisplayRowRenderClipBehavior {
-        DisplayRowRenderClipBehavior::PreserveRemainderAndStop
-    }
-}
-
-struct NaturalDisplayRowRenderPolicy;
-
-impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DisplayRowLispStringSourceId(u64);
@@ -864,154 +837,8 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     }
 }
 
-fn clipped_display_item_remainder(
-    item: DisplayItem,
-    progress: &crate::display_row_builder::DisplayRowAppendProgress,
-) -> Option<DisplayItem> {
-    let DisplayItem {
-        span,
-        face,
-        kind,
-        layout,
-    } = item;
-    let emitted_chars = progress.slots().len();
-    match kind {
-        DisplayItemKind::TextRun(run) => {
-            let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
-            Some(DisplayItem {
-                span: SourceSpan::new(
-                    display_source_position_advance(&span.start, emitted_chars, split_byte),
-                    span.end,
-                ),
-                face,
-                kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
-                layout,
-            })
-        }
-        DisplayItemKind::SourceMappedText(text) => {
-            let (_, remaining) = clipped_text_remainder(text.text.as_ref(), emitted_chars)?;
-            Some(DisplayItem {
-                span,
-                face,
-                kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(remaining)),
-                layout,
-            })
-        }
-        _ => None,
-    }
-}
-
-fn clipped_text_remainder(text: &str, emitted_chars: usize) -> Option<(usize, String)> {
-    if emitted_chars >= text.chars().count() {
-        return None;
-    }
-    let split_byte = text
-        .char_indices()
-        .nth(emitted_chars)
-        .map(|(byte, _)| byte)
-        .unwrap_or(text.len());
-    Some((split_byte, text[split_byte..].to_string()))
-}
-
-fn display_source_position_advance(
-    start: &DisplaySourcePosition,
-    char_offset: usize,
-    byte_offset: usize,
-) -> DisplaySourcePosition {
-    match start {
-        DisplaySourcePosition::Buffer {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        } => DisplaySourcePosition::buffer(
-            *buffer_id,
-            CharPos0::new(char_pos.get() + char_offset),
-            EmacsBytePos::new(byte_pos.get() + byte_offset),
-        ),
-        DisplaySourcePosition::LispString {
-            source_id,
-            char_index,
-            byte_index,
-        } => DisplaySourcePosition::lisp_string(
-            source_id.get(),
-            char_index + char_offset,
-            byte_index + byte_offset,
-        ),
-        DisplaySourcePosition::Synthetic { source_id, offset } => {
-            DisplaySourcePosition::synthetic(source_id.get(), offset + char_offset)
-        }
-    }
-}
-
 fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
     face.metrics.include_in_layout(layout);
-}
-
-impl DisplayMediaReplacement {
-    fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
-        RenderedDisplayRowMedia {
-            kind: self.kind.into(),
-            x: start.x_px(),
-            y,
-            col: start.col().min(usize::from(u16::MAX)) as u16,
-            width: self.width,
-            height: self.height,
-        }
-    }
-}
-
-struct DisplayRowRenderItem {
-    source_item: DisplayItem,
-    row_item: DisplayItem,
-    media_descriptor: Option<DisplayMediaReplacement>,
-}
-
-impl DisplayRowRenderItem {
-    fn from_source_item(source_item: DisplayItem) -> Self {
-        let media_descriptor = match &source_item.kind {
-            DisplayItemKind::MediaReplacement(media) => Some(*media),
-            _ => None,
-        };
-        let row_item = media_descriptor
-            .map(|descriptor| descriptor.replacement_item(source_item.clone()))
-            .unwrap_or_else(|| source_item.clone());
-        Self {
-            source_item,
-            row_item,
-            media_descriptor,
-        }
-    }
-
-    fn source_item(&self) -> &DisplayItem {
-        &self.source_item
-    }
-
-    fn row_face(&self) -> RenderFaceRef {
-        self.row_item.face
-    }
-
-    fn row_item(&self) -> &DisplayItem {
-        &self.row_item
-    }
-
-    fn row_item_for_write(&self) -> DisplayItem {
-        self.row_item.clone()
-    }
-
-    fn rendered_media_for_progress(
-        &self,
-        progress: &DisplayRowAppendProgress,
-        y: f32,
-    ) -> Option<RenderedDisplayRowMedia> {
-        let descriptor = self.media_descriptor?;
-        progress
-            .is_complete_with_positive_width()
-            .then(|| descriptor.rendered_media(progress.start(), y))
-    }
-
-    fn clipped_remainder(self, progress: &DisplayRowAppendProgress) -> Option<DisplayItem> {
-        clipped_display_item_remainder(self.source_item, progress)
-    }
 }
 
 pub(crate) struct DisplayRowRenderContext<'a, 'ids> {

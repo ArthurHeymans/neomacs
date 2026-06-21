@@ -8,7 +8,6 @@ use crate::display_item::{
 };
 #[cfg(test)]
 use crate::display_origin::DisplayOrigin;
-use crate::display_row::{DisplayRowRenderClipBehavior, DisplayRowRenderPolicy};
 use crate::display_row_append_context::{
     DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface,
@@ -21,6 +20,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPositio
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::display_row_render_policy::{DisplayRowRenderClipBehavior, DisplayRowRenderPolicy};
 use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_source_state::DisplayRowSourceState;
