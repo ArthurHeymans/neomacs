@@ -519,8 +519,11 @@ impl<'face> DisplayRowAppendSourceRenderRequest<'face> {
         self.output
     }
 
-    pub(crate) fn into_parts(self) -> (DisplayRowSourceRenderRequest<'face>, TextRowOutput) {
-        (self.row_request, self.output)
+    pub(crate) fn render_with_row_request<R>(
+        self,
+        render: impl FnOnce(DisplayRowSourceRenderRequest<'face>) -> R,
+    ) -> (R, TextRowOutput) {
+        (render(self.row_request), self.output)
     }
 }
 
@@ -534,8 +537,11 @@ impl<'face> DisplayRowAppendSourceMeasureRequest<'face> {
         self.row_request
     }
 
-    pub(crate) fn into_row_request(self) -> DisplayRowSourceRenderRequest<'face> {
-        self.row_request
+    pub(crate) fn measure_with_row_request<R>(
+        self,
+        measure: impl FnOnce(DisplayRowSourceRenderRequest<'face>) -> R,
+    ) -> R {
+        measure(self.row_request)
     }
 }
 

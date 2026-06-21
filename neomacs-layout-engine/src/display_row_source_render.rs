@@ -655,14 +655,17 @@ impl<'a> TextRowSourceRenderState<'a> {
         request: DisplayRowAppendSourceRenderRequest<'_>,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let (row_request, output) = request.into_parts();
-        let result = render_display_item_source_into_current_text_row(
-            &mut current_text_render_state(self, face_ids),
-            source,
-            source_state,
-            row_request,
-            render_policy,
-        )?;
+        let mut state = current_text_render_state(self, face_ids);
+        let (result, output) = request.render_with_row_request(|row_request| {
+            render_display_item_source_into_current_text_row(
+                &mut state,
+                source,
+                source_state,
+                row_request,
+                render_policy,
+            )
+        });
+        let result = result?;
         Some(
             self.output_render
                 .finish_current_text_row_render(output, result),
@@ -745,14 +748,16 @@ impl<'a> TextRowSourceMeasureState<'a> {
         request: DisplayRowAppendSourceMeasureRequest<'_>,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let row_request = request.into_row_request();
-        measure_display_item_source_against_current_text_row(
-            &mut current_text_measure_state(self, face_ids),
-            source,
-            source_state,
-            row_request,
-            render_policy,
-        )
+        let mut state = current_text_measure_state(self, face_ids);
+        request.measure_with_row_request(|row_request| {
+            measure_display_item_source_against_current_text_row(
+                &mut state,
+                source,
+                source_state,
+                row_request,
+                render_policy,
+            )
+        })
     }
 }
 
