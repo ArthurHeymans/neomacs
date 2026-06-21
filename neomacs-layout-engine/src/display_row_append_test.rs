@@ -3787,7 +3787,7 @@ fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFace
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut base = resolver.default_face().clone();
-    base.font_char_width = char_width;
+    base.set_measured_char_width_px(char_width);
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
         face_id,
@@ -4835,7 +4835,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut base_face = face_resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     let mut source = crate::display_source::LispStringSourceCursor::new(
         101,
@@ -4916,7 +4916,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut base_face = face_resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     let mut source = crate::display_source::LispStringSourceCursor::new(
         101,
@@ -5037,7 +5037,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut base_face = face_resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(8);
     let mut font_metrics = None;
@@ -5855,7 +5855,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
     assert_eq!(pending_faces[0].resolved().font_size, 28.0);
     assert_eq!(pending_faces[0].resolved().font_line_height, 32.0);
     assert_eq!(pending_faces[0].resolved().font_ascent, 24.0);
-    assert_eq!(pending_faces[0].resolved().font_char_width, 16.0);
+    assert_eq!(pending_faces[0].resolved().measured_char_width_px(), 16.0);
 }
 
 #[test]

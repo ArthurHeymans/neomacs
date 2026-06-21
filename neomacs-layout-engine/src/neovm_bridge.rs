@@ -2106,8 +2106,8 @@ pub struct ResolvedFace {
     pub overstrike: bool,
     /// Preserve terminal inverse-video when both colors are terminal defaults.
     pub terminal_inverse_video: bool,
-    /// Per-face character advance width (from FontMetricsService, 0.0 = use default).
-    pub font_char_width: f32,
+    /// Per-face measured character advance width (from FontMetricsService, 0.0 = use default).
+    font_char_width: f32,
     /// Per-face font ascent (from FontMetricsService, 0.0 = use default).
     pub font_ascent: f32,
     /// Per-face line height (from FontMetricsService, 0.0 = use default).
@@ -2145,6 +2145,16 @@ impl Default for ResolvedFace {
             font_line_height: 0.0,
             face_id: 0, // DEFAULT_FACE_ID
         }
+    }
+}
+
+impl ResolvedFace {
+    pub(crate) fn measured_char_width_px(&self) -> f32 {
+        self.font_char_width
+    }
+
+    pub(crate) fn set_measured_char_width_px(&mut self, width: f32) {
+        self.font_char_width = width;
     }
 }
 

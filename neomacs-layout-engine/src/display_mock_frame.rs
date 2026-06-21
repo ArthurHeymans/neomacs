@@ -76,7 +76,7 @@ pub(crate) fn resolved_mock_face(
         resolved.font_ascent = face.font_ascent as f32;
         resolved.font_line_height = (face.font_ascent + face.font_descent).max(0) as f32;
     }
-    resolved.font_char_width = char_w.max(1.0);
+    resolved.set_measured_char_width_px(char_w.max(1.0));
     if resolved.font_ascent <= 0.0 {
         resolved.font_ascent = ascent.max(0.0).min(char_h.max(1.0));
     }

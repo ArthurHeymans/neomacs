@@ -92,7 +92,7 @@ impl DisplayRowFaceMetrics {
             0
         };
         Self {
-            char_width_px: face.font_char_width,
+            char_width_px: face.measured_char_width_px(),
             ascent_px: face.font_ascent,
             descent_px,
         }

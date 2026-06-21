@@ -34,7 +34,10 @@ pub(crate) fn height_adjusted_face(
         .unwrap_or(canonical_line_height * 0.8)
         .min(canonical_line_height);
     let canonical_char_width = DisplayRowCharWidthPolicy::new(canonical_font_size * 0.5)
-        .width_or_measured(canonical.font_char_width, Some(fallback.char_width()));
+        .width_or_measured(
+            canonical.measured_char_width_px(),
+            Some(fallback.char_width()),
+        );
 
     let mut resolved = source.clone();
     resolved.font_size = (canonical_font_size * factor).max(1.0);
@@ -42,7 +45,7 @@ pub(crate) fn height_adjusted_face(
     resolved.font_ascent = (canonical_ascent * factor)
         .max(1.0)
         .min(resolved.font_line_height);
-    resolved.font_char_width = (canonical_char_width * factor).max(1.0);
+    resolved.set_measured_char_width_px((canonical_char_width * factor).max(1.0));
     Some(resolved)
 }
 

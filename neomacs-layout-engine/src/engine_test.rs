@@ -7872,17 +7872,13 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
 #[test]
 fn display_row_measurement_face_distinguishes_semantic_font_identity() {
     let mut font_metrics_svc = Some(FontMetricsService::new());
-    let regular = crate::neovm_bridge::ResolvedFace {
-        font_family: "monospace".to_string(),
-        font_size: 14.0,
-        font_weight: 400,
-        font_char_width: 8.0,
-        ..Default::default()
-    };
-    let bold = crate::neovm_bridge::ResolvedFace {
-        font_weight: 700,
-        ..regular.clone()
-    };
+    let mut regular = crate::neovm_bridge::ResolvedFace::default();
+    regular.font_family = "monospace".to_string();
+    regular.font_size = 14.0;
+    regular.font_weight = 400;
+    regular.set_measured_char_width_px(8.0);
+    let mut bold = regular.clone();
+    bold.font_weight = 700;
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(true);
     let regular_face = measurement_policy.measurement_face(42, &regular, None, 8.0);
     let bold_face = measurement_policy.measurement_face(43, &bold, None, 8.0);
@@ -7907,12 +7903,10 @@ fn display_row_measurement_face_distinguishes_semantic_font_identity() {
 
 #[test]
 fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font_metrics() {
-    let resolved = crate::neovm_bridge::ResolvedFace {
-        font_family: "JetBrainsMono Nerd Font".to_string(),
-        font_size: 12.0,
-        font_char_width: 7.2,
-        ..Default::default()
-    };
+    let mut resolved = crate::neovm_bridge::ResolvedFace::default();
+    resolved.font_family = "JetBrainsMono Nerd Font".to_string();
+    resolved.font_size = 12.0;
+    resolved.set_measured_char_width_px(7.2);
     let current_face =
         DisplayRowMeasurementPolicy::for_frame(true).measurement_face(42, &resolved, None, 7.2);
     let mut font_metrics_svc = None;
@@ -7924,12 +7918,10 @@ fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font
 
 #[test]
 fn display_row_glyph_measurer_is_reusable_for_engine_measurements() {
-    let resolved = crate::neovm_bridge::ResolvedFace {
-        font_family: "monospace".to_string(),
-        font_size: 14.0,
-        font_char_width: 8.0,
-        ..Default::default()
-    };
+    let mut resolved = crate::neovm_bridge::ResolvedFace::default();
+    resolved.font_family = "monospace".to_string();
+    resolved.font_size = 14.0;
+    resolved.set_measured_char_width_px(8.0);
     let faces = [DisplayRowFace::from_resolved(42, &resolved)];
     let mut font_metrics_svc = None;
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, font_metrics_svc.as_mut(), 7.2);
@@ -7943,12 +7935,10 @@ fn display_row_glyph_measurer_is_reusable_for_engine_measurements() {
 
 #[test]
 fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
-    let resolved = crate::neovm_bridge::ResolvedFace {
-        font_family: "monospace".to_string(),
-        font_size: 14.0,
-        font_char_width: 7.2,
-        ..Default::default()
-    };
+    let mut resolved = crate::neovm_bridge::ResolvedFace::default();
+    resolved.font_family = "monospace".to_string();
+    resolved.font_size = 14.0;
+    resolved.set_measured_char_width_px(7.2);
     let current_face =
         DisplayRowMeasurementPolicy::for_frame(false).measurement_face(42, &resolved, None, 7.2);
     let mut font_metrics_svc = None;

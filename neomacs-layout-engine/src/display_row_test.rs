@@ -162,7 +162,7 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
     let mut font_metrics = None;
     let mut realizer = DisplayRowFaceRealizer::new(&mut font_metrics);
     let mut face = base_face();
-    face.font_char_width = 0.0;
+    face.set_measured_char_width_px(0.0);
     face.font_ascent = 0.0;
     face.font_line_height = 0.0;
 
@@ -855,7 +855,7 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
-    test_base_face.font_char_width = 8.0;
+    test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = display_row_request_from_base_face(
@@ -895,7 +895,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
-    test_base_face.font_char_width = 8.0;
+    test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let request = display_row_request_from_base_face(
@@ -941,7 +941,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
-    test_base_face.font_char_width = 8.0;
+    test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let request = display_row_request_from_base_face(
@@ -1001,7 +1001,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
-    test_base_face.font_char_width = 8.0;
+    test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let base_face_id = 1;
     let mut face_ids = FrameFaceIdAllocator::new(2);
@@ -1434,7 +1434,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut base_face = resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
@@ -1490,7 +1490,7 @@ fn render_tab_line_with_media_host(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, default_fg, default_bg, 14.0, None);
     let mut base_face = resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
@@ -1968,9 +1968,9 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
 #[test]
 fn display_row_glyph_measurer_uses_face_specific_widths() {
     let mut base = base_face();
-    base.font_char_width = 5.0;
+    base.set_measured_char_width_px(5.0);
     let mut wide = base.clone();
-    wide.font_char_width = 9.0;
+    wide.set_measured_char_width_px(9.0);
     let faces = vec![
         DisplayRowFace::from_resolved(1, &base),
         DisplayRowFace::from_resolved(2, &wide),
@@ -1984,7 +1984,7 @@ fn display_row_glyph_measurer_uses_face_specific_widths() {
 #[test]
 fn display_row_glyph_measurer_preserves_fractional_gui_advances() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let faces = vec![DisplayRowFace::from_resolved(1, &base)];
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 7.2);
 
@@ -1994,7 +1994,7 @@ fn display_row_glyph_measurer_preserves_fractional_gui_advances() {
 #[test]
 fn display_row_glyph_measurer_can_snap_terminal_advances() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let faces = vec![DisplayRowFace::from_resolved(1, &base)];
     let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
         &faces,
@@ -2009,7 +2009,7 @@ fn display_row_glyph_measurer_can_snap_terminal_advances() {
 #[test]
 fn display_row_glyph_measurement_face_measures_single_char_columns() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let face = DisplayRowFace::from_resolved(8, &base);
     let measurement_face = DisplayRowGlyphMeasurementFace::with_mode(
         face,
@@ -2032,7 +2032,7 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
 #[test]
 fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let measurement_face =
         DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
     let mut font_metrics = None;
@@ -2046,7 +2046,7 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
 #[test]
 fn display_row_measurement_policy_builds_faces_from_frame_mode() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let tty_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let gui_policy = DisplayRowMeasurementPolicy::for_frame(true);
     let mut font_metrics = None;
@@ -2075,7 +2075,7 @@ fn display_row_fallback_metrics_builds_from_default_face_extents() {
 #[test]
 fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let policy = DisplayRowMeasurementPolicy::for_frame(false);
     let mut font_metrics = None;
 
@@ -2117,7 +2117,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
 #[test]
 fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let metrics = crate::font_metrics::FontMetrics {
         ascent: 13.0,
         descent: 5.0,
@@ -2201,7 +2201,7 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
-    base.font_char_width = 8.0;
+    base.set_measured_char_width_px(8.0);
     let measurement_face =
         DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
@@ -2265,7 +2265,7 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
-    base.font_char_width = 8.0;
+    base.set_measured_char_width_px(8.0);
     let faces = vec![DisplayRowFace::from_resolved(8, &base)];
     let mut font_metrics = FontMetricsService::new();
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, Some(&mut font_metrics), 8.0);
@@ -2295,7 +2295,7 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
-    base.font_char_width = 8.0;
+    base.set_measured_char_width_px(8.0);
     let measurement_face =
         DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
@@ -2319,7 +2319,7 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
 #[test]
 fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan() {
     let mut base = base_face();
-    base.font_char_width = 7.2;
+    base.set_measured_char_width_px(7.2);
     let measurement_face =
         DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
     let mut font_metrics = None;
@@ -2623,7 +2623,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut base_face = resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
+    base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     let rendered = Value::string_with_text_properties(
         "AB",
