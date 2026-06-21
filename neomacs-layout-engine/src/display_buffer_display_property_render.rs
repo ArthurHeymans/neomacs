@@ -6,7 +6,7 @@ use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 use crate::display_row_replacement::{
-    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
+    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementRowRenderRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::DisplaySourceItem;
@@ -111,7 +111,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
 
     fn render_append_request<B: LayoutBufferView>(
         &self,
-        append_request: DisplayPropertyReplacementAppendRequest,
+        append_request: DisplayPropertyReplacementRowRenderRequest,
         buffer: &B,
         state: BufferDisplayPropertyTextReplacementRenderState<'_>,
     ) -> BufferDisplayPropertyTextReplacementOutcome {
@@ -122,7 +122,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
             row_geometry,
             active_face_state,
         } = state;
-        let outcome = append_request.append_to_text_row(
+        let outcome = append_request.render_to_text_row(
             buffer,
             &mut source_render.reborrow(),
             face_ids,
@@ -154,7 +154,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
             state
                 .source_render
                 .with_font_metrics_and_display_host(|font_metrics, host| {
-                    DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+                    DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
                         descriptor,
                         source_text,
                         self.active_face_state,

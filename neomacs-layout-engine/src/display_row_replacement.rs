@@ -156,8 +156,15 @@ impl DisplayReplacementStringSourceAppendRequest {
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementStringAppendRequest {
     item: DisplayReplacementStringSourceItem,
-    pub(crate) replacement_base_face: Option<DisplayStringBaseFace>,
+    replacement_base_face: Option<DisplayStringBaseFace>,
     active_face_state: DisplayRowActiveFaceState,
+}
+
+#[cfg(test)]
+pub(crate) struct DisplayPropertyReplacementStringPlanSnapshot {
+    pub(crate) origin: DisplayOrigin,
+    pub(crate) base_face_policy: BaseFacePolicy,
+    pub(crate) has_replacement_base_face: bool,
 }
 
 impl DisplayReplacementStringAppendRequest {
@@ -173,19 +180,18 @@ impl DisplayReplacementStringAppendRequest {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn origin(&self) -> DisplayOrigin {
-        self.item.origin()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
-        self.item.base_face_policy()
-    }
-
     pub(crate) fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
         DisplayReplacementStringItemMeasurer {
             active_face_state: self.active_face_state.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    fn plan_snapshot(&self) -> DisplayPropertyReplacementStringPlanSnapshot {
+        DisplayPropertyReplacementStringPlanSnapshot {
+            origin: self.item.origin(),
+            base_face_policy: self.item.base_face_policy(),
+            has_replacement_base_face: self.replacement_base_face.is_some(),
         }
     }
 
@@ -429,7 +435,7 @@ impl DisplayReplacementStretchSourceItem {
 }
 
 #[derive(Clone)]
-pub(crate) struct DisplayPropertyReplacementAppendRequest {
+struct DisplayPropertyReplacementAppendRequest {
     replacement_source: BufferDisplayReplacementSource,
     item: DisplayPropertyReplacementSourceItem,
     glyph_y_offset: f32,
@@ -438,7 +444,7 @@ pub(crate) struct DisplayPropertyReplacementAppendRequest {
 }
 
 impl DisplayPropertyReplacementAppendRequest {
-    pub(crate) fn new(
+    fn new(
         replacement_source: BufferDisplayReplacementSource,
         item: DisplayPropertyReplacementSourceItem,
         glyph_y_offset: f32,
@@ -454,12 +460,12 @@ impl DisplayPropertyReplacementAppendRequest {
         }
     }
 
-    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
+    fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
         self.item.cursor_policy()
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_typed_replacement_descriptor(
+    fn from_typed_replacement_descriptor(
         descriptor: &DisplayPropertyReplacementDescriptor,
         source_text: &[u8],
         active_face_state: &DisplayRowActiveFaceState,
@@ -494,11 +500,11 @@ impl DisplayPropertyReplacementAppendRequest {
         ))
     }
 
-    pub(crate) fn start_position(&self) -> DisplayRowPosition {
+    fn start_position(&self) -> DisplayRowPosition {
         self.start_position
     }
 
-    pub(crate) fn into_plan<B: LayoutBufferView>(
+    fn into_plan<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
@@ -520,12 +526,7 @@ impl DisplayPropertyReplacementAppendRequest {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn into_item(self) -> DisplayPropertyReplacementSourceItem {
-        self.item
-    }
-
-    pub(crate) fn append_to_text_row<B: LayoutBufferView>(
+    fn append_to_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
@@ -549,6 +550,109 @@ impl DisplayPropertyReplacementAppendRequest {
             end_position,
             cursor_policy,
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DisplayPropertyReplacementRowRenderRequest {
+    append_request: DisplayPropertyReplacementAppendRequest,
+}
+
+impl DisplayPropertyReplacementRowRenderRequest {
+    #[cfg(test)]
+    pub(crate) fn from_resolved_source_item(
+        replacement_source: BufferDisplayReplacementSource,
+        item: DisplayPropertyReplacementSourceItem,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            append_request: DisplayPropertyReplacementAppendRequest::new(
+                replacement_source,
+                item,
+                glyph_y_offset,
+                fallback_metrics,
+                start_position,
+            ),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_typed_replacement_descriptor(
+        descriptor: &DisplayPropertyReplacementDescriptor,
+        source_text: &[u8],
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        params: &WindowParams,
+        display_host: Option<&dyn DisplayHost>,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+        start_position: DisplayRowPosition,
+    ) -> Option<Self> {
+        DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+            descriptor,
+            source_text,
+            active_face_state,
+            font_metrics,
+            current_x,
+            content_x,
+            params,
+            display_host,
+            glyph_y_offset,
+            fallback_metrics,
+            start_position,
+        )
+        .map(|append_request| Self { append_request })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
+        self.append_request.cursor_policy()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_position(&self) -> DisplayRowPosition {
+        self.append_request.start_position()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn into_item(self) -> DisplayPropertyReplacementSourceItem {
+        self.append_request.item
+    }
+
+    #[cfg(test)]
+    pub(crate) fn string_plan_snapshot<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: &mut TextRowSourceRenderState<'_>,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<DisplayPropertyReplacementStringPlanSnapshot> {
+        self.append_request
+            .into_plan(buffer, state, active_face_state, face_ids)
+            .string_plan_snapshot()
+    }
+
+    pub(crate) fn render_to_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) -> DisplayPropertyReplacementAppendOutcome {
+        self.append_request.append_to_text_row(
+            buffer,
+            state,
+            face_ids,
+            append_surface,
+            row_geometry,
+            active_face_state,
+        )
     }
 }
 
@@ -577,7 +681,7 @@ impl DisplayPropertyReplacementAppendOutcome {
     }
 }
 
-pub(crate) struct DisplayPropertyReplacementAppendPlan {
+struct DisplayPropertyReplacementAppendPlan {
     replacement_source: BufferDisplayReplacementSource,
     item: DisplayPropertyReplacementAppendPlanItem,
     glyph_y_offset: f32,
@@ -587,9 +691,11 @@ pub(crate) struct DisplayPropertyReplacementAppendPlan {
 
 impl DisplayPropertyReplacementAppendPlan {
     #[cfg(test)]
-    pub(crate) fn string_append_request(&self) -> Option<&DisplayReplacementStringAppendRequest> {
+    fn string_plan_snapshot(&self) -> Option<DisplayPropertyReplacementStringPlanSnapshot> {
         match &self.item {
-            DisplayPropertyReplacementAppendPlanItem::String(request) => Some(request),
+            DisplayPropertyReplacementAppendPlanItem::String(request) => {
+                Some(request.plan_snapshot())
+            }
             _ => None,
         }
     }

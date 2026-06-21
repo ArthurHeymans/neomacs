@@ -9563,11 +9563,11 @@ fn display_property_replacement_append_item_names_cursor_policy() {
 }
 
 #[test]
-fn display_property_replacement_append_request_keeps_item_policy_and_start_position() {
+fn display_property_replacement_row_render_request_keeps_item_policy_and_start_position() {
     let item = DisplayPropertyReplacementSourceItem::Stretch(
         DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
-    let request = DisplayPropertyReplacementAppendRequest::new(
+    let request = DisplayPropertyReplacementRowRenderRequest::from_resolved_source_item(
         crate::display_item::BufferDisplayReplacementSource::new(
             BufferId(7),
             CharPos0::new(3),
@@ -9598,7 +9598,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
 }
 
 #[test]
-fn display_property_replacement_append_resolve_request_builds_append_request() {
+fn display_property_replacement_row_render_request_builds_append_plan() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -9624,7 +9624,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         CharPos0::new(3),
         CharPos0::new(4),
     );
-    let request = DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+    let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
         b"x",
         &active_face,
@@ -9637,7 +9637,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .expect("display replacement append request");
+    .expect("display replacement row render request");
 
     assert_eq!(
         request.cursor_policy(),
@@ -9671,22 +9671,21 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         &mut font_metrics,
         &face_resolver,
     );
-    let plan = request.into_plan(&buffer, &mut source_render, &active_face, &mut face_ids);
-    let string_append_request = plan
-        .string_append_request()
+    let snapshot = request
+        .string_plan_snapshot(&buffer, &mut source_render, &active_face, &mut face_ids)
         .expect("string replacement lowers to string append request");
     assert_eq!(
-        string_append_request.origin(),
+        snapshot.origin,
         DisplayOrigin::DisplayPropertyString {
             anchor_charpos: CharPos0::new(3),
             source: DisplayPropertySource::TextProperty,
         }
     );
     assert_eq!(
-        string_append_request.base_face_policy(),
+        snapshot.base_face_policy,
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
-    assert!(string_append_request.replacement_base_face.is_some());
+    assert!(snapshot.has_replacement_base_face);
 }
 
 #[test]
@@ -9798,7 +9797,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         CharPos0::new(3),
         CharPos0::new(4),
     );
-    let request = DisplayPropertyReplacementAppendRequest::from_typed_replacement_descriptor(
+    let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
         b"x",
         &active_face,
@@ -9811,8 +9810,8 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 12.0),
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .expect("display replacement append request");
-    let outcome = request.append_to_text_row(
+    .expect("display replacement row render request");
+    let outcome = request.render_to_text_row(
         &buffer,
         &mut text_row_source_render_state(
             &mut builder,
