@@ -8,20 +8,12 @@ use crate::display_buffer_display_property_render::{
 use crate::display_buffer_source_consumption::BufferSourceConsumedItem;
 use crate::display_buffer_source_face_resolution::BufferSourceFaceResolutionContext;
 use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResolutionContext;
-use crate::display_buffer_source_item_render::{
-    BufferSourceItemRenderOutcome, BufferSourceItemRenderRequest,
-};
+use crate::display_buffer_source_item_render::BufferSourceItemRenderRequest;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
-use crate::display_buffer_source_row_lifecycle::{
-    BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
-    BufferSourceSelectiveDisplayTailRenderRequest,
-};
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::DisplayRowActiveFaceState;
-use crate::display_row_transition::DisplayRowTransitionContinuation;
-use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -136,90 +128,6 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     where
         'surface: 'request,
     {
-        let source_step_char = source_item.source_step_char();
-        let selective_display_outcome =
-            self.render_selective_display_tail_for_context(source_walk, source_step_char, buffer);
-        if selective_display_outcome.should_break() {
-            return false;
-        }
-        if selective_display_outcome.should_continue_buffer_walk() {
-            return true;
-        }
-
-        let is_explicit_line_break = source_item.is_explicit_line_break();
-        let end_byte_idx = source_item.source_end_byte_idx();
-        if is_explicit_line_break {
-            if let Some(end_byte_idx) = end_byte_idx {
-                self.state.progress.set_byte_idx(end_byte_idx);
-            }
-            if self
-                .render_line_break_for_context(source_walk, source_step_char, buffer)
-                .should_break()
-            {
-                return false;
-            }
-            return true;
-        }
-
-        let char_render_outcome = self.render_text_source_item_for_context(
-            source_walk,
-            layout_resolution_context,
-            source_item,
-            buffer,
-        );
-        if char_render_outcome.should_break() {
-            return false;
-        }
-        true
-    }
-
-    fn render_selective_display_tail_for_context<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferSourceWalk<'request, B>,
-        source_step_char: DisplaySourceStepChar,
-        buffer: &B,
-    ) -> BufferSourceSelectiveDisplayTailRenderOutcome
-    where
-        'surface: 'request,
-    {
-        let request = self.loop_context.selective_display_tail_request(
-            source_step_char,
-            self.text,
-            self.state.append_surface,
-            self.active_face_state,
-            0.0,
-        );
-        self.render_selective_display_tail(source_walk, request, buffer)
-    }
-
-    fn render_line_break_for_context<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferSourceWalk<'request, B>,
-        source_char: DisplaySourceStepChar,
-        buffer: &B,
-    ) -> DisplayRowTransitionContinuation
-    where
-        'surface: 'request,
-    {
-        let request = self.loop_context.line_break_request(
-            source_char,
-            self.text,
-            self.state.overlay_context,
-            self.active_face_state,
-        );
-        self.render_line_break(source_walk, request, buffer)
-    }
-
-    fn render_text_source_item_for_context<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferSourceWalk<'request, B>,
-        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_item: DisplaySourceStepItem,
-        buffer: &B,
-    ) -> BufferSourceItemRenderOutcome
-    where
-        'surface: 'request,
-    {
         BufferSourceItemRenderRequest::from_loop_context(
             layout_resolution_context,
             self.loop_context,
@@ -230,23 +138,5 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.params,
         )
         .render_and_apply(source_item, source_walk, buffer, self.state.reborrow())
-    }
-
-    fn render_selective_display_tail<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferSourceWalk<'request, B>,
-        request: BufferSourceSelectiveDisplayTailRenderRequest<'_>,
-        buffer: &B,
-    ) -> BufferSourceSelectiveDisplayTailRenderOutcome {
-        request.render_if_needed_and_apply(source_walk, buffer, self.state.reborrow())
-    }
-
-    fn render_line_break<B: LayoutBufferView>(
-        &mut self,
-        source_walk: &mut BufferSourceWalk<'request, B>,
-        request: BufferSourceLineBreakRenderRequest<'_>,
-        buffer: &B,
-    ) -> DisplayRowTransitionContinuation {
-        request.render_and_apply(source_walk, buffer, self.state.reborrow())
     }
 }

@@ -5,6 +5,10 @@ use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResoluti
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
+use crate::display_buffer_source_row_lifecycle::{
+    BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
+    BufferSourceSelectiveDisplayTailRenderRequest,
+};
 use crate::display_buffer_source_text_run::BufferSourceTextRunRenderRequest;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_row::DisplayRowActiveFaceState;
@@ -13,6 +17,8 @@ use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
 };
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_row_transition::DisplayRowTransitionContinuation;
+use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -34,6 +40,7 @@ impl BufferSourceItemRenderOutcome {
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSourceItemRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    loop_context: BufferSourceLoopRequestContext,
     text: &'a [u8],
     text_start_byte: usize,
     buffer_id: BufferId,
@@ -65,6 +72,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
     ) -> Self {
         Self::new(
             layout_resolution_context,
+            loop_context,
             text,
             loop_context.text_start_byte(),
             loop_context.buffer_id(),
@@ -88,6 +96,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+        loop_context: BufferSourceLoopRequestContext,
         text: &'a [u8],
         text_start_byte: usize,
         buffer_id: BufferId,
@@ -108,6 +117,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
     ) -> Self {
         Self {
             layout_resolution_context,
+            loop_context,
             text,
             text_start_byte,
             buffer_id,
@@ -129,6 +139,47 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
     }
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        mut self,
+        source_item: DisplaySourceStepItem,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
+    ) -> bool {
+        let source_step_char = source_item.source_step_char();
+        let mut state = state;
+        let selective_display_outcome = self.render_selective_display_tail_for_context(
+            &mut state,
+            source_walk,
+            source_step_char,
+            buffer,
+        );
+        if selective_display_outcome.should_break() {
+            return false;
+        }
+        if selective_display_outcome.should_continue_buffer_walk() {
+            return true;
+        }
+
+        let is_explicit_line_break = source_item.is_explicit_line_break();
+        let end_byte_idx = source_item.source_end_byte_idx();
+        if is_explicit_line_break {
+            if let Some(end_byte_idx) = end_byte_idx {
+                state.progress.set_byte_idx(end_byte_idx);
+            }
+            if self
+                .render_line_break_for_context(&mut state, source_walk, source_step_char, buffer)
+                .should_break()
+            {
+                return false;
+            }
+            return true;
+        }
+
+        let outcome = self.render_text_item_and_apply(source_item, source_walk, buffer, state);
+        !outcome.should_break()
+    }
+
+    fn render_text_item_and_apply<B: LayoutBufferView>(
         self,
         source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
@@ -137,6 +188,59 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
     ) -> BufferSourceItemRenderOutcome {
         debug_assert_ne!(source_item.source_step_char().ch(), '\n');
         self.render_prepared_source_item_and_apply(source_item, source_walk, buffer, state)
+    }
+
+    fn render_selective_display_tail_for_context<B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferSourceLoopMutableState<'_, '_, '_>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        source_step_char: DisplaySourceStepChar,
+        buffer: &B,
+    ) -> BufferSourceSelectiveDisplayTailRenderOutcome {
+        let request = self.loop_context.selective_display_tail_request(
+            source_step_char,
+            self.text,
+            state.append_surface,
+            self.active_face_state,
+            self.glyph_y_offset,
+        );
+        self.render_selective_display_tail(state, source_walk, request, buffer)
+    }
+
+    fn render_selective_display_tail<B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferSourceLoopMutableState<'_, '_, '_>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        request: BufferSourceSelectiveDisplayTailRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferSourceSelectiveDisplayTailRenderOutcome {
+        request.render_if_needed_and_apply(source_walk, buffer, state.reborrow())
+    }
+
+    fn render_line_break_for_context<B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferSourceLoopMutableState<'_, '_, '_>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        source_char: DisplaySourceStepChar,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        let request = self.loop_context.line_break_request(
+            source_char,
+            self.text,
+            state.overlay_context,
+            self.active_face_state,
+        );
+        self.render_line_break(state, source_walk, request, buffer)
+    }
+
+    fn render_line_break<B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferSourceLoopMutableState<'_, '_, '_>,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        request: BufferSourceLineBreakRenderRequest<'_>,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        request.render_and_apply(source_walk, buffer, state.reborrow())
     }
 
     fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
