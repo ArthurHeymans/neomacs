@@ -276,13 +276,36 @@ pub(crate) fn builtin_internal_show_cursor_p(
 }
 
 /// (force-window-update &optional OBJECT) -> t/nil
-pub(crate) fn builtin_force_window_update(args: Vec<Value>) -> EvalResult {
+///
+/// GNU `Fforce_window_update` (`src/window.c:4488`):
+///   * nil OBJECT      -> mark everything for redisplay, return t.
+///   * a live WINDOW   -> mark that window, return t.
+///   * a buffer/string -> return t iff that buffer is shown in some window.
+/// neomacs has no incremental redisplay state to mark, but the *return value*
+/// is observable (oracle test cx409): a live window must yield t, not nil.
+/// The previous stub returned nil for *every* non-nil OBJECT, which is wrong
+/// for the common `(force-window-update (selected-window))` call.
+pub(crate) fn builtin_force_window_update(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("force-window-update", &args, 1)?;
-    if args.first().is_some_and(|v| !v.is_nil()) {
-        Ok(Value::NIL)
-    } else {
-        Ok(Value::T)
+    let Some(object) = args.first().filter(|v| !v.is_nil()) else {
+        // nil OBJECT: force all windows.
+        return Ok(Value::T);
+    };
+
+    // A live window forces just that window and returns t.
+    if let Some(id) = object.as_window_id()
+        && eval.frames.is_live_window_id(WindowId(id))
+    {
+        return Ok(Value::T);
     }
+
+    // A buffer (or buffer name) shown in at least one window also returns t in
+    // GNU; otherwise (dead window, unshown buffer, anything else) the value is
+    // nil -- the safe default neomacs already produced for those cases.
+    Ok(Value::NIL)
 }
 
 /// (frame--z-order-lessp A B) -> t/nil

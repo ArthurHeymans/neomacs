@@ -8890,7 +8890,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "force-window-update",
-        |_ctx, args| super::dispnew::pure::builtin_force_window_update(args),
+        |ctx, args| super::dispnew::pure::builtin_force_window_update(ctx, args),
         0,
         Some(1),
     );

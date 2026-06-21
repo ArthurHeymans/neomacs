@@ -122,21 +122,39 @@ fn internal_show_cursor_rejects_non_window() {
 #[test]
 fn force_window_update_no_arg_returns_t() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_force_window_update(vec![]).unwrap();
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_force_window_update(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::T);
 }
 
 #[test]
-fn force_window_update_with_arg_returns_nil() {
+fn force_window_update_non_window_arg_returns_nil() {
+    // A non-window, non-displayed-buffer OBJECT yields nil (GNU
+    // `Fforce_window_update' returns t only for nil / a live window / a
+    // buffer shown in some window).
     crate::test_utils::init_test_tracing();
-    let result = builtin_force_window_update(vec![Value::T]).unwrap();
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_force_window_update(&mut eval, vec![Value::T]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn force_window_update_nil_arg_returns_t() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_force_window_update(vec![Value::NIL]).unwrap();
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_force_window_update(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(result, Value::T);
+}
+
+#[test]
+fn force_window_update_live_window_returns_t() {
+    // GNU returns t for a live window OBJECT (oracle test cx409); the prior
+    // stub wrongly returned nil for any non-nil OBJECT.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let selected =
+        crate::emacs_core::window_cmds::builtin_selected_window(&mut eval, vec![]).unwrap();
+    let result = builtin_force_window_update(&mut eval, vec![selected]).unwrap();
     assert_eq!(result, Value::T);
 }
 
