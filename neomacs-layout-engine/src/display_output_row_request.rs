@@ -2,6 +2,7 @@
 
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
+use neomacs_display_protocol::types::Rect;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct OutputRowBeginRequest {
@@ -12,10 +13,10 @@ pub(crate) struct OutputRowBeginRequest {
 
 #[derive(Clone, Debug)]
 pub(crate) struct OutputCompleteRowInstallRequest {
-    pub(crate) row: usize,
-    pub(crate) role: GlyphRowRole,
-    pub(crate) mode_line: bool,
-    pub(crate) glyph_row: GlyphRow,
+    row: usize,
+    role: GlyphRowRole,
+    mode_line: bool,
+    glyph_row: GlyphRow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,6 +81,33 @@ impl OutputCompleteRowInstallRequest {
             glyph_row,
         }
     }
+
+    pub(crate) fn from_window_absolute_row(
+        row: usize,
+        source: &GlyphRow,
+        window_bounds: Rect,
+    ) -> Self {
+        let mut glyph_row = source.clone();
+        OutputRowMetricsRequest::new(
+            source.pixel_y - window_bounds.y,
+            source.height_px,
+            source.ascent_px,
+        )
+        .apply_to_row(&mut glyph_row);
+        Self::new(row, glyph_row.role, glyph_row.mode_line, glyph_row)
+    }
+
+    pub(crate) fn row_index(&self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn begin_request(&self) -> OutputRowBeginRequest {
+        OutputRowBeginRequest::new(self.row, self.role, self.mode_line)
+    }
+
+    pub(crate) fn into_glyph_row(self) -> GlyphRow {
+        self.glyph_row
+    }
 }
 
 impl OutputRowMetricsRequest {
@@ -123,6 +151,18 @@ impl OutputRowLifecycleRequest {
     ) -> Self {
         Self::Complete(OutputCompleteRowInstallRequest::new(
             row, role, mode_line, glyph_row,
+        ))
+    }
+
+    pub(crate) fn complete_window_absolute_row(
+        row: usize,
+        source: &GlyphRow,
+        window_bounds: Rect,
+    ) -> Self {
+        Self::Complete(OutputCompleteRowInstallRequest::from_window_absolute_row(
+            row,
+            source,
+            window_bounds,
         ))
     }
 

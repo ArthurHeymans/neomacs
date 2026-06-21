@@ -20,9 +20,6 @@ use neomacs_display_protocol::types::{Color, Rect};
 pub(crate) struct DisplayRowOutputInstall<'a> {
     display_row_index: usize,
     row: &'a GlyphRow,
-    pixel_y: f32,
-    height_px: f32,
-    ascent_px: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -72,24 +69,17 @@ impl<'a> DisplayRowOutputInstall<'a> {
         Self {
             display_row_index,
             row,
-            pixel_y: row.pixel_y,
-            height_px: row.height_px,
-            ascent_px: row.ascent_px,
         }
     }
 
     pub(crate) fn install(self, builder: &mut DisplayOutputBuilder) {
-        let pixel_bounds = builder.current_window_pixel_bounds();
-        let mut row = self.row.clone();
-        row.pixel_y = self.pixel_y - pixel_bounds.y;
-        row.height_px = self.height_px;
-        row.ascent_px = self.ascent_px;
-        builder.install_output_row_lifecycle(OutputRowLifecycleRequest::complete(
-            self.display_row_index,
-            row.role,
-            row.mode_line,
-            row,
-        ));
+        builder.install_output_row_lifecycle(
+            OutputRowLifecycleRequest::complete_window_absolute_row(
+                self.display_row_index,
+                self.row,
+                builder.current_window_pixel_bounds(),
+            ),
+        );
     }
 }
 

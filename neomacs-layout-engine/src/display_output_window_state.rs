@@ -216,13 +216,10 @@ impl OutputWindowBuildState {
         request: OutputCompleteRowInstallRequest,
         phys_cursor: Option<&mut PhysCursor>,
     ) {
-        self.begin_current_row(OutputRowBeginRequest::new(
-            request.row,
-            request.role,
-            request.mode_line,
-        ));
-        self.replace_current_row(request.glyph_row);
-        self.finalize_output_row(request.row, phys_cursor);
+        let row = request.row_index();
+        self.begin_current_row(request.begin_request());
+        self.replace_current_row(request.into_glyph_row());
+        self.finalize_output_row(row, phys_cursor);
     }
 
     fn finalize_output_row(&mut self, row: usize, phys_cursor: Option<&mut PhysCursor>) {

@@ -369,10 +369,11 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     fn install_display_row(&mut self, row_index: usize, source: &GlyphRow) {
-        let pixel_bounds = self.current_window_pixel_bounds();
-        let mut row = source.clone();
-        row.pixel_y -= pixel_bounds.y;
-        self.install_complete_output_row(row_index, row.role, row.mode_line, row);
+        self.install_output_row_lifecycle(OutputRowLifecycleRequest::complete_window_absolute_row(
+            row_index,
+            source,
+            self.current_window_pixel_bounds(),
+        ));
     }
 
     #[cfg(test)]
