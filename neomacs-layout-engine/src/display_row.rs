@@ -490,90 +490,8 @@ impl DisplayRowLispStringSourceSession {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct DisplayRowSourceGeometry {
-    y: f32,
-    width: f32,
-    height: f32,
-    char_width: f32,
-    ascent: f32,
-    tab_policy: DisplayTabPolicy,
-}
-
-impl DisplayRowSourceGeometry {
-    fn new(
-        y: f32,
-        width: f32,
-        height: f32,
-        char_width: f32,
-        ascent: f32,
-        tab_policy: DisplayTabPolicy,
-    ) -> Self {
-        Self {
-            y,
-            width,
-            height,
-            char_width,
-            ascent,
-            tab_policy,
-        }
-    }
-
-    fn from_display_row_geometry(geometry: DisplayRowGeometry) -> Self {
-        Self::new(
-            geometry.y(),
-            geometry.width(),
-            geometry.height(),
-            geometry.char_width(),
-            geometry.ascent(),
-            geometry.tab_policy().clone(),
-        )
-    }
-
-    fn into_geometry(self) -> DisplayRowGeometry {
-        DisplayRowGeometry::new(
-            self.y,
-            self.width,
-            self.height,
-            self.char_width,
-            self.ascent,
-            self.tab_policy,
-        )
-    }
-
-    pub(crate) fn source_request_from_base_face<'face>(
-        self,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face: &'face ResolvedFace,
-        role: GlyphRowRole,
-        symbol_values: std::collections::HashMap<String, Value>,
-    ) -> DisplayRowSourceRenderRequest<'face> {
-        DisplayRowSourceRenderRequest::from_base_face(
-            self.into_geometry(),
-            face_ids,
-            base_face,
-            role,
-            symbol_values,
-        )
-    }
-
-    pub(crate) fn source_request_for_base_face_id<'face>(
-        self,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-        role: GlyphRowRole,
-    ) -> DisplayRowSourceRenderRequest<'face> {
-        DisplayRowSourceRenderRequest::whole_row(
-            self.into_geometry(),
-            base_face_id,
-            base_face,
-            role,
-        )
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
 struct DisplayRowSourceRequestPolicy {
-    geometry: DisplayRowSourceGeometry,
+    geometry: DisplayRowGeometry,
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 }
@@ -589,9 +507,7 @@ impl DisplayRowSourceRequestPolicy {
         role: GlyphRowRole,
     ) -> Self {
         Self {
-            geometry: DisplayRowSourceGeometry::new(
-                y, width, height, char_width, ascent, tab_policy,
-            ),
+            geometry: DisplayRowGeometry::new(y, width, height, char_width, ascent, tab_policy),
             role,
             symbol_values: std::collections::HashMap::new(),
         }
@@ -599,7 +515,7 @@ impl DisplayRowSourceRequestPolicy {
 
     fn from_display_row_geometry(geometry: DisplayRowGeometry, role: GlyphRowRole) -> Self {
         Self {
-            geometry: DisplayRowSourceGeometry::from_display_row_geometry(geometry),
+            geometry,
             role,
             symbol_values: std::collections::HashMap::new(),
         }
@@ -633,7 +549,8 @@ impl DisplayRowSourceRequestPolicy {
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
     ) -> DisplayRowSourceRenderRequest<'face> {
-        self.geometry.source_request_from_base_face(
+        DisplayRowSourceRenderRequest::from_base_face(
+            self.geometry,
             face_ids,
             base_face,
             self.role,
@@ -647,8 +564,7 @@ impl DisplayRowSourceRequestPolicy {
         base_face: &'face ResolvedFace,
     ) -> DisplayRowSourceRenderRequest<'face> {
         debug_assert!(self.symbol_values.is_empty());
-        self.geometry
-            .source_request_for_base_face_id(base_face_id, base_face, self.role)
+        DisplayRowSourceRenderRequest::whole_row(self.geometry, base_face_id, base_face, self.role)
     }
 }
 

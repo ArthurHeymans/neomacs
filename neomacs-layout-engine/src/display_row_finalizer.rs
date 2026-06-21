@@ -59,7 +59,7 @@ impl<'cursor> GlyphRowFinalizer<'cursor> {
             .filter(|cursor| self.context.cursor_matches(cursor))
             .map(|cursor| cursor.col);
 
-        let remapped_cursor_col = finalize_glyph_row(row, phys_cursor_col);
+        let remapped_cursor_col = crate::glyph_row_writer::reorder_row_bidi(row, phys_cursor_col);
         self.apply_phys_cursor_remap(remapped_cursor_col);
     }
 
@@ -81,10 +81,6 @@ impl<'cursor> GlyphRowFinalizer<'cursor> {
             cursor.x = self.context.window_pixel_bounds.x + col as f32 * char_w;
         }
     }
-}
-
-pub(crate) fn finalize_glyph_row(row: &mut GlyphRow, phys_cursor_col: Option<u16>) -> Option<u16> {
-    crate::glyph_row_writer::reorder_row_bidi(row, phys_cursor_col)
 }
 
 #[cfg(test)]
