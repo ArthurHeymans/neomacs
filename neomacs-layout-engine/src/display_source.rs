@@ -1993,16 +1993,6 @@ impl BufferDisplayReplacementStringRequest {
             string_source,
         ))
     }
-
-    #[cfg(test)]
-    pub(crate) fn source_id(self) -> u64 {
-        self.source_id
-    }
-
-    #[cfg(test)]
-    pub(crate) fn value(self) -> Value {
-        self.value
-    }
 }
 
 impl<S> BufferDisplayReplacementStringSource<S> {

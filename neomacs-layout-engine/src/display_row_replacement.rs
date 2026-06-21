@@ -94,16 +94,13 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct DisplayReplacementStringSourceAppendRequest {
-    pub(crate) position: DisplayRowPosition,
+struct DisplayReplacementStringSourceAppendRequest {
+    position: DisplayRowPosition,
     source: BufferDisplayReplacementStringRequest,
 }
 
 impl DisplayReplacementStringSourceAppendRequest {
-    pub(crate) fn new(
-        position: DisplayRowPosition,
-        source: BufferDisplayReplacementStringRequest,
-    ) -> Self {
+    fn new(position: DisplayRowPosition, source: BufferDisplayReplacementStringRequest) -> Self {
         Self { position, source }
     }
 
@@ -111,17 +108,7 @@ impl DisplayReplacementStringSourceAppendRequest {
         self.position
     }
 
-    #[cfg(test)]
-    pub(crate) fn source_id(self) -> LispStringSourceId {
-        LispStringSourceId(self.source.source_id())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn value(self) -> Value {
-        self.source.value()
-    }
-
-    pub(crate) fn render_to_text_row_and_emit(
+    fn render_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
@@ -154,10 +141,21 @@ impl DisplayReplacementStringSourceAppendRequest {
 }
 
 #[derive(Clone)]
-pub(crate) struct DisplayReplacementStringAppendRequest {
+struct DisplayReplacementStringAppendRequest {
     item: DisplayReplacementStringSourceItem,
     replacement_base_face: Option<DisplayStringBaseFace>,
     active_face_state: DisplayRowActiveFaceState,
+}
+
+#[cfg(test)]
+pub(crate) struct DisplayReplacementStringSourceSnapshot {
+    pub(crate) value: Value,
+    pub(crate) source_id: LispStringSourceId,
+    pub(crate) position: DisplayRowPosition,
+    pub(crate) origin: DisplayOrigin,
+    pub(crate) base_face_policy: BaseFacePolicy,
+    pub(crate) cursor_slot_width_px: f32,
+    pub(crate) is_empty: bool,
 }
 
 #[cfg(test)]
@@ -168,7 +166,7 @@ pub(crate) struct DisplayPropertyReplacementStringPlanSnapshot {
 }
 
 impl DisplayReplacementStringAppendRequest {
-    pub(crate) fn new(
+    fn new(
         item: DisplayReplacementStringSourceItem,
         replacement_base_face: Option<DisplayStringBaseFace>,
         active_face_state: DisplayRowActiveFaceState,
@@ -180,7 +178,7 @@ impl DisplayReplacementStringAppendRequest {
         }
     }
 
-    pub(crate) fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
+    fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
         DisplayReplacementStringItemMeasurer {
             active_face_state: self.active_face_state.clone(),
         }
@@ -195,7 +193,7 @@ impl DisplayReplacementStringAppendRequest {
         }
     }
 
-    pub(crate) fn source_append_request(
+    fn source_append_request(
         &self,
         replacement_source: BufferDisplayReplacementSource,
         position: DisplayRowPosition,
@@ -237,6 +235,37 @@ impl DisplayReplacementStringAppendRequest {
             &append_context,
             &mut item_policy,
         )
+    }
+}
+
+#[cfg(test)]
+impl DisplayReplacementStringSourceItem {
+    pub(crate) fn append_source_snapshot(
+        &self,
+        position: DisplayRowPosition,
+    ) -> DisplayReplacementStringSourceSnapshot {
+        DisplayReplacementStringSourceSnapshot {
+            value: self.value(),
+            source_id: LispStringSourceId::display_replacement(self.source_id()),
+            position,
+            origin: self.origin(),
+            base_face_policy: self.base_face_policy(),
+            cursor_slot_width_px: self.cursor_slot_width_px(),
+            is_empty: self.is_empty(),
+        }
+    }
+
+    pub(crate) fn measurement_from_active_face(
+        &self,
+        active_face_state: &DisplayRowActiveFaceState,
+        item: &DisplayItem,
+        face_id: u32,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowItemMeasurement {
+        let mut measurer = DisplayReplacementStringItemMeasurer {
+            active_face_state: active_face_state.clone(),
+        };
+        DisplayRowRenderPolicy::measurement_for(&mut measurer, item, face_id, font_metrics)
     }
 }
 
@@ -1042,5 +1071,23 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         let plan = DisplayReplacementItemAppendRequest::active_face(kind, position)
             .into_plan(replacement_source, self.single_item.face_id());
         self.append_replacement_item_plan_to_text_row_and_emit(state, face_ids, plan)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_replacement_string_source_to_text_row_and_emit(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        replacement_source: BufferDisplayReplacementSource,
+        source_id: LispStringSourceId,
+        value: Value,
+        position: DisplayRowPosition,
+        item_policy: &mut impl DisplayRowRenderPolicy,
+    ) -> DisplayRowPosition {
+        DisplayReplacementStringSourceAppendRequest::new(
+            position,
+            BufferDisplayReplacementStringRequest::new(source_id.raw(), value, replacement_source),
+        )
+        .render_to_text_row_and_emit(state, face_ids, self, item_policy)
     }
 }

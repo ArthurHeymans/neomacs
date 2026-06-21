@@ -73,13 +73,12 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::*;
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
-    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem, DisplaySourceRenderPlanRequest,
-    DisplaySourceSpecialDisplay,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    DisplaySourceRenderPlanRequest, DisplaySourceSpecialDisplay,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -9280,12 +9279,7 @@ impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
 
 #[test]
 fn display_replacement_string_append_item_names_cursor_and_source_policy() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
+    let _eval = Context::new();
     let value = Value::string("ab");
     let item = DisplayReplacementStringSourceItem::display_property_string(
         value,
@@ -9298,32 +9292,26 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
-    let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
-        buf_id,
-        CharPos0::new(4),
-        EmacsBytePos::new(4),
-    );
-    let active_face = test_active_face_state(7, 8.0);
-    let request =
-        DisplayReplacementStringAppendRequest::new(item.clone(), None, active_face.clone())
-            .source_append_request(replacement_source, DisplayRowPosition { x_px: 2.0, col: 1 });
-    assert_eq!(request.value(), value);
+    let snapshot = item.append_source_snapshot(DisplayRowPosition { x_px: 2.0, col: 1 });
     assert_eq!(
-        request.source_id(),
+        snapshot.source_id,
         LispStringSourceId::display_replacement(9)
     );
-    assert_eq!(request.position, DisplayRowPosition { x_px: 2.0, col: 1 });
+    assert_eq!(snapshot.value, value);
+    assert_eq!(snapshot.position, DisplayRowPosition { x_px: 2.0, col: 1 });
     assert_eq!(
-        item.origin(),
+        snapshot.origin,
         DisplayOrigin::DisplayPropertyString {
             anchor_charpos: CharPos0::new(4),
             source: DisplayPropertySource::TextProperty,
         }
     );
     assert_eq!(
-        item.base_face_policy(),
+        snapshot.base_face_policy,
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
+    assert_eq!(snapshot.cursor_slot_width_px, 8.0);
+    assert!(!snapshot.is_empty);
 
     let empty = DisplayReplacementStringSourceItem::display_property_string(
         Value::string(""),
@@ -9349,8 +9337,6 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
         8.0,
     )
     .expect("display property string item");
-    let request = DisplayReplacementStringAppendRequest::new(item, None, active_face.clone());
-    let mut measurer = request.string_item_measurer();
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
@@ -9359,7 +9345,7 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
     );
 
     let measurement =
-        DisplayRowRenderPolicy::measurement_for(&mut measurer, &source_item, 7, &mut font_metrics);
+        item.measurement_from_active_face(&active_face, &source_item, 7, &mut font_metrics);
 
     let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
         panic!("replacement string text should use a direct text-run measurement");
@@ -10370,17 +10356,9 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
-    let request = DisplayReplacementStringSourceAppendRequest::new(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferDisplayReplacementStringRequest::new(
-            LispStringSourceId::display_replacement(1).raw(),
-            value,
-            replacement_source,
-        ),
-    );
 
     let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
-    let end = request.render_to_text_row_and_emit(
+    let end = append_context.append_replacement_string_source_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
             &mut output_emitter,
@@ -10389,7 +10367,10 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
             &face_resolver,
         ),
         &mut face_ids,
-        &append_context,
+        replacement_source,
+        LispStringSourceId::display_replacement(1),
+        value,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
         &mut measurer,
     );
 
