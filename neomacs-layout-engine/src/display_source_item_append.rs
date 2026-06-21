@@ -738,7 +738,7 @@ impl DisplaySourceItemRequest {
 }
 
 pub(crate) struct DisplaySourceItemAppendContext<'a> {
-    pub(crate) single_item: SingleDisplayItemAppendContext<'a>,
+    single_item: SingleDisplayItemAppendContext<'a>,
 }
 
 impl<'a> DisplaySourceItemAppendContext<'a> {

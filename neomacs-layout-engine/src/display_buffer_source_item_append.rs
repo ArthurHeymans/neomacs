@@ -448,8 +448,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferSourceRequestAppendContext<'a, B> {
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         self.item_context
-            .single_item
-            .render_naturally(state, item, position, kind)
+            .append_display_item_to_text_row_and_emit(state, item, position, kind)
     }
 
     pub(crate) fn try_measure_source_request_width_to_text_row(
@@ -467,8 +466,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferSourceRequestAppendContext<'a, B> {
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         self.item_context
-            .single_item
-            .measure_width_naturally(state, item, position, kind)
+            .measure_display_item_width_naturally(state, &item, position, kind)
     }
 
     pub(crate) fn measure_source_request_width_to_text_row(
@@ -479,17 +477,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferSourceRequestAppendContext<'a, B> {
     ) -> f32 {
         let fallback_width = source_item.fallback_width();
         let Some(append_item) = buffer_source_item_append_request(
-            source_item,
+            source_item.clone(),
             self.buffer_id,
             self.buffer,
             self.item_context.face_id(),
         ) else {
             return fallback_width.resolve_to_text_row(self.item_context.frame());
         };
-        let kind = append_item.append_kind();
         let item = append_item.into_item();
         self.item_context
-            .single_item
-            .measure_width_with_source_fallback(state, item, position, kind, fallback_width)
+            .measure_source_display_item_width_to_text_row(state, &item, source_item, position)
     }
 }
