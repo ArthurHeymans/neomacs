@@ -4,7 +4,6 @@ use crate::composition::{
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds, DisplayRowSourceRenderRequest,
-    DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
@@ -623,11 +622,12 @@ impl DisplayRowAppendFrame {
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceRenderRequest<'face> {
-        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+        DisplayRowSourceRenderRequest::from_display_row_geometry_for_base_face_id(
             self.source_render_geometry(kind),
+            face_id,
+            base_face,
             GlyphRowRole::Text,
         )
-        .source_request_for_base_face_id(face_id, base_face)
         .with_render_bounds(DisplayRowRenderBounds {
             start: position,
             max_x: kind.max_x(self),

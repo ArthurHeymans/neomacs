@@ -1993,6 +1993,16 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         }
     }
 
+    pub(crate) fn from_display_row_geometry_for_base_face_id(
+        geometry: DisplayRowGeometry,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        role: GlyphRowRole,
+    ) -> Self {
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
+            .source_request_for_base_face_id(base_face_id, base_face)
+    }
+
     pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
         self
