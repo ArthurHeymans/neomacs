@@ -241,14 +241,14 @@ impl DisplayReplacementStringAppendRequest {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DisplayReplacementItemAppendRequest {
+struct DisplayReplacementItemAppendRequest {
     kind: DisplayItemKind,
     frame: DisplayReplacementItemAppendFrame,
     position: DisplayRowPosition,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DisplayReplacementItemAppendPlan {
+struct DisplayReplacementItemAppendPlan {
     item: DisplayItem,
     frame: DisplayReplacementItemAppendFrame,
     position: DisplayRowPosition,
@@ -276,7 +276,7 @@ enum DisplayReplacementItemRowGeometryUpdate {
 
 impl DisplayReplacementItemAppendRequest {
     #[cfg(test)]
-    pub(crate) fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
+    fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
         Self {
             kind,
             frame: DisplayReplacementItemAppendFrame::ActiveFace,
@@ -285,7 +285,7 @@ impl DisplayReplacementItemAppendRequest {
     }
 
     #[cfg(test)]
-    pub(crate) fn display_box(
+    fn display_box(
         kind: DisplayItemKind,
         height_px: f32,
         ascent_px: f32,
@@ -301,7 +301,7 @@ impl DisplayReplacementItemAppendRequest {
         }
     }
 
-    pub(crate) fn into_plan(
+    fn into_plan(
         self,
         replacement_source: BufferDisplayReplacementSource,
         face_id: u32,
@@ -419,18 +419,6 @@ impl DisplayReplacementItemAppendTemplate {
             row_geometry.include_row_extents(height_px, ascent_px);
         }
         progress.end
-    }
-}
-
-impl DisplayReplacementStretchSourceItem {
-    #[cfg(test)]
-    pub(crate) fn append_request(
-        self,
-        position: DisplayRowPosition,
-    ) -> Option<DisplayReplacementItemAppendRequest> {
-        (self.width_px() > 0.0).then(|| {
-            DisplayReplacementItemAppendRequest::active_face(self.display_item_kind(), position)
-        })
     }
 }
 
@@ -821,10 +809,7 @@ impl DisplayReplacementMediaSourceItem {
     }
 
     #[cfg(test)]
-    pub(crate) fn append_request(
-        self,
-        position: DisplayRowPosition,
-    ) -> DisplayReplacementItemAppendRequest {
+    fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::display_box(
             DisplayItemKind::MediaReplacement(self.media()),
             self.display_height_px(),
@@ -836,10 +821,7 @@ impl DisplayReplacementMediaSourceItem {
 
 impl DisplayReplacementSourceMappedTextItem {
     #[cfg(test)]
-    pub(crate) fn append_request(
-        self,
-        position: DisplayRowPosition,
-    ) -> DisplayReplacementItemAppendRequest {
+    fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::active_face(
             DisplayItemKind::SourceMappedText(crate::display_item::DisplaySourceMappedText::new(
                 self.into_text(),
@@ -942,7 +924,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         )
     }
 
-    pub(crate) fn append_item_request_to_text_row_and_emit(
+    fn append_item_request_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
@@ -965,6 +947,49 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         };
         append_context.append_replacement_item_plan_to_text_row_and_emit(state, face_ids, plan)
     }
+
+    #[cfg(test)]
+    pub(crate) fn append_stretch_source_item_to_text_row_and_emit(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        item: DisplayReplacementStretchSourceItem,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        let request =
+            DisplayReplacementItemAppendTemplate::from_stretch(item)?.into_request(position);
+        self.append_item_request_to_text_row_and_emit(state, face_ids, request)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_media_source_item_to_text_row_and_emit(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        item: DisplayReplacementMediaSourceItem,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        self.append_item_request_to_text_row_and_emit(
+            state,
+            face_ids,
+            item.append_request(position),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_source_mapped_text_item_to_text_row_and_emit(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        item: DisplayReplacementSourceMappedTextItem,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        self.append_item_request_to_text_row_and_emit(
+            state,
+            face_ids,
+            item.append_request(position),
+        )
+    }
 }
 
 #[derive(Clone)]
@@ -983,7 +1008,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         }
     }
 
-    pub(crate) fn append_replacement_item_plan_to_text_row_and_emit(
+    fn append_replacement_item_plan_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
@@ -1003,5 +1028,19 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             &mut render_policy,
         )?;
         Some(outcome.into_append_progress(position))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_replacement_item_kind_to_text_row_and_emit(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        replacement_source: BufferDisplayReplacementSource,
+        kind: DisplayItemKind,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        let plan = DisplayReplacementItemAppendRequest::active_face(kind, position)
+            .into_plan(replacement_source, self.single_item.face_id());
+        self.append_replacement_item_plan_to_text_row_and_emit(state, face_ids, plan)
     }
 }
