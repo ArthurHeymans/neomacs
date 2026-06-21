@@ -264,13 +264,9 @@ pub(crate) fn resolve_display_replacement(
         return Some(resolved_media_replacement(media));
     }
 
-    if let Some(media) = resolve_display_property_media(
-        &display_prop,
-        display_host,
-        resolved_face,
-        fallback_metrics,
-    )
-    .filter(|media| replacement.accepts_media_replacement(media))
+    if let Some(media) =
+        resolve_display_property_media(&display_prop, display_host, resolved_face, fallback_metrics)
+            .filter(|media| replacement.accepts_media_replacement(media))
     {
         return Some(resolved_media_replacement(media));
     }
@@ -372,27 +368,17 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         let source_inputs = match display_property.replacement()? {
             DisplayReplacementProperty::String => {
                 let replacement = replacement_value.as_utf8_str()?;
-                let cursor_slot_width_px = replacement
-                    .chars()
-                    .next()
-                    .map(|ch| {
-                        self.active_face_state.advance_for_char(
-                            self.font_metrics,
-                            ch,
-                            face_metrics.char_width,
-                        )
-                    })
-                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
+                let cursor_slot_width_px = self
+                    .active_face_state
+                    .display_replacement_string_cursor_slot_width(self.font_metrics, replacement);
                 DisplayPropertyReplacementSourceInputs::empty()
                     .with_string_cursor_slot_width_px(cursor_slot_width_px)
             }
             DisplayReplacementProperty::Stretch(_) => {
                 let (display_ch, _) = decode_utf8(source_text);
-                let display_char_width = self.active_face_state.advance_for_char(
-                    self.font_metrics,
-                    display_ch,
-                    face_metrics.char_width,
-                );
+                let display_char_width = self
+                    .active_face_state
+                    .display_replacement_stretch_source_char_width(self.font_metrics, display_ch);
                 DisplayPropertyReplacementSourceInputs::empty()
                     .with_stretch_display_char_width_px(display_char_width)
             }

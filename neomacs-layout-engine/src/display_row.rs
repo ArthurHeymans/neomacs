@@ -950,6 +950,27 @@ impl DisplayRowActiveFaceState {
         self.advance_for_char(font_metrics, ch, fallback_advance_px)
     }
 
+    pub(crate) fn display_replacement_string_cursor_slot_width(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        replacement: &str,
+    ) -> f32 {
+        let face_metrics = self.metrics();
+        replacement
+            .chars()
+            .next()
+            .map(|ch| self.advance_for_char(font_metrics, ch, face_metrics.char_width))
+            .unwrap_or_else(|| face_metrics.char_width.max(1.0))
+    }
+
+    pub(crate) fn display_replacement_stretch_source_char_width(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        source_char: char,
+    ) -> f32 {
+        self.advance_for_char(font_metrics, source_char, self.metrics().char_width)
+    }
+
     pub(crate) fn text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
