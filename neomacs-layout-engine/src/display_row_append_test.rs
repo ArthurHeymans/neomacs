@@ -5152,10 +5152,10 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             7,
             &base_face,
         )
-        .render_request(DisplayRowRenderBounds {
-            start: DisplayRowPosition { x_px: 16.0, col: 2 },
-            max_x: DisplayRowMaxX::Bounded(160.0),
-        })
+        .render_request(DisplayRowRenderBounds::new(
+            DisplayRowPosition { x_px: 16.0, col: 2 },
+            DisplayRowMaxX::Bounded(160.0),
+        ))
         .render_fragment_step_with_display_host(
             &mut renderer,
             &mut source,
@@ -5255,9 +5255,9 @@ fn display_row_append_surface_builds_positioned_source_requests() {
     let output = request.output();
     let request = request.row_request();
 
-    assert_eq!(request.render_bounds().start, position);
+    assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
-        request.render_bounds().max_x,
+        request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.role(), GlyphRowRole::Text);
@@ -5315,11 +5315,11 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let ordinary_output = ordinary.output();
     let ordinary = ordinary.row_request();
     assert_eq!(
-        ordinary.render_bounds().start,
+        ordinary.render_bounds().start(),
         DisplayRowPosition { x_px: 8.0, col: 0 }
     );
     assert_eq!(
-        ordinary.render_bounds().max_x,
+        ordinary.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(ordinary.geometry().char_width, 9.0);
@@ -5332,7 +5332,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         frame.source_append_render_request(position, 42, base_face, DisplayRowAppendKind::Tab);
     let tab_output = tab.output();
     let tab = tab.row_request();
-    assert_eq!(tab.render_bounds().max_x, DisplayRowMaxX::Unbounded);
+    assert_eq!(tab.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
     assert_eq!(tab.geometry().char_width, 7.0);
     assert_eq!(tab_output.height, 14.0);
 
@@ -5345,7 +5345,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let control_output = control.output();
     let control = control.row_request();
     assert_eq!(
-        control.render_bounds().max_x,
+        control.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(control.geometry().char_width, 9.0);
@@ -5359,7 +5359,10 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     );
     let mapped_output = mapped.output();
     let mapped = mapped.row_request();
-    assert_eq!(mapped.render_bounds().max_x, DisplayRowMaxX::Bounded(128.0));
+    assert_eq!(
+        mapped.render_bounds().max_x(),
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(mapped_output.height, 14.0);
 
     let glyphless = frame.source_append_render_request(
@@ -5371,7 +5374,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let glyphless_output = glyphless.output();
     let glyphless = glyphless.row_request();
     assert_eq!(
-        glyphless.render_bounds().max_x,
+        glyphless.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(glyphless_output.height, 16.0);
@@ -5385,7 +5388,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let replacement_output = replacement.output();
     let replacement = replacement.row_request();
     assert_eq!(
-        replacement.render_bounds().max_x,
+        replacement.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement.geometry().char_width, 9.0);
@@ -5400,7 +5403,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let replacement_string_output = replacement_string.output();
     let replacement_string = replacement_string.row_request();
     assert_eq!(
-        replacement_string.render_bounds().max_x,
+        replacement_string.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(replacement_string.geometry().char_width, 7.0);
@@ -5493,9 +5496,9 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
     let output = request.output();
     let request = request.row_request();
 
-    assert_eq!(request.render_bounds().start, position);
+    assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
-        request.render_bounds().max_x,
+        request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
@@ -5542,7 +5545,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
         .row_request();
 
     assert_eq!(
-        request.render_bounds().max_x,
+        request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
@@ -5581,8 +5584,8 @@ fn display_row_append_frame_builds_source_measure_request() {
         .source_append_measure_request(position, 42, base_face, DisplayRowAppendKind::SourceText)
         .row_request();
 
-    assert_eq!(request.render_bounds().start, position);
-    assert_eq!(request.render_bounds().max_x, DisplayRowMaxX::Unbounded);
+    assert_eq!(request.render_bounds().start(), position);
+    assert_eq!(request.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().char_width, 9.0);
@@ -5625,9 +5628,9 @@ fn display_row_source_append_render_request_uses_frame_policy() {
     let request = request.row_request();
 
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(request.render_bounds().start, position);
+    assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
-        request.render_bounds().max_x,
+        request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.geometry().height, 16.0);
@@ -5670,9 +5673,9 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
     let request = request.row_request();
 
     assert_eq!(request.base_face_id(), 42);
-    assert_eq!(request.render_bounds().start, position);
+    assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
-        request.render_bounds().max_x,
+        request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(148.0)
     );
     assert_eq!(request.base_face_id(), 42);

@@ -638,10 +638,7 @@ impl DisplayRowAppendFrame {
             base_face,
             GlyphRowRole::Text,
         )
-        .with_render_bounds(DisplayRowRenderBounds {
-            start: position,
-            max_x: kind.max_x(self),
-        })
+        .with_render_bounds(DisplayRowRenderBounds::new(position, kind.max_x(self)))
     }
 
     fn source_render_geometry(&self, kind: DisplayRowAppendKind) -> DisplayRowGeometry {

@@ -422,10 +422,10 @@ fn display_row_source_geometry_request_overrides_render_bounds() {
         ascent: 12.0,
         tab_policy: DisplayTabPolicy::every(8),
     };
-    let bounds = DisplayRowRenderBounds {
-        start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x: DisplayRowMaxX::Bounded(40.0),
-    };
+    let bounds = DisplayRowRenderBounds::new(
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowMaxX::Bounded(40.0),
+    );
 
     let request = display_row_request_for_face(geometry, 7, &face, GlyphRowRole::Text)
         .with_render_bounds(bounds);
@@ -466,10 +466,10 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_glyph_row() {
     );
     assert_eq!(
         request.render_bounds(),
-        DisplayRowRenderBounds {
-            start: DisplayRowPosition { x_px: 22.5, col: 3 },
-            max_x: DisplayRowMaxX::Bounded(90.0),
-        }
+        DisplayRowRenderBounds::new(
+            DisplayRowPosition { x_px: 22.5, col: 3 },
+            DisplayRowMaxX::Bounded(90.0),
+        )
     );
     assert_eq!(request.glyph_area(), GlyphArea::RightMargin);
 }
@@ -502,10 +502,10 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_row_geometry() {
     );
     assert_eq!(
         request.render_bounds(),
-        DisplayRowRenderBounds {
-            start: DisplayRowPosition { x_px: 0.0, col: 0 },
-            max_x: DisplayRowMaxX::Bounded(45.0),
-        }
+        DisplayRowRenderBounds::new(
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowMaxX::Bounded(45.0),
+        )
     );
     assert_eq!(request.glyph_area(), GlyphArea::LeftMargin);
 }
@@ -912,10 +912,10 @@ fn display_row_renderer_clips_from_render_bounds_start() {
         GlyphRowRole::ModeLine,
         std::collections::HashMap::new(),
     )
-    .with_render_bounds(DisplayRowRenderBounds {
-        start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x: DisplayRowMaxX::Bounded(32.0),
-    });
+    .with_render_bounds(DisplayRowRenderBounds::new(
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowMaxX::Bounded(32.0),
+    ));
 
     let rendered = render_lisp_string_row(
         &mut renderer,
@@ -958,10 +958,10 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
         GlyphRowRole::ModeLine,
         std::collections::HashMap::new(),
     )
-    .with_render_bounds(DisplayRowRenderBounds {
-        start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x: DisplayRowMaxX::Bounded(240.0),
-    });
+    .with_render_bounds(DisplayRowRenderBounds::new(
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+        DisplayRowMaxX::Bounded(240.0),
+    ));
 
     let rendered = render_lisp_string_row(
         &mut renderer,
@@ -2902,10 +2902,10 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
         GlyphRowRole::Text,
         std::collections::HashMap::new(),
     )
-    .with_render_bounds(DisplayRowRenderBounds {
-        start: DisplayRowPosition { x_px: 8.0, col: 1 },
-        max_x: DisplayRowMaxX::Bounded(240.0),
-    });
+    .with_render_bounds(DisplayRowRenderBounds::new(
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        DisplayRowMaxX::Bounded(240.0),
+    ));
     let base_face_id = request.base_face_id();
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     crate::glyph_row_writer::push_char_to_row(&mut row, 'e', base_face_id, 0, 8.0);

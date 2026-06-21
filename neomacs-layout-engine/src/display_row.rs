@@ -1482,13 +1482,13 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
         max_col: usize,
     ) -> DisplayRowSourceFragmentRenderRequest<'face> {
         let char_width = self.policy.geometry.char_width;
-        self.render_request(DisplayRowRenderBounds {
-            start: DisplayRowPosition {
+        self.render_request(DisplayRowRenderBounds::new(
+            DisplayRowPosition {
                 x_px: start_col as f32 * char_width,
                 col: start_col,
             },
-            max_x: DisplayRowMaxX::Bounded(max_col as f32 * char_width),
-        })
+            DisplayRowMaxX::Bounded(max_col as f32 * char_width),
+        ))
     }
 
     pub(crate) fn render_request_from_column_for_area(
@@ -2282,23 +2282,32 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowRenderBounds {
-    pub(crate) start: DisplayRowPosition,
-    pub(crate) max_x: DisplayRowMaxX,
+    start: DisplayRowPosition,
+    max_x: DisplayRowMaxX,
 }
 
 impl DisplayRowRenderBounds {
+    pub(crate) fn new(start: DisplayRowPosition, max_x: DisplayRowMaxX) -> Self {
+        Self { start, max_x }
+    }
+
     pub(crate) fn whole_row(width_px: f32) -> Self {
-        Self {
-            start: DisplayRowPosition { x_px: 0.0, col: 0 },
-            max_x: DisplayRowMaxX::Bounded(width_px.max(0.0)),
-        }
+        Self::new(
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowMaxX::Bounded(width_px.max(0.0)),
+        )
     }
 
     pub(crate) fn unbounded_from(start: DisplayRowPosition) -> Self {
-        Self {
-            start,
-            max_x: DisplayRowMaxX::Unbounded,
-        }
+        Self::new(start, DisplayRowMaxX::Unbounded)
+    }
+
+    pub(crate) fn start(self) -> DisplayRowPosition {
+        self.start
+    }
+
+    pub(crate) fn max_x(self) -> DisplayRowMaxX {
+        self.max_x
     }
 }
 
@@ -2768,7 +2777,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             RenderFaceRef::FaceId(row_face.face_id),
             parsed_symbol_values,
         );
-        let mut position = render_bounds.start;
+        let mut position = render_bounds.start();
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
         let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
@@ -2834,7 +2843,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         &mut *row,
                         &mut glyph_measurer,
                         position,
-                        render_bounds.max_x.to_f32(),
+                        render_bounds.max_x().to_f32(),
                         area,
                     );
                     row_writer.push_item(render_item.row_item_for_write())
@@ -2846,7 +2855,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                             &mut *row,
                             measurement,
                             position,
-                            render_bounds.max_x.to_f32(),
+                            render_bounds.max_x().to_f32(),
                             area,
                         );
                     row_writer.push_item(render_item.row_item_for_write())

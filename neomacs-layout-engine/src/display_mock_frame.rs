@@ -244,10 +244,10 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
     let row_request =
         DisplayRowSourceFragmentFrame::new(geometry, role, base_face.face_id, base_face)
             .render_request_for_area(
-                DisplayRowRenderBounds {
-                    start: DisplayRowPosition { x_px: 0.0, col: 0 },
-                    max_x: DisplayRowMaxX::Bounded(render_width),
-                },
+                DisplayRowRenderBounds::new(
+                    DisplayRowPosition { x_px: 0.0, col: 0 },
+                    DisplayRowMaxX::Bounded(render_width),
+                ),
                 area,
             );
     let mut executor = DisplayRowRenderExecutor::new(font_metrics, face_resolver, None, face_ids);

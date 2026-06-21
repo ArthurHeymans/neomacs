@@ -1497,10 +1497,10 @@ fn render_buffer_text_source_shadow_row(
         0,
         resolver.default_face(),
     )
-    .render_request(DisplayRowRenderBounds {
-        start: DisplayRowPosition { x_px: 0.0, col: 0 },
-        max_x: DisplayRowMaxX::Bounded(width_px),
-    })
+    .render_request(DisplayRowRenderBounds::new(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowMaxX::Bounded(width_px),
+    ))
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("typed buffer text source row")
     .into_row()
