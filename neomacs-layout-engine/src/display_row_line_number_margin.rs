@@ -5,7 +5,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
+use crate::display_row::DisplayRowSourceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
@@ -83,23 +83,19 @@ impl BufferLineNumberMarginRenderRequest {
         };
         let mut source = LineNumberMarginItemSource::new(&margin_request);
         let mut source_state = DisplayRowSourceState::default();
-        let request = DisplayRowSourceFragmentFrame::from_row_geometry_columns(
+        let margin_cols = margin_request.cols.max(1) as usize + 1;
+        source_render.render_natural_fragment_from_row_geometry_columns(
             row_geometry,
-            margin_request.cols.max(1) as usize + 1,
+            &mut source,
+            &mut source_state,
+            margin_cols,
             char_width,
             neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
             line_number_face_id,
             &line_number_face,
-        )
-        .render_request_from_column_for_area(
             0,
-            margin_request.cols.max(1) as usize + 1,
+            margin_cols,
             GlyphArea::LeftMargin,
-        );
-        source_render.render_natural_fragment_into_current_row(
-            request,
-            &mut source,
-            &mut source_state,
             face_ids,
         );
 

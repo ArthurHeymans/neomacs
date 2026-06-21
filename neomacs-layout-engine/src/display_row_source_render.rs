@@ -14,13 +14,15 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderContext, DisplayRowRenderExecutor,
     DisplayRowRenderIntoRowResult, DisplayRowRenderPolicy, DisplayRowRenderer,
-    DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
-    DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
+    DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentFrame,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    display_row_output_end_position,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendSourceMeasureRequest, DisplayRowAppendSourceRenderRequest,
 };
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
+use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
@@ -642,6 +644,34 @@ impl<'a> TextRowSourceRenderState<'a> {
         self.output_render
             .current_source_fragment_render_state(self.font_metrics, self.face_resolver, face_ids)
             .render_natural_fragment_into_current_row(request, source, source_state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_natural_fragment_from_row_geometry_columns<S: DisplayItemSource>(
+        &mut self,
+        row_geometry: &DisplayRowGeometryState,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        cols: usize,
+        char_width: f32,
+        role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
+        face_id: u32,
+        base_face: &ResolvedFace,
+        start_col: usize,
+        max_col: usize,
+        area: neomacs_display_protocol::glyph_matrix::GlyphArea,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
+        let request = DisplayRowSourceFragmentFrame::from_row_geometry_columns(
+            row_geometry,
+            cols,
+            char_width,
+            role,
+            face_id,
+            base_face,
+        )
+        .render_request_from_column_for_area(start_col, max_col, area);
+        self.render_natural_fragment_into_current_row(request, source, source_state, face_ids)
     }
 
     pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
