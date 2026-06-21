@@ -793,6 +793,16 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
         eval.obarray_mut().set_symbol_value_id(resolved, value);
     }
 
+    // Finding 6: changing the DEFAULT of a display-affecting variable
+    // (e.g. `(setq-default truncate-lines t)`) alters how every buffer
+    // that lacks a local value is laid out, so it must mark redisplay
+    // dirty just like a buffer-local `setq`. Mirrors GNU
+    // `set_default_internal` propagating the new default into all
+    // buffers without a local binding (`src/data.c:2087-2114`); GNU then
+    // relies on `redisplay_window` re-reading the live slots, while
+    // neomacs must nudge its signature short-circuit.
+    eval.mark_redisplay_dirty_if_display_var(resolved);
+
     Ok(value)
 }
 

@@ -392,6 +392,11 @@ pub(crate) fn set_default_toplevel_value_impl(
         ctx.sync_cached_runtime_binding_by_id(resolved, value);
     }
     ctx.refresh_gc_runtime_settings_after_change_by_id(resolved);
+    // Finding 6: `set-default-toplevel-value` (the `setq-default` /
+    // custom-setter path) changes the global default of a variable; if
+    // it is display-affecting, every window reading that default must be
+    // repainted. Mark redisplay dirty rather than wait for a keystroke.
+    ctx.mark_redisplay_dirty_if_display_var(resolved);
     Ok(Value::NIL)
 }
 

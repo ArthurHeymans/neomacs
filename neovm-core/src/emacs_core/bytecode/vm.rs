@@ -2711,6 +2711,14 @@ impl<'a> Vm<'a> {
                                 }
                             }
                             self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+                            // Finding 6: this FORWARDED fast-path writes the
+                            // per-buffer display slot directly and returns
+                            // WITHOUT routing through
+                            // `set_runtime_binding_in_state`, so it must mark
+                            // redisplay dirty itself. This is the hot path for
+                            // `(setq truncate-lines t)` run from byte-compiled
+                            // code — the common case in real usage.
+                            self.ctx.mark_redisplay_dirty_if_display_var(resolved);
                             return Ok(());
                         }
                     }
@@ -2751,6 +2759,10 @@ impl<'a> Vm<'a> {
                     buf.local_var_alist = new_alist;
                 }
                 self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+                // Finding 6: a LOCALIZED display variable set from
+                // byte-compiled code must also nudge redisplay (this arm
+                // returns without `set_runtime_binding_in_state`).
+                self.ctx.mark_redisplay_dirty_if_display_var(resolved);
                 return Ok(());
             }
         }
@@ -3045,6 +3057,12 @@ impl<'a> Vm<'a> {
         } else {
             self.ctx.obarray.set_symbol_value_id(resolved, value);
         }
+        // Finding 6: the buffer-local branch above writes the obarray
+        // value cell directly and the non-local branch already nudges
+        // redisplay via `set_runtime_binding_in_state`; mark dirty here
+        // so `(setq-default truncate-lines t)` from byte-compiled code
+        // repaints all affected windows without an extra keystroke.
+        self.ctx.mark_redisplay_dirty_if_display_var(resolved);
 
         Ok(value)
     }

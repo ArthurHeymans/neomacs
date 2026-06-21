@@ -1672,6 +1672,149 @@ fn set_buffer_redisplay_watcher_invalidates_redisplay() {
     assert_eq!(*redisplay_count.borrow(), 2);
 }
 
+/// Finding 6: setting a display-affecting buffer variable must mark
+/// redisplay dirty all by itself (no variable-watcher required), so the
+/// next redisplay actually repaints. Without the fix the unchanged
+/// `RedisplaySignature` short-circuits the callback and the screen stays
+/// stale until the next keystroke (the "Doom blank pane" class of bug).
+#[test]
+fn setq_display_var_invalidates_redisplay_without_watcher() {
+    crate::test_utils::init_test_tracing();
+
+    for form in [
+        "(setq truncate-lines t)",
+        "(setq tab-width 16)",
+        "(setq header-line-format \"hdr\")",
+        "(setq cursor-type 'bar)",
+        "(setq selective-display 4)",
+        "(setq word-wrap t)",
+    ] {
+        let mut ev = Context::new();
+        let redisplay_count = Rc::new(RefCell::new(0usize));
+        let redisplay_count_in_cb = Rc::clone(&redisplay_count);
+        ev.redisplay_fn = Some(Box::new(move |_ev: &mut Context| {
+            *redisplay_count_in_cb.borrow_mut() += 1;
+        }));
+
+        ev.redisplay();
+        assert_eq!(
+            *redisplay_count.borrow(),
+            1,
+            "baseline redisplay for {form}"
+        );
+
+        ev.eval_str(form)
+            .unwrap_or_else(|e| panic!("{form} should evaluate: {e:?}"));
+        ev.redisplay();
+        assert_eq!(
+            *redisplay_count.borrow(),
+            2,
+            "{form} must invalidate redisplay so the next redisplay repaints"
+        );
+
+        // Idempotent: a second redisplay with no further change is a no-op.
+        ev.redisplay();
+        assert_eq!(
+            *redisplay_count.borrow(),
+            2,
+            "{form}: redisplay must not re-fire when nothing changed"
+        );
+    }
+}
+
+/// Setting a non-display variable must NOT invalidate redisplay — the
+/// curated set keeps us from over-triggering repaints. This is the
+/// complement of the test above and guards the "don't over-trigger"
+/// requirement.
+#[test]
+fn setq_non_display_var_does_not_invalidate_redisplay() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.obarray
+        .set_symbol_value("neo-test-counter", Value::fixnum(0));
+
+    let redisplay_count = Rc::new(RefCell::new(0usize));
+    let redisplay_count_in_cb = Rc::clone(&redisplay_count);
+    ev.redisplay_fn = Some(Box::new(move |_ev: &mut Context| {
+        *redisplay_count_in_cb.borrow_mut() += 1;
+    }));
+
+    ev.redisplay();
+    assert_eq!(*redisplay_count.borrow(), 1);
+
+    ev.eval_str("(setq neo-test-counter 99)")
+        .expect("plain setq should evaluate");
+    ev.redisplay();
+    assert_eq!(
+        *redisplay_count.borrow(),
+        1,
+        "a non-display variable set must not force a redisplay"
+    );
+}
+
+/// Finding 6: changing the DEFAULT of a display variable
+/// (`setq-default` / `set-default`) must also mark redisplay dirty.
+#[test]
+fn set_default_display_var_invalidates_redisplay() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let redisplay_count = Rc::new(RefCell::new(0usize));
+    let redisplay_count_in_cb = Rc::clone(&redisplay_count);
+    ev.redisplay_fn = Some(Box::new(move |_ev: &mut Context| {
+        *redisplay_count_in_cb.borrow_mut() += 1;
+    }));
+
+    ev.redisplay();
+    assert_eq!(*redisplay_count.borrow(), 1);
+
+    ev.eval_str("(set-default 'truncate-lines t)")
+        .expect("set-default should evaluate");
+    ev.redisplay();
+    assert_eq!(
+        *redisplay_count.borrow(),
+        2,
+        "set-default of a display variable must invalidate redisplay"
+    );
+}
+
+/// The curated predicate is the single source of truth and must classify
+/// the documented display variables correctly while excluding ordinary
+/// variables.
+#[test]
+fn variable_affects_display_classifies_curated_set() {
+    use crate::buffer::buffer::variable_affects_display;
+    for name in [
+        "truncate-lines",
+        "tab-width",
+        "header-line-format",
+        "mode-line-format",
+        "cursor-type",
+        "line-spacing",
+        "buffer-display-table",
+        "selective-display",
+        "truncate-partial-width-windows",
+        "word-wrap",
+    ] {
+        assert!(
+            variable_affects_display(name),
+            "{name} should be classified as display-affecting"
+        );
+    }
+    for name in [
+        "blink-cursor-blinks-done",
+        "neo-test-counter",
+        "default-directory",
+        "buffer-read-only",
+        "case-fold-search",
+    ] {
+        assert!(
+            !variable_affects_display(name),
+            "{name} should NOT be classified as display-affecting"
+        );
+    }
+}
+
 #[test]
 fn read_char_does_not_redisplay_again_when_monitor_change_arrives_after_pre_block_redisplay() {
     crate::test_utils::init_test_tracing();

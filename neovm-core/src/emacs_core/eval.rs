@@ -6603,6 +6603,41 @@ impl Context {
         self.last_redisplay_signature = None;
     }
 
+    /// Mark redisplay dirty when a display-affecting variable is set.
+    ///
+    /// GNU Emacs has no per-variable redisplay flag in the `set`/`setq`
+    /// store path: `redisplay_window` re-reads every live display slot
+    /// each cycle and the current-matrix diff repaints any change
+    /// (`src/xdisp.c:20535-20566`). Neomacs adds an aggressive
+    /// optimization GNU lacks — `redisplay_with_force` early-returns on
+    /// an unchanged `RedisplaySignature`, which captures buffer/overlay/
+    /// text-property ticks, point and window geometry but NOT the
+    /// per-buffer display slots (`truncate-lines`, `tab-width`,
+    /// `header-line-format`, `cursor-type`, …). So a bare
+    /// `(setq truncate-lines t)` left the screen stale until the next
+    /// keystroke bumped the signature (Finding 6 in the command-loop
+    /// audit; the "Doom blank pane" class of bug).
+    ///
+    /// To stay faithful to GNU's *observable* behavior we mark redisplay
+    /// dirty here — the analogue of GNU `bset_redisplay` /
+    /// `windows_or_buffers_changed` — when the variable being set is in
+    /// the curated display-affecting set
+    /// ([`crate::buffer::buffer::variable_affects_display_by_sym_id`]).
+    /// This is checked at the single variable-set chokepoint so the
+    /// answer is identical for every write path (tree-walk interpreter,
+    /// bytecode VM, `set-default`, custom). The curated set keeps us
+    /// from over-triggering redisplay on ordinary non-display variables.
+    ///
+    /// `sym_id` is resolved through `defvaralias` first so an alias of a
+    /// display variable (e.g. an obsolete alias) still nudges redisplay.
+    pub(crate) fn mark_redisplay_dirty_if_display_var(&mut self, sym_id: SymId) {
+        let resolved =
+            builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
+        if crate::buffer::buffer::variable_affects_display_by_sym_id(resolved) {
+            self.invalidate_redisplay();
+        }
+    }
+
     pub(crate) fn redisplay_with_force(&mut self, force: bool) {
         // Mirrors GNU `redisplay_internal` (xdisp.c:17242-17245): bail out
         // when `inhibit-redisplay` is non-nil. `run_window_change_functions`
@@ -8671,6 +8706,7 @@ impl Context {
                 {
                     buf.slots[offset] = value;
                     self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+                    self.mark_redisplay_dirty_if_display_var(sym_id);
                     return;
                 }
             }
@@ -8678,6 +8714,7 @@ impl Context {
         self.obarray.set_symbol_value(name, value);
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+        self.mark_redisplay_dirty_if_display_var(sym_id);
     }
 
     #[inline]
@@ -8750,6 +8787,8 @@ impl Context {
             let _ = self
                 .buffers
                 .set_buffer_local_property_by_sym_id(buffer_id, resolved, value);
+            // Finding 6: `setq-local`/`set` on a display-affecting slot.
+            self.mark_redisplay_dirty_if_display_var(resolved);
             return Ok(());
         }
 
@@ -8781,6 +8820,8 @@ impl Context {
             0,
             None,
         );
+        // Finding 6: a LOCALIZED display var set buffer-locally.
+        self.mark_redisplay_dirty_if_display_var(resolved);
         Ok(())
     }
 
@@ -13378,14 +13419,22 @@ pub(crate) fn set_runtime_binding_in_state(
     sym_id: SymId,
     value: Value,
 ) -> Option<crate::buffer::BufferId> {
-    set_runtime_binding(
+    let locus = set_runtime_binding(
         &mut ctx.obarray,
         &mut ctx.buffers,
         &ctx.custom,
         ctx.specpdl.as_slice(),
         sym_id,
         value,
-    )
+    );
+    // Finding 6: the bytecode VM (`assign_var_id`/`assign_var`), the VM's
+    // `set-default` shared path, and `custom` all route writes through
+    // this entry point. Mark redisplay dirty for display-affecting vars
+    // here so a `(setq truncate-lines t)` evaluated from byte-compiled
+    // code repaints without waiting for the next keystroke, exactly like
+    // the tree-walk interpreter.
+    ctx.mark_redisplay_dirty_if_display_var(sym_id);
+    locus
 }
 
 fn let_shadows_buffer_binding_p_in_state(
@@ -14137,6 +14186,7 @@ impl Context {
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.sync_keyboard_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+        self.mark_redisplay_dirty_if_display_var(sym_id);
         locus
     }
 
@@ -14160,6 +14210,7 @@ impl Context {
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.sync_keyboard_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+        self.mark_redisplay_dirty_if_display_var(sym_id);
         locus
     }
 

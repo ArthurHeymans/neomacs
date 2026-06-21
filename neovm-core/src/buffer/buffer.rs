@@ -1165,6 +1165,165 @@ pub fn lookup_buffer_slot_by_sym_id(sym_id: SymId) -> Option<&'static BufferSlot
         .and_then(|slot| *slot)
 }
 
+/// The curated set of per-buffer (`DEFVAR_PER_BUFFER`) variables whose
+/// value affects how a window is laid out / painted, mirroring GNU's
+/// `struct buffer` display slots (`src/buffer.c:5117-5899`).
+///
+/// In GNU Emacs there is *no* per-variable "redisplay" flag fired inside
+/// the `setq`/`set` store path; instead `redisplay_window` re-reads every
+/// live buffer-local display slot each cycle and the current-matrix diff
+/// repaints any change (`src/xdisp.c:20535-20566`). Neomacs adds an
+/// aggressive optimization GNU lacks — it short-circuits redisplay on an
+/// unchanged `RedisplaySignature` — so to remain faithful it must mark
+/// redisplay dirty (the analogue of GNU's `bset_redisplay` /
+/// `windows_or_buffers_changed`) whenever one of these slots is written.
+///
+/// This is the per-buffer half of the display-affecting variable set
+/// consulted by the variable-set chokepoint. Names match the GNU Lisp
+/// names exactly. `enable-multibyte-characters` is deliberately excluded:
+/// it is set through a dedicated path (`set-buffer-multibyte`) that
+/// already nudges redisplay, and a plain `setq` of it is rejected by GNU.
+pub const DISPLAY_AFFECTING_BUFFER_SLOTS: &[&str] = &[
+    // Mode / header / tab lines — change the chrome rows.
+    "mode-line-format",
+    "header-line-format",
+    "tab-line-format",
+    // Text layout.
+    "tab-width",
+    "left-margin",
+    "ctl-arrow",
+    "truncate-lines",
+    "word-wrap",
+    "selective-display",
+    "selective-display-ellipses",
+    "buffer-display-table",
+    "line-spacing",
+    "fill-column",
+    // Bidi reordering parameters.
+    "bidi-display-reordering",
+    "bidi-paragraph-direction",
+    "bidi-paragraph-start-re",
+    "bidi-paragraph-separate-re",
+    // Margins, fringes, scroll bars.
+    "left-margin-width",
+    "right-margin-width",
+    "left-fringe-width",
+    "right-fringe-width",
+    "fringes-outside-margins",
+    "scroll-bar-width",
+    "scroll-bar-height",
+    "vertical-scroll-bar",
+    "horizontal-scroll-bar",
+    "indicate-empty-lines",
+    "indicate-buffer-boundaries",
+    "fringe-indicator-alist",
+    "fringe-cursor-alist",
+    "scroll-up-aggressively",
+    "scroll-down-aggressively",
+    // Cursor appearance.
+    "cursor-type",
+    "cursor-in-non-selected-windows",
+    // Invisibility spec changes which text is shown.
+    "buffer-invisibility-spec",
+];
+
+/// The curated set of *global* (`DEFVAR_LISP`) variables that affect
+/// display and so must mark redisplay dirty when set, mirroring GNU.
+/// Unlike the per-buffer slots above these are not `struct buffer`
+/// fields; GNU reads them directly during layout. `redisplay_window`
+/// has no signature short-circuit so GNU needs no flag — but neomacs
+/// does. Kept conservative: only variables read by the layout/iterator
+/// path are listed, to avoid over-triggering redisplay.
+pub const DISPLAY_AFFECTING_GLOBAL_VARS: &[&str] = &[
+    "truncate-partial-width-windows",
+    "line-prefix",
+    "wrap-prefix",
+    "default-text-properties",
+    "display-line-numbers",
+    "display-line-numbers-width",
+    "display-line-numbers-widen",
+    "display-fill-column-indicator",
+    "display-fill-column-indicator-column",
+    "display-fill-column-indicator-character",
+    "show-trailing-whitespace",
+    "indicate-empty-lines",
+    "overlay-arrow-position",
+    "overlay-arrow-string",
+    "mode-line-format",
+    "header-line-format",
+    "tab-line-format",
+    "ctl-arrow",
+    "tab-width",
+    "truncate-lines",
+    "word-wrap",
+    "bidi-display-reordering",
+    "bidi-paragraph-direction",
+    "scroll-margin",
+    "scroll-conservatively",
+    "scroll-step",
+    "hscroll-margin",
+    "hscroll-step",
+    "fringe-indicator-alist",
+    "fringe-cursor-alist",
+    "glyphless-char-display",
+    "nobreak-char-display",
+    "void-text-area-pointer",
+    "blink-cursor-mode",
+    "cursor-in-non-selected-windows",
+];
+
+/// Whether setting the named variable should mark redisplay dirty.
+///
+/// Returns `true` for the curated per-buffer display slots and the
+/// curated global display variables. This is the single source of
+/// truth queried by the `set`/`set-default`/buffer-local-set chokepoint
+/// so the answer is identical no matter which write path is taken
+/// (the tree-walk interpreter, the bytecode VM, `set-default`, custom).
+pub fn variable_affects_display(name: &str) -> bool {
+    static DISPLAY_VAR_SET: OnceLock<FxHashMap<&'static str, ()>> = OnceLock::new();
+    DISPLAY_VAR_SET
+        .get_or_init(|| {
+            let mut set = FxHashMap::default();
+            for &name in DISPLAY_AFFECTING_BUFFER_SLOTS {
+                set.insert(name, ());
+            }
+            for &name in DISPLAY_AFFECTING_GLOBAL_VARS {
+                set.insert(name, ());
+            }
+            set
+        })
+        .contains_key(name)
+}
+
+/// `variable_affects_display` keyed by `SymId`, for the hot variable-set
+/// path. Resolves the symbol's name once into a dense `SymId -> bool`
+/// table so the chokepoint avoids a string hash on every assignment.
+pub fn variable_affects_display_by_sym_id(sym_id: SymId) -> bool {
+    static DISPLAY_VAR_BY_SYM: OnceLock<Box<[bool]>> = OnceLock::new();
+    DISPLAY_VAR_BY_SYM
+        .get_or_init(|| {
+            let mut entries: Vec<bool> = Vec::new();
+            let mut mark = |name: &str| {
+                let id = intern(name);
+                let index = id.0 as usize;
+                if entries.len() <= index {
+                    entries.resize(index + 1, false);
+                }
+                entries[index] = true;
+            };
+            for &name in DISPLAY_AFFECTING_BUFFER_SLOTS {
+                mark(name);
+            }
+            for &name in DISPLAY_AFFECTING_GLOBAL_VARS {
+                mark(name);
+            }
+            entries.into_boxed_slice()
+        })
+        .get(sym_id.0 as usize)
+        .copied()
+        .unwrap_or(false)
+}
+
 /// Neomacs stores per-buffer slots in a compact Rust table, but GNU exposes
 /// their C `struct buffer` order through `buffer-local-variables`: it walks
 /// from `name_` through `cursor_in_non_selected_windows_` and prepends each
