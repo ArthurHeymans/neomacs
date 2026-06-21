@@ -119,6 +119,20 @@ fn builder_starts_empty() {
 }
 
 #[test]
+fn builder_applies_row_begin_lifecycle_to_matrix_row() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 20.0), true);
+    builder.begin_output_row(0, GlyphRowRole::ModeLine, true);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert!(row.enabled);
+    assert_eq!(row.role, GlyphRowRole::ModeLine);
+    assert!(row.mode_line);
+}
+
+#[test]
 fn builder_can_preserve_exact_frame_pixel_size() {
     let builder = DisplayOutputBuilder::new();
     let state = builder.finish_with_pixel_size(79, 36, 16.25, 33.0, 1300.0, 1188.0);

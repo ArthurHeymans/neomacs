@@ -102,9 +102,7 @@ impl OutputWindowRowGrid {
         let Some(row) = self.row_mut(begin.row) else {
             return;
         };
-        row.role = begin.role;
-        row.enabled = true;
-        row.mode_line = begin.mode_line;
+        begin.apply_to_row(row);
     }
 
     pub(crate) fn finalize_row(

@@ -58,6 +58,12 @@ impl OutputRowBeginRequest {
             mode_line,
         }
     }
+
+    pub(crate) fn apply_to_row(self, row: &mut GlyphRow) {
+        row.role = self.role;
+        row.enabled = true;
+        row.mode_line = self.mode_line;
+    }
 }
 
 impl OutputCompleteRowInstallRequest {
