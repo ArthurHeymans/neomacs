@@ -223,12 +223,12 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
         &walk_setup,
     );
 
-    assert_eq!(output_setup.row_visibility_limit.max_rows, 5);
-    assert_eq!(output_setup.row_visibility_limit.bottom_y, 80.0);
-    assert_eq!(output_setup.row_limit.max_rows, 5);
-    assert_eq!(output_setup.body_install_context.output_cols(), 1);
-    assert_eq!(output_setup.retry_bounds.text_area_top(), 24);
-    assert_eq!(output_setup.retry_bounds.text_area_bottom(), 72);
+    assert_eq!(output_setup.row_visibility_limit().max_rows, 5);
+    assert_eq!(output_setup.row_visibility_limit().bottom_y, 80.0);
+    assert_eq!(output_setup.row_limit().max_rows, 5);
+    assert_eq!(output_setup.body_install_context().output_cols(), 1);
+    assert_eq!(output_setup.retry_bounds().text_area_top(), 24);
+    assert_eq!(output_setup.retry_bounds().text_area_bottom(), 72);
 }
 
 #[test]
@@ -261,11 +261,11 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         24.0,
         true,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 11.0),
-        output_setup.row_visibility_limit,
+        output_setup.row_visibility_limit(),
         walk_setup.row_geometry_defaults,
         2,
         5,
-        output_setup.row_limit,
+        output_setup.row_limit(),
     );
 
     assert_eq!(context.buffer_id(), neovm_core::buffer::BufferId(42));
@@ -273,7 +273,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
     assert_eq!(context.accessible_end(), 80);
     assert_eq!(context.selective_display(), params.selective_display);
     assert_eq!(context.tab_width(), params.tab_width);
-    assert_eq!(context.row_limit(), output_setup.row_limit);
+    assert_eq!(context.row_limit(), output_setup.row_limit());
 }
 
 #[test]

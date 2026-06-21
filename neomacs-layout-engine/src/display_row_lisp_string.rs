@@ -701,7 +701,8 @@ pub(crate) fn apply_pending_display_source_faces(
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
-        install_output_resolved_face(builder, pending.face_id, &pending.resolved, None);
+        let (face_id, resolved) = pending.into_parts();
+        install_output_resolved_face(builder, face_id, &resolved, None);
     }
 }
 

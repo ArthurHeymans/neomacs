@@ -1137,20 +1137,14 @@ impl DisplayRowSourceState {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> ResolvedDisplaySourceItem {
         if self.is_finished() {
-            return ResolvedDisplaySourceItem {
-                item: None,
-                pending_faces: Vec::new(),
-            };
+            return ResolvedDisplaySourceItem::empty();
         }
         if let Some(item) = self.take_pending_item() {
-            return ResolvedDisplaySourceItem {
-                item: Some(item),
-                pending_faces: Vec::new(),
-            };
+            return ResolvedDisplaySourceItem::new(Some(item), Vec::new());
         }
         let resolved =
             resolve_next_display_source_item(source, params, &mut self.resolve_state, face_ids);
-        if resolved.item.is_none() {
+        if resolved.item().is_none() {
             self.mark_exhausted();
         }
         resolved
@@ -1183,8 +1177,15 @@ impl DisplayRowSourceState {
 
 #[cfg(test)]
 pub(crate) struct DisplayRowSourceStep {
-    pub(crate) item: DisplayItem,
-    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
+    item: DisplayItem,
+    pending_faces: Vec<PendingDisplaySourceFace>,
+}
+
+#[cfg(test)]
+impl DisplayRowSourceStep {
+    pub(crate) fn into_parts(self) -> (DisplayItem, Vec<PendingDisplaySourceFace>) {
+        (self.item, self.pending_faces)
+    }
 }
 
 #[cfg(test)]
@@ -1231,9 +1232,10 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
             DisplaySourceResolveParams::new(face_basis, display_host),
             face_ids,
         );
-        resolved.item.map(|item| DisplayRowSourceStep {
+        let (item, pending_faces) = resolved.into_parts();
+        item.map(|item| DisplayRowSourceStep {
             item,
-            pending_faces: resolved.pending_faces,
+            pending_faces,
         })
     }
 }
@@ -2630,11 +2632,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let params =
                 context.source_resolve_params(row_face.face_id, base_face, fallback_metrics);
             let resolved = state.next_resolved_item(source, params, context.face_ids());
-            let item = resolved.item;
-            for pending in resolved.pending_faces {
+            let (item, pending_faces) = resolved.into_parts();
+            for pending in pending_faces {
+                let (face_id, resolved) = pending.into_parts();
                 let row_face = face_realizer.realize_face(
-                    pending.face_id,
-                    &pending.resolved,
+                    face_id,
+                    &resolved,
                     char_width,
                     geometry.ascent,
                     geometry.height,

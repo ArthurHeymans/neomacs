@@ -152,8 +152,26 @@ struct DisplayHeightFaceKey {
 
 #[derive(Clone, Debug)]
 pub(crate) struct PendingDisplaySourceFace {
-    pub(crate) face_id: u32,
-    pub(crate) resolved: ResolvedFace,
+    face_id: u32,
+    resolved: ResolvedFace,
+}
+
+impl PendingDisplaySourceFace {
+    pub(crate) fn new(face_id: u32, resolved: ResolvedFace) -> Self {
+        Self { face_id, resolved }
+    }
+
+    pub(crate) fn face_id(&self) -> u32 {
+        self.face_id
+    }
+
+    pub(crate) fn resolved(&self) -> &ResolvedFace {
+        &self.resolved
+    }
+
+    pub(crate) fn into_parts(self) -> (u32, ResolvedFace) {
+        (self.face_id, self.resolved)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -214,19 +232,15 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
     } else if same_resolved_face(&face, face_resolver.default_face()) {
         let face_id = u32::from(BasicFaceId::Default);
         let pending_face = match default_install_policy {
-            DisplayDefaultFaceInstallPolicy::InstallDefaultFace => Some(PendingDisplaySourceFace {
-                face_id,
-                resolved: face.clone(),
-            }),
+            DisplayDefaultFaceInstallPolicy::InstallDefaultFace => {
+                Some(PendingDisplaySourceFace::new(face_id, face.clone()))
+            }
             DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace => None,
         };
         (face_id, pending_face)
     } else {
         let face_id = face_ids.allocate();
-        let pending_face = Some(PendingDisplaySourceFace {
-            face_id,
-            resolved: face.clone(),
-        });
+        let pending_face = Some(PendingDisplaySourceFace::new(face_id, face.clone()));
         (face_id, pending_face)
     };
 
@@ -239,8 +253,32 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
 
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedDisplaySourceItem {
-    pub(crate) item: Option<DisplayItem>,
-    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
+    item: Option<DisplayItem>,
+    pending_faces: Vec<PendingDisplaySourceFace>,
+}
+
+impl ResolvedDisplaySourceItem {
+    pub(crate) fn new(
+        item: Option<DisplayItem>,
+        pending_faces: Vec<PendingDisplaySourceFace>,
+    ) -> Self {
+        Self {
+            item,
+            pending_faces,
+        }
+    }
+
+    pub(crate) fn empty() -> Self {
+        Self::new(None, Vec::new())
+    }
+
+    pub(crate) fn item(&self) -> Option<&DisplayItem> {
+        self.item.as_ref()
+    }
+
+    pub(crate) fn into_parts(self) -> (Option<DisplayItem>, Vec<PendingDisplaySourceFace>) {
+        (self.item, self.pending_faces)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -470,7 +508,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         self.state.height_face_cache.insert(key, face_id);
         self.state.remember_face(face_id, &resolved);
         self.pending_faces
-            .push(PendingDisplaySourceFace { face_id, resolved });
+            .push(PendingDisplaySourceFace::new(face_id, resolved));
         RenderFaceRef::FaceId(face_id)
     }
 }
@@ -500,7 +538,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
         let face_id = self.face_ids.allocate();
         self.state.cache_face(face_value, face_id, &resolved);
         self.pending_faces
-            .push(PendingDisplaySourceFace { face_id, resolved });
+            .push(PendingDisplaySourceFace::new(face_id, resolved));
         RenderFaceRef::FaceId(face_id)
     }
 
@@ -536,10 +574,7 @@ pub(crate) fn resolve_next_display_source_item(
             .next_item(&mut context)
             .map(|item| resolver.resolve_item_layout(item))
     };
-    ResolvedDisplaySourceItem {
-        item,
-        pending_faces,
-    }
+    ResolvedDisplaySourceItem::new(item, pending_faces)
 }
 
 pub(crate) fn resolve_display_property_media(
@@ -700,8 +735,11 @@ mod tests {
 
         assert_eq!(base_face.face_id(), 500);
         let pending_face = base_face.pending_face().expect("pending face");
-        assert_eq!(pending_face.face_id, 500);
-        assert!(same_resolved_face(&pending_face.resolved, base_face.face()));
+        assert_eq!(pending_face.face_id(), 500);
+        assert!(same_resolved_face(
+            pending_face.resolved(),
+            base_face.face()
+        ));
         assert_eq!(face_ids.finish(), 501);
     }
 

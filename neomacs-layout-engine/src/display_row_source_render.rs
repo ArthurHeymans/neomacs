@@ -504,7 +504,7 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     fn install_pending_display_string_base_face(&mut self, base_face: &DisplayStringBaseFace) {
         if let Some(pending_face) = base_face.pending_face() {
-            self.insert_resolved_face(pending_face.face_id, &pending_face.resolved);
+            self.insert_resolved_face(pending_face.face_id(), pending_face.resolved());
         }
     }
 

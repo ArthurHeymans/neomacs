@@ -33,11 +33,11 @@ use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
 pub(crate) struct BufferSourceOutputSetup {
-    pub(crate) begin_request: TextWindowBeginRequest,
-    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
-    pub(crate) row_limit: DisplayRowLimit,
-    pub(crate) body_install_context: BufferSourceBodyInstallContext,
-    pub(crate) retry_bounds: BufferSourceRetryBounds,
+    begin_request: TextWindowBeginRequest,
+    row_visibility_limit: DisplayRowVisibilityLimit,
+    row_limit: DisplayRowLimit,
+    body_install_context: BufferSourceBodyInstallContext,
+    retry_bounds: BufferSourceRetryBounds,
 }
 
 pub(crate) struct BufferSourceDefaultFacePlan {
@@ -230,6 +230,26 @@ impl BufferSourceDefaultFacePlan {
 }
 
 impl BufferSourceOutputSetup {
+    #[cfg(test)]
+    pub(crate) fn row_visibility_limit(&self) -> DisplayRowVisibilityLimit {
+        self.row_visibility_limit
+    }
+
+    #[cfg(test)]
+    pub(crate) fn row_limit(&self) -> DisplayRowLimit {
+        self.row_limit
+    }
+
+    #[cfg(test)]
+    pub(crate) fn body_install_context(&self) -> BufferSourceBodyInstallContext {
+        self.body_install_context
+    }
+
+    #[cfg(test)]
+    pub(crate) fn retry_bounds(&self) -> BufferSourceRetryBounds {
+        self.retry_bounds
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_body_attempt<'a, 'surface, 'buf, B>(
         self,

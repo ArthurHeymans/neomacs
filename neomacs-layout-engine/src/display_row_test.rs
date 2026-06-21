@@ -826,21 +826,24 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         (next_item(), next_item(), next_item())
     };
 
+    let (first_item, first_pending_faces) = first.into_parts();
+    let (second_item, second_pending_faces) = second.into_parts();
+    let (third_item, third_pending_faces) = third.into_parts();
     assert_eq!(
-        first.item.expect("first source item").face,
+        first_item.expect("first source item").face,
         RenderFaceRef::FaceId(20)
     );
-    assert_eq!(first.pending_faces.len(), 1);
+    assert_eq!(first_pending_faces.len(), 1);
     assert_eq!(
-        second.item.expect("second source item").face,
+        second_item.expect("second source item").face,
         RenderFaceRef::FaceId(0)
     );
-    assert!(second.pending_faces.is_empty());
+    assert!(second_pending_faces.is_empty());
     assert_eq!(
-        third.item.expect("third source item").face,
+        third_item.expect("third source item").face,
         RenderFaceRef::FaceId(20)
     );
-    assert!(third.pending_faces.is_empty());
+    assert!(third_pending_faces.is_empty());
     assert_eq!(face_ids.finish(), 21);
 }
 

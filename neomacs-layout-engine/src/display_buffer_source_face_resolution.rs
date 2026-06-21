@@ -174,10 +174,11 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         pending_faces: Vec<PendingDisplaySourceFace>,
     ) {
         for pending in pending_faces {
+            let (face_id, resolved) = pending.into_parts();
             let active_face = source_render.resolve_and_install_measured_face(
                 self.measurement_policy,
-                pending.face_id,
-                pending.resolved,
+                face_id,
+                resolved,
                 self.window_system,
                 self.window_metrics.char_width(),
                 self.window_metrics,

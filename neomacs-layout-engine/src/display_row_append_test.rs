@@ -5904,8 +5904,8 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     assert_eq!(face, RenderFaceRef::FaceId(20));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(pending_faces.len(), 1);
-    assert_eq!(pending_faces[0].face_id, 20);
-    assert_eq!(pending_faces[0].resolved.fg, 0x00ff0000);
+    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].resolved().fg, 0x00ff0000);
 }
 
 #[test]
@@ -5975,11 +5975,12 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
         &mut face_ids,
     );
 
-    let item = resolved.item.expect("source item");
+    let (item, pending_faces) = resolved.into_parts();
+    let item = item.expect("source item");
     assert_eq!(item.face, RenderFaceRef::FaceId(20));
-    assert_eq!(resolved.pending_faces.len(), 1);
-    assert_eq!(resolved.pending_faces[0].face_id, 20);
-    assert_eq!(resolved.pending_faces[0].resolved.fg, 0x00ff0000);
+    assert_eq!(pending_faces.len(), 1);
+    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].resolved().fg, 0x00ff0000);
 }
 
 #[test]
@@ -6023,14 +6024,15 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
         &mut face_ids,
     );
 
-    let item = resolved.item.expect("source item");
+    let (item, pending_faces) = resolved.into_parts();
+    let item = item.expect("source item");
     assert_eq!(item.face, RenderFaceRef::FaceId(20));
-    assert_eq!(resolved.pending_faces.len(), 1);
-    assert_eq!(resolved.pending_faces[0].face_id, 20);
-    assert_eq!(resolved.pending_faces[0].resolved.font_size, 28.0);
-    assert_eq!(resolved.pending_faces[0].resolved.font_line_height, 32.0);
-    assert_eq!(resolved.pending_faces[0].resolved.font_ascent, 24.0);
-    assert_eq!(resolved.pending_faces[0].resolved.font_char_width, 16.0);
+    assert_eq!(pending_faces.len(), 1);
+    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].resolved().font_size, 28.0);
+    assert_eq!(pending_faces[0].resolved().font_line_height, 32.0);
+    assert_eq!(pending_faces[0].resolved().font_ascent, 24.0);
+    assert_eq!(pending_faces[0].resolved().font_char_width, 16.0);
 }
 
 #[test]
@@ -6066,7 +6068,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     let mut source = crate::display_row::DisplayRowSourceWalker::new(source);
     let (first, second, third) = {
         let mut next_item = |label: &str| {
-            let mut step = source
+            let step = source
                 .next_step(
                     &face_resolver,
                     base_face,
@@ -6078,8 +6080,9 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
                     16.0,
                 )
                 .unwrap_or_else(|| panic!("{label} source item"));
-            apply_pending_display_source_faces(&mut builder, &mut step.pending_faces);
-            step.item
+            let (item, mut pending_faces) = step.into_parts();
+            apply_pending_display_source_faces(&mut builder, &mut pending_faces);
+            item
         };
         (next_item("first"), next_item("second"), next_item("third"))
     };
