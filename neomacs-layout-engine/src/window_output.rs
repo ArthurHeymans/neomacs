@@ -54,11 +54,45 @@ use neovm_core::window::{
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
-    pub(crate) display_row_index: usize,
-    pub(crate) row: usize,
-    pub(crate) pixel_y: f32,
-    pub(crate) height: f32,
-    pub(crate) ascent: f32,
+    display_row_index: usize,
+    row: usize,
+    pixel_y: f32,
+    height: f32,
+    ascent: f32,
+}
+
+impl RowMetricsSnapshot {
+    pub(crate) fn new(
+        display_row_index: usize,
+        row: usize,
+        pixel_y: f32,
+        height: f32,
+        ascent: f32,
+    ) -> Self {
+        Self {
+            display_row_index,
+            row,
+            pixel_y,
+            height,
+            ascent,
+        }
+    }
+
+    pub(crate) fn row(self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn pixel_y(self) -> f32 {
+        self.pixel_y
+    }
+
+    pub(crate) fn height(self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn ascent(self) -> f32 {
+        self.ascent
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1244,15 +1278,15 @@ impl WindowOutputEmitter {
             start_buffer_pos: self.current_row_first_display_pos.take(),
             end_buffer_pos: self.current_row_last_display_pos.take(),
         });
-        self.row_metrics.push(RowMetricsSnapshot {
-            display_row_index: row_progress
+        self.row_metrics.push(RowMetricsSnapshot::new(
+            row_progress
                 .display_row_index
                 .expect("text row must have display row progress before recording metrics"),
-            row: row_progress.row.max(0) as usize,
-            pixel_y: row_y_start,
-            height: row_height.max(1.0),
-            ascent: row_ascent.max(0.0).min(row_height.max(1.0)),
-        });
+            row_progress.row.max(0) as usize,
+            row_y_start,
+            row_height.max(1.0),
+            row_ascent.max(0.0).min(row_height.max(1.0)),
+        ));
     }
 
     fn push_chrome_row(&mut self, row: DisplayRowSnapshot) {

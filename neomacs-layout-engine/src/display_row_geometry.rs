@@ -596,13 +596,13 @@ impl DisplayRowGeometryState {
 
     pub(crate) fn row_metrics_snapshot(&self, row_base: usize) -> RowMetricsSnapshot {
         let height = self.height.max(1.0);
-        RowMetricsSnapshot {
-            display_row_index: row_base + self.row,
-            row: row_base + self.row,
-            pixel_y: self.y,
+        RowMetricsSnapshot::new(
+            row_base + self.row,
+            row_base + self.row,
+            self.y,
             height,
-            ascent: self.ascent.max(0.0).min(height),
-        }
+            self.ascent.max(0.0).min(height),
+        )
     }
 
     pub(crate) fn display_text_row_begin(

@@ -962,13 +962,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
             stretch_like: true,
         },
     );
-    let row_metric = RowMetricsSnapshot {
-        display_row_index: 9,
-        row: 9,
-        pixel_y: 32.0,
-        height: 25.0,
-        ascent: 19.0,
-    };
+    let row_metric = RowMetricsSnapshot::new(9, 9, 32.0, 25.0, 19.0);
 
     let source = CursorGeometrySource::from_captured_cursor(
         &cursor,
@@ -1118,13 +1112,7 @@ fn captured_cursor_info_builds_logical_cursor_position() {
             stretch_like: true,
         },
     );
-    let row_metric = RowMetricsSnapshot {
-        display_row_index: 9,
-        row: 9,
-        pixel_y: 32.6,
-        height: 25.0,
-        ascent: 19.0,
-    };
+    let row_metric = RowMetricsSnapshot::new(9, 9, 32.6, 25.0, 19.0);
 
     let logical = cursor.logical_cursor_position(row_metric, 7, 10.0, 2.0);
 
@@ -1181,20 +1169,8 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
     )
     .publish_captured_cursor(
         cursor,
-        &[RowMetricsSnapshot {
-            display_row_index: 0,
-            row: 0,
-            pixel_y: 20.0,
-            height: 16.0,
-            ascent: 12.0,
-        }],
-        RowMetricsSnapshot {
-            display_row_index: 0,
-            row: 0,
-            pixel_y: 20.0,
-            height: 16.0,
-            ascent: 12.0,
-        },
+        &[RowMetricsSnapshot::new(0, 0, 20.0, 16.0, 12.0)],
+        RowMetricsSnapshot::new(0, 0, 20.0, 16.0, 12.0),
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
     );

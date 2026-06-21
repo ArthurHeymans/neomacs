@@ -603,10 +603,10 @@ fn display_row_geometry_state_builds_row_metrics_snapshot() {
 
     let snapshot = geometry.row_metrics_snapshot(5);
 
-    assert_eq!(snapshot.row, 8);
-    assert_eq!(snapshot.pixel_y, 69.0);
-    assert_eq!(snapshot.height, 24.0);
-    assert_eq!(snapshot.ascent, 18.0);
+    assert_eq!(snapshot.row(), 8);
+    assert_eq!(snapshot.pixel_y(), 69.0);
+    assert_eq!(snapshot.height(), 24.0);
+    assert_eq!(snapshot.ascent(), 18.0);
 }
 
 #[test]
@@ -621,8 +621,8 @@ fn display_row_geometry_state_clamps_row_metrics_snapshot_extents() {
 
     let snapshot = geometry.row_metrics_snapshot(5);
 
-    assert_eq!(snapshot.height, 1.0);
-    assert_eq!(snapshot.ascent, 1.0);
+    assert_eq!(snapshot.height(), 1.0);
+    assert_eq!(snapshot.ascent(), 1.0);
 }
 
 #[test]

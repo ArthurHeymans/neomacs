@@ -977,9 +977,9 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     assert_eq!(hit_rows[0].charpos_start, 2);
     assert_eq!(hit_rows[0].charpos_end, 5);
     assert_eq!(emitter.rows().len(), 1);
-    assert_eq!(emitter.row_metrics()[0].pixel_y, 4.0);
-    assert_eq!(emitter.row_metrics()[0].height, 18.0);
-    assert_eq!(emitter.row_metrics()[0].ascent, 13.0);
+    assert_eq!(emitter.row_metrics()[0].pixel_y(), 4.0);
+    assert_eq!(emitter.row_metrics()[0].height(), 18.0);
+    assert_eq!(emitter.row_metrics()[0].ascent(), 13.0);
 }
 
 #[test]

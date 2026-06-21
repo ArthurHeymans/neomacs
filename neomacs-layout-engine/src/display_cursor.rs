@@ -319,7 +319,7 @@ impl CapturedCursorInfo {
     ) -> WindowCursorPos {
         WindowCursorPos {
             x: (self.x - text_area_left).round() as i64,
-            y: (row_metric.pixel_y - window_top).round() as i64,
+            y: (row_metric.pixel_y() - window_top).round() as i64,
             row: display_text_row_base as i64 + self.display_row_offset as i64,
             col: self.col as i64,
         }
@@ -460,7 +460,7 @@ impl CursorGeometrySource {
         Self {
             slot_id: DisplaySlotId {
                 window_id: context.window_id,
-                row: row_metric.row as u32,
+                row: row_metric.row() as u32,
                 col: cursor.col as u16,
             },
             x: cursor.x,
@@ -468,8 +468,8 @@ impl CursorGeometrySource {
             slot_width: context.slot_width.max(1.0),
             face_height: cursor.face_h,
             face_ascent: cursor.face_ascent,
-            row_height: row_metric.height,
-            row_ascent: row_metric.ascent,
+            row_height: row_metric.height(),
+            row_ascent: row_metric.ascent(),
             default_line_height: context.default_line_height,
             stretch_like: cursor.stretch_like,
             ends_at_visible_eob: context.ends_at_visible_eob,
@@ -618,7 +618,7 @@ pub(crate) fn row_metrics_for_cursor(
 ) -> RowMetricsSnapshot {
     row_metrics
         .iter()
-        .find(|metric| metric.row == cursor_row)
+        .find(|metric| metric.row() == cursor_row)
         .copied()
         .unwrap_or(current_row_fallback)
 }

@@ -9554,8 +9554,8 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     assert_eq!(cursor.x, 24.0);
     assert_eq!(cursor.slot_width, Some(16.0));
     let metrics = geometry.row_metrics_snapshot(0);
-    assert!(metrics.height > 16.0);
-    assert!(metrics.ascent > 12.0);
+    assert!(metrics.height() > 16.0);
+    assert!(metrics.ascent() > 12.0);
 }
 
 #[test]
