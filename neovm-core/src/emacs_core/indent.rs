@@ -192,42 +192,157 @@ fn raw_unibyte_display_width(byte: u8) -> usize {
     if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
 }
 
-/// If the buffer position `byte` carries a `display` text property whose value
-/// is a string, return `(display_width, run_end_byte)` where `display_width` is
-/// the string's total display columns and `run_end_byte` is the end of the
-/// `display`-property run. Used by the column engine so display-string text
-/// lays out at the replacement string's width, not the underlying text's.
-fn display_string_run_at(
+/// Compute the column width of a `(space ...)` display spec, mirroring GNU's
+/// `check_display_width` (src/indent.c) — the column-only subset of the display
+/// engine's spec evaluation. `col` is the current column at the spec (needed for
+/// `:align-to`); the char-at-pos width factor for `:relative-width` is applied by
+/// the caller. Returns the width in canonical columns, or None when the spec
+/// carries no width-bearing keyword (in which case GNU lets the underlying
+/// character display at its own width).
+///
+/// GNU's exact precedence (indent.c:506-520):
+///   * `:width N` or `:relative-width N` — N a FIXNUM in [0, INT_MAX] -> width N.
+///   * a FLOAT `:relative-width` -> round(F).  (A float `:width` is NOT honored:
+///     GNU only inspects the *last* `plist_get` result for the float branch, and
+///     for `:width` that result was overwritten by the `:relative-width` lookup.)
+///   * `:align-to COL` — COL a FIXNUM in [col, col+INT_MAX] -> width COL - col.
+///   * a FLOAT `:align-to` in [col, ...] -> round(COL) - col.
+fn space_spec_width(plist: Value, col: usize) -> Option<usize> {
+    let qcwidth = Value::symbol(":width");
+    let qcrel = Value::symbol(":relative-width");
+    let qcalign = Value::symbol(":align-to");
+
+    // GNU's `align_to_max` upper bound for `:align-to` is `col + INT_MAX`
+    // (indent.c:501-504); `:width`/`:relative-width` use plain `INT_MAX`.
+    let int_max = i64::from(i32::MAX);
+    let align_to_max = (col as i64).saturating_add(int_max);
+
+    // `:width N` (fixnum), else `:relative-width N` (fixnum). GNU's `||` leaves
+    // `prop` holding the `:relative-width` value when `:width` is absent/non-fixnum.
+    let width_prop = super::plist::plist_get(plist, &qcwidth).unwrap_or(Value::NIL);
+    if let Some(n) = ranged_fixnum(width_prop, 0, int_max) {
+        return Some(n as usize);
+    }
+    let rel_prop = super::plist::plist_get(plist, &qcrel).unwrap_or(Value::NIL);
+    if let Some(n) = ranged_fixnum(rel_prop, 0, int_max) {
+        return Some(n as usize);
+    }
+    // Float branch reads the *last* probed value, which is `:relative-width`.
+    if let Some(f) = rel_prop.as_float() {
+        if (0.0..=(i32::MAX as f64)).contains(&f) {
+            return Some((f + 0.5) as usize);
+        }
+    }
+    // `:align-to COL`: width = COL - col.
+    let align_prop = super::plist::plist_get(plist, &qcalign).unwrap_or(Value::NIL);
+    if let Some(n) = ranged_fixnum(align_prop, col as i64, align_to_max) {
+        return Some((n as usize).saturating_sub(col));
+    }
+    if let Some(f) = align_prop.as_float() {
+        if f >= col as f64 && f <= align_to_max as f64 {
+            return Some(((f + 0.5) as usize).saturating_sub(col));
+        }
+    }
+    None
+}
+
+/// GNU `RANGED_FIXNUMP (lo, x, hi)` — `x` is a fixnum in `[lo, hi]`.
+fn ranged_fixnum(value: Value, lo: i64, hi: i64) -> Option<i64> {
+    let n = value.as_fixnum()?;
+    if n >= lo && n <= hi { Some(n) } else { None }
+}
+
+/// If buffer position `byte` carries a `display` property (text property OR
+/// overlay — GNU consults both via `get_char_property_and_overlay`) whose value
+/// replaces the covered text for layout, return `(display_width, run_end_byte)`.
+/// Mirrors GNU's `check_display_width` (src/indent.c): a `display` STRING lays
+/// out at its `string-width`; a `(space ...)` spec at the width computed by
+/// `space_spec_width`. `column` is the current column at `byte`, needed for
+/// `(space :align-to ...)`. Image/slice specs return None here (their width is a
+/// font/pixel quantity GNU computes via the display engine; not column-exact in
+/// a batch/TTY context), so the covered character displays at its own width.
+fn display_run_at(
     ctx: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     byte: usize,
+    column: usize,
 ) -> Option<(usize, usize)> {
     let buf = ctx.buffers.get(buffer_id)?;
     let charpos0 = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte));
     let charpos1 = charpos0.get() as i64 + 1;
-    let display = super::textprop::builtin_get_text_property_in_state(
+
+    // GNU `get_char_property_and_overlay (pos, Qdisplay, ...)`: returns the
+    // `display` value and, when it came from an overlay, the overlay itself.
+    let (display, overlay) = super::textprop::buffer_overlay_property_at_byte_pos(
         &ctx.obarray,
         &ctx.buffers,
-        vec![Value::fixnum(charpos1), Value::symbol("display")],
+        buf,
+        byte,
+        Value::symbol("display"),
+        None,
     )
-    .ok()?;
-    let disp_str = display.as_lisp_string()?;
-    let width: usize = lisp_string_display_columns(disp_str);
-    // End of the `display`-property run (nil result means end of accessible text).
-    let run_end_char1 = super::textprop::builtin_next_single_property_change_in_state(
-        &ctx.obarray,
-        &ctx.buffers,
-        vec![Value::fixnum(charpos1), Value::symbol("display")],
-    )
-    .ok()
-    .and_then(|v| match v.kind() {
-        ValueKind::Fixnum(n) => Some(n),
-        _ => None,
-    })
-    .unwrap_or_else(|| buf.accessible_char_region().end().get() as i64 + 1);
-    let run_end_byte = buf
-        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new((run_end_char1 - 1).max(0) as usize))
-        .get();
+    .map(|(v, ov)| (v, Some(ov)))
+    .or_else(|| {
+        let v = super::textprop::builtin_get_text_property_in_state(
+            &ctx.obarray,
+            &ctx.buffers,
+            vec![Value::fixnum(charpos1), Value::symbol("display")],
+        )
+        .ok()?;
+        if v.is_nil() { None } else { Some((v, None)) }
+    })?;
+
+    let is_space_spec = display.is_cons() && display.cons_car() == Value::symbol("space");
+
+    // Compute the spec's column width (GNU `check_display_width`'s `width`).
+    let mut width = if let Some(disp_str) = display.as_lisp_string() {
+        // `display` STRING -> its display columns.
+        lisp_string_display_columns(disp_str)
+    } else if is_space_spec {
+        // `(space ...)` spec -> evaluate the `:width`/`:relative-width`/`:align-to`
+        // keywords. A spec with no width-bearing keyword leaves the char at its
+        // own width.
+        space_spec_width(display.cons_cdr(), column)?
+    } else {
+        // image/slice/other spec -> not handled here (see fn doc).
+        return None;
+    };
+
+    // `:relative-width` is multiplied by the column width of the covered char
+    // (GNU multiplies by `MULTIBYTE_BYTES_WIDTH` of the char at POS).
+    if is_space_spec
+        && super::plist::plist_get(display.cons_cdr(), &Value::symbol(":relative-width"))
+            .is_some_and(|v| !v.is_nil())
+    {
+        let scan_pos = EmacsBytePos::new(byte);
+        if let Some(code) = buf.char_code_after_emacs_byte_pos(scan_pos) {
+            let char_w = buffer_char_display_width(buf, scan_pos, code);
+            width = width.saturating_mul(char_w);
+        }
+    }
+
+    // End of the run: overlay-end for overlay `display`, else the text-property
+    // range end (GNU `OVERLAY_END` vs `get_property_and_range`).
+    let run_end_byte = if let Some(ov) = overlay {
+        buf.overlays
+            .overlay_end_emacs_byte_pos(ov)
+            .map(|p| p.get())
+            .unwrap_or_else(|| buf.accessible_emacs_byte_region().end().get())
+    } else {
+        let run_end_char1 = super::textprop::builtin_next_single_property_change_in_state(
+            &ctx.obarray,
+            &ctx.buffers,
+            vec![Value::fixnum(charpos1), Value::symbol("display")],
+        )
+        .ok()
+        .and_then(|v| match v.kind() {
+            ValueKind::Fixnum(n) => Some(n),
+            _ => None,
+        })
+        .unwrap_or_else(|| buf.accessible_char_region().end().get() as i64 + 1);
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new((run_end_char1 - 1).max(0) as usize))
+            .get()
+    };
     Some((width, run_end_byte))
 }
 
@@ -376,11 +491,12 @@ fn scan_for_column(
             break;
         }
 
-        // A `display` text property whose value is a string replaces the covered
-        // text with that string for layout (GNU's `current_column_1` /
-        // `Fmove_to_column` consult `display` specs). Advance by the string's
-        // display width over the whole property run, atomically.
-        if let Some((disp_width, run_end_byte)) = display_string_run_at(ctx, buffer_id, scan) {
+        // A `display` property (text property or overlay) whose value is a string
+        // or a `(space ...)` spec replaces the covered text for layout (GNU's
+        // `current_column_1` / `Fmove_to_column` consult `display` specs via
+        // `check_display_width`). Advance by the spec's display width over the
+        // whole property/overlay run, atomically (no splitting a display run).
+        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, scan, column) {
             if run_end_byte > scan {
                 previous_byte_pos = scan;
                 previous_column = column;

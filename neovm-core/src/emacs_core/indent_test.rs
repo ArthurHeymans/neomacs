@@ -805,3 +805,134 @@ fn save_restriction_restores_full_buffer_after_widen_insert() {
         .expect("eval");
     assert_eq!(super::super::print::print_value(&value), "(9 120)");
 }
+
+// ---------------------------------------------------------------------------
+// `(space ...)` and overlay `display` column width (GNU `check_display_width`).
+// Expected values verified byte-exact against GNU Emacs 31.0.50 --batch.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn current_column_counts_display_space_width() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // a(1) + space(5) + c(1) = 7 at end; a(1)+space(5)=6 just before c.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :width 5))
+                 (list (current-column) (progn (goto-char 3) (current-column))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(7 6)");
+}
+
+#[test]
+fn current_column_counts_display_space_align_to() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // a(1) -> align-to 10 adds (10-1)=9 -> 10, then c -> 11; goto 2 -> col 1.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :align-to 10))
+                 (list (current-column) (progn (goto-char 2) (current-column))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(11 1)");
+}
+
+#[test]
+fn current_column_counts_display_space_relative_width() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // a(1) + relative-width 2 * width(b=1) = 2 -> 3, then c -> 4; goto 2 -> 1.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :relative-width 2))
+                 (list (current-column) (progn (goto-char 2) (current-column))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(4 1)");
+}
+
+#[test]
+fn current_column_float_width_is_not_honored_but_float_align_is() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // GNU: a float `:width` is NOT honored -> char b stays 1 -> a+b+c = 3.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :width 2.4))
+                 (current-column))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "3");
+    // GNU: a float `:align-to` IS honored -> round(7.6)=8, 8-1=7 -> col 8, c -> 9.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :align-to 7.6))
+                 (current-column))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "9");
+}
+
+#[test]
+fn move_to_column_stops_at_display_space_run_end() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // Column 4 falls inside the 5-wide space run; GNU does not split the run and
+    // stops at its end (buffer pos 3).
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (put-text-property 2 3 'display '(space :width 5))
+                 (move-to-column 4)
+                 (point))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "3");
+}
+
+#[test]
+fn current_column_counts_overlay_display_string() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // overlay display "ZZ" over char b: a(1)+"ZZ"(2)+c(1) = 4; goto 2 -> 1.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc")
+                 (let ((ov (make-overlay 2 3))) (overlay-put ov 'display "ZZ"))
+                 (list (current-column) (progn (goto-char 2) (current-column))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(4 1)");
+}
+
+#[test]
+fn move_to_column_stops_at_overlay_display_run_end() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // overlay display "XX" over char b (pos 2..3): move-to-column 3 lands inside
+    // the run -> stop at run end (pos 3); col 5 reaches char c's tail (pos 4).
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abcde")
+                 (let ((ov (make-overlay 2 3))) (overlay-put ov 'display "XX"))
+                 (list (progn (move-to-column 3) (point))
+                       (progn (move-to-column 5) (point))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(3 5)");
+}
