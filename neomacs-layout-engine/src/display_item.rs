@@ -174,9 +174,7 @@ impl DisplayItemLayout {
 pub(crate) enum DisplayItemKind {
     TextRun(DisplayTextRun),
     SourceMappedText(DisplaySourceMappedText),
-    ControlChar {
-        ch: char,
-    },
+    ControlChar { ch: char },
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
     MediaReplacement(DisplayMediaReplacement),
