@@ -279,9 +279,9 @@ impl CapturedCursorVisualState {
     pub(crate) fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
         let metrics = active_face_state.metrics();
         Self {
-            face_width: metrics.char_width,
-            face_height: metrics.row_height,
-            face_ascent: metrics.ascent,
+            face_width: metrics.char_width(),
+            face_height: metrics.row_height(),
+            face_ascent: metrics.ascent(),
             background: active_face_state.background(),
         }
     }
@@ -293,7 +293,7 @@ impl CapturedCursorVisualState {
     ) -> Self {
         let metrics = active_face_state.metrics();
         Self {
-            face_width: metrics.char_width,
+            face_width: metrics.char_width(),
             face_height,
             face_ascent,
             background: active_face_state.background(),
@@ -305,7 +305,7 @@ impl CapturedCursorVisualState {
         line_height: f32,
     ) -> Self {
         let metrics = active_face_state.metrics();
-        Self::display_box_from_active_face_state(active_face_state, line_height, metrics.ascent)
+        Self::display_box_from_active_face_state(active_face_state, line_height, metrics.ascent())
     }
 }
 

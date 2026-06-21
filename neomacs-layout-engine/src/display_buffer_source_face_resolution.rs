@@ -120,7 +120,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         let face_metrics = state.active_face_state.metrics();
         state
             .row_geometry
-            .include_row_extents(face_metrics.row_height, face_metrics.ascent);
+            .include_row_extents(face_metrics.row_height(), face_metrics.ascent());
 
         if resolved_extend {
             let ext_bg = Color::from_pixel(resolved_bg);
@@ -184,7 +184,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
                 self.window_metrics,
             );
             let metrics = active_face.metrics();
-            row_geometry.include_row_extents(metrics.row_height, metrics.ascent);
+            row_geometry.include_row_extents(metrics.row_height(), metrics.ascent());
         }
     }
 
@@ -260,7 +260,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             self.window_metrics,
         );
         let metrics = resolved_active_face.metrics();
-        row_geometry.include_row_extents(metrics.row_height, metrics.ascent);
+        row_geometry.include_row_extents(metrics.row_height(), metrics.ascent());
         resolved_active_face
     }
 }

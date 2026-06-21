@@ -486,8 +486,8 @@ impl DisplayRowAppendMetrics {
         Self::new(
             height,
             ascent,
-            metrics.char_width,
-            metrics.space_width,
+            metrics.char_width(),
+            metrics.space_width(),
             fallback_metrics,
         )
     }
@@ -497,10 +497,10 @@ impl DisplayRowAppendMetrics {
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         Self::new(
-            metrics.row_height,
-            metrics.ascent,
-            metrics.char_width,
-            metrics.space_width,
+            metrics.row_height(),
+            metrics.ascent(),
+            metrics.char_width(),
+            metrics.space_width(),
             fallback_metrics,
         )
     }

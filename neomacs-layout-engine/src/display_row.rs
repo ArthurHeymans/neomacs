@@ -610,12 +610,12 @@ impl DisplayRowMeasurementPolicy {
             ));
         DisplayRowMeasuredFace {
             measurement_face,
-            metrics: DisplayRowMeasuredFaceMetrics {
+            metrics: DisplayRowMeasuredFaceMetrics::new(
                 char_width,
                 row_height,
                 ascent,
                 space_width,
-            },
+            ),
         }
     }
 
@@ -770,10 +770,37 @@ pub(crate) struct DisplayRowMeasuredFace {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowMeasuredFaceMetrics {
-    pub(crate) char_width: f32,
-    pub(crate) row_height: f32,
-    pub(crate) ascent: f32,
-    pub(crate) space_width: f32,
+    char_width: f32,
+    row_height: f32,
+    ascent: f32,
+    space_width: f32,
+}
+
+impl DisplayRowMeasuredFaceMetrics {
+    pub(crate) fn new(char_width: f32, row_height: f32, ascent: f32, space_width: f32) -> Self {
+        Self {
+            char_width,
+            row_height,
+            ascent,
+            space_width,
+        }
+    }
+
+    pub(crate) fn char_width(self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn row_height(self) -> f32 {
+        self.row_height
+    }
+
+    pub(crate) fn ascent(self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn space_width(self) -> f32 {
+        self.space_width
+    }
 }
 
 impl DisplayRowMeasuredFace {
@@ -947,7 +974,7 @@ impl DisplayRowActiveFaceState {
         if columns == 0 {
             return 0.0;
         }
-        let fallback_advance_px = self.metrics().char_width * columns as f32;
+        let fallback_advance_px = self.metrics().char_width() * columns as f32;
         self.advance_for_char(font_metrics, ch, fallback_advance_px)
     }
 
@@ -960,8 +987,8 @@ impl DisplayRowActiveFaceState {
         replacement
             .chars()
             .next()
-            .map(|ch| self.advance_for_char(font_metrics, ch, face_metrics.char_width))
-            .unwrap_or_else(|| face_metrics.char_width.max(1.0))
+            .map(|ch| self.advance_for_char(font_metrics, ch, face_metrics.char_width()))
+            .unwrap_or_else(|| face_metrics.char_width().max(1.0))
     }
 
     pub(crate) fn display_replacement_stretch_source_char_width(
@@ -969,7 +996,7 @@ impl DisplayRowActiveFaceState {
         font_metrics: &mut Option<FontMetricsService>,
         source_char: char,
     ) -> f32 {
-        self.advance_for_char(font_metrics, source_char, self.metrics().char_width)
+        self.advance_for_char(font_metrics, source_char, self.metrics().char_width())
     }
 
     pub(crate) fn complex_text_run_advance(

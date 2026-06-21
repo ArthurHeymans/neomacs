@@ -333,8 +333,8 @@ impl DisplayReplacementMediaSourceItem {
             ResolvedDisplayReplacement::Media(media) => {
                 Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
                     media,
-                    active_face_state.metrics().row_height,
-                    active_face_state.metrics().ascent,
+                    active_face_state.metrics().row_height(),
+                    active_face_state.metrics().ascent(),
                     replacement.uses_xwidget_cursor_extents(),
                 )))
             }
@@ -399,9 +399,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         let source_text = self.source_text;
         let face_metrics = self.face_metrics();
         let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            face_metrics.char_width,
-            face_metrics.row_height,
-            face_metrics.ascent,
+            face_metrics.char_width(),
+            face_metrics.row_height(),
+            face_metrics.ascent(),
         );
         let source_inputs = match display_property.replacement()? {
             DisplayReplacementProperty::String => {

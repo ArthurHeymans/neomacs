@@ -383,12 +383,7 @@ impl DisplayHost for RecordingAppendImageHost {
 #[test]
 fn display_row_append_metrics_builds_from_measured_face_metrics() {
     let metrics = DisplayRowAppendMetrics::from_measured_face_metrics(
-        DisplayRowMeasuredFaceMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-            space_width: 8.0,
-        },
+        DisplayRowMeasuredFaceMetrics::new(7.5, 18.0, 13.0, 8.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
 
@@ -628,7 +623,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
 
     assert!(resolved);
     assert_eq!(active_face.face_id(), 20);
-    assert_eq!(active_face.metrics().row_height, 16.0);
+    assert_eq!(active_face.metrics().row_height(), 16.0);
     assert_eq!(row_geometry.height(), 16.0);
 }
 
@@ -9263,8 +9258,8 @@ fn display_property_replacement_append_item_names_cursor_policy() {
                 width: 42.0,
                 height: 11.0,
             }),
-            active_face.metrics().row_height,
-            active_face.metrics().ascent,
+            active_face.metrics().row_height(),
+            active_face.metrics().ascent(),
             true,
         )),
     );
@@ -9924,8 +9919,8 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
 
     let ordinary = DisplayReplacementMediaSourceItem::new(
         media,
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         false,
     );
     assert_eq!(ordinary.width_px(), 64.0);
@@ -9936,8 +9931,8 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
 
     let xwidget_cursor = DisplayReplacementMediaSourceItem::new(
         media,
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         true,
     );
     assert_eq!(xwidget_cursor.cursor_face_height_px(), 18.0);
@@ -10005,8 +10000,8 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
             width: 64.0,
             height: 10.0,
         }),
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         false,
     );
     let progress = DisplayRowAppendProgress::from_positions(
@@ -10488,8 +10483,8 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             width: 96.0,
             height: 54.0,
         }),
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         true,
     );
     let append_context = DisplayReplacementRowAppendContext::new(
@@ -10620,8 +10615,8 @@ fn display_replacement_append_context_installs_image_replacements() {
             width: 64.0,
             height: 32.0,
         }),
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
@@ -10748,8 +10743,8 @@ fn display_replacement_append_context_installs_video_replacements() {
             loop_count: -1,
             autoplay: true,
         }),
-        active_face.metrics().row_height,
-        active_face.metrics().ascent,
+        active_face.metrics().row_height(),
+        active_face.metrics().ascent(),
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);

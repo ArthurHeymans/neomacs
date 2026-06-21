@@ -483,9 +483,9 @@ fn render_prepared_source_item_and_apply<B: LayoutBufferView>(
         &active_face_state,
         context.glyph_y_offset,
         DisplayRowFallbackMetrics::from_default_face_extents(
-            active_face_metrics.char_width,
+            active_face_metrics.char_width(),
             context.char_h,
-            active_face_metrics.ascent,
+            active_face_metrics.ascent(),
         ),
     );
     let append_position = progress.row_position();
@@ -877,9 +877,9 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.params,
             0.0,
             DisplayRowFallbackMetrics::from_default_face_extents(
-                active_face_metrics.char_width,
+                active_face_metrics.char_width(),
                 self.loop_context.char_height(),
-                active_face_metrics.ascent,
+                active_face_metrics.ascent(),
             ),
             self.active_face_state,
         );

@@ -597,7 +597,7 @@ fn display_row_resolved_measured_face_builds_active_face_state_directly() {
 
     assert_eq!(active.face_id(), 12);
     assert_eq!(active.resolved_face().fg, face.fg);
-    assert_eq!(active.metrics().row_height, 15.0);
+    assert_eq!(active.metrics().row_height(), 15.0);
 }
 
 #[test]
@@ -624,10 +624,10 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
         .into_active_face_state();
 
     assert_eq!(active.face_id(), 14);
-    assert_eq!(active.metrics().char_width, 7.0);
-    assert_eq!(active.metrics().row_height, 15.0);
-    assert_eq!(active.metrics().ascent, 10.0);
-    assert_eq!(active.metrics().space_width, 7.0);
+    assert_eq!(active.metrics().char_width(), 7.0);
+    assert_eq!(active.metrics().row_height(), 15.0);
+    assert_eq!(active.metrics().ascent(), 10.0);
+    assert_eq!(active.metrics().space_width(), 7.0);
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
 }
@@ -658,7 +658,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
     assert_eq!(active.face_id(), 14);
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
-    assert_eq!(active.metrics().char_width, 7.0);
+    assert_eq!(active.metrics().char_width(), 7.0);
 }
 
 #[test]
@@ -686,7 +686,7 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
     assert_eq!(active.face_id(), 14);
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
-    assert_eq!(active.metrics().char_width, 7.0);
+    assert_eq!(active.metrics().char_width(), 7.0);
 }
 
 #[test]
@@ -2095,7 +2095,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
         ),
     );
 
-    assert_eq!(active.metrics().space_width, 7.0);
+    assert_eq!(active.metrics().space_width(), 7.0);
     assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
     assert_eq!(active.advance_for_columns(&mut font_metrics, 'x', 2), 14.0);
 
@@ -2141,9 +2141,9 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
     );
 
     let measured_metrics = measured.metrics();
-    assert_eq!(measured_metrics.char_width, 9.0);
-    assert_eq!(measured_metrics.row_height, 18.0);
-    assert_eq!(measured_metrics.ascent, 13.0);
+    assert_eq!(measured_metrics.char_width(), 9.0);
+    assert_eq!(measured_metrics.row_height(), 18.0);
+    assert_eq!(measured_metrics.ascent(), 13.0);
 }
 
 #[test]
@@ -2190,10 +2190,10 @@ fn display_row_measured_face_exposes_metrics_as_single_value() {
 
     let metrics = measured.metrics();
 
-    assert_eq!(metrics.char_width, 7.2);
-    assert_eq!(metrics.row_height, 16.0);
-    assert_eq!(metrics.ascent, 11.0);
-    assert_eq!(metrics.space_width, 7.0);
+    assert_eq!(metrics.char_width(), 7.2);
+    assert_eq!(metrics.row_height(), 16.0);
+    assert_eq!(metrics.ascent(), 11.0);
+    assert_eq!(metrics.space_width(), 7.0);
 }
 
 #[test]
