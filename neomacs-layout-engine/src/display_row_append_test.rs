@@ -1654,8 +1654,8 @@ fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
     let (request_position, source, face) = request.into_parts();
 
     assert_eq!(request_position, position);
-    assert_eq!(source.source_id, SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS);
-    assert_eq!(source.text.as_ref(), "...");
+    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS);
+    assert_eq!(source.text(), "...");
     assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
 }
 
@@ -1844,8 +1844,8 @@ fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
     let (request_position, source, face) = request.into_parts();
 
     assert_eq!(request_position, position);
-    assert_eq!(source.source_id, SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS);
-    assert_eq!(source.text.as_ref(), "...");
+    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS);
+    assert_eq!(source.text(), "...");
     assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
 }
 

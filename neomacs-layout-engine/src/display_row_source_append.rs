@@ -26,8 +26,8 @@ const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SyntheticTextSource {
-    pub(crate) source_id: u64,
-    pub(crate) text: Box<str>,
+    source_id: u64,
+    text: Box<str>,
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +81,12 @@ struct PreparedSingleDisplayItemSourceAppend {
     position: DisplayRowPosition,
 }
 
+impl PreparedSingleDisplayItemSourceAppend {
+    fn into_parts(self) -> (DisplayItem, u32, DisplayRowAppendKind, DisplayRowPosition) {
+        (self.item, self.face_id, self.kind, self.position)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayItemSourceAppendContext<'face> {
     base_face: &'face ResolvedFace,
@@ -102,6 +108,16 @@ impl SyntheticTextSource {
             source_id,
             text: text.into(),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn source_id(&self) -> u64 {
+        self.source_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn text(&self) -> &str {
+        &self.text
     }
 
     fn marker(marker: SyntheticTextMarker) -> Self {
@@ -530,21 +546,20 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         render_policy: &mut P,
     ) -> Option<DisplayRowAppendProgress> {
         let prepared = self.prepare_item(item, position, kind);
-        let mut face_ids = FrameFaceIdAllocator::new(prepared.face_id.saturating_add(1));
-        let mut source = DisplayItemOnceSource::new(prepared.item);
+        let (item, face_id, kind, position) = prepared.into_parts();
+        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+        let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
-        let outcome = self
-            .source_context_for_face(prepared.face_id)
-            .render_with_policy(
-                state,
-                &mut face_ids,
-                &mut source,
-                &mut source_state,
-                prepared.position,
-                prepared.kind,
-                render_policy,
-            )?;
-        Some(outcome.into_append_progress(prepared.position))
+        let outcome = self.source_context_for_face(face_id).render_with_policy(
+            state,
+            &mut face_ids,
+            &mut source,
+            &mut source_state,
+            position,
+            kind,
+            render_policy,
+        )?;
+        Some(outcome.into_append_progress(position))
     }
 
     pub(crate) fn render_naturally(
@@ -567,26 +582,20 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         render_policy: &mut P,
     ) -> Option<f32> {
         let prepared = self.prepare_item(item, position, kind);
-        let mut face_ids = FrameFaceIdAllocator::new(prepared.face_id.saturating_add(1));
-        let mut source = DisplayItemOnceSource::new(prepared.item);
+        let (item, face_id, kind, position) = prepared.into_parts();
+        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+        let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
-        let outcome = self
-            .source_context_for_face(prepared.face_id)
-            .measure_with_policy(
-                state,
-                &mut face_ids,
-                &mut source,
-                &mut source_state,
-                prepared.position,
-                prepared.kind,
-                render_policy,
-            )?;
-        Some(
-            outcome
-                .into_append_progress(prepared.position)
-                .metrics
-                .width_px,
-        )
+        let outcome = self.source_context_for_face(face_id).measure_with_policy(
+            state,
+            &mut face_ids,
+            &mut source,
+            &mut source_state,
+            position,
+            kind,
+            render_policy,
+        )?;
+        Some(outcome.into_append_progress(position).metrics.width_px)
     }
 
     pub(crate) fn measure_width_naturally(
