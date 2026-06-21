@@ -1037,9 +1037,8 @@ impl LayoutEngine {
                 y: tab_bar_y,
                 width,
                 height: tab_bar_height,
-                metrics: DisplayRowFallbackMetrics::from_default_face_extents(
-                    frame_params.char_width,
-                    frame_params.char_height,
+                metrics: DisplayRowFallbackMetrics::from_frame_defaults(
+                    frame_params,
                     tab_bar_ascent,
                 ),
                 base_face: &tab_bar_face,

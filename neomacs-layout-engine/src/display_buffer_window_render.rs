@@ -84,9 +84,7 @@ where
 
         let char_w = params.char_width;
         let char_h = params.char_height;
-        let font_ascent = params.font_ascent;
-        let window_metrics =
-            DisplayRowFallbackMetrics::from_default_face_extents(char_w, char_h, font_ascent);
+        let window_metrics = DisplayRowFallbackMetrics::from_window_defaults(params);
         let local_display_policy = BufferWindowLocalDisplayPolicy::from_buffer(buffer);
 
         let default_face = state.with_face_services(|face_resolver, font_metrics| {

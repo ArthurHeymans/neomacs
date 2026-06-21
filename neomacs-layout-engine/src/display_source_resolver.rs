@@ -398,11 +398,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         let anchor_charpos = self.anchor_charpos;
         let source_text = self.source_text;
         let face_metrics = self.face_metrics();
-        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            face_metrics.char_width(),
-            face_metrics.row_height(),
-            face_metrics.ascent(),
-        );
+        let fallback_metrics = DisplayRowFallbackMetrics::from_measured_face(face_metrics);
         let source_inputs = match display_property.replacement()? {
             DisplayReplacementProperty::String => {
                 let replacement = replacement_value.as_utf8_str()?;

@@ -765,11 +765,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         ChromeLispStringRowRequest::new(
             self.bounds.y,
             self.bounds.width,
-            DisplayRowFallbackMetrics::from_default_face_extents(
-                self.metrics.char_width(),
-                self.bounds.height,
-                self.metrics.ascent(),
-            ),
+            self.metrics.with_row_height(self.bounds.height),
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,

@@ -42,11 +42,8 @@ impl BufferSourceActiveFaceRowMetrics {
     ) -> Self {
         let active_face_metrics = active_face.metrics();
         Self {
-            fallback_metrics: DisplayRowFallbackMetrics::from_default_face_extents(
-                active_face_metrics.char_width(),
-                row_height_px,
-                active_face_metrics.ascent(),
-            ),
+            fallback_metrics: DisplayRowFallbackMetrics::from_measured_face(active_face_metrics)
+                .with_row_height(row_height_px),
         }
     }
 

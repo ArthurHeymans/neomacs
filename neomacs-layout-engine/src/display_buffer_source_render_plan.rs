@@ -178,28 +178,21 @@ impl BufferSourceDefaultFacePlan {
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         let face = face_resolver.default_face().clone();
-        let (char_width, row_height, ascent) = if window_system && let Some(service) = font_metrics
-        {
+        let metrics = if window_system && let Some(service) = font_metrics {
             let metrics = service.font_metrics(
                 &face.font_family,
                 face.font_weight,
                 face.italic,
                 face.font_size,
             );
-            (metrics.char_width, metrics.line_height, metrics.ascent)
+            DisplayRowFallbackMetrics::from_font_metrics(metrics)
         } else {
-            (
-                fallback_metrics.char_width(),
-                fallback_metrics.row_height(),
-                fallback_metrics.ascent(),
-            )
+            fallback_metrics
         };
 
         Self {
             face,
-            metrics: DisplayRowFallbackMetrics::from_default_face_extents(
-                char_width, row_height, ascent,
-            ),
+            metrics,
             measurement_policy: DisplayRowMeasurementPolicy::for_frame(window_system),
         }
     }
@@ -229,7 +222,7 @@ impl BufferSourceDefaultFacePlan {
         char_width: f32,
         row_height: f32,
     ) -> DisplayRowFallbackMetrics {
-        DisplayRowFallbackMetrics::from_default_face_extents(char_width, row_height, self.ascent())
+        self.metrics.with_extents(char_width, row_height)
     }
 
     pub(crate) fn row_metrics_for_default_width(

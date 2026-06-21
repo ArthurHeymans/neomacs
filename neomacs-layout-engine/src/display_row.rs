@@ -32,6 +32,7 @@ use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
+use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
@@ -569,6 +570,34 @@ impl DisplayRowFallbackMetrics {
             row_height,
             ascent,
         }
+    }
+
+    pub(crate) fn from_window_defaults(params: &WindowParams) -> Self {
+        Self::from_default_face_extents(params.char_width, params.char_height, params.font_ascent)
+    }
+
+    pub(crate) fn from_frame_defaults(params: &FrameParams, ascent: f32) -> Self {
+        Self::from_default_face_extents(params.char_width, params.char_height, ascent)
+    }
+
+    pub(crate) fn from_font_metrics(metrics: FontMetrics) -> Self {
+        Self::from_default_face_extents(metrics.char_width, metrics.line_height, metrics.ascent)
+    }
+
+    pub(crate) fn from_measured_face(metrics: DisplayRowMeasuredFaceMetrics) -> Self {
+        Self::from_default_face_extents(
+            metrics.char_width(),
+            metrics.row_height(),
+            metrics.ascent(),
+        )
+    }
+
+    pub(crate) fn with_row_height(self, row_height: f32) -> Self {
+        Self::from_default_face_extents(self.char_width(), row_height, self.ascent())
+    }
+
+    pub(crate) fn with_extents(self, char_width: f32, row_height: f32) -> Self {
+        Self::from_default_face_extents(char_width, row_height, self.ascent())
     }
 
     pub(crate) fn char_width(self) -> f32 {
