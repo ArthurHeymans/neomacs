@@ -5968,6 +5968,55 @@ mod tests {
     }
 
     #[test]
+    fn mir_multi_phi_merge_matches_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        // A diamond where BOTH branches leave TWO values on the stack, so the
+        // merge needs TWO phis; then Sub consumes them. Compares MIR to the
+        // interpreter (ground truth) — no manual expected value.
+        let ops = [
+            Op::StackRef(0),  // 0: cond, depth 2
+            Op::GotoIfNil(5), // 1: pop; else->5, fall->2  (depth 1)
+            Op::Constant(0),  // 2: then: 10  (depth 2)
+            Op::Constant(1),  // 3:        20 (depth 3)
+            Op::Goto(7),      // 4: -> merge(7)
+            Op::Constant(1),  // 5: else: 20 (depth 2) [leader]
+            Op::Constant(0),  // 6:        10 (depth 3)  falls to 7
+            Op::Sub,          // 7: merge: two phis -> Sub (depth 2) [leader]
+            Op::Return,       // 8
+        ];
+        let constants = [Value::make_int(10), Value::make_int(20)];
+        for c in [Value::T, Value::NIL] {
+            let mut eval = Context::new_minimal_vm_harness();
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![crate::emacs_core::intern::SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.to_vec();
+            f.constants = constants.to_vec();
+            f.max_stack = 16;
+            let want = {
+                let mut vm = Vm::from_context(&mut eval);
+                vm.execute(&f, vec![c]).expect("interp multi-phi").bits()
+            };
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 1) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    let ctx_ptr = &mut eval as *mut Context as *mut u8;
+                    if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[c]) {
+                        assert_eq!(
+                            bits, want,
+                            "MIR multi-phi-merge mismatch for cond bits {}",
+                            c.bits()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn backedge_polls_quit_like_the_interpreter() {
         use crate::emacs_core::bytecode::Vm;
         use crate::emacs_core::eval::Context;
