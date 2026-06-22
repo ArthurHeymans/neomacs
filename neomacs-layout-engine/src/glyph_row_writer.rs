@@ -192,7 +192,12 @@ fn extend_glyph_grapheme(glyph: &mut Glyph, ch: char) {
 /// Whether `glyph` is a complex-run member's padding cell carrying its own
 /// per-cell grapheme (a non-blank Char or a Composite), as opposed to a
 /// blank wide-char padding slot. Such cells let the TTY decompose the run.
-fn is_run_member_padding(glyph: &Glyph) -> bool {
+///
+/// These cells must contribute 0 columns and 0 pixels to the rendered metric:
+/// the run's base `Composite` already carries the whole run's width (GNU's
+/// `cmp->width`, set once in `produce_composite_glyph`, src/term.c). See
+/// `DisplayRowWriteMetrics::from_glyphs`.
+pub(crate) fn is_run_member_padding(glyph: &Glyph) -> bool {
     glyph.padding
         && match &glyph.glyph_type {
             GlyphType::Char { ch } => *ch != ' ',

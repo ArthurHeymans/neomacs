@@ -897,6 +897,89 @@ fn resumed_writer_counts_composed_cluster_by_string_width() {
     );
 }
 
+/// Same etc/HELLO contextual-shaping scenario as
+/// `resumed_writer_counts_composed_cluster_by_string_width`, but built with the
+/// *live* glyph shape the buffer walk actually emits today. The refactored
+/// `push_run_member_to_area` no longer pushes zero-width grapheme padding: each
+/// run member is a `padding` `GlyphType::Char { ch }` cell carrying a POSITIVE
+/// `pixel_width` (so the GUI x-advance and per-cell cursor work). The base
+/// `Composite` already carries the whole run's width via
+/// `composed_cluster_cols(text)` (= GNU's `cmp->width`, set once in
+/// `produce_composite_glyph`, src/term.c:1859), so those padding cells must
+/// count 0 cols / 0 px or the run is double-counted: a 7-cell Arabic word would
+/// report 7 + 6 = 13 cols, putting the resumed column at 22 and over-filling the
+/// following TAB (the etc/HELLO Arabic/Bengali/etc. left-shift regression).
+#[test]
+fn resumed_writer_counts_live_run_member_padding_once() {
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::every(42);
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+
+    // `Arabic (` — eight plain Char glyphs (cols 0..8).
+    for (i, ch) in "Arabic (".chars().enumerate() {
+        crate::glyph_row_writer::push_char_to_row(&mut row, ch, 2, i, 8.0);
+    }
+    // The Arabic word built EXACTLY as the buffer walk does: the first letter is
+    // a plain Char, then each subsequent letter is pushed via
+    // `push_run_member_to_row`, which grows the base into one `Composite`
+    // ("العربيّة") and appends a positive-`pixel_width` `Char` padding cell per
+    // member. string-width is 7 (six letters + teh-marbuta; the shadda U+0651 is
+    // a zero-width combining mark folded into the cluster, not its own member).
+    let word = "العربيّة";
+    let mut chars = word.chars();
+    let first = chars.next().expect("non-empty word");
+    crate::glyph_row_writer::push_char_to_row(&mut row, first, 2, 8, 8.0);
+    for (offset, ch) in chars.enumerate() {
+        crate::glyph_row_writer::push_run_member_to_row(&mut row, ch, 2, 9 + offset, 8.0);
+    }
+    // Sanity: exactly what the live writer produces — one non-padding Composite
+    // base plus per-member padding cells with positive pixel widths.
+    {
+        let text = &row.glyphs[GlyphArea::Text.index()];
+        let base = &text[8];
+        assert!(!base.padding, "run base must not be padding");
+        assert_eq!(
+            base.glyph_type,
+            GlyphType::Composite { text: word.into() },
+            "run base must hold the whole composed cluster"
+        );
+        assert!(
+            text[9..].iter().all(|g| g.padding && g.pixel_width > 0.0),
+            "live run-member padding cells carry POSITIVE pixel_width: {:?}",
+            text[9..].iter().map(|g| g.pixel_width).collect::<Vec<_>>()
+        );
+    }
+    // The closing paren — one more Char glyph.
+    let close_pos = 9 + word.chars().count() - 1;
+    crate::glyph_row_writer::push_char_to_row(&mut row, ')', 2, close_pos, 8.0);
+
+    // A fresh writer (the TAB item) must recover col 16 from the row glyphs:
+    // 8 ("Arabic (") + 7 (composed cluster, counted ONCE) + 1 (")"). If the
+    // run-member padding cells are double-counted it lands at 22 and the TAB
+    // over-fills.
+    let tab = {
+        let mut writer = DisplayRowProgressWriter::new(
+            &row_layout,
+            &mut row,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            1280.0,
+        );
+        writer.push_item(text_item("\t"))
+    };
+
+    assert_eq!(
+        tab.start.col, 16,
+        "resume must count the composed cluster once (16), not per run member; got {}",
+        tab.start.col
+    );
+    assert_eq!(
+        tab.end.col, 42,
+        "resumed TAB must fill to the buffer tab stop (col 42); got {}",
+        tab.end.col
+    );
+}
+
 #[test]
 fn display_row_progress_writer_uses_position_for_tabs() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);

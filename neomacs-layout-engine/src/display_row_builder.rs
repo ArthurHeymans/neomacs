@@ -371,6 +371,19 @@ impl DisplayRowWriteMetrics {
 
     fn from_glyphs(glyphs: &[Glyph], char_width_px: f32) -> Self {
         glyphs.iter().fold(Self::default(), |mut metrics, glyph| {
+            // A complex-run member's padding cell carries its own grapheme (a
+            // non-blank Char or Composite) plus a POSITIVE `pixel_width` so the
+            // GUI advances x and the TTY can decompose the run one cell each.
+            // But the run's base `Composite` already accounts for the whole
+            // run's width via `composed_cluster_cols` (= GNU's `cmp->width`,
+            // set once in `produce_composite_glyph`, src/term.c:1859; the
+            // caller advances `it->current_x` by it a single time, :1762).
+            // Counting these padding cells again would double-count the run
+            // (the etc/HELLO Arabic/Indic left-shift): so they contribute 0
+            // cols and 0 px, just like the old zero-width padding shape did.
+            if glyph_row_writer::is_run_member_padding(glyph) {
+                return metrics;
+            }
             let width_cols = match &glyph.glyph_type {
                 GlyphType::Stretch { width_cols } => usize::from((*width_cols).max(1)),
                 GlyphType::Glyphless { .. } if glyph.pixel_width > 0.0 => {
