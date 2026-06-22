@@ -171,6 +171,17 @@ impl BufferWindowSourceRequest {
         if self.point_charpos <= 0 || self.kind.is_minibuffer() {
             return false;
         }
+        // A non-minibuffer window laid out at a degenerate (<= 1 row) height is a
+        // transient/probe state — e.g. an intermediate pass while a child-frame
+        // (posframe) or frame resize is in flight. Its viewport is too small to
+        // estimate a real scroll from: every point past the first row looks "far
+        // below", so this heuristic would scroll window_start to point. That
+        // scrolled start then PERSISTS and corrupts the real (tall) window (the
+        // Doom dashboard banner scrolls off when `SPC SPC` opens find-file). GNU
+        // never scrolls an editing window from such a state.
+        if self.max_rows <= 1 {
+            return false;
+        }
         let has_prev_end = self
             .previous_window_end
             .is_some_and(|end| self.point_charpos > end);

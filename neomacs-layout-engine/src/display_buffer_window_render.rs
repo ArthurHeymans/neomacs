@@ -157,6 +157,18 @@ where
             return BufferSourceRenderAttemptOutcome::Skipped;
         }
 
+        // A non-minibuffer window laid out at a degenerate (<= 1 row) height is a
+        // transient/probe pass (child-frame/posframe or frame resize in flight).
+        // Disable the visibility scroll retries for it: the retry would scroll
+        // window_start to point — which then PERSISTS and corrupts the real (tall)
+        // window. Pairs with the forward-scroll guard in
+        // `BufferWindowSourceRequest::should_forward_scroll_without_layout`.
+        let remaining_visibility_retries = if geometry.max_rows <= 1 && !params.is_minibuffer() {
+            0
+        } else {
+            remaining_visibility_retries
+        };
+
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
         let mut walk_setup = BufferSourceWalkSetupRequest::from_window_geometry(

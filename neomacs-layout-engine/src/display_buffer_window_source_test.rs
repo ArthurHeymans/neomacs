@@ -148,3 +148,23 @@ fn source_request_does_not_forward_scroll_minibuffer() {
 
     assert_eq!(resolved, 0);
 }
+
+#[test]
+fn source_request_does_not_forward_scroll_degenerate_one_row_window() {
+    // Regression: when a non-minibuffer window is transiently laid out at a
+    // degenerate (<= 1 row) height — e.g. an intermediate/probe pass while a
+    // posframe/child-frame or frame resize is in flight — point appears "far
+    // below" the 1-row viewport, so the forward-scroll heuristic would scroll
+    // window_start to point. That scrolled start then PERSISTS and corrupts the
+    // real (tall) window: the Doom dashboard banner gets scrolled off-screen
+    // when `SPC SPC` opens the project find-file posframe. A 1-row layout is not
+    // a real scroll decision, so it must leave window_start unchanged.
+    let text = b"a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt\nu\nv\nw\nx\ny\nz\n";
+    let resolved = request(0, None, 50, text.len() as i64, 1, WindowKind::Main)
+        .resolve_window_start(byte_at_charpos(text));
+
+    assert_eq!(
+        resolved, 0,
+        "a 1-row (degenerate) window must not forward-scroll past its start"
+    );
+}
