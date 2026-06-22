@@ -629,6 +629,48 @@ impl LayoutEngine {
                             let resize_mode =
                                 ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
 
+                            // GNU `resize_mini_window` measures the mini-window's
+                            // CONTENT height via `move_it_to (ZV)` (xdisp.c:13340) and
+                            // shrinks a grow-only window when `height < old_height &&
+                            // (exact_p || BEGV == ZV)` (xdisp.c:13395). An empty
+                            // mini/echo buffer is exactly one line.
+                            //
+                            // We measure with the glyph matrix
+                            // (`latest_output_window_enabled_rows`) instead, which can
+                            // be STALE: after find-file the mini-window is laid out
+                            // with zero text height and SKIPPED, so its matrix keeps
+                            // the vertico candidate row count and the echo area never
+                            // shrinks back (it stays ~9 rows tall and empty). Mirror
+                            // GNU's content measurement for the empty case: when the
+                            // buffer the window actually displays is empty (BEGV == ZV)
+                            // the used height is 1, regardless of the stale matrix.
+                            //
+                            // `buf_id` is that displayed buffer: the swapped
+                            // ` *Echo Area 0*` for an inactive mini-window (GNU
+                            // `with_echo_area_buffer`), or the window's own buffer when
+                            // the minibuffer is active.
+                            let mini_window_id =
+                                neovm_core::window::WindowId(mini_params.window_id as u64);
+                            let buf_id = if !evaluator.minibuffer_window_is_active(mini_window_id) {
+                                evaluator.ensure_echo_area_buffers();
+                                evaluator
+                                    .buffer_manager()
+                                    .find_buffer_by_name(" *Echo Area 0*")
+                                    .unwrap_or(neovm_core::buffer::BufferId(mini_params.buffer_id))
+                            } else {
+                                neovm_core::buffer::BufferId(mini_params.buffer_id)
+                            };
+                            let visible_region_empty = evaluator
+                                .buffer_manager()
+                                .get(buf_id)
+                                .map(|b| b.accessible_emacs_byte_range().is_empty())
+                                .unwrap_or(true);
+                            let mini_rows_used = if visible_region_empty {
+                                1
+                            } else {
+                                mini_rows_used
+                            };
+
                             if mini_rows_used > allocated_rows {
                                 // --- Grow ---
                                 let delta = (mini_rows_used as i32) - (allocated_rows as i32);
@@ -652,52 +694,11 @@ impl LayoutEngine {
                                 }
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
-                                // GNU `resize_mini_window` (src/xdisp.c:13395-
-                                // 13406): with `grow-only`, a mini-window
-                                // shrinks when `height < old_height &&
-                                // (exact_p || BEGV == ZV)`. Two cases shrink:
-                                //
-                                //   * `BEGV == ZV` — its displayed buffer is
-                                //     empty. We test that on the buffer the
-                                //     mini-window is actually displaying: the
-                                //     swapped ` *Echo Area 0*` buffer for an
-                                //     inactive mini-window (GNU
-                                //     `with_echo_area_buffer`), or the window's
-                                //     own buffer when the minibuffer is active.
-                                //
-                                //   * `exact_p` — a post-command exact resize
-                                //     was requested. GNU's
-                                //     `resize_echo_area_exactly` (xdisp.c:13228)
-                                //     runs after every command (keyboard.c:1344)
-                                //     with `exact_p = (minibuf_level == 0)`, so
-                                //     a finished command with no active
-                                //     minibuffer shrinks the echo window to fit
-                                //     even a shorter NON-EMPTY message. We read
-                                //     that request from the evaluator; it is
-                                //     cleared once per redisplay.
-                                //
-                                // `mini_rows_used < allocated` already bounds
-                                // the genuine (multi-line) message case.
+                                // `exact_p` is GNU's post-command exact resize
+                                // (`resize_echo_area_exactly`, run with
+                                // `minibuf_level == 0`); `visible_region_empty`
+                                // (computed above) is the `BEGV == ZV` case.
                                 let exact = evaluator.echo_area_resize_exact_pending();
-                                let mini_window_id =
-                                    neovm_core::window::WindowId(mini_params.window_id as u64);
-                                let buf_id =
-                                    if !evaluator.minibuffer_window_is_active(mini_window_id) {
-                                        evaluator.ensure_echo_area_buffers();
-                                        evaluator
-                                            .buffer_manager()
-                                            .find_buffer_by_name(" *Echo Area 0*")
-                                            .unwrap_or(neovm_core::buffer::BufferId(
-                                                mini_params.buffer_id,
-                                            ))
-                                    } else {
-                                        neovm_core::buffer::BufferId(mini_params.buffer_id)
-                                    };
-                                let visible_region_empty = evaluator
-                                    .buffer_manager()
-                                    .get(buf_id)
-                                    .map(|b| b.accessible_emacs_byte_range().is_empty())
-                                    .unwrap_or(true);
                                 let should_shrink =
                                     resize_mode.should_shrink(exact, visible_region_empty);
 
