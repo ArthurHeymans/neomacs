@@ -1926,11 +1926,6 @@ fn compile_bytecode_function_inner(
         // find them.
         return Err(CompileError::TakesArguments);
     }
-    if !body_is_jit_profitable(&f.ops) {
-        // Call-dominated body: native codegen would only add rooting + call-shim
-        // overhead. Keep it on the interpreter (cached as NotCompilable).
-        return Err(CompileError::NotProfitable);
-    }
     // Typed-MIR Tier-2: for pure required-only functions, build the SSA MIR and
     // lower it with fixnum UNBOXING (raw arithmetic, retag only at boundaries) —
     // faster than the baseline's per-op untag/retag. Fall back to the baseline on
@@ -1974,6 +1969,12 @@ fn compile_bytecode_function_inner(
                 }
             }
         }
+    }
+    // The MIR tier above already claimed any body its inlining/unboxing makes
+    // worthwhile. What's left goes to the baseline, whose per-op call shims aren't
+    // worth it for a call-dominated body — keep those on the interpreter.
+    if !body_is_jit_profitable(&f.ops) {
+        return Err(CompileError::NotProfitable);
     }
     let mut leaf = lower_leaf_full(
         &f.ops,
