@@ -2617,16 +2617,34 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::Call(_) | Op::Apply(_), .. }))
     });
 
+    // Escape analysis (hoisted — depends only on `m`). A NON-escaping cons is elided
+    // (scalar-replaced, no allocation); an ESCAPING cons is heap-allocated via the
+    // neovm_jit_cons shim so the body stays in the MIR tier. Both the calls-slice and
+    // cons allocation need the runtime scaffolding (needs_rt: vmctx + shims), but a
+    // cons allocation is a GC SAFEPOINT, NOT an observable side effect — so it does
+    // NOT force precise deopt. precise (+ has_side_effects) stay = has_call:
+    // rerun-from-start re-allocates a fresh (never-escaped) cons, which is sound.
+    let cons_repl: Vec<Option<(mir::MirValue, mir::MirValue)>> = if has_call {
+        vec![None; m.value_types.len()]
+    } else {
+        mir::cons_scalar_repl_targets(m)
+    };
+    let has_escaping_cons = m.blocks.iter().flat_map(|b| b.insts.iter()).any(|i| {
+        matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none()
+    });
+    let needs_rt = has_call || has_escaping_cons;
+
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
-    if has_call {
-        // Only the shims the calls-slice references; declare_rt_refs declares the
-        // full import set but Cranelift resolves only referenced symbols.
+    if needs_rt {
+        // The shims the calls-slice + cons allocation reference; declare_rt_refs
+        // declares the full import set but Cranelift resolves only referenced ones.
         builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
         builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
         builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
         builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
         builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
+        builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     }
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
@@ -2681,7 +2699,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // Runtime context for calls (vmctx + shims + arg/result slots), built only
         // when the body has a call. declare_rt_refs declares the full import set;
         // only the referenced shims (call/apply/gc_*) are resolved at finalize.
-        let rt = if has_call {
+        let rt = if needs_rt {
             let refs = declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = m
@@ -2722,18 +2740,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // ALL-PRECISE deopt for call-bearing bodies (see mir_deopt_block): never
         // rerun-from-start after a call. Pure bodies keep the shared rerun block.
         let precise = has_call;
-        // Escape-analysis scalar-replacement of non-escaping conses — ONLY for pure
-        // bodies (precise == false). There a deopt reruns from start and re-creates
-        // the cons, so the elided value is never read from a precise framestate (no
-        // materialization needed). A replaceable Cons becomes a no-op; its car/cdr
-        // reads forward to the operand SSA values (zero allocation, raw fixnums kept
-        // raw across the elided cons). Empty (all-None) for call-bearing bodies, so
-        // every cons there keeps bailing as before.
-        let cons_repl: Vec<Option<(mir::MirValue, mir::MirValue)>> = if precise {
-            vec![None; m.value_types.len()]
-        } else {
-            mir::cons_scalar_repl_targets(m)
-        };
+        // (cons_repl + needs_rt computed at the top, before the JITBuilder.)
         let mut pending: Vec<PendingDeopt> = Vec::new();
         // Shared signal-propagation block (returns STATUS_SIGNAL), created lazily by
         // the first call lowering.
@@ -2948,17 +2955,54 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         cval[r] = Some(result);
                         cval_raw[r] = false;
                     }
-                    // A non-escaping cons (escape analysis, pure bodies only) is
-                    // ELIDED: emit nothing, leave cval[r]=None — every use is a
-                    // CarCdr that forwards to the operands. An escaping cons (or any
-                    // cons in a call-bearing body) still bails: it allocates.
+                    // A non-escaping cons (escape analysis) is ELIDED: emit nothing,
+                    // leave cval[r]=None — every use is a CarCdr that forwards to the
+                    // operands.
                     MirOp::Cons(..) if cons_repl[r].is_some() => {}
-                    // Shim-using / allocating ops, deferred: `eq` needs the
-                    // symbols-with-position slow-path shim (vmctx) so plain
-                    // tagged-bits comparison would diverge when
-                    // symbols-with-pos-enabled; an ESCAPING `cons` allocates (GC
-                    // safepoint); other `opaque` (VarRef/builtins/...) not yet ported.
-                    MirOp::Eq(..) | MirOp::Cons(..) | MirOp::Opaque { .. } => {
+                    // An ESCAPING cons is heap-allocated via the neovm_jit_cons shim —
+                    // a GC SAFEPOINT, but NOT an observable side effect (a fresh
+                    // unshared object), so it needs NO precise deopt: rerun-from-start
+                    // (pure body) re-allocates a fresh cons the caller never saw, and a
+                    // call-bearing body spills the allocated cons (a real Value) into
+                    // its precise framestate normally. Force-tag car+cdr (no raw fixnum
+                    // into the heap pair / across the safepoint; the shim self-roots
+                    // them) + gc-root the live-across-allocation residual, like a call.
+                    MirOp::Cons(car, cdr) => {
+                        let rt = rt
+                            .as_ref()
+                            .ok_or(CompileError::UnsupportedOp("mir-cons-no-rt"))?;
+                        let car_v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *car)?;
+                        let cdr_v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *cdr)?;
+                        // Residual = operand-stack values live across the allocation
+                        // (pre-op stack below car+cdr). Cons pops exactly 2.
+                        let residual_len = inst.pre_stack.len().saturating_sub(2);
+                        let saved = if residual_len == 0 {
+                            None
+                        } else {
+                            let c = fb.ins().call(rt.refs.gc_save, &[]);
+                            let s = fb.inst_results(c)[0];
+                            for k in 0..residual_len {
+                                let rv = inst.pre_stack[k];
+                                let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
+                                fb.ins().call(rt.refs.gc_push, &[v]);
+                            }
+                            Some(s)
+                        };
+                        // The shim self-roots car+cdr; infallible + context-free (no
+                        // status, no vmctx) — no STATUS branch / signal exit.
+                        let call = fb.ins().call(rt.refs.cons, &[car_v, cdr_v]);
+                        let result = fb.inst_results(call)[0];
+                        if let Some(s) = saved {
+                            fb.ins().call(rt.refs.gc_restore, &[s]);
+                        }
+                        cval[r] = Some(result);
+                        cval_raw[r] = false;
+                    }
+                    // Shim-using ops, deferred: `eq` needs the symbols-with-position
+                    // slow-path shim (vmctx) so plain tagged-bits comparison would
+                    // diverge when symbols-with-pos-enabled; other `opaque`
+                    // (VarRef/builtins/...) not yet ported.
+                    MirOp::Eq(..) | MirOp::Opaque { .. } => {
                         return Err(CompileError::UnsupportedOp("mir-pure-shim-op"));
                     }
                 }
@@ -7075,6 +7119,34 @@ mod tests {
         match leaf.call_for_test(&[Value::make_int(3), Value::make_int(5)]) {
             Some(bits) => assert_eq!(bits, Value::make_int(3).bits(), "(car (cons 3 5)) = 3"),
             None => panic!("expected Some(3) — no deopt"),
+        }
+    }
+
+    #[test]
+    fn mir_allocates_escaping_cons() {
+        use crate::emacs_core::eval::Context;
+        // F = (cons a b), returned -> the cons ESCAPES -> heap-allocated in the MIR
+        // tier via neovm_jit_cons (previously this body bailed to the baseline).
+        // Verify it lowers (no bail) + runs to a cons; the contents (3 . 5) are
+        // covered by the differential gate. Real Context (the allocation runs).
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let ops = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Return];
+        let m = mir::build_mir(&ops, &[], 2).expect("builds");
+        let leaf = lower_mir_pure(&m).expect("escaping cons lowers (no bail)");
+        assert!(
+            !leaf.has_side_effects,
+            "a cons allocation is a GC safepoint, not a side effect (no precise deopt)"
+        );
+        match leaf.call(ctx as *mut u8, &[Value::make_int(3), Value::make_int(5)]) {
+            NativeRun::Ok(bits) => assert!(
+                matches!(
+                    Value::from_bits(bits).kind(),
+                    crate::emacs_core::value::ValueKind::Cons
+                ),
+                "(cons 3 5) allocates a cons"
+            ),
+            other => panic!("F(3,5): expected Ok(cons), got {other:?}"),
         }
     }
 
