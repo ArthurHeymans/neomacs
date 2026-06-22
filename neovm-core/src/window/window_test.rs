@@ -2096,3 +2096,45 @@ fn grow_mini_window_with_explicit_max_lines_honors_integer_limit() {
         "explicit integer max-mini-window-height should win"
     );
 }
+
+#[test]
+fn grow_mini_window_with_max_lines_one_caps_at_one_row_not_whole_frame() {
+    // Regression: `max-mini-window-height = 1` (an integer 1 line, e.g. set
+    // buffer-local by vertico-posframe) must cap the mini-window at ONE row.
+    // A prior bug treated `max_lines <= 1.0` as a *fraction* of the frame, so a
+    // 1-line cap grew the mini-window to the whole frame and crushed the main
+    // window (the `SPC SPC` posframe "echo area fills the main frame" bug).
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 80, 24, BufferId(1));
+    {
+        let frame = mgr.get_mut(fid).unwrap();
+        frame.char_height = 1.0;
+        frame.char_width = 1.0;
+        if let Some(mini) = frame.minibuffer_leaf.as_mut() {
+            let mut b = *mini.bounds();
+            b.height = 1.0;
+            mini.set_bounds(b);
+        }
+        frame.sync_window_area_bounds();
+    }
+
+    // Ask to grow by 34 rows (as vertico's 35-candidate overlay would), capped
+    // at a 1-line `max-mini-window-height`.
+    mgr.get_mut(fid)
+        .unwrap()
+        .grow_mini_window_with_max_lines(34, 1.0);
+    let grown_h = mgr
+        .get(fid)
+        .unwrap()
+        .minibuffer_leaf
+        .as_ref()
+        .unwrap()
+        .bounds()
+        .height;
+
+    assert_eq!(
+        grown_h, 1.0,
+        "a 1-line cap must keep the mini-window at one row, not grow to the frame"
+    );
+}

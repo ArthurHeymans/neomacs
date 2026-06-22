@@ -2469,7 +2469,12 @@ impl Frame {
     /// `sync_window_area_bounds` propagates the change to the root
     /// window tree (the root shrinks by the same delta).
     pub fn grow_mini_window(&mut self, delta_rows: i32) {
-        self.grow_mini_window_with_max_lines(delta_rows, 0.25);
+        // The default `max-mini-window-height` is the float 0.25 (a fraction of
+        // the frame's inner height). Resolve it to a line count so it matches
+        // the lines-only contract of `*_with_max_lines`.
+        let char_h = self.char_height.max(1.0);
+        let frame_inner_rows = ((self.height as f32 - self.chrome_top_height()) / char_h).max(1.0);
+        self.grow_mini_window_with_max_lines(delta_rows, 0.25 * frame_inner_rows);
     }
 
     /// Grow the minibuffer window using GNU's `max-mini-window-height`
@@ -2482,11 +2487,16 @@ impl Frame {
         let char_h = self.char_height.max(1.0);
         let unit = char_h;
         let frame_inner_h = (self.height as f32) - self.chrome_top_height();
-        let requested_max_h = if max_lines <= 1.0 {
-            frame_inner_h * max_lines.max(0.0)
-        } else {
-            unit * max_lines
-        };
+        // `max_lines` is a resolved LINE COUNT (the caller resolves GNU
+        // `max-mini-window-height` to lines: Float -> frac*frame_rows,
+        // Fixnum -> the integer). GNU caps the mini-window at `lines * unit`
+        // pixels (xdisp.c:13330 resize_mini_window, FIXNUMP branch), clipped to
+        // [unit, frame_inner_h]. NOTE: this used to branch on `max_lines <= 1.0`
+        // to re-apply the fraction, which wrongly treated an integer cap of 1
+        // line (e.g. vertico-posframe's `(setq-local max-mini-window-height 1)`)
+        // as 100% of the frame -> the minibuffer grew to the whole frame and
+        // crushed the main window.
+        let requested_max_h = unit * max_lines;
         let max_h = requested_max_h.min(frame_inner_h).max(unit);
 
         let Some(mini) = self.minibuffer_leaf.as_mut() else {
