@@ -294,7 +294,14 @@ fn opaque_effect(op: &Op) -> Effect {
         | Op::SaveExcursion
         | Op::SaveRestriction
         | Op::SaveWindowExcursion
-        | Op::UnwindProtectPop => Effect::Calls,
+        | Op::UnwindProtectPop
+        // Setcar/Setcdr MUTATE a cons in place — a side effect (like Aset/VarSet
+        // above), NOT pure. They reach this fn only as Opaque ops; inert today (no
+        // pass reads `.effect` for a correctness decision + lower_mir_pure bails on
+        // them), but keeping the metadata correct guards the escape analysis if the
+        // Opaque bail is ever narrowed (a mutated cons must never be scalar-replaced).
+        | Op::Setcar
+        | Op::Setcdr => Effect::Calls,
         Op::VarRef(_) => Effect::Signals,
         _ => Effect::Pure,
     }
