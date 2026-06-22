@@ -1,731 +1,392 @@
 # Display Pipeline Refactor Handoff
 
-Date: 2026-06-13 (refreshed 2026-06-17)
+Date: 2026-06-13
+Last refreshed: 2026-06-22
 Branch: `main`
-HEAD at refresh: `e58ae8082` (started from `77c140125`; this session landed 3
-path-deletion slices + an exhaustive remaining-gap map — see "Landed" and
-"Prioritized Execution Plan" below)
 
-> Refresh note (2026-06-17): the original 2026-06-13 handoff stopped at
-> `798f6b312 refactor: group buffer advance context`. **476 commits** landed
-> between then and `77c140125`, so the per-slice bullet list below was rewritten
-> to describe where the pipeline actually stands now rather than re-listing every
-> wrapper commit. The "Why", "Desired Pipeline", "Important Invariants", GNU
-> reference, manual-repro, and verification sections were still accurate and are
-> unchanged.
+> **STATUS (2026-06-22): SPINE COMPLETE — this handoff is historical.**
+> The refactor spine is finished and verified (`cargo nextest -p neomacs-layout-engine`
+> = 1250/1250). The "Remaining Phases" below are closed (see the per-phase status
+> in that section). The authoritative current docs are:
+> - `docs/plans/2026-06-21-display-pipeline-deletion-plan.md` — the deletion-targeted
+>   re-framing that supersedes the older "extract more modules" framing here.
+> - `docs/plans/2026-06-22-pipeline-completion-proof.md` — the per-path proof that
+>   measurement/advance and face/source policy are owned at the shared boundary.
+> Do **not** act on the old "extract types out of display_row.rs" framing — keeping the
+> request/renderer/context types in the row center is intentional; the wrapper tower
+> was collapsed onto one canonical `DisplayRowSourceRenderRequest` instead.
 
-## Goal
+## Final Goal
 
-Continue the long-term display pipeline refactor until Neomacs has one typed source-to-row pipeline for main buffer text, overlay/display strings, mode/header/tab-line, tab-bar, minibuffer, echo area, and detached child-frame/posframe rows.
-
-The goal is not complete. The recent work landed several safe slices, but the pipeline is still split between older buffer-walker code and newer request/source-based row rendering.
-
-### Strategic guidance (agreed 2026-06-17)
-
-The destination above is correct and matches GNU's real structure: source-specific
-"get next element" via `it->method` dispatch (`GET_FROM_BUFFER` / `GET_FROM_STRING`
-/ `GET_FROM_STRETCH` / `GET_FROM_IMAGE` / …) feeding a shared `produce_glyphs`
-keyed on `it->what`. That is exactly `DisplayItemSource` → one row builder. Keep
-the direction. Three refinements to *how* it's pursued:
-
-- **Relax the "pure typed boundary" ideal.** "Below `DisplayItemSource` consume
-  only typed display items, no peeking at source semantics" is stricter than GNU,
-  which shares mutable `it` state (bidi level, cursor pos, hpos/x, wrap/continuation)
-  across both layers — because wrap, cursor, and bidi inherently need to see across
-  the boundary. Plan for the boundary to carry a small *typed* shared-progress
-  channel (x/col, bidi level, wrap state), not zero shared state. The current
-  `DisplayItem -> BufferTextDecodedSourceEvent` round-trip and the unremovable
-  resolved-advance-for-wrap are that channel asking to be made explicit — not
-  failures to design away.
-- **Judge progress by paths deleted, not types added.** Value is realized when an
-  old path is *removed* and a bug class becomes structurally impossible, not when
-  another typed wrapper lands. After the 476-commit batch, no production main-buffer
-  path is deleted yet; `BufferTextSourceCursor` is still dead-code behind a
-  test-only toggle, and `display_row_append.rs` has grown to ~10k lines. Close one
-  loop end-to-end before widening, and give that module a complexity budget so
-  "unified" means smaller, not relocated.
-- **Slice 5 (one row lifecycle) is the real prize.** The listed bugs are *lifecycle*
-  bugs (inconsistent bidi/finalization timing). Shared production + one finalization
-  boundary fixes them. Source unification (Slice 4) is necessary plumbing but fixes
-  no listed bug on its own. Starting with Slice 2 is recommended: it is the cheapest
-  way to confront the cross-boundary-state question before the big cursor swap.
-
-## Current Status
-
-Most recent display-pipeline commits on `main` (newest first):
-
-- `77c140125 refactor: typed buffer source adapter and parity tests`
-- `a39aca1d9 refactor: request display replacement append plan items`
-- `f906fd14f refactor: move replacement cursor policy source`
-- `d82458511 refactor: resolve display replacements from request`
-- `3225f4b4e refactor: build display replacement source items`
-- `03095e21e refactor: move display property replacement source item`
-
-Baseline at refresh (`77c140125`):
-
-```bash
-cargo nextest run -p neomacs-layout-engine
-```
-
-passed with **1263 tests** (up from 1061 at the original handoff). Do not use
-`cargo test`; the project owner explicitly requested `cargo nextest`.
-
-### What landed in the 476 commits since the original handoff
-
-Grouped by theme instead of per-commit, because almost every commit is one
-containment/typing step in a long strangler-fig sequence:
-
-- **The giant buffer redisplay loop left `engine.rs`.** `engine.rs` is now
-  ~1790 lines; the per-window buffer walk is a typed state machine in the new
-  `display_buffer_text_walk.rs` (~3396 lines) built from dozens of
-  `BufferTextWindow*` request/state structs. `engine.rs::layout_window_rust`
-  now delegates into that module.
-- **A real typed buffer source exists but is not yet the production path.**
-  `display_buffer_text_source.rs` adds `BufferTextSourceCursor`, a
-  `DisplayItemSource` that walks plain buffer text + face/display-property
-  boundaries and emits `DisplayItem`s. It is wired behind
-  `LayoutEngine::use_typed_buffer_source` (default `false`, `#[cfg(test)]`
-  setter only). When enabled, `display_buffer_text_walk.rs::consume_source_event`
-  pulls one `DisplayItem` from the cursor and **lowers it back into the legacy
-  `BufferTextDecodedSourceEvent`** the old loop consumes. So today it is a
-  *parity shim* proving the cursor yields equivalent events — not a replacement
-  of the downstream walker. Parity is asserted in `display_source_test.rs`.
-- **Display replacements moved to the source layer.** Display-property
-  replacement strings, media, stretches/spaces, mapped text, and placeholders
-  are now built as typed source items and resolved from request/source context
-  (`display_source.rs`, `display_source_resolver.rs`), instead of `engine.rs`
-  wiring raw replacement append requests.
-- **Chrome, line numbers, right borders, echo markers, and mock rows render
-  through item sources / row requests.** Legacy direct row-glyph installers and
-  the legacy line-number row writer were removed; status/chrome rows install as
-  prebuilt rows through the row lifecycle.
-- **Matrix builder boundary narrowed.** `matrix_builder.rs` API was internalized
-  and row-writing pushed out; row glyph surgery now lives in the row builder.
-- **Width/advance measurement centralized (but not unified).** ASCII buffer
-  text and display items are measured through the row renderer; buffer advances
-  are resolved from typed requests. The walker still computes a resolved advance
-  for wrap/cursor decisions, so the width path is *not* fully unified yet (this
-  is still the open "Slice 2" work below).
-
-Out of scope but on the same branch in this range (do not let these confuse a
-`git log` of the display work): Cranelift JIT (Milestone D + Tier-2 phases),
-perf work (mimalloc global allocator, FxHash maps), `fix(#131)` multibyte buffer
-decode, and `fix(#132)` subprocess isolation / wait-strategy refactor.
-
-## Landed (2026-06-17 session): exhaustive map + first 3 path-deletions
-
-A 12-agent mapping workflow enumerated **45 gaps across 10 subsystems** and
-deduped them into a prioritized plan of 10 path-deletion slices, with an
-adversarial completeness critic (see **Prioritized Execution Plan** below). The
-map corrected two wrong assumptions *before* any code was written: complex runs
-are *already* single-shaped (the double-shape was the **Natural** path), and the
-`FaceColumns` advance is the TTY/no-font-metrics fallback, not removable
-duplication.
-
-Three slices then landed (HEAD `e58ae8082`; net **−1194 lines**; full
-layout-engine suite green at 1217), each adversarially reviewed (verdict: SHIP,
-zero blockers):
-
-- **`4c0df03fd` — delete dead `bidi_layout.rs`** (the second bidi-reorder, over
-  the retired `FrameGlyphBuffer`/`FrameGlyph` representation). Zero production
-  callers; the only live row reorder is `glyph_row_writer::reorder_row_bidi` over
-  `GlyphRow`. −1299 lines; one production bidi reorder remains. The deleted
-  per-glyph `row_max_ascent` baseline logic was dead code on a defunct
-  representation — the live `GlyphRow` uses GNU's single-per-row `ascent` model,
-  so no capability was lost. (`bidi_layout.rs` no longer exists; ignore older
-  plan/audit docs that still cite it by path.)
-- **`685a288ff` — delete vestigial `DisplayOrigin::Posframe`** (`#[allow(dead_code)]`,
-  never constructed; production posframes go through display-runtime's
-  `ChildFrameManager`). NOTE: the mapped slice also proposed deleting the mock
-  child-frame loop in `engine.rs::layout_mock_frame`, but that was **kept** —
-  `mock-display.rs:690` exercises it, so it is live for the dev tool, not dead.
-- **`4e95cf933` + `e58ae8082` — shaped-run cache in `FontMetricsService`**. Kills
-  the Natural-path measure/render double-shape: every non-ASCII simple char and
-  natural run was shaped twice (`measure_natural_width_to_text_row` +
-  `NaturalDisplayRowAppendRenderPolicy`, both via `display_row.rs::text_run_advances_px
-  → shape_run`, with no shaped-run cache). Now cached by integer-centipx face
-  identity + run text, cleared by `clear_caches` (same font-change posture as the
-  existing advance caches), bounded at 8192. Tests assert dedup, per-face
-  distinctness across all four key fields, `clear_caches` invalidation, and the
-  overflow branch.
-
-## Why This Refactor Exists
-
-The bugs that triggered this work were not isolated rendering accidents. They all came from the same architectural split:
-
-- main buffer rendering had a rich ad hoc walker in `engine.rs`;
-- chrome/string rows had separate simpler paths;
-- posframe/minibuffer/tab-line/tab-bar rows reached glyph output with weaker face, width, overlay, display-property, and row lifecycle semantics;
-- several paths carried already-derived glyph data instead of typed display intent.
-
-That split caused bugs such as:
-
-- tab-bar/tab-line/posframe text spacing and overlap problems;
-- background face leakage from minibuffer prompt into completion candidates;
-- posframe width changing while moving selection;
-- overlay before/after string behavior diverging from GNU Emacs;
-- row finalization and bidi normalization happening at inconsistent times.
-
-The long-term design is to preserve typed display origin and display items until a single row builder handles shaping, width, faces, display properties, clipping, bidi, and row finalization.
-
-## Desired Pipeline
+Finish the full display pipeline refactor: every display source should become a
+typed display item stream, then flow through one shared row-rendering lifecycle.
 
 Target shape:
 
 ```text
-Source-specific side
---------------------
-BufferTextSourceCursor
-LispStringSourceCursor
-Overlay/display string sources
-Chrome row sources
-Detached/posframe row sources
-        |
-        v
-DisplayItemSource / DisplayItem stream
-        |
-        v
-DisplayRowSourceRenderRequest
-        |
-        v
-DisplayRowRenderer / DisplayRowBuilder
-        |
-        v
-RenderedDisplayRow + metadata
-        |
-        v
-Window or frame row installer
-        |
-        v
-FrameDisplayState -> renderer
+buffer / Lisp string / overlay string / display property / mode-line /
+tab-line / tab-bar / minibuffer / echo area / child-frame or posframe
+        -> DisplayItemSource / DisplayItem
+        -> DisplayRowSourceRenderRequest or append request
+        -> DisplayRowRenderer / DisplayRowBuilder
+        -> RenderedDisplayRow
+        -> row finalizer
+        -> window/frame installer
+        -> renderer
 ```
 
-Important boundary:
+Source-specific code may understand buffers, overlays, Lisp values, text
+properties, window state, and GNU display rules. Once it emits typed items and row
+requests, the shared row path should own face realization, text measurement,
+display-property rendering, clipping/wrapping, bidi finalization, row metadata,
+and installation.
 
-- Code above `DisplayItemSource` may know about buffers, overlays, Lisp `Value`, text properties, window state, and GNU-specific source rules.
-- Code below `DisplayItemSource` should consume typed Rust display items and row requests. It should not evaluate Lisp or infer source semantics from glyphs.
+The goal is not complete yet. The main buffer source is unified, echo/minibuffer
+now use the buffer walk, `DisplayRowSpec` is gone, and much of the old matrix and
+append sprawl has been deleted or split. The remaining work is mostly
+containment: shrink the row center, delete duplicated measurement/policy paths,
+and reduce the matrix/builder boundary to row installation and bookkeeping.
 
-## Key Modules
+## Current Verified State
 
-- `neomacs-layout-engine/src/display_item.rs`
-  - Typed display item language: `DisplayItem`, `DisplayItemKind`, source spans, text runs, media/stretch items, face refs.
+Local branch status at refresh:
 
-- `neomacs-layout-engine/src/display_source.rs`
-  - Source cursor abstraction and shared source types: `DisplayItemSource`, `DisplaySourceContext`, `LispStringSourceCursor`, `BufferTextSourceChar`, the buffer advance request/classification types, and display-replacement source resolution.
+- Branch is far ahead of `origin/main`; do not assume remote has this state.
+- Do not push unless explicitly asked.
+- `docs/plans/2026-06-13-display-pipeline-refactor-handoff.md` is a handoff file
+  and may be intentionally left uncommitted.
+- Use repo-local temp only: `TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp`.
 
-- `neomacs-layout-engine/src/display_buffer_text_source.rs` (new since handoff)
-  - `BufferTextSourceCursor`: the typed `DisplayItemSource` for plain buffer text + face/display-property boundaries — the strangler-fig replacement for the old raw decoder. Also `BufferTextWindowSource*` (window-start resolution + text read) and `BufferTextSourceEventCursor` (the raw decoder still used in production). The cursor is gated behind `use_typed_buffer_source` and is currently a parity shim only.
-
-- `neomacs-layout-engine/src/display_buffer_text_walk.rs` (new since handoff)
-  - The per-window buffer redisplay walk as a typed state machine (`BufferTextWindow*` request/state structs). This is where the giant `engine.rs` loop now lives, and where `consume_source_event` chooses between the raw decoder and the typed cursor.
-
-- `neomacs-layout-engine/src/display_row.rs`
-  - Current row rendering center: `DisplayRowSourceRenderRequest`, private `LoweredDisplayRowSpec`, `DisplayRowRenderContext`, `DisplayRowRenderer`, fragment rendering, row finalization helpers.
-
-- `neomacs-layout-engine/src/display_row_source_render.rs` (new since handoff)
-  - Source → row render-request execution (`render_*_with_source_state` helpers) used by the walk module.
-
-- `neomacs-layout-engine/src/display_row_walk_state.rs` (new since handoff)
-  - Per-row overflow/wrap decision state (`BufferTextRowOverflowDecision`, etc.).
-
-- `neomacs-layout-engine/src/display_row_append.rs`
-  - Bridge for appending rendered fragments into current text rows and emitting output. **Now the largest module (~10k lines)** and still the biggest builder-coupling debt area after `engine.rs` shrank.
-
-- `neomacs-layout-engine/src/display_origin.rs`
-  - Typed origins for face/source policy decisions.
-
-- `neomacs-layout-engine/src/display_face_policy.rs`
-  - Base face policy. This should grow into the only place that decides how each origin gets its base face.
-
-- `neomacs-layout-engine/src/display_source_resolver.rs`
-  - Resolves display-source items and faces. Keep semantic source resolution here rather than in row glyph output.
-
-- `neomacs-layout-engine/src/display_row_builder.rs`
-  - Row geometry/progress/measurement concepts. Long-term, this should own more of the shared row lifecycle.
-
-- `neomacs-layout-engine/src/matrix_builder.rs`
-  - Matrix installation/bookkeeping. Long-term, this should not encode display semantics.
-
-- `neomacs-layout-engine/src/engine.rs`
-  - Frame-level orchestration (`layout_frame_rust`, `layout_window_rust`), `LayoutEngine` state, font-metrics setup, and the `use_typed_buffer_source` toggle. The large per-window buffer walk it used to host now lives in `display_buffer_text_walk.rs`; the remaining debt is `display_row_append.rs` and finishing the typed buffer source migration.
-
-## Current Split To Remove
-
-The split is no longer "two whole rendering paths" — chrome/string rows and the
-main buffer row append now share `DisplayRowSourceRenderRequest` /
-`display_row_append.rs`. What remains split is **how main-buffer text is
-sourced**:
+Recent local display-pipeline commits at this refresh:
 
 ```text
-Production main-buffer path (use_typed_buffer_source = false)
-------------------------------------------------------------
-display_buffer_text_walk.rs::consume_source_event
-  -> BufferTextSourceEventCursor (raw UTF-8 decoder)
-  -> BufferTextDecodedSourceEvent
-  -> shared append/render (display_row_append.rs -> GlyphRow)
-
-Typed parity path (use_typed_buffer_source = true, tests only)
---------------------------------------------------------------
-display_buffer_text_walk.rs::consume_source_event
-  -> BufferTextSourceCursor (DisplayItemSource)
-  -> DisplayItem
-  -> lowered BACK to BufferTextDecodedSourceEvent   <-- shim, not yet a replacement
-  -> shared append/render (display_row_append.rs -> GlyphRow)
+a87d25355 refactor: extract display row render item policy
+b7c42316f refactor: move display row geometry
+41b2e721a refactor: extract display row face state
+7efb7530b refactor: extract measured display rows
+b9c5b336e refactor: extract display row source state
+44f8181c4 refactor: extract display row render state
+1b11decdb refactor: extract display row metrics
+4cf3e7d2d refactor: split output frame artifact state
+cff4d331a refactor: route output row cursor lifecycle
+96d007074 refactor: type output current row mutations
+95c1b65a0 refactor: type output window row mutations
+6f197eda3 refactor: type special glyph row mutations
+3de403248 refactor: type current row output mutations
 ```
 
-The goal is to delete the raw-decoder path and let `BufferTextSourceCursor`'s
-`DisplayItem`s flow straight into the shared renderer without the
-`DisplayItem -> BufferTextDecodedSourceEvent` round-trip. That round-trip is the
-load-bearing piece of the next slice.
+Latest local code commit at this refresh is `a87d25355`. It extracts row render
+policy and render-item lowering from `display_row.rs` into:
 
-The old caller-facing `DisplayRowSpec` name is gone from source. The lowered row request is now the private `LoweredDisplayRowSpec` inside `display_row.rs`; new caller coverage should use `DisplayRowSourceRenderRequest`, `DisplayRowSourceAppendRequest`, or a higher-level row request.
+- `neomacs-layout-engine/src/display_row_render_policy.rs`
+- `neomacs-layout-engine/src/display_row_render_item.rs`
 
-## Important Invariants
-
-Preserve these while refactoring:
-
-- Use `cargo nextest`, never `cargo test`.
-- Keep commits as cohesive architectural batches. Avoid tiny wrapper-only commits when related pipeline containment work can be verified together.
-- Do not hide layout bugs with frontend workarounds.
-- Do not let renderer code infer row source semantics from pixels or glyphs.
-- Keep row ownership explicit:
-  - tab-bar is frame chrome;
-  - tab-line/header-line/mode-line are window-local chrome;
-  - minibuffer/echo are normal window rows unless explicitly detached;
-  - posframe/child-frame content belongs to that frame/window, not the parent minibuffer prompt.
-- Use enums for semantic choices instead of bool flags.
-- Keep `Value` and Lisp-specific parsing out of pure row building wherever possible.
-- Row finalization, bidi normalization, clipping, and face insertion must happen at one predictable boundary.
-
-## Suggested Next Slices
-
-### Slice 1: Contain `DisplayRowSpec` (done)
-
-Goal: make `DisplayRowSpec` an internal lowering type for `DisplayRowRenderer`.
-
-Status: complete in source. The lowered type is now private `LoweredDisplayRowSpec`; keep it that way.
-
-Steps:
-
-1. Search:
-
-   ```bash
-   rg -n "DisplayRowSpec|display_row_spec\\(|display_row_spec_" neomacs-layout-engine/src
-   ```
-
-2. For every test/caller that can use `DisplayRowSourceRenderRequest`, migrate it.
-
-3. Keep direct lowered-spec use only in renderer internals.
-
-4. Focused verification:
-
-   ```bash
-   cargo nextest run -p neomacs-layout-engine display_row display_row_append
-   cargo nextest run -p neomacs-layout-engine
-   ```
-
-### Slice 2: Retire Old Width Paths
-
-Goal: make all row text use one measurement/advance path.
-
-Look for:
+Verification run for that commit:
 
 ```bash
-rg -n "font_char_width|pixel_width|from_char_advances|text_char_advance_px_at_position_with_measurement" neomacs-layout-engine/src
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo check -p neomacs-layout-engine --tests
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo nextest run -p neomacs-layout-engine --status-level fail --no-fail-fast
 ```
 
-Current issue: some paths still derive placement from face-width assumptions or precomputed per-character advances before row rendering. The row renderer should own measured text advance for all row kinds.
+The layout-engine nextest suite was run twice around the extraction. Both runs
+passed: 1250 tests, 0 failures.
 
-Do not remove a path until tests cover:
+Known unrelated warnings during these commands come from `neovm-core`:
 
-- main buffer ASCII;
-- wide chars;
-- grapheme clusters;
-- tab-line/tab-bar;
-- mode-line;
+- unused assignment to `p`;
+- unused assignment to `cycle_completed`;
+- `unsafe_op_in_unsafe_fn` in `seed_all_context_roots`.
+
+Do not mix those warning cleanups into display-pipeline commits unless a slice
+actually touches that code.
+
+## What Is Done
+
+The main completed phases:
+
+- `DisplayRowSpec` containment is finished. The old caller-facing spec name is no
+  longer present in `neomacs-layout-engine/src`.
+- Main-buffer source unification is finished. `BufferTextSourceCursor` is the
+  production source path; the legacy raw decoder, typed-source fallback flag, and
+  parity shim were deleted in earlier local commits.
+- Echo and inactive minibuffer rendering now flow through the normal buffer-text
+  walk by using the echo area buffer, instead of a parallel synthetic row path.
+- The old giant window loop was moved out of `engine.rs`; `engine.rs` is now
+  mostly frame/window orchestration.
+- Buffer source rendering has been split across focused modules:
+  `display_buffer_source_walk.rs`, `display_buffer_source_loop_render.rs`,
+  `display_buffer_source_body_render.rs`, `display_buffer_source_item_render.rs`,
+  `display_buffer_source_row_lifecycle.rs`, `display_buffer_source_render_plan.rs`,
+  and related helpers.
+- Row finalization is centralized enough that prebuilt/incremental bidi split was
+  removed; row-end finalization is no longer duplicated in the old form.
+- Row render policy and render-item lowering now live outside `display_row.rs` in
+  `display_row_render_policy.rs` and `display_row_render_item.rs`.
+- Right-edge/right-border special glyphs, line-number margin rendering, overlay
+  string rendering, row metrics, row geometry, measured rows, row face state, row
+  source state, row render state, output row cursor lifecycle, and current/window
+  output mutations have been extracted from older large modules.
+- `display_row_append.rs` no longer exists. Its remaining responsibilities are in
+  `display_row_append_context.rs` and the newer buffer/row modules.
+- `matrix_builder.rs` no longer exists under that name. Matrix-facing behavior has
+  been split into output/current-row/window-row/special-glyph paths and row
+  installers.
+- Overlay string ordering has been corrected where it was safe. Do not collapse
+  before-string and after-string injection into a single stop point: prior review
+  found that would merge distinct GNU positions and break cursor behavior.
+- Shaped-run caching was added so natural text rendering does not shape the same
+  run twice in the normal measure/render path.
+
+## Current Pipeline
+
+Main buffer and echo/minibuffer text now broadly follow this shape:
+
+```text
+engine.rs
+  -> display_buffer_window_render.rs / display_buffer_window_source.rs
+  -> display_buffer_source_walk.rs
+  -> BufferTextSourceCursor
+  -> DisplayItem
+  -> display_buffer_source_* render/append modules
+  -> DisplayRowSourceRenderRequest / DisplayRowSourceAppendRequest
+  -> DisplayRowRenderer / DisplayRowBuilder
+  -> RenderedDisplayRow
+  -> row finalizer / output installer
+```
+
+Chrome/string rows broadly follow:
+
+```text
+LispStringSourceCursor or source-specific request
+  -> DisplayItemSource / DisplayItem
+  -> DisplayRowSourceRenderRequest
+  -> DisplayRowRenderer / DisplayRowBuilder
+  -> RenderedDisplayRow
+  -> installer
+```
+
+Important current modules:
+
+- `display_item.rs`: typed display item language.
+- `display_source.rs`: source cursor abstraction and shared display source types.
+- `display_buffer_text_source.rs`: `BufferTextSourceCursor`.
+- `display_buffer_source_*`: production main-buffer source walking, item
+  rendering, replacement/display-property rendering, overflow, row lifecycle, and
+  render-plan logic.
+- `display_row.rs`: still the row center. It now holds row source request/session
+  types, row render context, and `DisplayRowRenderer`.
+- `display_row_render_policy.rs`: row render clipping/exhaustion policy.
+- `display_row_render_item.rs`: source-item to row-item lowering and media
+  remainder handling.
+- `display_row_builder.rs`: row geometry/progress/measurement and row item
+  building.
+- `display_row_finalizer.rs`: row finalization boundary.
+- `display_row_source_render.rs` and `display_row_source_append.rs`: source to
+  row render/append execution.
+- `display_row_append_context.rs`: append surfaces/frames/kinds. This is still a
+  coupling point, but it is no longer a 10k-line append module.
+- `display_rendered_row_output_install.rs`, `display_current_row_output.rs`,
+  `display_output_window_row*.rs`: output installation and matrix-facing behavior.
+
+## Remaining Phases
+
+> **ALL CLOSED as of 2026-06-22.** Per-phase resolution:
+> - **Phase 1 (extract types out of `display_row.rs`) — REJECTED / superseded.** Doing
+>   this would repeat the file-count/wrapper-growth problem. Instead the wrapper tower
+>   was collapsed onto one canonical `DisplayRowSourceRenderRequest`. `display_row.rs`
+>   is the row center and intentionally owns the renderer/context/request types.
+> - **Phase 2 (normalize measurement/width) — DONE + PROVEN.** One advance authority
+>   (`DisplayRowWriter` + measured-face metrics + the single `calc_pixel_width_or_height`
+>   `(space)` evaluator). See `2026-06-22-pipeline-completion-proof.md`.
+> - **Phase 3 (normalize face/source policy) — DONE + PROVEN.** One per-origin
+>   `BaseFacePolicy` + `FaceResolver` + a single `resolve_and_install_measured_face`
+>   realizer (2 call sites). See the completion proof.
+> - **Phase 4 (overlay/display-property typed convergence) — CAPPED (correct-as-is).**
+>   The candidate folds are redesigns, not behavior-preserving folds; the current design
+>   is GNU-faithful. See the deletion plan's "intentionally NOT recommended" section.
+> - **Phase 5 (shrink matrix/output) — DONE.** Forwarding hops + row-grid collapsed;
+>   the post-install edge-marker placement is GNU-correct, not a defect.
+> - **Phase 6 (broaden regression coverage) — DONE/ongoing.** Added end-to-end face-merge,
+>   buffer display-prop replacement, RTL-chrome, and chrome `:align-to` tests.
+>
+> The detail below is retained as historical context for each phase.
+
+### 1. Extract row request/session/plan types out of `display_row.rs`
+
+`display_row.rs` is still the next large containment target. The likely next
+types to move are:
+
+- `DisplayRowItemSourceRenderRequest`
+- `DisplayRowSourceFragmentRenderRequest`
+- `DisplayRowSourceFragmentFrame`
+- `DisplayRowLispStringSourceSessionRequest`
+- `DisplayRowLispStringSourceRenderRequest`
+- `DisplayRowLispStringSourceSession`
+- `DisplayRowSourceRequestPolicy`
+- `DisplayRowSourceRenderRequest`
+- `DisplayRowRenderContext`
+
+Keep public call sites stable. Move types by responsibility, not by alphabetical
+chunks. Good candidate modules:
+
+- `display_row_source_request.rs`
+- `display_row_lisp_string_request.rs`
+- `display_row_render_context.rs`
+
+Success condition: `display_row.rs` becomes mostly orchestration and
+`DisplayRowRenderer`, not a registry for every request/session type.
+
+### 2. Normalize measurement and width ownership
+
+Search starting points:
+
+```bash
+rg -n "font_char_width|char_advance|pixel_width|natural.*width|advance_px|width_px" neomacs-layout-engine/src
+```
+
+Goal: row rendering/measurement owns text advance. Source walking may need typed
+progress for wrap/cursor decisions, but it should not duplicate independent pixel
+width rules.
+
+Tests to keep green or add:
+
+- ASCII buffer text;
+- CJK wide chars;
+- emoji / ZWJ grapheme clusters;
+- combining marks;
+- tabs;
+- mode-line/tab-line/tab-bar strings;
 - minibuffer/echo;
-- posframe/child-frame completion rows.
+- child-frame/posframe rows.
 
-### Slice 3: Normalize Face Source Policy
+### 3. Normalize face/source policy
 
-Goal: prevent face leakage across prompt/candidate, overlay, display-string, and chrome boundaries.
+Policy should live in source/face policy modules, not in row glyph emission.
 
-Useful tests:
-
-- minibuffer prompt background does not leak into completion candidates;
-- overlay `before-string` and `after-string` use GNU-compatible anchor face policy;
-- tab-line/tab-bar propertized strings preserve their own faces;
-- detached/child-frame rows resolve faces independently of parent window rows.
-
-Keep policy in:
+Useful files:
 
 - `display_origin.rs`
 - `display_face_policy.rs`
 - `display_source_resolver.rs`
+- `display_buffer_source_face_resolution.rs`
+- `display_row_face_state.rs`
 
-Avoid putting source-specific face rules in `DisplayRowRenderer`.
+Regression areas:
 
-### Slice 4: Move More Buffer Walker Output To `DisplayItemSource` (in progress)
+- minibuffer prompt face must not leak into completion candidates;
+- overlay before/after strings need GNU-compatible anchor policy;
+- display-property strings and replacement text must keep their own faces;
+- tab-line/tab-bar propertized strings should preserve their faces;
+- child-frame/posframe rows should resolve independently from parent rows.
 
-Goal: shrink the buffer walk and let it consume typed `DisplayItem`s.
+### 4. Finish overlay/display-property typed item convergence
 
-Status: the buffer loop already moved out of `engine.rs` into
-`display_buffer_text_walk.rs`, and step 1 below is done — `BufferTextSourceCursor`
-exists with parity tests. What remains is to stop lowering its items back to the
-legacy `BufferTextDecodedSourceEvent`.
+Do not force overlay before/after strings into one injection point. The before and
+after positions are distinct. The safe remaining work is containment and typed
+item convergence:
 
-Approach:
+- remove any leftover overlay scaffolding that only wraps the same shared row
+  path;
+- keep cursor capture and row-break behavior intact;
+- ensure display-property replacements, stretches, media, and mapped text stay
+  typed until row rendering;
+- add focused tests before deleting a special case.
 
-1. ~~Extract a narrow source cursor for plain buffer text with resolved face refs.~~ Done: `BufferTextSourceCursor` in `display_buffer_text_source.rs`.
-2. **Next: remove the parity round-trip.** Have `consume_source_event` (or its caller) consume `DisplayItem`s directly instead of translating `DisplayItem -> BufferTextDecodedSourceEvent`. Do this for plain text first; keep overlays/display-properties/cursor metadata on the legacy path until each is covered.
-3. Keep matrix installation unchanged.
-4. Add regression tests around cursor position, row end, clipping, and bidi as each segment type moves over.
-5. Once a segment type renders identically from the typed source, flip and eventually delete the raw-decoder branch for it.
+### 5. Shrink matrix/output responsibility further
 
-Do not try to migrate overlays, display properties, and cursor metadata all in one commit. The `use_typed_buffer_source` toggle is the seam: expand what it covers, keep both paths green via parity tests, then retire the legacy path.
+The old `MatrixBuilder` target is already mostly gone, but the final goal is the
+same: matrix-facing code should install completed rows and manage frame/window
+state, not encode display semantics.
 
-### Slice 5: Unified Row Lifecycle
-
-Goal: one lifecycle for row construction:
-
-```text
-begin row
-consume display items
-measure/shape/append slots
-clip or exhaust source
-finalize bidi
-normalize external row
-install row
-emit output
-```
-
-Today these steps are still spread across `DisplayRowRenderer`, `GlyphMatrixBuilder`, `display_row_append.rs`, and `engine.rs`.
-
-## GNU Emacs Reference Points
-
-Use `/home/exec/Projects/github.com/emacs-mirror/emacs` as the local GNU source reference.
-
-Useful files/functions:
-
-- `src/xdisp.c`
-  - redisplay iterator model;
-  - display string handling;
-  - glyph production;
-  - overlay string loading;
-  - mode-line/tab-line style string display.
-
-GNU's C code is not a Rust abstraction to copy directly. The useful lesson is the conceptual split:
-
-- source iteration can be source-specific;
-- glyph production should be shared;
-- display strings should not use a weaker display language than buffer text.
-
-## Manual Repro Context
-
-The user often validates with personal config and `/tmp/debug.txt`, sometimes with:
+Look for remaining semantic work in output/install paths:
 
 ```bash
-NEOMACS_DUMP_FRAME_GLYPHS=1
+rg -n "face|width|advance|bidi|overlay|display property|replacement|cursor" neomacs-layout-engine/src/display_*output* neomacs-layout-engine/src/display_rendered_row_output_install.rs
 ```
 
-Recent visual areas to keep checking:
+Move source semantics back above the row-render boundary when found.
 
-- `M-x`, type one char, press `TAB`: minibuffer should not spam duplicate visible "Making completion list..." messages.
-- Vertico posframe:
-  - no text overlap;
-  - candidate spacing stable;
-  - candidate row backgrounds not polluted by prompt face;
-  - posframe width does not shrink while moving selection.
-- Tab-bar/tab-line:
-  - height should not grow on repeated `j`/`k`;
-  - text spacing should match main row measurements.
-- Menu-bar:
-  - button click opens correct menu content;
-  - popup anchored below clicked button;
-  - hover opens submenus without selecting commands.
+### 6. Broaden regression coverage
+
+Before calling the full refactor done, coverage should include:
+
+- main buffer plain text, tabs, truncation, wrapping, hscroll, invisible text;
+- overlays and display properties;
+- replacement strings, stretches, images/media placeholders;
+- bidi in buffer and chrome rows;
+- wide chars and grapheme clusters;
+- mode-line/header-line/tab-line/tab-bar;
+- echo area and active/inactive minibuffer;
+- child-frame/posframe rendering;
+- row finalization and cursor placement around clipped rows.
+
+## Important Invariants
+
+- Use `cargo nextest`, not `cargo test`, for suite verification.
+- Use repo-local temp: `TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp`.
+- Keep display semantics above the row-render boundary; row installers should not
+  rediscover source meaning from glyphs or pixels.
+- Preserve explicit row ownership:
+  - tab-bar is frame chrome;
+  - tab-line/header-line/mode-line are window chrome;
+  - active minibuffer is a buffer walk;
+  - inactive echo renders through the echo area buffer;
+  - child-frame/posframe content belongs to that frame/window.
+- Use enums for semantic choices instead of bool flags.
+- Keep Lisp-specific parsing and `Value` handling out of pure row building where
+  possible.
+- Row finalization, bidi normalization, clipping, and face insertion should happen
+  at predictable shared boundaries.
+
+## GNU Reference
+
+Use the local GNU source at:
+
+```text
+/home/exec/Projects/github.com/emacs-mirror/emacs
+```
+
+Most useful file:
+
+```text
+src/xdisp.c
+```
+
+Useful conceptual anchors:
+
+- source iteration is source-specific;
+- glyph production is shared;
+- display strings should not use a weaker display language than buffer text;
+- minibuffer/echo display uses echo area buffers and the normal display walk;
+- overlay before/after positions are distinct display stops.
 
 ## Recommended Verification
 
-For a narrow slice:
+For a focused layout-engine slice:
 
 ```bash
-cargo nextest run -p neomacs-layout-engine <focused-test-filter>
-cargo fmt --check
+cargo fmt -p neomacs-layout-engine
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo check -p neomacs-layout-engine --tests
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo nextest run -p neomacs-layout-engine <focused-filter>
 git diff --check
-cargo check -p neomacs-layout-engine
 ```
 
-Before pushing a display pipeline slice:
+Before handing off a large display-pipeline batch:
 
 ```bash
-cargo nextest run -p neomacs-layout-engine
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo nextest run -p neomacs-layout-engine --status-level fail --no-fail-fast
 ```
 
-If touching cross-crate display protocol/runtime code, also run the relevant package:
+If touching display protocol/runtime:
 
 ```bash
-cargo nextest run -p neomacs-display-protocol
-cargo nextest run -p neomacs-display-runtime
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo nextest run -p neomacs-display-protocol
+env TMPDIR=/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp cargo nextest run -p neomacs-display-runtime
 ```
 
-Expect some unrelated warnings from `neovm-core` during `cargo check`; do not mix warning cleanup into display refactor commits unless directly required.
+GUI smoke areas that have caught regressions before:
 
-## Prioritized Execution Plan (mapped 2026-06-17)
-
-This supersedes the conceptual "Suggested Next Slices" above as the authoritative
-ordered worklist. It is the dedup+prioritized output of the 10-subsystem gap map,
-ordered by (deletion value) × (inverse risk) × (dependency readiness): free
-dead/mock deletions first, then the local correctness dedup, then the lifecycle
-unification, then the typed-source keystone, then the convergences that depend on
-it. **Lead with the free wins; do NOT relocate `display_row_append.rs` or merge
-overlay/echo before the lifecycle is unified — relocating first only moves
-duplication.**
-
-Status legend: ✅ done · ⬜ remaining.
-
-1. ✅ **Delete dead `bidi_layout.rs`** (`4c0df03fd`). Risk low. Independent.
-2. ✅ **Delete `DisplayOrigin::Posframe`** (`685a288ff`). Risk low. Independent.
-   (Mock child-frame loop deliberately kept — see Landed note.)
-3. ✅ **Shaped-run cache** (`4e95cf933`, `e58ae8082`). Risk medium. Independent.
-4. ✅ **Add characterization/parity tests** (`e184af092`). `rtl_text_and_chrome_rows_reorder_identically` (matrix_builder_test) + `child_frame_resolves_faces_and_width_independently_from_parent` (engine_test); both pass on HEAD.
-   Deps: 1. The two intended tests: (a) child-frame face/width independence;
-   (b) **cross-row-kind RTL bidi parity** — identical RTL text as a buffer `Text`
-   row vs a `ModeLine`/`Minibuffer` chrome row. CAVEAT from the critique: (b) is a
-   **forward-spec, not a characterization** — buffer rows reorder at
-   `EndIncremental` (cursor remapped) while chrome reorders earlier with
-   `phys_cursor=None`, so it may *not* pass on HEAD. Scope (b) to glyph order /
-   `reversed_p` (identical today); the cursor-column axis is what slice 5 fixes.
-   The mixed-ascent baseline test the critique wanted is **not needed** — the
-   review confirmed the live `GlyphRow` single-per-row ascent already covers it.
-5. ✅ **Collapse the `EndPrebuilt`/`EndIncremental` bidi+install fork into ONE
-   row-end boundary** (core landed `6d5aadf9d`). `reorder_current_row_bidi` is now
-   the single bidi finalizer for all row kinds; the bidi/finalization-timing bug
-   class is structurally fixed. `normalize_external_row` no longer reorders (render
-   produces logical order); `PrebuiltDisplayRowInstall` uses `EndIncremental`;
-   the frame tab-bar reorders its side-vector clone; `EndPrebuilt` deleted.
-   Validated: 1219 layout-engine + 1431/1435 cross-crate green (4 pre-existing tty
-   failures unrelated). The scout's verdict simplified it: threading `phys_cursor`
-   through chrome is NOT needed (point never lives in chrome; the active minibuffer
-   already goes through the buffer walk), and nearly all pre-install geometry
-   readers are vertical/count (reorder-independent). **One GNU-correct behavior
-   delta** remains untested: the RTL echo continuation-marker side (markers now
-   participate in paragraph direction) — recommend an RTL-echo characterization
-   test + GUI check. **Optional remaining containment** (not needed for the bug-class
-   fix): delete `PrebuiltDisplayRowInstall`/`PrebuiltCurrent` by having chrome
-   append directly into the current row instead of copy-prebuilt-glyphs-then-reorder.
-   _Original framing kept for reference:_ *The real "one row lifecycle" prize* and
-   the structural fix for the finalization/bidi-timing bug class. Critique
-   prerequisites (now resolved by the scout): enumerate every pre-install reader of
-   chrome row geometry; resolve the tab-bar measure-then-relayout vs
-   append-into-live-matrix conflict (height reader is order-independent, so safe).
-   **PREREQUISITE for slice 6 — walk-state parity coverage ✅ DONE** (`a0801d56c`,
-   `9e120f049`). A design scout corrected the scope sharply: **6 of the 8 named
-   gaps are pure WALK-STATE and need NO typed-source change** — line-number margins,
-   invisible runs, hscroll-skip run *before* `consume_source_event` (bypass
-   sourcing); selective-display ellipsis + nobreak/NBSP reach the typed path
-   through the shim's *translated* arms; word-wrap candidates + tab + multibyte are
-   already covered. Parity tests now exist for all of them (the new ones:
-   invisible, nobreak, selective-display, hscroll; pre-existing: line-numbers,
-   word-wrap, truncate, wrap, tab, multibyte, face). Also corrected: **the parity
-   harness ALREADY compares faces + cursor col** (`matrix_rows` is `assert_eq!`'d
-   whole; `GlyphTrace` derives `Eq` over `face_id`, `RowTrace` over `cursor_col`).
-   The ONLY genuine typed-source gaps left are (a) glyphless-with-composition-
-   cluster-tail emit reconciliation and (b) native handling of the replacement
-   items (`SourceMappedText`/`Stretch`/`MediaReplacement`/non-Buffer span) that
-   currently hit the `None`-fallthrough — and **both are coupled to slice 6**: the
-   shim's fallthrough/flattening MASKS these divergences, so they cannot be
-   validated by a standalone parity test until the native consume is built. They
-   are folded into slice 6 below.
-6. ✅ **DONE — `BufferTextSourceCursor` is the production path; legacy decoder +
-   flag deleted** (`149d22717` flip, `a77d18446` no-fallback, `c09adac5f` delete).
-   The keystone. A design scout (run `wti0xt1u4`) + reading `render_next_step`
-   resolved it far more simply than feared: the display-property / invisible /
-   hscroll checkpoints run BEFORE `consume_source_event` and short-circuit on every
-   replacement / non-buffer-span span, so consume only ever sees plain text /
-   control / glyphless / newline — the per-char native consume the shim already
-   implemented is sufficient and the `None`-fallthrough is unreachable in
-   production. Validated empirically: flipped the default, removed the raw
-   fallback, and all 1224 tests stayed byte-identical (parity tests assert whole
-   `matrix_rows` incl. faces + cursor across plain/mixed/face/display/truncate/wrap/
-   line-numbers/word-wrap/invisible/nobreak/selective-display/hscroll + a new
-   Arabic/Hebrew/emoji-ZWJ complex-text case). Then deleted `BufferTextSourceEventCursor`
-   + the shim + the `use_typed_buffer_source` flag everywhere (net −125 lines); the
-   structurally-dead arms degrade gracefully (log + decode underlying char) rather
-   than panic during redisplay. Workspace builds; 1223 layout-engine tests green.
-   _Historical detail below (kept for reference):_
-   This was effectively ONE atomic change (the shim masked the remaining
-   divergences). Scout's
-   exact plan (`keystone-prereq-design-scout`, run `wti0xt1u4`):
-   - **Native consume:** rewrite `consume_source_event` (walk.rs:2778-2790) to be
-     UNCONDITIONALLY native — pull a `DisplayItem` from a per-step
-     `BufferTextSourceCursor` (keep the stateless-per-step pattern seeded at
-     `CharPos0(*self.charpos)`; the walk's `&mut byte_idx/charpos` stay
-     authoritative, advancing by `ch.len_utf8` / +1 for newline). Emit
-     Text/LineBreak for TextRun/ControlChar/Glyphless as the shim does, AND handle
-     `SourceMappedText`/`Stretch`/`MediaReplacement` natively (these are the
-     fallthrough cases — **the real blocker**, larger than the per-char gaps).
-   - **Glyphless+composition reconciliation:** make the cursor emit composition-
-     joiner chars as **Text** (not Glyphless) so the downstream `has_tail`
-     look-ahead (display_source.rs:732) makes the classification, matching the raw
-     path. Reconcile `PreserveForComposition` (display_source.rs:2095) with
-     `glyphless_method_for_char`.
-   - **Flip + delete:** remove the `use_typed_buffer_source` branch + field +
-     setter (engine.rs:186/211/236/276/1000; walk.rs threading); delete
-     `consume_typed_source_event` (walk.rs:2792-2873), `BufferTextSourceEventCursor`
-     + `next_event` + `into_event` (display_buffer_text_source.rs:363-382/295-301).
-     **KEEP** `BufferTextDecodedSourceEvent`/`BufferTextSourceTextEvent`/
-     `BufferTextLineBreakSourceEvent` (still request-builder inputs at
-     display_row_append.rs:4346/4350) unless you also refactor those builders.
-   - **Test fallout:** display_buffer_text_walk_test.rs:198-199 (flag assert);
-     display_row_append_test.rs / display_source_test.rs callers of
-     `BufferTextSourceEventCursor::new().next_event()`; collapse the now-redundant
-     dual-path parity tests (engine_test.rs ~2005-2200) to single-path assertions.
-   - **Validation:** full `cargo nextest run -p neomacs-layout-engine` (1223
-     baseline) AND a Doom GUI screenshot smoke (the release binary is built; regen
-     the pdump first) — the parity tests only cover synthetic buffers, not real
-     overlay/bidi/composition interactions. Default flip changes production
-     rendering for ALL of layout, so this is the GUI-validation gate.
-7. ◑ **Overlay strings — partially done.** A design scout (run `wcwa3lt3d`)
-   corrected the framing: overlay strings, display-property replacements, AND
-   line/wrap prefixes ALREADY share one render path (`LispStringSourceRowAppendSession`,
-   keyed by `LispStringSourceId` OVERLAY_STRING=1 / PREFIX=2) — there is NO separate
-   "third lifecycle" to delete. And the typed cursor's `replacement_strings` stack
-   is dead (the display-property checkpoint pre-empts replacements, per slice 6), so
-   "overlay strings as DisplayItems on the typed cursor's stack" is NOT achievable
-   without first making that stack load-bearing + teaching `LispStringSourceFrame`
-   to carry overlay identity (cursor capture keys on it) — **deferred to a later
-   slice**. The achievable wins:
-   - ✅ **GNU `compare_overlay_entries` ordering** (`2a8d3fd5b`): `overlay_strings_at`
-     returns ONE interleaved list (after-strings of other overlays in front of
-     before-strings; same-overlay before<after; before asc / after desc priority),
-     via a manual stable insertion sort (the comparator is NOT a total order — a
-     zero-length overlay with both before+after cycles; `sort_by` would panic).
-     Behavior-neutral so far: consumers re-split by kind.
-   - ⬜ **Step 2 (HIGH risk): activate the interleaving** — collapse the three
-     injection points (`render_before_at`/`render_after_at`/`render_both_at`,
-     display_row_append.rs ~2253/2327) into ONE `render_overlay_strings_at` that
-     consumes the interleaved list in order. Risk: today before-strings render
-     before the buffer char (4533) and after-strings after it (4572); GNU renders
-     all position overlay strings before the char. Scout mitigation: keep a
-     documented two-phase split (same-overlay-end after-strings post-char) if the
-     single point regresses `places_cursor_inside_overlay_string_text_run` (9358)
-     or `preserves_multiline_overlay_output_rows` (9116). Canary test: 9358.
-   - ⬜ **Steps 3–5: containment** — rewire the 4 call sites, delete the batch
-     scaffolding (`render_overlay_string_batch`, `OverlayStringRenderBatchSource`,
-     `BufferOverlayString*RenderContext` shells, engine_test.rs:633/663 scaffolding
-     tests), remove the `overlay_context` threading. KEEP `render_overlay_string`,
-     `OverlayStringRowBreakRenderContext::finish_row`, `discard_pending_until_row_break`,
-     `capture_overlay_string_cursor*` (the shared row-break/clip/cursor machinery).
-8. ⬜ **Echo / inactive-minibuffer through the buffer walk.** Risk **high**, large
-   (8 steps, several HIGH-risk to ALL minibuffer rendering). Deps: 5, 6. Mirrors
-   GNU `display_echo_area_1`. **Scout (run `w9bzpec3k`) verdict: go-with-care.**
-   The ` *Echo Area 0/1*` buffers already exist (`Context::ensure_echo_area_buffers`,
-   eval.rs:7759); `set_current_message` (eval.rs:7751) exists but only stashes a
-   `LispString` field — it never writes the buffer. The dual message/buffer source
-   is the historical duplicate-"Making completion list..." bug. Ordered plan:
-   1. ✅ **DONE (`e05f98b84`): mirror the message into ` *Echo Area 0*`** in
-      `set_current_message` + `append_current_message_*` + the clear paths (GNU
-      `set_message_1`, via `replace_buffer_contents_lisp_string` after toggling
-      the echo buffer's multibyteness to the message's). The mirror does NOT
-      create the buffer (GNU assumes it exists) — only writes when present.
-      `builtin_message` reordered to GNU's `message_dolog`+`ensure_echo_area_buffers`
-      FIRST, then `set_current_message`, so the echo buffer exists + gets the
-      message and creation order stays `[*scratch*, *Messages*, *Echo Area 0/1*]`.
-      Additive — layout still renders from `current_message`.
-   2. ✅ **DONE (`942d113be`):** swap the inactive mini-window's buffer to
-      ` *Echo Area 0*` (GNU `with_echo_area_buffer`, xdisp.c:12904). Done as a
-      layout-only buffer resolution in engine.rs `layout_window_rust`: for an
-      inactive mini-window, `ensure_echo_area_buffers()` then resolve `buf_id` to
-      ` *Echo Area 0*` (GNU's temporary `wset_buffer` for display; the window
-      record's `buffer_id` is untouched). ALSO reset the position params to the
-      echo buffer's full range (`window_start`/`point`→BEG=0, `buffer_begv`=0,
-      `buffer_size`=echo ZV char) — GNU moves `pointm`/`start` to BEG; without
-      this the source read uses the mini-window's own (short) accessible range and
-      truncates the message. Ensuring the buffers exist is what keeps an idle echo
-      area blank instead of re-displaying the frame's root buffer (which the
-      mini-window record points at, window/mod.rs).
-   3. ◑ **PARTIAL (`942d113be`):** instead of porting the full `resize_mini_window`
-      unclamped-measure, the existing pre-layout estimator was repointed to read
-      the SWAPPED echo buffer (`BufferTextWindowContentRowsRequest` now takes an
-      `effective_buf_id`), so it pre-grows for the echo content and the existing
-      grow/shrink loop (engine.rs:559, which already IS GNU grow/shrink) resizes.
-      Works + green incl. the multiline-echo resize tests. The full GNU
-      measure-by-iteration-to-ZV + `visible_max_rows` relaxation (so the estimator
-      can be DELETED, step 6) is still TODO.
-   4. ✅ **DONE (`942d113be`):** deleted the engine.rs early-return dispatch;
-      echo/inactive now flows through the ordinary walk over the swapped buffer.
-      This IS GNU `display_echo_area_1` (xdisp.c:13194) = resize + walk. Echo now
-      renders with full unified-pipeline fidelity (faces, CJK wide glyphs, ZWJ
-      emoji, inline images) — proven by the converted parity tests.
-   5. ✅ **DONE (`2e754c4e0`, net −1062 lines):** deleted the parallel machinery —
-      `MinibufferSpecialRowsPlan` + enum + `EchoMinibufferDisplayRowsRequest` +
-      `InactiveMinibufferDisplayRowRequest` + `MinibufferDisplayRenderState` +
-      `empty_minibuffer_echo_row` + `append_synthetic_minibuffer_text` +
-      `message_wrap_mode` + `minibuffer_echo_message_for_window` + dead
-      `ChromeRowRenderServices`/`DisplayRow*` session helpers. Cascade: the
-      `DisplayOrigin::Minibuffer`/`EchoArea` variants became unconstructed and were
-      removed too (the real `layout_window` path now tags echo rows `Text`, the
-      same role the active-minibuffer walk already produces; the mock-frame path
-      still uses `GlyphRowRole::Minibuffer`). Suppression unit tests deleted
-      (tested a deleted internal helper; inactive-render covered end-to-end).
-   6. ✅ **DONE (`05ec88d2f`):** deleted the pre-layout estimator
-      (`BufferTextWindowContentRowsRequest` struct+`resolve`+`new`,
-      `minibuffer_resize_line_count`, the `effective_buf_id` plumbing, and the
-      `into_geometry` minibuffer-rows override param). Minibuffer height is now
-      measured by the walk itself (GNU `resize_mini_window` `move_it_to(ZV)`):
-      `with_max_mini_window_rows` setter + relaxed `visible_max_rows` +
-      `visibility_bottom_y` lifted to span the ceiling so the walk emits past the
-      window's current physical height; `max_rows` still hard-caps at
-      `max-mini-window-height`. Overflow shows the END by un-excluding the
-      point-driven `scroll_down_window_start` for the minibuffer (point at EOB for
-      active fido/vertico; BEGV for inactive echo so it never scrolls).
-   7. ✅ **DONE (`05ec88d2f`):** the shrink path now reflects true buffer
-      emptiness (the walk measures the displayed buffer directly), GNU `BEGV==ZV`.
-   8. ✅ **DONE — GUI-validated 2026-06-18.** Release build + pdump regen + X11
-      smoke: echo startup message renders 1-line; active `Eval:` minibuffer renders
-      (prompt+cursor); a multi-line `(message "AA\nBB\nCC")` GROWS the echo area to
-      3 rows (mode-line shifts up); a single-line message SHRINKS it back to 1 —
-      exactly GNU grow/shrink_mini_window. Plus active-minibuffer + overflow matrix
-      characterization tests (`be325295b`).
-   _Status 2026-06-18: **SLICE 8 COMPLETE + GUI-validated.** Echo/minibuffer now
-   renders entirely through the unified buffer-text walk (GNU `display_echo_area_1`
-   / `resize_mini_window`); the parallel echo machinery (~1062 lines) AND the
-   pre-layout estimator are deleted. Done by reading GNU first — every invented risk
-   (stale swap, chicken-and-egg height) dissolved against GNU's actual design. 1218
-   layout-engine + 228 neovm-core message/echo green._
-9. ◑ **PARTIAL — 2 relocations DONE.** `e7b717a53` right-edge/right-border installer
-   → `display_row_special_glyphs.rs` (GNU `produce_special_glyphs`, −284);
-   `e423748df` line-number margin → `display_row_line_number_margin.rs` (GNU
-   `maybe_produce_line_number`, −108); `5a90cbdb7` overlay-string rendering →
-   `display_row_overlay_string.rs` (GNU `load_overlay_strings`, −270).
-   `display_row_append.rs` 10150 → 9268. **COMPLETE for the cohesive non-append
-   clusters** — what remains is core append-glyph logic
-   (`BufferTextRowAppendContext`/`BufferTextItemAppendContext` impls + the append
-   free functions), the module's actual purpose; no clean cluster left to extract.
-10. ✅ **DONE — A+C (`5f7be8d8a`, −222) + B (`cedf18b8a`).** A: collapsed
-    `BufferTextSourceAppendOperation` (inlined into 4 production callers via the
-    existing `append_request`/`for_single_item`). C: deleted the `cfg(test)`
-    `for_buffer_text_range`/`BufferTextSourceRangeAppendContext` cluster (6 unique
-    assertions retargeted onto the production path, 1 true duplicate dropped).
-    B: the TTY right border now allocates its face id from the single per-frame
-    `FrameFaceIdAllocator` (GNU `face_cache->used` / `lookup_face`) instead of the
-    redundant `FaceResolver::next_dynamic_id` (deleted) — verified every other
-    `resolve_named_face` consumer re-keys/uses-attributes/takes-a-basic-id, so only
-    the border aliased. The `-nw` smoke gate was satisfied with a deterministic
-    matrix regression test pinning the no-collision invariant directly.
-
-**Slice 7 step 2 — EXCLUDED (do not implement).** Adversarial verification
-(workflow `wiqlkm18n`) found a FATAL flaw: `*charpos += 1` (display_row_append.rs,
-in `append_to_text_row_and_apply`) executes BETWEEN `render_before_at` (charpos N)
-and `render_after_at` (charpos N+1) — they are two DISTINCT GNU stop positions, not
-one, so collapsing them into a single `render_overlay_strings_at` is semantically
-impossible and empirically breaks the cursor canary. The GNU interleaving the plan
-wanted to "activate" is ALREADY live via `overlay_strings_at` + per-iteration
-adjacency. Only the batch scaffolding is deletable (low-value containment).
-
-**Risk note for slices 5–10:** these touch live redisplay in exactly the areas
-validated visually (posframe, tab-bar/tab-line, bidi, echo/minibuffer). Do them
-incrementally with per-segment parity tests and GUI validation
-(`NEOMACS_DUMP_FRAME_GLYPHS=1`, the screenshot+`xdotool` loop) — not a one-shot
-rush. The keystone (6) is gated on the unscheduled prerequisite above; sequence
-it explicitly or the legacy path can never be deleted.
+- `M-x`, type one char, press `TAB`: no duplicate visible "Making completion list..." rows.
+- Vertico/posframe: stable width, no text overlap, prompt face does not leak into candidates.
+- Tab-bar/tab-line: stable height and spacing across repeated navigation.
+- Menu-bar: correct popup content, anchoring, hover behavior, and submenu behavior.
