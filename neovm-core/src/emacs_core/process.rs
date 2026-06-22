@@ -8088,17 +8088,24 @@ fn builtin_make_process_impl_with_environment(
         ));
     };
 
-    // Determine PTY vs pipe as GNU's `is_pty_from_symbol` does:
+    // Determine PTY vs pipe exactly as GNU's `is_pty_from_symbol` does:
     // nil inherits `process-connection-type`; only `pipe` and `pty` are
     // accepted explicit symbols.
-    let mut use_pty =
+    //
+    // GNU's `Fmake_process` (src/process.c) decides STDIN/STDOUT's pty-vs-pipe
+    // *solely* from `:connection-type` / `process-connection-type` and stores it
+    // in `pty_in`/`pty_out`.  Supplying `:stderr` only routes the child's
+    // *stderr* to a separate pipe process (`stderrproc`); it does NOT flip
+    // stdin/stdout to a pipe.  In `create_process`, the pty is allocated when
+    // `pty_in || pty_out`, stdin/stdout use the pty channels, and the stderr
+    // pipe is wired through a wholly separate `forkerr` fd.  Hence with the
+    // default connection-type (pty) and `:stderr`, GNU reports
+    // `(process-tty-name p 'stdout)` => "/dev/pts/N" and `'stderr` => nil.
+    //
+    // The previous code wrongly forced `use_pty = false` whenever `:stderr` was
+    // given, downgrading stdout from a pty to a pipe and diverging from GNU.
+    let use_pty =
         resolve_process_connection_type_use_pty(connection_type.as_ref(), default_use_pty)?;
-    // GNU's create_process can only separate stderr when the child uses pipes
-    // (a PTY merges stdout and stderr).  When :stderr is given, force pipe mode
-    // for the main process so stderr can be routed to the stderr pipe-process.
-    if !stderr_target.is_nil() {
-        use_pty = false;
-    }
 
     let command = command.unwrap_or_default();
     let (program, argv) = if command.is_empty() {
