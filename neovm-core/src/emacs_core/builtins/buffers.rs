@@ -1887,8 +1887,23 @@ pub(crate) fn builtin_buffer_text_pixel_size(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let buffers = &eval.buffers;
     expect_range_args("buffer-text-pixel-size", &args, 0, 4)?;
+
+    // GNU `buffer-text-pixel-size` returns PIXELS: the measured column/row counts
+    // scaled by the frame's character cell size. On a TTY the cell is 1x1 (so the
+    // result equals the cell counts), on a GUI frame it is the real font
+    // width/height. This mirrors `window-text-pixel-size` (which already scales by
+    // `frame.char_width`). Without it, `string-pixel-width` returns columns, and the
+    // mode-line `(space :align-to (- right-margin (string-pixel-width …)))` produced
+    // by `mode-line-format-right-align` mis-aligns on GUI frames — the Doom dashboard
+    // "DOOM vX" right segment is pushed off-screen.
+    let (char_w, char_h) = eval
+        .frames
+        .selected_frame()
+        .map(|f| (f.char_width.max(1.0), f.char_height.max(1.0)))
+        .unwrap_or((1.0, 1.0));
+
+    let buffers = &eval.buffers;
 
     let buffer_id = if args.is_empty() {
         resolve_buffer_designator_allow_nil_current_in_manager(buffers, &Value::NIL)?
@@ -1981,8 +1996,8 @@ pub(crate) fn builtin_buffer_text_pixel_size(
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     }
     Ok(Value::cons(
-        Value::fixnum(width as i64),
-        Value::fixnum(height as i64),
+        Value::fixnum((width as f32 * char_w).ceil() as i64),
+        Value::fixnum((height as f32 * char_h).ceil() as i64),
     ))
 }
 
