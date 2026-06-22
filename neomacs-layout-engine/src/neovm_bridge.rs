@@ -521,8 +521,12 @@ fn global_bool(obarray: &Obarray, name: &str) -> bool {
         .is_some_and(|value| !value.is_nil())
 }
 
-fn global_nobreak_char_display(obarray: &Obarray) -> i32 {
-    match obarray.symbol_value("nobreak-char-display") {
+fn effective_nobreak_char_display(buffer: &Buffer, obarray: &Obarray) -> i32 {
+    // `nobreak-char-display` is a `DEFVAR_LISP`, but GNU reads `Vnobreak_char_display`
+    // while displaying buffer text (xdisp.c:8522, with the window's buffer current),
+    // so a buffer-local binding takes effect. Read buffer-local-then-global, not the
+    // raw global.
+    match effective_buffer_value(buffer, obarray, "nobreak-char-display") {
         Some(value) if value.is_nil() => 0,
         Some(value) if value.as_int() == Some(2) => 2,
         Some(_) => 1,
@@ -1321,7 +1325,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         },
         selective_display: buffer_selective_display(buffer),
         escape_glyph_fg: 0,
-        nobreak_char_display: global_nobreak_char_display(obarray),
+        nobreak_char_display: effective_nobreak_char_display(buffer, obarray),
         nobreak_char_fg: 0,
         glyphless_char_fg: 0,
         wrap_prefix: Vec::new(),

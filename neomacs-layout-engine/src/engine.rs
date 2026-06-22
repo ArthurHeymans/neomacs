@@ -611,10 +611,21 @@ impl LayoutEngine {
                                 mini_params,
                                 frame_rows,
                             );
+                            // GNU `resize_mini_window` reads `Vresize_mini_windows`
+                            // after `set_buffer_internal (XBUFFER (w->contents))`
+                            // (xdisp.c:13296,13318), so a buffer-local binding in the
+                            // mini-window's buffer takes effect. Read buffer-local-
+                            // then-global from that buffer, not the raw global.
                             let resize_policy = evaluator
-                                .obarray()
-                                .symbol_value("resize-mini-windows")
-                                .copied();
+                                .buffer_manager()
+                                .get(neovm_core::buffer::BufferId(mini_params.buffer_id))
+                                .and_then(|buffer| buffer.buffer_local_value("resize-mini-windows"))
+                                .or_else(|| {
+                                    evaluator
+                                        .obarray()
+                                        .symbol_value("resize-mini-windows")
+                                        .copied()
+                                });
                             let resize_mode =
                                 ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
 
