@@ -1874,6 +1874,60 @@ fn backend_layout_trace_with_buffer_and_window_setup(
     selected_window_layout_trace(&eval, &engine, frame_id)
 }
 
+/// Layout-engine micro-benchmark — the REDISPLAY LAYOUT cost, the rank-1
+/// interactive-latency cost center (the engine had ZERO timers in ~49k LOC). One
+/// GUI engine over a realistic buffer/frame: COLD first layout then WARM
+/// steady-state (min-of-N). The engine rebuilds the frame in full every cycle (no
+/// incremental fast-path), so warm = the per-redisplay-cycle floor a keystroke
+/// pays. Reports via panic! (like the jit_bench_* family) so the line surfaces
+/// under nextest capture; the test "fails" by design. Build needs the jit feature
+/// (a bare neovm-core build is broken on this branch, pre-existing). Run:
+///   cargo nextest run -p neomacs-layout-engine --features neovm-core/jit \
+///     --release --run-ignored ignored-only --no-capture layout_bench_warm
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn layout_bench_warm() {
+    use std::time::{Duration, Instant};
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    // ~120 lines of representative code-like ASCII (a real editing buffer).
+    let text =
+        "(defun example-helper (alpha beta) (let ((sum (+ alpha beta))) (* sum sum)))\n".repeat(120);
+    insert_fragmented_current_buffer_text(&mut eval, &text);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-bench", 1000, 700, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+    let mut engine = LayoutEngine::new();
+    let t0 = Instant::now();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let cold = t0.elapsed();
+    let mut best = Duration::MAX;
+    for _ in 0..100 {
+        let t = Instant::now();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        best = best.min(t.elapsed());
+    }
+    panic!("BENCH layout_frame_rust 1000x700 (~120-line buffer, GUI): warm {best:?} cold {cold:?}");
+}
+
 fn backend_layout_trace_with_buffer_setup(
     kind: BufferTextBackendKind,
     frame_name: &str,

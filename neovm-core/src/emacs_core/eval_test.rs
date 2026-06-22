@@ -13708,6 +13708,48 @@ fn vm_op_mix_loop() {
     panic!("OP-MIX dumped above (profiling aid, not a failure)");
 }
 
+/// Op-mix profiling aid on a REAL byte-compiled elisp workload (vs the hand-built
+/// arithmetic loop): a recursive list build + recursive sum, driven 500x. Three
+/// knobs make it count real-elisp ops: (1) runtime_startup_context (defun/dotimes
+/// are Lisp MACROS from byte-run.el — a bare Context::new lacks them); (2)
+/// byte-compile + assert byte-code-function-p (a plain defun is a tree-walked
+/// closure that never reaches run_loop, so vm_profile would see 0 ops); (3)
+/// NEOVM_JIT=0 so the hot body stays in the VM (else it tiers to native mid-run
+/// and silently drops ops). The mix (Call/Car/Cdr/Cons/branch-weighted) is
+/// genuinely different from the StackRef/StackSet-dominated hand-built loop —
+/// representative of real list-processing elisp. Run:
+///   cargo nextest run -p neovm-core --features vm-profile --release \
+///     --run-ignored ignored-only --no-capture vm_op_mix_real_elisp
+#[cfg(feature = "vm-profile")]
+#[test]
+#[ignore = "profiling aid; run explicitly with --features vm-profile --no-capture"]
+fn vm_op_mix_real_elisp() {
+    crate::test_utils::init_test_tracing();
+    // SAFETY: nextest runs each test in its own process; this write happens before
+    // the VM reads the JIT gate. Pins the body in run_loop so vm_profile counts
+    // every op (a tiered-to-native body bumps nothing).
+    unsafe { std::env::set_var("NEOVM_JIT", "0") };
+    let mut ev = crate::test_utils::runtime_startup_context();
+    ev.eval_str(
+        "(progn \
+           (defun rl-build (n acc) (if (= n 0) acc (rl-build (1- n) (cons n acc)))) \
+           (defun rl-sum (lst) (if (null lst) 0 (+ (car lst) (rl-sum (cdr lst))))) \
+           (defun rl-work (n) (rl-sum (rl-build n nil))) \
+           (byte-compile 'rl-build) (byte-compile 'rl-sum) (byte-compile 'rl-work) t)",
+    )
+    .expect("setup defuns + byte-compile");
+    assert_eq!(
+        format_eval_result(&ev.eval_str("(byte-code-function-p (symbol-function 'rl-work))")),
+        "OK t",
+        "rl-work must be byte-compiled (else it tree-walks and counts no VM ops)"
+    );
+    crate::emacs_core::bytecode::vm::vm_profile::reset();
+    let run = ev.eval_str("(let ((s 0)) (dotimes (_ 500) (setq s (rl-work 200))) s)");
+    assert_eq!(format_eval_result(&run), "OK 20100");
+    crate::emacs_core::bytecode::vm::vm_profile::dump("real-elisp list-processing");
+    panic!("OP-MIX dumped above (profiling aid, not a failure)");
+}
+
 /// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
 /// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
 /// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin
