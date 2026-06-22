@@ -756,7 +756,7 @@ fn tty_complex_run_then_tab_lands_on_buffer_tab_stop() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
-    test_base_face.font_char_width = 8.0;
+    test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let request = display_row_request_from_base_face(
@@ -775,16 +775,21 @@ fn tty_complex_run_then_tab_lands_on_buffer_tab_stop() {
         std::collections::HashMap::new(),
     );
 
-    let rendered =
-        DisplayRowLispStringRenderRequest::new(request, Value::string("Arabic (العربيّة)\tx"))
-            .render(&mut renderer, &resolver, &mut face_ids)
-            .expect("display source row");
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        request,
+        Value::string("Arabic (العربيّة)\tx"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
 
     // The greeting (here `x`) must land at the tab stop, just past column 42.
     assert_eq!(
-        rendered.progress.end_col, 43,
+        rendered.progress().end_col(),
+        43,
         "complex name + TAB must reach the buffer tab stop (col 42 + 1 for `x`); got {}",
-        rendered.progress.end_col
+        rendered.progress().end_col()
     );
 }
 
