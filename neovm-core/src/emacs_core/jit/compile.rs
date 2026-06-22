@@ -2722,6 +2722,18 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // ALL-PRECISE deopt for call-bearing bodies (see mir_deopt_block): never
         // rerun-from-start after a call. Pure bodies keep the shared rerun block.
         let precise = has_call;
+        // Escape-analysis scalar-replacement of non-escaping conses — ONLY for pure
+        // bodies (precise == false). There a deopt reruns from start and re-creates
+        // the cons, so the elided value is never read from a precise framestate (no
+        // materialization needed). A replaceable Cons becomes a no-op; its car/cdr
+        // reads forward to the operand SSA values (zero allocation, raw fixnums kept
+        // raw across the elided cons). Empty (all-None) for call-bearing bodies, so
+        // every cons there keeps bailing as before.
+        let cons_repl: Vec<Option<(mir::MirValue, mir::MirValue)>> = if precise {
+            vec![None; m.value_types.len()]
+        } else {
+            mir::cons_scalar_repl_targets(m)
+        };
         let mut pending: Vec<PendingDeopt> = Vec::new();
         // Shared signal-propagation block (returns STATUS_SIGNAL), created lazily by
         // the first call lowering.
@@ -2850,15 +2862,27 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         cval[r] = Some(lower_predicate(&mut fb, k, a));
                     }
                     MirOp::CarCdr { cdr, safe, arg } => {
-                        let d = if *safe {
-                            None
+                        // If `arg` is a scalar-replaced (eliminated) cons, forward the
+                        // read directly to its car/cdr operand SSA value — no consp
+                        // guard, no allocation, no lower_car_cdr. Carry cval_raw so a
+                        // raw fixnum stays raw across the elided cons. (Checked BEFORE
+                        // mir_deopt_block — a forwarded read never deopts.)
+                        if let Some((car_v, cdr_v)) = cons_repl[arg.0 as usize] {
+                            let src = if *cdr { cdr_v } else { car_v };
+                            cval[r] = cval[src.0 as usize];
+                            cval_raw[r] = cval_raw[src.0 as usize];
                         } else {
-                            Some(mir_deopt_block(
-                                &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
-                            )?)
-                        };
-                        let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *arg)?;
-                        cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
+                            let d = if *safe {
+                                None
+                            } else {
+                                Some(mir_deopt_block(
+                                    &mut fb, precise, inst, &cval, &cval_raw, &mut deopt,
+                                    &mut pending,
+                                )?)
+                            };
+                            let a = mir_as_tagged(&mut fb, &cval, &cval_raw, *arg)?;
+                            cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
+                        }
                     }
                     // A CALL: a GC safepoint + a side effect. Force-tag every value
                     // that survives it (a raw fixnum cannot cross the safepoint —
@@ -2924,11 +2948,16 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         cval[r] = Some(result);
                         cval_raw[r] = false;
                     }
+                    // A non-escaping cons (escape analysis, pure bodies only) is
+                    // ELIDED: emit nothing, leave cval[r]=None — every use is a
+                    // CarCdr that forwards to the operands. An escaping cons (or any
+                    // cons in a call-bearing body) still bails: it allocates.
+                    MirOp::Cons(..) if cons_repl[r].is_some() => {}
                     // Shim-using / allocating ops, deferred: `eq` needs the
                     // symbols-with-position slow-path shim (vmctx) so plain
                     // tagged-bits comparison would diverge when
-                    // symbols-with-pos-enabled; `cons` allocates (GC safepoint);
-                    // other `opaque` (VarRef/builtins/...) are not yet ported.
+                    // symbols-with-pos-enabled; an ESCAPING `cons` allocates (GC
+                    // safepoint); other `opaque` (VarRef/builtins/...) not yet ported.
                     MirOp::Eq(..) | MirOp::Cons(..) | MirOp::Opaque { .. } => {
                         return Err(CompileError::UnsupportedOp("mir-pure-shim-op"));
                     }
@@ -7029,6 +7058,24 @@ mod tests {
             0,
             "C's dep entry cleared on eviction"
         );
+    }
+
+    #[test]
+    fn mir_scalar_replaces_non_escaping_cons() {
+        // F = (car (cons a b)) -> a, with the cons ELIDED (escape analysis, pure
+        // body -> MIR tier, zero allocation). Previously the cons bailed the whole
+        // body to the baseline. Verify it lowers (no bail) and returns the car.
+        let ops = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Car, Op::Return];
+        let m = mir::build_mir(&ops, &[], 2).expect("builds");
+        let leaf = lower_mir_pure(&m).expect("scalar-replaced cons lowers (no bail)");
+        assert!(
+            !leaf.has_side_effects,
+            "a pure scalar-replaced body has no side effects (no allocation/call)"
+        );
+        match leaf.call_for_test(&[Value::make_int(3), Value::make_int(5)]) {
+            Some(bits) => assert_eq!(bits, Value::make_int(3).bits(), "(car (cons 3 5)) = 3"),
+            None => panic!("expected Some(3) — no deopt"),
+        }
     }
 
     #[test]

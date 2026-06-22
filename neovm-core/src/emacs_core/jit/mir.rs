@@ -951,6 +951,83 @@ pub fn inline_pure_single_block_callees(
     inlined
 }
 
+/// Escape analysis for cons SCALAR-REPLACEMENT. Returns, indexed by `MirValue.0`,
+/// `Some((car, cdr))` for each `MirOp::Cons` result whose EVERY use is a local
+/// `MirOp::CarCdr` read — i.e. it never escapes: not returned, not a cross-block
+/// (phi) arg, not consed into another cons, not `eq`'d, not an `Opaque` operand,
+/// not an arithmetic/predicate/compare operand. Such a cons can be eliminated with
+/// NO heap allocation — its car/cdr reads forward directly to the operand SSA
+/// values (the caller restricts this to PURE bodies, where a deopt reruns from
+/// start and re-creates the cons, so no framestate ever observes the elided value).
+///
+/// Conservative: any non-CarCdr use marks the cons escaping (`None` — keep the
+/// allocation / bail). A cons consed into ANOTHER cons is treated as escaping (the
+/// simplest sound rule, no fixpoint). The use classification matches op KIND
+/// explicitly (a `CarCdr.arg` is the sole non-escaping position) rather than a
+/// position-blind operand walk.
+pub(crate) fn cons_scalar_repl_targets(m: &MirFunction) -> Vec<Option<(MirValue, MirValue)>> {
+    let n = m.value_types.len();
+    let mut cons_of: Vec<Option<(MirValue, MirValue)>> = vec![None; n];
+    let mut escapes = vec![false; n];
+    let esc = |v: MirValue, escapes: &mut Vec<bool>| escapes[v.0 as usize] = true;
+    for blk in &m.blocks {
+        for inst in &blk.insts {
+            if let MirOp::Cons(car, cdr) = &inst.op {
+                cons_of[inst.result.0 as usize] = Some((*car, *cdr));
+            }
+            match &inst.op {
+                MirOp::Arg(_) | MirOp::Const(_) => {}
+                // A car/cdr read is the ONLY non-escaping use of a cons.
+                MirOp::CarCdr { .. } => {}
+                MirOp::Bin(_, a, b)
+                | MirOp::Cmp(_, a, b)
+                | MirOp::Eq(a, b)
+                | MirOp::Cons(a, b) => {
+                    esc(*a, &mut escapes);
+                    esc(*b, &mut escapes);
+                }
+                MirOp::Unary(_, a) | MirOp::Pred(_, a) => esc(*a, &mut escapes),
+                MirOp::Opaque { args, .. } => {
+                    for a in args {
+                        esc(*a, &mut escapes);
+                    }
+                }
+            }
+        }
+        match &blk.term {
+            MirTerm::Return(v) => esc(*v, &mut escapes),
+            MirTerm::Goto { args, .. } => {
+                for v in args {
+                    esc(*v, &mut escapes);
+                }
+            }
+            MirTerm::Branch {
+                cond,
+                taken_args,
+                fallthrough_args,
+                ..
+            } => {
+                esc(*cond, &mut escapes);
+                for v in taken_args {
+                    esc(*v, &mut escapes);
+                }
+                for v in fallthrough_args {
+                    esc(*v, &mut escapes);
+                }
+            }
+        }
+    }
+    let mut out = vec![None; n];
+    for (i, cc) in cons_of.iter().enumerate() {
+        if let Some(cc) = cc {
+            if !escapes[i] {
+                out[i] = Some(*cc);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1141,6 +1218,24 @@ mod tests {
         assert_eq!(
             rv, m.blocks[0].params[0],
             "(id (id x)) must return the arg x — composed substitution resolves the chain"
+        );
+    }
+
+    #[test]
+    fn cons_scalar_repl_finds_only_non_escaping_conses() {
+        // (car (cons a b)) — the cons is consumed only by car -> replaceable.
+        let ops = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Car, Op::Return];
+        let m = build_mir(&ops, &[], 2).expect("builds");
+        assert!(
+            cons_scalar_repl_targets(&m).iter().any(|r| r.is_some()),
+            "(car (cons a b)) cons is scalar-replaceable"
+        );
+        // A RETURNED cons escapes -> not replaceable.
+        let ops2 = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Return];
+        let m2 = build_mir(&ops2, &[], 2).expect("builds");
+        assert!(
+            cons_scalar_repl_targets(&m2).iter().all(|r| r.is_none()),
+            "a returned cons escapes"
         );
     }
 
