@@ -5157,6 +5157,15 @@ fn vm_process_introspection_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
+            // Simulate a spawned child: `create_process` only registers the
+            // record, so `os_pid` is None and GNU-correct `process-id` returns
+            // nil (commit e9359911e).  A real, live `'real` process has the
+            // child's OS pid, so give the fixture a synthetic one to match what
+            // `(integerp (process-id p))` observes for a running process.
+            eval.processes
+                .get_mut(pid)
+                .expect("introspect process")
+                .os_pid = Some(4242);
         },
     );
     assert_eq!(result, "OK (t t t t t t t t t t t t t t t t t t t)");
@@ -5188,6 +5197,15 @@ fn vm_stale_process_introspection_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
+            // Simulate a spawned child before the test deletes it: GNU keeps the
+            // process object's recorded OS pid after `delete-process`, so
+            // `(integerp (process-id p))` is t on the stale handle.  Without a
+            // spawn, `os_pid` is None and GNU-correct `process-id` returns nil
+            // (commit e9359911e); give the fixture a synthetic pid to match.
+            eval.processes
+                .get_mut(pid)
+                .expect("stale introspect process")
+                .os_pid = Some(4242);
         },
     );
     assert_eq!(result, "OK (t t t t t t t t t t)");
@@ -5266,7 +5284,12 @@ fn vm_stale_process_coding_and_tty_builtins_use_shared_runtime_state() {
              (delete-process p)
              (list
               (null (set-process-coding-system p 'utf-16le))
-              (equal (process-coding-system p) '(utf-16le . utf-16le))
+              ;; Single DECODING arg, ENCODING omitted (nil): GNU
+              ;; `Fset_process_coding_system` runs the nil ENCODING through
+              ;; `coding_inherit_eol_type` which normalizes it to raw-text-unix,
+              ;; so the pair becomes (utf-16le . raw-text-unix) — verified
+              ;; byte-identical on the GNU binary (31.0.x).
+              (equal (process-coding-system p) '(utf-16le . raw-text-unix))
               (eq (set-process-inherit-coding-system-flag p t) t)
               (process-inherit-coding-system-flag p)
               (eq (set-process-datagram-address p nil) nil)
