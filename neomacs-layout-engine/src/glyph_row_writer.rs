@@ -451,17 +451,33 @@ pub(crate) fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>)
         return None;
     }
 
-    let chars: String = units.iter().map(|unit| unit.ch).collect();
-    let levels = bidi::resolve_levels(&chars, BidiDir::Auto);
+    // Fast path: when every representative char is below U+0590 (the first RTL
+    // block) the row has no R/AL/AN and no explicit bidi controls, so UAX#9
+    // resolves all chars to even (LTR) levels with paragraph base 0 — visual
+    // order is the identity and the row is not reversed. Skip BOTH resolver
+    // passes (resolve_levels + paragraph_base_level), which otherwise run per row
+    // on EVERY redisplay even for pure-ASCII/code buffers (the common case, and
+    // the rank-1 redisplay-layout cost center). Soundness: I1 bumps European
+    // digits to level 2, but 2 is even — every consumer tests `bidi_level & 1`,
+    // and an all-even row has no odd run for rule L2 to reverse, so the result is
+    // observably identical to a full resolve.
+    let all_ltr = !units.iter().any(|unit| unit.ch >= '\u{0590}');
+    let (levels, reversed_p) = if all_ltr {
+        (vec![0u8; units.len()], false)
+    } else {
+        let chars: String = units.iter().map(|unit| unit.ch).collect();
+        let levels = bidi::resolve_levels(&chars, BidiDir::Auto);
+        // GNU marks a row whose paragraph base direction is right-to-left as
+        // `reversed_p` and displays it flush to the right margin (src/xdisp.c).
+        // Row materialization reads the same flag to offset glyphs to the right
+        // edge. Determined from logical-order representative chars.
+        let reversed_p = bidi::paragraph_base_level(&chars, BidiDir::Auto) & 1 == 1;
+        (levels, reversed_p)
+    };
     if levels.len() != units.len() {
         return None;
     }
-
-    // GNU marks a row whose paragraph base direction is right-to-left as
-    // `reversed_p` and displays it flush to the right margin (src/xdisp.c).
-    // Row materialization reads the same flag to offset glyphs to the right
-    // edge. Determined from logical-order representative chars.
-    row.reversed_p = bidi::paragraph_base_level(&chars, BidiDir::Auto) & 1 == 1;
+    row.reversed_p = reversed_p;
 
     let cursor_logical_idx = row.cursor_col.and_then(|col| {
         units
