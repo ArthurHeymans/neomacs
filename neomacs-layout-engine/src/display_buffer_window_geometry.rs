@@ -272,7 +272,17 @@ impl BufferWindowLocalDisplayPolicy {
         } else {
             1
         };
-        let point_line = if self.line_numbers_enabled() && self.line_number_mode >= 2 {
+        // `point_line` is needed for TWO things: relative line numbers
+        // (`current_line - point_line`) AND the `line-number-current-line` face on
+        // the current line (`is_current_line` == `current_line == point_line`).
+        // GNU highlights the current line number in EVERY mode (xdisp.c
+        // maybe_produce_line_number uses `lnum_face_id` when the row holds point),
+        // so compute point_line whenever line numbers are on — not only in
+        // relative/visual mode (>= 2). Gating it on `>= 2` left point_line at 0 in
+        // absolute mode, so `is_current_line` was never true and the current line's
+        // number rendered in the plain `line-number` face instead of
+        // `line-number-current-line`.
+        let point_line = if self.line_numbers_enabled() {
             let pt_byte = access.charpos_to_bytepos(point_charpos);
             access.count_lines(begin_byte, pt_byte) + 1
         } else {
