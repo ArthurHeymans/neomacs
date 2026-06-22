@@ -681,11 +681,293 @@ pub fn is_boot_info_row(gnu_text: &str, neo_text: &str) -> bool {
     false
 }
 
+// ── Strict contract-level grid comparison ────────────────────────────
+//
+// `diff_screens` above compares *raw* cells (char + exact terminal colour).
+// Raw-colour equality is the WRONG strictness for the Neomacs↔GNU contract:
+// the two editors map faces to terminal colours through different palettes/
+// themes, so identical raw SGR is not required (Neomacs is free to differ
+// "below the contract"). The contract is the *logical display*: the exact
+// character grid, and *which logical face* applies to each cell.
+//
+// `compare_grids_strict` therefore compares:
+//   1. the exact character at each cell (logical layout), and
+//   2. face *identity* as a palette-independent CLASS PARTITION — two cells
+//      share a class iff they share `(fg, bg)`, and the two grids must induce
+//      the *same partition* over the compared cells. GNU using red where
+//      Neomacs uses green is fine; GNU colouring two runs the same while
+//      Neomacs colours them differently is a divergence.
+// minus an explicit, shrinking allow-list of known parity gaps, with chrome /
+// non-deterministic rows masked.
+
+/// A cell allowed to diverge from GNU, with a human-readable reason. The
+/// allow-list is the *visible, shrinking* parity backlog: a green run means
+/// "no new divergence", not "no divergence".
+#[derive(Debug, Clone)]
+pub struct ExpectedDivergence {
+    pub row: u16,
+    pub col: u16,
+    pub reason: &'static str,
+}
+
+/// Options for [`compare_grids_strict`] / [`assert_grids_strict`].
+pub struct StrictGridOptions {
+    /// Rows skipped entirely (chrome: mode-line, header-line, echo area, and
+    /// any non-deterministic region).
+    pub masked_rows: Vec<u16>,
+    /// Restrict comparison to this row window (e.g. the text area). `None`
+    /// compares every unmasked row.
+    pub row_range: Option<std::ops::Range<u16>>,
+    /// Compare face identity (the class partition) in addition to characters.
+    pub compare_faces: bool,
+    /// Cells permitted to differ.
+    pub allow: Vec<ExpectedDivergence>,
+}
+
+impl Default for StrictGridOptions {
+    fn default() -> Self {
+        Self {
+            masked_rows: Vec::new(),
+            row_range: None,
+            compare_faces: true,
+            allow: Vec::new(),
+        }
+    }
+}
+
+/// What kind of strict (contract-level) divergence a cell exhibits.
+#[derive(Debug, PartialEq, Eq)]
+pub enum StrictDiffKind {
+    /// Different character — a logical-layout violation.
+    Char,
+    /// Different face *identity* — the cell's colour-class partition differs
+    /// from GNU's. Palette-independent: NOT a raw-colour comparison.
+    FaceClass,
+}
+
+/// One unexpected (non-allow-listed) divergence.
+#[derive(Debug)]
+pub struct StrictDiff {
+    pub row: u16,
+    pub col: u16,
+    pub kind: StrictDiffKind,
+    pub gnu_char: String,
+    pub neo_char: String,
+}
+
+/// Compare two screens strictly on the contract axis (exact chars + face-class
+/// partition) over the unmasked text area, minus the allow-list. Returns the
+/// unexpected divergences (empty == strict match).
+pub fn compare_grids_strict(
+    gnu: &vt100::Screen,
+    neo: &vt100::Screen,
+    opts: &StrictGridOptions,
+) -> Vec<StrictDiff> {
+    let is_allowed = |r: u16, c: u16| opts.allow.iter().any(|a| a.row == r && a.col == c);
+    let in_range = |r: u16| {
+        opts.row_range
+            .as_ref()
+            .map_or(true, |range| range.contains(&r))
+    };
+
+    // Per-grid canonical face-class labels, assigned by first appearance in a
+    // fixed row-major traversal. Same traversal on both grids => labels agree
+    // iff the partitions agree (palette-independent).
+    let mut gnu_class: std::collections::HashMap<(String, String), usize> = Default::default();
+    let mut neo_class: std::collections::HashMap<(String, String), usize> = Default::default();
+    let mut diffs = Vec::new();
+
+    for row in 0..ROWS {
+        if opts.masked_rows.contains(&row) || !in_range(row) {
+            continue;
+        }
+        for col in 0..COLS {
+            let (gc, nc) = match (gnu.cell(row, col), neo.cell(row, col)) {
+                (Some(g), Some(n)) => (g, n),
+                _ => continue,
+            };
+            if is_allowed(row, col) {
+                continue;
+            }
+
+            // Normalise blank-cell representation: GNU leaves trailing/blank
+            // cells *unwritten* (vt100 returns ""), while Neomacs writes explicit
+            // spaces. Both mean "blank", so treat "" and " " as equal — this is a
+            // terminal-output optimisation, not a logical-display difference.
+            let g_char = if gc.contents().is_empty() {
+                " "
+            } else {
+                gc.contents()
+            };
+            let n_char = if nc.contents().is_empty() {
+                " "
+            } else {
+                nc.contents()
+            };
+            if g_char != n_char {
+                diffs.push(StrictDiff {
+                    row,
+                    col,
+                    kind: StrictDiffKind::Char,
+                    gnu_char: g_char.to_string(),
+                    neo_char: n_char.to_string(),
+                });
+            }
+
+            if opts.compare_faces {
+                // Label classes by first appearance, but ANCHOR the
+                // default/background class (Default fg + Default bg) to 0 in both
+                // grids. Otherwise a single diverging colour shifts every later
+                // label and makes blank runs cascade into thousands of false
+                // diffs. With the anchor, only the genuinely re-partitioned
+                // (coloured) cells are reported.
+                let label = |classes: &mut std::collections::HashMap<(String, String), usize>,
+                             fg: vt100::Color,
+                             bg: vt100::Color|
+                 -> usize {
+                    let key = (format!("{fg:?}"), format!("{bg:?}"));
+                    if key.0 == "Default" && key.1 == "Default" {
+                        return 0;
+                    }
+                    let next = classes.len() + 1;
+                    *classes.entry(key).or_insert(next)
+                };
+                let g_label = label(&mut gnu_class, gc.fgcolor(), gc.bgcolor());
+                let n_label = label(&mut neo_class, nc.fgcolor(), nc.bgcolor());
+                if g_label != n_label {
+                    diffs.push(StrictDiff {
+                        row,
+                        col,
+                        kind: StrictDiffKind::FaceClass,
+                        gnu_char: gc.contents().to_string(),
+                        neo_char: nc.contents().to_string(),
+                    });
+                }
+            }
+        }
+    }
+    diffs
+}
+
+/// Assert a strict (contract-level) grid match; panics with a readable dump of
+/// the first divergences otherwise.
+pub fn assert_grids_strict(
+    label: &str,
+    gnu: &vt100::Screen,
+    neo: &vt100::Screen,
+    opts: &StrictGridOptions,
+) {
+    let diffs = compare_grids_strict(gnu, neo, opts);
+    if diffs.is_empty() {
+        return;
+    }
+    use std::fmt::Write as _;
+    let n_char = diffs
+        .iter()
+        .filter(|d| d.kind == StrictDiffKind::Char)
+        .count();
+    let n_face = diffs.len() - n_char;
+    let mut msg = format!(
+        "{label}: {} unexpected strict divergence(s) vs GNU ({n_char} char, {n_face} face-class):\n",
+        diffs.len()
+    );
+    for d in diffs.iter().take(40) {
+        let _ = writeln!(
+            msg,
+            "  ({:>2},{:>3}) {:?}: GNU {:?} / NEO {:?}",
+            d.row, d.col, d.kind, d.gnu_char, d.neo_char
+        );
+    }
+    if diffs.len() > 40 {
+        let _ = writeln!(msg, "  … and {} more", diffs.len() - 40);
+    }
+    panic!("{msg}");
+}
+
 /// Pretty-print row diffs to stderr (useful in test assertions).
 pub fn print_row_diffs(diffs: &[RowDiff]) {
     for d in diffs {
         eprintln!("  row {:2}:", d.row);
         eprintln!("    GNU: |{}|", d.gnu);
         eprintln!("    NEO: |{}|", d.neo);
+    }
+}
+
+#[cfg(test)]
+mod strict_grid_tests {
+    use super::*;
+
+    /// Render SGR-coloured `bytes` onto a full-size screen, starting at home.
+    fn screen(bytes: &[u8]) -> vt100::Parser {
+        let mut p = vt100::Parser::new(ROWS, COLS, 0);
+        p.process(b"\x1b[H");
+        p.process(bytes);
+        p
+    }
+
+    #[test]
+    fn face_class_is_palette_independent() {
+        // Same partition {col0,col1},{col2}; different palettes (red/blue vs green/yellow).
+        let gnu = screen(b"\x1b[31mAB\x1b[34mC\x1b[0m");
+        let neo = screen(b"\x1b[32mAB\x1b[33mC\x1b[0m");
+        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
+        assert!(
+            diffs.is_empty(),
+            "same partition with a different palette must match; got {diffs:?}"
+        );
+    }
+
+    #[test]
+    fn face_class_catches_repartition_without_cascading() {
+        // GNU separates C (blue) from A,B (red); NEO colours all three the same.
+        let gnu = screen(b"\x1b[31mAB\x1b[34mC\x1b[0m");
+        let neo = screen(b"\x1b[32mABC\x1b[0m");
+        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
+        // Exactly the C cell diverges — the (anchored) default/blank cells do NOT cascade.
+        assert_eq!(
+            diffs.len(),
+            1,
+            "only the repartitioned cell should diverge; got {diffs:?}"
+        );
+        assert_eq!(diffs[0].kind, StrictDiffKind::FaceClass);
+        assert_eq!((diffs[0].row, diffs[0].col), (0, 2));
+    }
+
+    #[test]
+    fn char_diff_caught_and_allowlist_suppresses() {
+        let gnu = screen(b"hello");
+        let neo = screen(b"hellX"); // differ at col 4
+        let plain = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
+        let chars: Vec<_> = plain
+            .iter()
+            .filter(|d| d.kind == StrictDiffKind::Char)
+            .collect();
+        assert_eq!(chars.len(), 1, "one char diff expected; got {plain:?}");
+        assert_eq!((chars[0].row, chars[0].col), (0, 4));
+
+        // Allow-listing that cell makes the comparison clean.
+        let opts = StrictGridOptions {
+            allow: vec![ExpectedDivergence {
+                row: 0,
+                col: 4,
+                reason: "intentional test divergence",
+            }],
+            ..Default::default()
+        };
+        assert!(compare_grids_strict(gnu.screen(), neo.screen(), &opts).is_empty());
+    }
+
+    #[test]
+    fn blank_cell_representation_is_normalised() {
+        // GNU leaves trailing cells unwritten (""); NEO writes explicit spaces.
+        let gnu = screen(b"AB"); // cols 2.. unwritten -> ""
+        let mut neo = vt100::Parser::new(ROWS, COLS, 0);
+        neo.process(b"\x1b[HAB");
+        neo.process(b"\x1b[1;3H   "); // overwrite cols 2..5 with spaces
+        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
+        assert!(
+            diffs.is_empty(),
+            "\"\" and \" \" blanks must compare equal; got {diffs:?}"
+        );
     }
 }
