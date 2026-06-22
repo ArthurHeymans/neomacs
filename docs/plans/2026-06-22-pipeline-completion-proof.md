@@ -49,10 +49,11 @@ path" would be a finding requiring code work; none was found.
   the GNU `face_at_buffer_position` merge order; independently verified by the
   2026-06-21 face-merge regression test), `face_for_overlay_string`, and fixed
   basic-face lookups.
-- **Realization:** `resolve_and_install_measured_face` — **exactly 2 call sites**,
-  both in the shared render path (`display_row_source_render.rs`,
-  `display_buffer_source_face_resolution.rs`). No face is realized below the row
-  boundary.
+- **Realization:** `resolve_and_install_measured_face` — defined on the shared
+  `TextRowSourceRenderState` (`display_row_source_render.rs`); **all direct calls are
+  in shared source-render / face-resolution code** (3 calls, all in
+  `display_buffer_source_face_resolution.rs:111,177,254`). No face is realized below
+  the row boundary.
 
 ## Per-path proof
 
@@ -85,8 +86,10 @@ the authorities:
   advance (`display_row_walk_state.rs`, `display_source_item_append.rs`) — the
   legitimate shared-progress channel GNU also uses (shared `it` state). **No
   independent pixel-width rule.**
-- **Face:** `resolve_and_install_measured_face` has exactly 2 callers (both shared);
-  `BaseFacePolicy::from` covers every origin. **No below-boundary face realization.**
+- **Face:** all direct calls to `resolve_and_install_measured_face` are in shared
+  source-render / face-resolution code (3, all in
+  `display_buffer_source_face_resolution.rs`); `BaseFacePolicy::from` covers every
+  origin. **No below-boundary face realization.**
 
 **No divergent path found.**
 
