@@ -7975,9 +7975,10 @@ impl Context {
     /// GNU `set_message_1` (`src/xdisp.c`) does: clear the echo buffer and insert
     /// the message text at BEG. This keeps the echo-area buffer as the single
     /// source of truth for the message text so redisplay can render it as
-    /// ordinary buffer text (the GNU `display_echo_area_1` model). Additive for
-    /// now — the layout still renders from `current_message` until the echo
-    /// reroute lands.
+    /// ordinary buffer text (the GNU `display_echo_area_1` model). The echo
+    /// reroute has landed: the layout engine renders the inactive echo area
+    /// through this ` *Echo Area 0*` buffer via the normal buffer walk (not from
+    /// `current_message`), so keeping this buffer in sync is load-bearing.
     fn mirror_message_to_echo_area_buffer(
         &mut self,
         message: Option<&crate::heap_types::LispString>,
