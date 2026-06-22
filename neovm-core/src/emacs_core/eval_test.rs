@@ -13681,6 +13681,33 @@ fn jit_bench_loop() {
     );
 }
 
+/// Profiling aid (NOT a pass/fail test): dump the dynamic, execution-weighted
+/// opcode histogram the interpreter runs for a workload — which opcodes actually
+/// dominate execution, the input the deferred tier-0 IC/quickening work needs to
+/// size itself. Reuses the loop workload run force-COLD (interpreted) so every op
+/// flows through the dispatch loop's `vm_profile::bump`. Like the benches it
+/// reports via panic! so the dump surfaces under nextest's capture. Run with:
+///   cargo nextest run -p neovm-core --features jit,vm-profile --release \
+///     --run-ignored ignored-only --no-capture vm_op_mix_loop
+#[cfg(all(feature = "jit", feature = "vm-profile"))]
+#[test]
+#[ignore = "profiling aid; run explicitly with --features vm-profile --no-capture"]
+fn vm_op_mix_loop() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let cold = jit_bench_loop_value(BenchTier::Cold);
+    let n = 1_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    crate::emacs_core::bytecode::vm::vm_profile::reset();
+    assert_eq!(
+        ev.funcall_general_untraced(cold, vec![Value::make_int(n)])
+            .unwrap(),
+        want
+    );
+    crate::emacs_core::bytecode::vm::vm_profile::dump("loop(1M) interpreted");
+    panic!("OP-MIX dumped above (profiling aid, not a failure)");
+}
+
 /// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
 /// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
 /// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin

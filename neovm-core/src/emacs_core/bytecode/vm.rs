@@ -24,6 +24,57 @@ use crate::emacs_core::value::*;
 use crate::tagged::header::{SubrDispatchKind, SubrFn};
 use crate::window::{FrameId, FrameManager, Window};
 
+/// Dynamic, execution-weighted opcode histogram for the Tier-0 interpreter
+/// dispatch loop. Compiled in ONLY under the `vm-profile` feature, so the
+/// production loop's bump site vanishes entirely — zero cost when off (no env
+/// check, no branch). This is the EXECUTION-weighted op-mix the deferred JIT
+/// work (tier-0 ICs / quickening) needs to size itself; distinct from the
+/// STATIC per-compiled-function op-mix behind `NEOVM_JIT_PROFILE`
+/// (jit/compile.rs), which counts a function's ops once at compile time.
+#[cfg(feature = "vm-profile")]
+pub(crate) mod vm_profile {
+    use super::Op;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static OP_COUNTS: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
+    }
+
+    /// Bump the executed-op histogram (once per dispatched op while profiling).
+    /// Keyed by the variant name without operands ("StackRef(3)" -> "StackRef").
+    pub(crate) fn bump(op: &Op) {
+        let dbg = format!("{op:?}");
+        let name = dbg.split(['(', ' ', '{']).next().unwrap_or(dbg.as_str());
+        OP_COUNTS.with(|c| {
+            let mut m = c.borrow_mut();
+            if let Some(v) = m.get_mut(name) {
+                *v += 1;
+            } else {
+                m.insert(name.to_string(), 1);
+            }
+        });
+    }
+
+    /// Clear the histogram (call before a measured workload).
+    pub(crate) fn reset() {
+        OP_COUNTS.with(|c| c.borrow_mut().clear());
+    }
+
+    /// Print the histogram, descending by count, with each op's execution share.
+    pub(crate) fn dump(label: &str) {
+        let mut rows: Vec<(String, u64)> =
+            OP_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect());
+        rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let total: u64 = rows.iter().map(|r| r.1).sum();
+        eprintln!("=== OP-MIX [{label}]: {total} ops executed, {} distinct ===", rows.len());
+        for (name, count) in &rows {
+            let pct = 100.0 * *count as f64 / total.max(1) as f64;
+            eprintln!("  {name:<16} {count:>12}  {pct:5.2}%");
+        }
+    }
+}
+
 /// Local marker for catch/condition-case frames mirrored into the shared
 /// condition runtime.
 #[derive(Clone, Debug)]
@@ -881,6 +932,8 @@ impl<'a> Vm<'a> {
         while pc_local < ops_len {
             let op = unsafe { &*ops_ptr.add(pc_local) };
             pc_local += 1;
+            #[cfg(feature = "vm-profile")]
+            vm_profile::bump(op);
 
             match op {
                 // -- Constants and stack --
