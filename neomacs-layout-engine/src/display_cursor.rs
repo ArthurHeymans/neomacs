@@ -10,7 +10,9 @@ use crate::window_output::{
     WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -191,8 +193,22 @@ impl CursorVisualColumnResolutionRequest {
             col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
         }
 
+        // Trim the trailing `:extend` fill glyphs from the Text area. The blank
+        // space + stretch glyphs that `extend_face_to_end_of_line` appends past
+        // EOL carry the no-buffer-position sentinel; they fill the highlighted
+        // background to the window edge but represent no buffer character. GNU's
+        // set_cursor_from_row walks `end` back over exactly these glyphs (the
+        // ones whose `object` is nil, src/xdisp.c:18648) so the EOL/blank-line
+        // cursor lands in the empty area right after the real text rather than
+        // being shoved to the fill's right edge.
+        let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+        let mut text_end = text_glyphs.len();
+        while text_end > 0 && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS {
+            text_end -= 1;
+        }
+
         let mut nearest_after: Option<(usize, u16)> = None;
-        for glyph in &row.glyphs[GlyphArea::Text.index()] {
+        for glyph in &text_glyphs[..text_end] {
             if glyph.padding {
                 continue;
             }

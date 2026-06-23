@@ -93,6 +93,17 @@ impl GlyphArea {
     }
 }
 
+/// Sentinel `charpos` for synthetic glyphs that map to no buffer position.
+///
+/// Glyphs appended by `extend_face_to_end_of_line` (the leading face-anchor
+/// space on an empty row and the trailing background stretch) fill the
+/// highlighted `:extend` background past end-of-line but cover no buffer
+/// character. They carry this sentinel so cursor placement can exclude them,
+/// mirroring GNU's `NILP (glyph->object)` test in `set_cursor_from_row`
+/// (src/xdisp.c). A literal `0` cannot be used: real buffer text begins at
+/// 0-based `charpos` `0`, so `0` is a valid position for the first glyph.
+pub const NO_BUFFER_POSITION_CHARPOS: usize = usize::MAX;
+
 /// One character cell on screen.
 /// Equivalent to GNU's `struct glyph` in `dispextern.h`.
 ///

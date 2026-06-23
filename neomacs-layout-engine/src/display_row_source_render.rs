@@ -46,7 +46,9 @@ use crate::window_output::{
     transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
+};
 use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -160,10 +162,13 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
         }
         let text_index = GlyphArea::Text.index();
         // Empty row: push a leading space carrying the extend face so the row
-        // displays text and has a face anchor (GNU xdisp.c:24420).
+        // displays text and has a face anchor (GNU xdisp.c:24420). It covers no
+        // buffer position, so stamp the no-position sentinel (see GNU's
+        // `glyph->charpos = -1` for the same anchor, src/xdisp.c:26021) — this
+        // keeps the blank-line cursor from latching onto the fill.
         if row.glyphs[text_index].is_empty() {
             row.glyphs[text_index].push(
-                Glyph::char(' ', self.fill.face_id, 0)
+                Glyph::char(' ', self.fill.face_id, NO_BUFFER_POSITION_CHARPOS)
                     .with_pixel_width(self.fill.char_width.max(1.0)),
             );
             row.displays_text = true;
@@ -177,6 +182,11 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
             self.fill.height_px,
             self.fill.ascent_px,
         );
+        // The trailing fill stretch likewise maps to no buffer position; mark it
+        // so cursor placement excludes it (GNU set_cursor_from_row, xdisp.c:18648).
+        if let Some(last) = row.glyphs[text_index].last_mut() {
+            last.charpos = NO_BUFFER_POSITION_CHARPOS;
+        }
         true
     }
 }

@@ -2160,6 +2160,133 @@ fn layout_frame_rust_line_number_cursor_tracks_first_text_column_after_c_n() {
     assert_eq!(cursor.x, point.x);
 }
 
+/// An anonymous `(:background ... :extend t)` face value, the shape hl-line /
+/// region use to highlight a whole line out to the window edge.
+fn extend_face_value() -> Value {
+    Value::list(vec![
+        Value::keyword("background"),
+        Value::string("#003366"),
+        Value::keyword("extend"),
+        Value::T,
+    ])
+}
+
+/// Lay out a 360x180 frame over `text` with point at `point_byte`, an `:extend`
+/// face on `extend_range`, and `display-line-numbers` optionally enabled.
+/// Returns the frame's authoritative phys cursor (the geometry the GUI draws)
+/// and the frame's pixel width.
+fn empty_line_extend_cursor(
+    text: &str,
+    extend_range: (usize, usize),
+    point_byte: usize,
+    line_numbers: bool,
+) -> (neomacs_display_protocol::frame_glyphs::PhysCursor, f32) {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, text);
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        if line_numbers {
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+        }
+        assert!(buffer.put_text_property(
+            extend_range.0,
+            extend_range.1,
+            Value::symbol("face"),
+            extend_face_value()
+        ));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(point_byte));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("empty-line-extend-cursor", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let phys = state
+        .phys_cursor
+        .clone()
+        .expect("frame phys cursor on the empty :extend line");
+    (phys, state.frame_pixel_width)
+}
+
+/// Regression: with `display-line-numbers` + an `:extend` (hl-line-style) face,
+/// the cursor on an EMPTY line must sit at column 0 of the text area (right
+/// after the line-number gutter), NOT at the far-right window edge.
+///
+/// `extend_face_to_end_of_line` fills the highlighted background from EOL to the
+/// window edge by appending a face-anchor space + a wide stretch glyph. Those
+/// synthetic glyphs carry no buffer position; before the fix
+/// `CursorVisualColumnResolutionRequest::resolve` counted them into the visual
+/// column, shoving the blank-line cursor to the fill's right edge.
+#[test]
+fn empty_line_extend_cursor_sits_at_text_start_not_window_edge() {
+    // Empty middle line of "abc\n\ndef\n", point on it (byte 4), line numbers on.
+    let (cursor, frame_width) = empty_line_extend_cursor("abc\n\ndef\n", (4, 5), 4, true);
+    // Reference: a real char at the start of a NON-empty line gets the first
+    // text column (the gutter width). The empty-line cursor must match it, not
+    // the :extend fill's far-right edge.
+    let (non_empty_cursor, _) = empty_line_extend_cursor("abc\n\ndef\n", (0, 1), 0, true);
+    assert_eq!(
+        cursor.col, non_empty_cursor.col,
+        "empty-line cursor column must equal the first text column (column 0 of \
+         the text area), not the :extend fill's right edge; got {cursor:?}"
+    );
+    // The drawn cursor must be far from the window's right edge (the bug placed
+    // it at/past `frame_width`).
+    assert!(
+        cursor.x <= non_empty_cursor.x + 1.0 && cursor.x < frame_width / 2.0,
+        "empty-line cursor x must be at the text-area start (~{}), not near the \
+         window right edge ({frame_width}); got x={}",
+        non_empty_cursor.x,
+        cursor.x
+    );
+
+    // Without line numbers the text area starts at x=0, so an empty line's
+    // cursor must be at column 0 / x=0 exactly.
+    let (no_ln_cursor, _) = empty_line_extend_cursor("abc\n\ndef\n", (4, 5), 4, false);
+    assert_eq!(
+        no_ln_cursor.col, 0,
+        "empty-line cursor without line numbers must be at column 0; got {no_ln_cursor:?}"
+    );
+    assert_eq!(
+        no_ln_cursor.x, 0.0,
+        "empty-line cursor without line numbers must be at x=0; got {no_ln_cursor:?}"
+    );
+
+    // The fill's synthetic glyphs carry no buffer position, so they must not
+    // displace the cursor at end-of-line on a NON-empty first line whose real
+    // first char carries 0-based charpos 0: the cursor sits AFTER that char.
+    let (single_char_cursor, _) = empty_line_extend_cursor("a\nbc\n", (0, 2), 1, false);
+    assert_eq!(
+        single_char_cursor.col, 1,
+        "EOL cursor on a single-char first line must sit after the char (col 1), \
+         not be pulled back over the trimmed fill; got {single_char_cursor:?}"
+    );
+}
+
 #[test]
 fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
     let trace = backend_layout_trace_with_buffer_and_window_setup(
