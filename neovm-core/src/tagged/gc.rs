@@ -434,6 +434,15 @@ pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
     with_tagged_heap(|heap| heap.note_root_overwrite_value(pre_image));
 }
 
+/// Whether a concurrent mark is active on this (mutator) thread — the gate the
+/// Stage 1b symbol-cell seqlock uses to bracket value-cell ARM changes only
+/// while the GC thread might be scanning the obarray. A thread-local load;
+/// false (zero cost) off the concurrent path.
+#[inline]
+pub(crate) fn concurrent_mark_active() -> bool {
+    TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get())
+}
+
 // ---------------------------------------------------------------------------
 // Cons block allocator
 // ---------------------------------------------------------------------------

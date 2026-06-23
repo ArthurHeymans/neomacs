@@ -621,12 +621,37 @@ impl SymbolChunks {
     /// borrow) lets a write site bump the seqlock and then take a `&mut` to the
     /// slot without a borrow conflict (the `AtomicU32` is interior-mutable).
     // Used by the write-site seqlock bump + the GC scan in the next increment.
-    #[allow(dead_code)]
     #[inline(always)]
     fn chunk_seq_ptr(&self, idx: usize) -> Option<*const std::sync::atomic::AtomicU32> {
         self.seqs
             .get(idx >> 12)
             .map(|b| &**b as *const std::sync::atomic::AtomicU32)
+    }
+}
+
+/// Brackets a symbol value-cell ARM change (redirect tag + val word) with the
+/// per-chunk seqlock so a concurrent GC reader sees a consistent (redirect,val)
+/// pair. Bumps the chunk seqlock to ODD on construction and back to EVEN on
+/// drop. No-op unless a concurrent mark is active. Holds a raw pointer (not a
+/// borrow) so the caller can still take `&mut` to the slot.
+struct SeqlockWriteGuard {
+    seq: Option<*const std::sync::atomic::AtomicU32>,
+}
+impl SeqlockWriteGuard {
+    #[inline]
+    fn new(seq: Option<*const std::sync::atomic::AtomicU32>) -> Self {
+        if let Some(p) = seq {
+            unsafe { (*p).fetch_add(1, std::sync::atomic::Ordering::Release) }; // -> odd
+        }
+        Self { seq }
+    }
+}
+impl Drop for SeqlockWriteGuard {
+    #[inline]
+    fn drop(&mut self) {
+        if let Some(p) = self.seq {
+            unsafe { (*p).fetch_add(1, std::sync::atomic::Ordering::Release) }; // -> even
+        }
     }
 }
 
@@ -728,6 +753,19 @@ impl Obarray {
         self.symbols
             .ensure(idx)
             .get_or_insert_with(|| LispSymbol::new(id))
+    }
+
+    /// Returns a seqlock guard for the chunk holding `id`'s slot, armed only while a
+    /// concurrent mark is active. Must be created BEFORE the redirect/val write and
+    /// held until after it (the RAII drop closes the window).
+    #[inline]
+    fn seqlock_guard(&self, id: SymId) -> SeqlockWriteGuard {
+        let seq = if crate::tagged::gc::concurrent_mark_active() {
+            self.symbols.chunk_seq_ptr(Self::slot_index(id))
+        } else {
+            None
+        };
+        SeqlockWriteGuard::new(seq)
     }
 
     fn mark_global_member(&mut self, id: SymId) {
@@ -1211,6 +1249,10 @@ impl Obarray {
         });
         let raw = Box::into_raw(blv);
         self.blvs.push(raw);
+        // Stage 1b: bracket the redirect-arm change (Plainval/... -> Localized) +
+        // val-word store with the per-chunk seqlock, armed only during a concurrent
+        // mark. Created BEFORE the &mut slot borrow (holds a raw ptr, no borrow).
+        let _seq_guard = self.seqlock_guard(target);
         let sym = self.ensure_symbol_id(target);
         // SATB: a Plainval cell holds a heap Value about to be replaced by the BLV
         // pointer — retain its pre-image during a concurrent mark (it only survives
@@ -1331,6 +1373,10 @@ impl Obarray {
         id: SymId,
         fwd: &'static crate::emacs_core::forward::LispBufferObjFwd,
     ) {
+        // Stage 1b: bracket the redirect-arm change (Plainval/... -> Forwarded) +
+        // val-word store with the per-chunk seqlock, armed only during a concurrent
+        // mark. Created BEFORE the &mut slot borrow (holds a raw ptr, no borrow).
+        let _seq_guard = self.seqlock_guard(id);
         let sym = self.ensure_symbol_id(id);
         // SATB: a Plainval cell holds a heap Value about to be replaced by a
         // forwarder descriptor — retain its pre-image during a concurrent mark.
@@ -1641,6 +1687,12 @@ impl Obarray {
     fn set_symbol_value_id_inner(&mut self, id: SymId, value: Value) {
         let target = self.resolve_alias_for_write(id);
         self.value_epoch = self.value_epoch.wrapping_add(1);
+        // Stage 1b: bracket the redirect-arm change (the `_ =>` arm below resets to
+        // Plainval) + val-word store with the per-chunk seqlock, armed only during a
+        // concurrent mark. Created BEFORE the &mut slot borrow (holds a raw ptr, no
+        // borrow). The Localized fast-path returns early, dropping the guard then;
+        // the val word it touches lives in the BLV pool, not the seqlock'd slot.
+        let _seq_guard = self.seqlock_guard(target);
         let sym = self.ensure_symbol_id(target);
 
         // LOCALIZED: write to BLV defcell (the default). Do NOT touch
@@ -1860,6 +1912,10 @@ impl Obarray {
     pub fn makunbound_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);
         let target = self.resolve_alias_for_write(id);
+        // Stage 1b: bracket the redirect-arm change (-> Plainval/UNBOUND) + val-word
+        // store with the per-chunk seqlock, armed only during a concurrent mark.
+        // Created BEFORE the &mut slot borrow (holds a raw ptr, no borrow).
+        let _seq_guard = self.seqlock_guard(target);
         if let Some(sym) = self.slot_mut(target) {
             if sym.flags.trapped_write() != SymbolTrappedWrite::NoWrite {
                 // SATB: retain the old plain value during a concurrent mark before
@@ -2114,6 +2170,11 @@ impl Obarray {
     /// Phase 1: maintains both the legacy enum and the new redirect tag.
     /// Phase 3 cuts callers over to the redirect-only path.
     pub fn make_alias(&mut self, id: SymId, target: SymId) {
+        // Stage 1b: bracket the redirect-arm change (Plainval/... -> Varalias) +
+        // val-word store performed inside `set_alias_target` with the per-chunk
+        // seqlock, armed only during a concurrent mark. Created BEFORE the &mut slot
+        // borrow (holds a raw ptr, no borrow).
+        let _seq_guard = self.seqlock_guard(id);
         let sym = self.ensure_symbol_id(id);
         sym.set_alias_target(target);
     }
@@ -2142,6 +2203,10 @@ impl Obarray {
     /// restored to `SYMBOL_PLAINVAL` with `Qunbound` in its value cell.
     pub fn delete_variable_alias_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);
+        // Stage 1b: bracket the redirect-arm change (Varalias -> Plainval) + val-word
+        // store with the per-chunk seqlock, armed only during a concurrent mark.
+        // Created BEFORE the &mut slot borrow (holds a raw ptr, no borrow).
+        let _seq_guard = self.seqlock_guard(id);
         let sym = self.ensure_symbol_id(id);
         // SATB: normally the prior redirect is Varalias (a non-heap SymId), but
         // guard for a Plainval heap value being clobbered to UNBOUND during a mark.
