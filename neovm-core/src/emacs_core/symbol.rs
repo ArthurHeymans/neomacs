@@ -479,7 +479,7 @@ impl LispSymbol {
 /// stays semantically a deep copy. The custom [`Drop`] impl frees the
 /// heap allocations.
 pub struct Obarray {
-    symbols: Vec<Option<LispSymbol>>,
+    symbols: SymbolChunks,
     global_member_count: usize,
     function_epoch: u64,
     value_epoch: u64,
@@ -487,6 +487,73 @@ pub struct Obarray {
     /// is a `Box::into_raw` pointer; freed in [`Obarray::drop`]. The
     /// pool is append-only — we never reuse a slot.
     blvs: Vec<*mut LispBufferLocalValue>,
+}
+
+/// Power-of-two slots per obarray chunk (`idx >> 12` / `idx & 4095`).
+const OBARRAY_CHUNK: usize = 4096;
+
+/// Non-moving chunked backing for the obarray's symbol slots: a `Vec` spine of
+/// fixed-size boxed arrays. Growth APPENDS a chunk, so existing chunk arrays never
+/// move (only the 8-byte spine pointers do) — unlike the old flat `Vec`, whose
+/// `resize_with` relocated every `LispSymbol`. This is the Stage 1b foundation: a
+/// stable chunk address lets the GC thread scan a chunk concurrently with no
+/// realloc UAF. Slot `idx` (== `SymId`) lives at `chunks[idx >> 12][idx & 4095]`,
+/// preserving the dense `SymId == slot-index` identity the dump + iteration rely on.
+#[derive(Clone)]
+struct SymbolChunks {
+    chunks: Vec<Box<[Option<LispSymbol>; OBARRAY_CHUNK]>>,
+    /// Logical slot count; grows to a chunk boundary as chunks are appended.
+    len: usize,
+}
+
+impl SymbolChunks {
+    fn new() -> Self {
+        Self {
+            chunks: Vec::new(),
+            len: 0,
+        }
+    }
+
+    #[inline(always)]
+    fn get(&self, idx: usize) -> Option<&Option<LispSymbol>> {
+        if idx >= self.len {
+            return None;
+        }
+        Some(&self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)])
+    }
+
+    #[inline(always)]
+    fn get_mut(&mut self, idx: usize) -> Option<&mut Option<LispSymbol>> {
+        if idx >= self.len {
+            return None;
+        }
+        Some(&mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)])
+    }
+
+    /// Grow (appending chunks; existing chunks never move) until `idx` is in
+    /// range, returning a mutable reference to its slot.
+    fn ensure(&mut self, idx: usize) -> &mut Option<LispSymbol> {
+        while self.len <= idx {
+            self.chunks.push(Box::new(std::array::from_fn(|_| None)));
+            self.len += OBARRAY_CHUNK;
+        }
+        &mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)]
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Iterate every slot in global `SymId` order (untouched tail slots are
+    /// `None`, inert under `.flatten()`; `.enumerate()` yields the global index).
+    fn iter(&self) -> impl Iterator<Item = &Option<LispSymbol>> {
+        self.chunks.iter().flat_map(|c| c.iter())
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<LispSymbol>> {
+        self.chunks.iter_mut().flat_map(|c| c.iter_mut())
+    }
 }
 
 impl std::fmt::Debug for Obarray {
@@ -584,10 +651,9 @@ impl Obarray {
 
     fn ensure_slot(&mut self, id: SymId) -> &mut LispSymbol {
         let idx = Self::slot_index(id);
-        if self.symbols.len() <= idx {
-            self.symbols.resize_with(idx + 1, || None);
-        }
-        self.symbols[idx].get_or_insert_with(|| LispSymbol::new(id))
+        self.symbols
+            .ensure(idx)
+            .get_or_insert_with(|| LispSymbol::new(id))
     }
 
     fn mark_global_member(&mut self, id: SymId) {
@@ -661,7 +727,7 @@ impl Obarray {
 
     pub fn new() -> Self {
         let mut ob = Self {
-            symbols: Vec::new(),
+            symbols: SymbolChunks::new(),
             global_member_count: 0,
             function_epoch: 0,
             value_epoch: 0,
@@ -2295,9 +2361,9 @@ impl Obarray {
             .chain(global_members.iter().map(|id| Self::slot_index(*id)))
             .chain(function_unbound.iter().map(|id| Self::slot_index(*id)))
             .max();
-        let mut slots = Vec::new();
+        let mut slots = SymbolChunks::new();
         if let Some(max_slot) = max_slot {
-            slots.resize_with(max_slot + 1, || None);
+            slots.ensure(max_slot);
         }
 
         let mut ob = Self {
@@ -2310,7 +2376,7 @@ impl Obarray {
         for (id, mut sym) in symbols {
             sym.interned_global = false;
             sym.function_unbound = false;
-            ob.symbols[Self::slot_index(id)] = Some(sym);
+            *ob.symbols.ensure(Self::slot_index(id)) = Some(sym);
         }
         for id in global_members {
             let sym = ob
