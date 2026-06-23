@@ -120,9 +120,9 @@ struct LineColumn {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct RegionTextMetrics {
-    lines: usize,
-    max_columns: usize,
+pub(crate) struct RegionTextMetrics {
+    pub(crate) lines: usize,
+    pub(crate) max_columns: usize,
 }
 
 fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
@@ -188,6 +188,315 @@ fn region_text_metrics(bytes: &[u8], multibyte: bool) -> RegionTextMetrics {
         lines,
         max_columns: max_cols.max(cur_col),
     }
+}
+
+/// Resolve a `(space :align-to SPEC)` / `(space :width SPEC)` value to a count of
+/// canonical character columns, mirroring GNU's `calc_pixel_width_or_height`
+/// (src/xdisp.c) but in *column* units rather than pixels.  GNU works in pixels
+/// where a bare number is multiplied by `FRAME_COLUMN_WIDTH`; since our caller
+/// multiplies the final column count by `char_width`, here one number == one
+/// column and the window-relative edge keywords resolve to column offsets.
+///
+/// `align_to` selects the GNU "first pass" semantics where bare window symbols
+/// (`left`, `text`, …) stand for the *position* of the element's left edge;
+/// when false they stand for their *width*.  Returns the resolved column count
+/// (may be 0), or `None` for spec forms we do not model (pixel `(N)` lists,
+/// physical units like `in`/`cm`, images, fringe/scroll-bar/right edges that
+/// depend on window box geometry we do not track here).
+fn calc_space_columns(spec: Value, align_to: bool) -> Option<f64> {
+    if spec.is_nil() {
+        return Some(0.0);
+    }
+    // A bare number stands for that many columns (GNU: NUM * FRAME_COLUMN_WIDTH).
+    if let Some(n) = spec.as_fixnum() {
+        return Some(n as f64);
+    }
+    if let Some(f) = spec.as_float() {
+        return Some(f);
+    }
+    if let Some(name) = spec.as_symbol_name() {
+        // Window-relative edge keywords.  We model the text area as starting at
+        // column 0 (we do not subtract the line-number gutter / margins / fringe
+        // here — see the function doc TODO).  `left`/`text` => column 0; the
+        // others depend on window box geometry we do not have, so bail.
+        return match name {
+            "left" => Some(0.0),
+            // `text` as a *width* is the text-area width, which we do not know;
+            // as an align-to *position* it is the left edge of the text area = 0.
+            "text" if align_to => Some(0.0),
+            _ => None,
+        };
+    }
+    if spec.is_cons() {
+        let car = spec.cons_car();
+        // `(+ EXPR...)` / `(- EXPR...)`: GNU sums recursively-resolved values.
+        if car.is_symbol_named("+") || car.is_symbol_named("-") {
+            let minus = car.is_symbol_named("-");
+            let mut cdr = spec.cons_cdr();
+            let mut acc = 0.0;
+            let mut first = true;
+            while cdr.is_cons() {
+                let part = calc_space_columns(cdr.cons_car(), align_to)?;
+                if first {
+                    acc = if minus { -part } else { part };
+                    first = false;
+                } else {
+                    acc += part;
+                }
+                cdr = cdr.cons_cdr();
+            }
+            if minus {
+                acc = -acc;
+            }
+            return Some(acc);
+        }
+        // `(NUM)` absolute-pixel and image/slice specs are not modeled here.
+        return None;
+    }
+    None
+}
+
+/// Resolve a `(space ...)` plist to the number of columns the space occupies,
+/// honoring `:width`/`:align-to` (the column-affecting subset GNU's display
+/// iterator resolves via `calc_pixel_width_or_height`).  `cur_col` is the column
+/// at the spec, needed for `:align-to` (which is an absolute target column).
+/// Returns `None` when the spec carries no column-bearing keyword we model.
+fn space_spec_advance_columns(plist: Value, cur_col: usize) -> Option<usize> {
+    let qcwidth = Value::symbol(":width");
+    let qcalign = Value::symbol(":align-to");
+
+    // `:width N` => advance N columns from the current position.
+    if let Some(width) = super::plist::plist_get(plist, &qcwidth) {
+        if !width.is_nil() {
+            if let Some(cols) = calc_space_columns(width, false) {
+                return Some(cols.max(0.0).round() as usize);
+            }
+        }
+    }
+
+    // `:align-to COL` => advance so the running column reaches COL (never go
+    // backwards, matching GNU which never produces a negative-width space).
+    if let Some(align) = super::plist::plist_get(plist, &qcalign) {
+        if !align.is_nil() {
+            if let Some(target) = calc_space_columns(align, true) {
+                let target = target.max(0.0).round() as usize;
+                return Some(target.saturating_sub(cur_col));
+            }
+        }
+    }
+
+    None
+}
+
+/// Per-character column width policy for [`region_text_metrics_with_display`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CharColumnWidth {
+    /// One column per character (matches `window-text-pixel-size`).
+    One,
+    /// The character's display width (1 or 2 for wide chars); matches the
+    /// `crate::encoding::char_width` accounting of `buffer-text-pixel-size`.
+    DisplayWidth,
+}
+
+/// `display`-aware variant of [`region_text_metrics`].  Scans the buffer's
+/// byte range `[from, to)` honoring the `display` text property / overlay at
+/// each position: a `(space :align-to N)` / `(space :width N)` spec contributes
+/// its real column width (GNU resolves these through the display iterator's
+/// `calc_pixel_width_or_height`), instead of being counted as a single
+/// character column.  Plain text, tabs and newlines are counted exactly as
+/// `region_text_metrics` does.  `apply_trim` requests the GNU `TO == t`
+/// trailing-blank-line trimming, applied to the *byte* range before scanning.
+///
+/// `char_width` selects the per-char column accounting (see [`CharColumnWidth`]).
+/// `x_limit` / `y_limit` cap the measured columns-per-line and lines (used by
+/// `buffer-text-pixel-size`); pass `None` for an unbounded scan.
+pub(crate) fn region_text_metrics_with_display(
+    eval: &super::eval::Context,
+    buffer_id: BufferId,
+    from: EmacsBytePos,
+    to: EmacsBytePos,
+    apply_trim: bool,
+    char_width: CharColumnWidth,
+    x_limit: Option<usize>,
+    y_limit: Option<usize>,
+) -> RegionTextMetrics {
+    let Some(buf) = eval.buffers.get(buffer_id) else {
+        return RegionTextMetrics {
+            lines: 0,
+            max_columns: 0,
+        };
+    };
+
+    // The GNU `TO == t` semantics measure through the line ending the last
+    // non-empty line, not through trailing blank lines.  We reuse the existing
+    // byte-level trimmer to find the trimmed end, then scan with display props.
+    let scan_end = if apply_trim {
+        let mut bytes = Vec::new();
+        buf.copy_emacs_byte_range_to(EmacsByteRange::new(from, to), &mut bytes);
+        let trimmed_len = trim_window_text_to_non_empty_line_end(&bytes).len();
+        EmacsBytePos::new(from.get() + trimmed_len)
+    } else {
+        to
+    };
+
+    if scan_end.get() <= from.get() {
+        return RegionTextMetrics {
+            lines: 0,
+            max_columns: 0,
+        };
+    }
+
+    let display_sym = Value::symbol("display");
+    let mut max_cols = 0usize;
+    let mut lines = 1usize;
+    let mut cur_col = 0usize;
+    let mut last_code: Option<u32> = None;
+    // Once the running line is capped by `x_limit`, ignore further width on it.
+    let mut line_capped = false;
+
+    let cap_line = |cur_col: &mut usize, line_capped: &mut bool| {
+        if let Some(limit) = x_limit {
+            if *cur_col >= limit {
+                *cur_col = limit;
+                *line_capped = true;
+            }
+        }
+    };
+
+    let mut scan = from.get();
+    let end = scan_end.get();
+    while scan < end {
+        if y_limit.is_some_and(|limit| lines > limit) {
+            lines = lines.saturating_sub(1);
+            break;
+        }
+
+        // A `display` property (text property or overlay) whose value is a
+        // `(space ...)` spec replaces the covered text for layout.  Resolve its
+        // column width and advance over the whole property/overlay run atomically.
+        if let Some((width, run_end)) =
+            display_space_run(eval, buf, scan, cur_col, &display_sym, end)
+        {
+            if run_end > scan {
+                if !line_capped {
+                    cur_col = cur_col.saturating_add(width);
+                    cap_line(&mut cur_col, &mut line_capped);
+                }
+                last_code = None;
+                scan = run_end.min(end);
+                continue;
+            }
+        }
+
+        let scan_pos = EmacsBytePos::new(scan);
+        let Some(code) = buf.char_code_after_emacs_byte_pos(scan_pos) else {
+            break;
+        };
+        let char_len = buf
+            .char_after_emacs_byte_len(scan_pos)
+            .map(|len| len.get().max(1))
+            .unwrap_or(1);
+
+        if code == '\n' as u32 {
+            lines += 1;
+            max_cols = max_cols.max(cur_col);
+            cur_col = 0;
+            line_capped = false;
+        } else if !line_capped {
+            if code == '\t' as u32 {
+                cur_col = (cur_col + 8) & !7;
+            } else {
+                cur_col += match char_width {
+                    CharColumnWidth::One => 1,
+                    CharColumnWidth::DisplayWidth => char::from_u32(code)
+                        .map(crate::encoding::char_width)
+                        .unwrap_or(1),
+                };
+            }
+            cap_line(&mut cur_col, &mut line_capped);
+        }
+        last_code = Some(code);
+        scan += char_len;
+    }
+
+    // Match `region_text_metrics`: a trailing newline does not open a new line.
+    if last_code == Some('\n' as u32) {
+        lines = lines.saturating_sub(1);
+    }
+
+    RegionTextMetrics {
+        lines,
+        max_columns: max_cols.max(cur_col),
+    }
+}
+
+/// If buffer byte `pos` carries a `display` property (text property OR overlay)
+/// whose value is a `(space ...)` spec with a column-bearing keyword, return
+/// `(column_width, run_end_byte)`.  Mirrors the `display`-spec branch of GNU's
+/// display iterator: the covered run is laid out as a single stretch of the
+/// resolved width.  Returns `None` when there is no `display` property, or its
+/// value is not a width-bearing `(space ...)` spec we model.
+fn display_space_run(
+    eval: &super::eval::Context,
+    buf: &Buffer,
+    pos: usize,
+    cur_col: usize,
+    display_sym: &Value,
+    region_end: usize,
+) -> Option<(usize, usize)> {
+    let charpos0 = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(pos));
+    let charpos1 = charpos0.get() as i64 + 1;
+
+    // GNU consults overlays and text properties (get_char_property_and_overlay).
+    let (display, overlay) = super::textprop::buffer_overlay_property_at_byte_pos(
+        &eval.obarray,
+        &eval.buffers,
+        buf,
+        pos,
+        *display_sym,
+        None,
+    )
+    .map(|(v, ov)| (v, Some(ov)))
+    .or_else(|| {
+        let v = super::textprop::builtin_get_text_property_in_state(
+            &eval.obarray,
+            &eval.buffers,
+            vec![Value::fixnum(charpos1), *display_sym],
+        )
+        .ok()?;
+        if v.is_nil() { None } else { Some((v, None)) }
+    })?;
+
+    // Only `(space ...)` specs affect the measured column width here.
+    if !(display.is_cons() && display.cons_car() == Value::symbol("space")) {
+        return None;
+    }
+    let width = space_spec_advance_columns(display.cons_cdr(), cur_col)?;
+
+    // End of the run: overlay-end for an overlay `display`, else the
+    // text-property range end (GNU `OVERLAY_END` vs `get_property_and_range`).
+    let run_end = if let Some(ov) = overlay {
+        buf.overlays
+            .overlay_end_emacs_byte_pos(ov)
+            .map(|p| p.get())
+            .unwrap_or(region_end)
+    } else {
+        let run_end_char1 = super::textprop::builtin_next_single_property_change_in_state(
+            &eval.obarray,
+            &eval.buffers,
+            vec![Value::fixnum(charpos1), *display_sym],
+        )
+        .ok()
+        .and_then(|v| match v.kind() {
+            ValueKind::Fixnum(n) => Some(n),
+            _ => None,
+        })
+        .unwrap_or_else(|| buf.accessible_char_region().end().get() as i64 + 1);
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new((run_end_char1 - 1).max(0) as usize))
+            .get()
+    };
+
+    Some((width, run_end.min(region_end)))
 }
 
 fn trim_window_text_to_non_empty_line_end(bytes: &[u8]) -> &[u8] {
@@ -2953,21 +3262,24 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     // Determine FROM/TO range.
     let from_pos = window_text_pixel_size_from_pos(&eval.buffers, buf, args.get(1))?;
     let to_pos = window_text_pixel_size_to_pos(&eval.buffers, buf, args.get(2), from_pos)?;
-
-    // Count lines and max columns in the region.  GNU's TO=t means
-    // measure through the line ending the last non-empty line, not
-    // through trailing blank lines.
-    let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(EmacsByteRange::new(from_pos, to_pos), &mut bytes);
-    let measured = if args
+    // GNU's TO=t means measure through the line ending the last non-empty line,
+    // not through trailing blank lines.
+    let apply_trim = args
         .get(2)
-        .is_some_and(|v| v.is_t() || v.is_symbol_named("t"))
-    {
-        trim_window_text_to_non_empty_line_end(&bytes)
-    } else {
-        &bytes
-    };
-    let text_metrics = region_text_metrics(measured, buf.get_multibyte());
+        .is_some_and(|v| v.is_t() || v.is_symbol_named("t"));
+
+    // Count lines and max columns in the region, honoring `display` text
+    // properties (e.g. `(space :align-to N)`) that change a line's pixel width.
+    let text_metrics = region_text_metrics_with_display(
+        eval,
+        buf_id,
+        from_pos,
+        to_pos,
+        apply_trim,
+        CharColumnWidth::One,
+        None,
+        None,
+    );
 
     let width = (text_metrics.max_columns as f32 * char_w).ceil() as i64;
     let mode_line_rows = if window_text_pixel_size_includes_mode_line(args.get(5)) {

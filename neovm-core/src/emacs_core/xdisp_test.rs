@@ -1724,6 +1724,165 @@ fn test_window_text_pixel_size_uses_char_positions_for_multibyte_range() {
     assert_eq!(result.cons_cdr(), Value::fixnum(1));
 }
 
+/// Build a context with a single TTY frame (char cell 1x1) whose selected
+/// window shows the current buffer, used by the `display`-spec measurement
+/// tests below.  Returns the selected-window id as a fixnum-able integer.
+fn pixel_size_tty_context() -> (Context, i64) {
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-display-spec", 200, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
+    (eval, selected_window)
+}
+
+/// A space carrying `display (space :align-to 80)` must measure as if the text
+/// after it starts at column 80 — not as a single character column.  Mirrors
+/// marginalia's right-aligned annotation (which uses align-to to pad the line).
+#[test]
+fn test_window_text_pixel_size_honors_display_align_to_column() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    // "AB" + space + "XY": the space is at column 2; align-to 80 pushes "XY" to
+    // columns 80,81 so the widest column reached is 82.
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("AB XY");
+    // Put `display (space :align-to 80)` on the single space (1-based pos 3..4).
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::symbol(":align-to"),
+        Value::fixnum(80),
+    ]);
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::symbol("display"),
+            spec,
+        ],
+    )
+    .expect("put display align-to property");
+
+    let result =
+        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+            .expect("window-text-pixel-size");
+    assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
+    // char_width == 1.0, so pixels == columns.  Without the fix this would be
+    // ~5 (2 chars + 1 space + 2 chars); with align-to honored it is 82.
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(82),
+        "align-to 80 should make the line ~82 columns wide, not ~5"
+    );
+}
+
+/// `display (space :align-to (+ left N))` is the form marginalia actually emits
+/// (default `marginalia-align` is `left`).  `left` resolves to text-area column
+/// 0, so the target column is N.
+#[test]
+fn test_window_text_pixel_size_honors_display_align_to_plus_left() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("AB XY");
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::symbol(":align-to"),
+        Value::list(vec![
+            Value::symbol("+"),
+            Value::symbol("left"),
+            Value::fixnum(80),
+        ]),
+    ]);
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::symbol("display"),
+            spec,
+        ],
+    )
+    .expect("put display align-to (+ left N) property");
+
+    let result =
+        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+            .expect("window-text-pixel-size");
+    assert_eq!(result.cons_car(), Value::fixnum(82));
+}
+
+/// `display (space :width 20)` advances the running column by 20.
+#[test]
+fn test_window_text_pixel_size_honors_display_space_width() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    // "AB" (cols 0,1) + width-20 space (cols 2..22) + "XY" (cols 22,23) => 24.
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("AB XY");
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::symbol(":width"),
+        Value::fixnum(20),
+    ]);
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::symbol("display"),
+            spec,
+        ],
+    )
+    .expect("put display :width property");
+
+    let result =
+        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+            .expect("window-text-pixel-size");
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(24),
+        ":width 20 should add 20 columns (2 + 20 + 2), not 1 (2 + 1 + 2)"
+    );
+}
+
+/// Plain text with no width-affecting `display` property must be unchanged: a
+/// `display` STRING/other spec we do not model falls through to per-char column
+/// counting (the covered char still counts as one column).
+#[test]
+fn test_window_text_pixel_size_plain_text_unchanged_by_fix() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("hello\nworld!");
+    let result =
+        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+            .expect("window-text-pixel-size");
+    // Widest line is "world!" => 6 columns.
+    assert_eq!(result.cons_car(), Value::fixnum(6));
+    assert_eq!(result.cons_cdr(), Value::fixnum(2));
+}
+
 fn window_text_pixel_size_backend_trace(kind: BufferTextBackendKind) -> (i64, i64) {
     let mut eval = interactive_context();
     convert_current_buffer_text_backend(&mut eval, kind);

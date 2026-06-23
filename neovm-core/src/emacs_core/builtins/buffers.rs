@@ -1943,61 +1943,40 @@ pub(crate) fn builtin_buffer_text_pixel_size(
         None
     };
 
-    let text = if let Some(id) = buffer_id {
-        if let Some(buf) = buffers.get(id) {
-            // Issue #131: this text only feeds a line/column pixel-size
-            // measurement, so a lossy UTF-8 rendering (real PUA preserved,
-            // eight-bit -> one U+FFFD column) is the right display form and
-            // avoids the buggy storage-string sentinels.
-            crate::emacs_core::emacs_char::to_utf8_lossy(
-                buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range())
-                    .as_bytes(),
-            )
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
+    let Some(buffer_id) = buffer_id else {
+        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
 
-    if text.is_empty() {
+    // Determine the accessible byte range to measure.  An empty buffer yields
+    // (0 . 0) just like the previous text-based implementation.
+    let range = match buffers.get(buffer_id) {
+        Some(buf) => buf.accessible_emacs_byte_range(),
+        None => return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0))),
+    };
+    if range.end().get() <= range.start().get() {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     }
 
-    let mut height = 0usize;
-    let mut width = 0usize;
-    for line in text.lines() {
-        if y_limit.is_some_and(|limit| height >= limit) {
-            break;
-        }
+    // Measure honoring `display` text properties (e.g. `(space :align-to N)` /
+    // `(space :width N)`), shared with `window-text-pixel-size`.  Wide chars
+    // contribute their display width, preserving the previous accounting.
+    let metrics = crate::emacs_core::xdisp::region_text_metrics_with_display(
+        eval,
+        buffer_id,
+        range.start(),
+        range.end(),
+        false,
+        crate::emacs_core::xdisp::CharColumnWidth::DisplayWidth,
+        x_limit,
+        y_limit,
+    );
 
-        let mut line_width = 0usize;
-        for ch in line.chars() {
-            if ch == '\t' {
-                let tab_width = 8usize;
-                line_width += tab_width - (line_width % tab_width);
-            } else {
-                line_width += crate::encoding::char_width(ch);
-            }
-
-            if let Some(limit) = x_limit {
-                if line_width >= limit {
-                    line_width = limit;
-                    break;
-                }
-            }
-        }
-
-        height += 1;
-        width = width.max(line_width);
-    }
-
-    if height == 0 {
+    if metrics.lines == 0 {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     }
     Ok(Value::cons(
-        Value::fixnum((width as f32 * char_w).ceil() as i64),
-        Value::fixnum((height as f32 * char_h).ceil() as i64),
+        Value::fixnum((metrics.max_columns as f32 * char_w).ceil() as i64),
+        Value::fixnum((metrics.lines as f32 * char_h).ceil() as i64),
     ))
 }
 

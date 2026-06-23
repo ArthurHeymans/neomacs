@@ -16390,3 +16390,124 @@ fn get_byte_unibyte_string_returns_raw_byte_values() {
         Value::fixnum(65)
     );
 }
+
+/// `buffer-text-pixel-size` must honor a `display (space :align-to N)` text
+/// property the same way `window-text-pixel-size` does: the measured width is
+/// the real aligned-to column count, not the single-column-per-space count.
+/// (Regression: marginalia's right-aligned annotation was clipped because the
+/// align-to space counted as one column.)
+#[test]
+fn buffer_text_pixel_size_honors_display_align_to() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("buf-pixel-align-to", 200, 24, buf_id);
+    eval.frames.select_frame(frame_id);
+    {
+        let frame = eval.frames.selected_frame_mut().expect("selected frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("AB XY");
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::symbol(":align-to"),
+        Value::fixnum(80),
+    ]);
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::symbol("display"),
+            spec,
+        ],
+    )
+    .expect("put display align-to property");
+
+    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
+    // char_width == 1.0 so pixels == columns; "XY" lands at columns 80,81 => 82.
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(82),
+        "align-to 80 should yield ~82 columns, not ~5"
+    );
+}
+
+/// `buffer-text-pixel-size` honors `display (space :width N)` too.
+#[test]
+fn buffer_text_pixel_size_honors_display_space_width() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("buf-pixel-space-width", 200, 24, buf_id);
+    eval.frames.select_frame(frame_id);
+    {
+        let frame = eval.frames.selected_frame_mut().expect("selected frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("AB XY");
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::symbol(":width"),
+        Value::fixnum(20),
+    ]);
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(4),
+            Value::symbol("display"),
+            spec,
+        ],
+    )
+    .expect("put display :width property");
+
+    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(24),
+        ":width 20 should add 20 columns (2 + 20 + 2)"
+    );
+}
+
+/// Plain text without a width-affecting `display` property still measures by
+/// per-char display width (wide chars count as 2), unchanged by the fix.
+#[test]
+fn buffer_text_pixel_size_plain_text_unchanged() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval.frames.create_frame("buf-pixel-plain", 200, 24, buf_id);
+    eval.frames.select_frame(frame_id);
+    {
+        let frame = eval.frames.selected_frame_mut().expect("selected frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("hello\nworld!");
+    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    assert_eq!(result.cons_car(), Value::fixnum(6));
+    assert_eq!(result.cons_cdr(), Value::fixnum(2));
+}
