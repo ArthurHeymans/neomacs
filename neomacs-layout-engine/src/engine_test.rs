@@ -9314,6 +9314,85 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
 }
 
 #[test]
+fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
+    // GNU `handle_stop`-at-init loads the before-strings of overlays anchored at
+    // the iterator's starting charpos (window-start) before producing the first
+    // buffer char (`get_overlay_strings_1`, `src/xdisp.c`). vertico's "n/m"
+    // candidate count is exactly such a before-string at point-min; it must
+    // render at the very start of the first row, ahead of the buffer text.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("M-x switch");
+        // Zero-length overlay anchored at point-min carrying the count in its
+        // before-string, mirroring vertico's overlay (vertico.el:444-448/614).
+        let bob = 0;
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: bob,
+            end: bob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("1/1 "),
+        );
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(bob));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-row-start-before-overlay", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+    let first_row = rows.first().cloned().unwrap_or_default();
+
+    assert!(
+        first_row.contains("1/1"),
+        "expected point-min before-string to render on the first row, rows={rows:?}"
+    );
+    // The before-string must precede the buffer text on the row, exactly like
+    // GNU shows "1/1   M-x …" rather than "M-x …".
+    let count_idx = first_row
+        .find("1/1")
+        .expect("before-string present on first row");
+    let buffer_idx = first_row
+        .find("M-x")
+        .expect("buffer text present on first row");
+    assert!(
+        count_idx < buffer_idx,
+        "before-string must render ahead of the first buffer char, first_row={first_row:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
     let mut eval = Context::new();
     let buf_id = eval
