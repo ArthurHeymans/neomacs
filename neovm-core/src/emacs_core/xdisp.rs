@@ -4849,7 +4849,13 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         "char-script-table",
         make_char_table_with_extra_slots(Value::symbol("char-script-table"), Value::NIL, 1),
     );
-    obarray.set_symbol_value("pre-redisplay-function", Value::NIL);
+    // GNU's C default for `pre-redisplay-function` is `ignore` (xdisp.c:39133),
+    // NOT nil. simple.el upgrades it to `redisplay--pre-redisplay-functions`
+    // (the driver of the `pre-redisplay-functions` hook) ONLY when it still
+    // equals `ignore` (simple.el:7352). Initialising it to nil here made that
+    // guard fail, so the driver was never installed and `pre-redisplay-functions`
+    // (hl-line with sticky 'window, the region overlay, …) never ran.
+    obarray.set_symbol_value("pre-redisplay-function", Value::symbol("ignore"));
     obarray.set_symbol_value("pre-redisplay-functions", Value::NIL);
     obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
     obarray.make_special("display-line-numbers-major-tick");

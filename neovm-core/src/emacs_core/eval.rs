@@ -6704,6 +6704,15 @@ impl Context {
             tracing::debug!("redisplay skipped: visible state unchanged");
             return;
         }
+        // GNU `prepare_menu_bars` (xdisp.c:14230-14246) runs
+        // `pre-redisplay-function` just before the window layout so hooks on
+        // `pre-redisplay-functions` (e.g. `global-hl-line-mode` with sticky-flag
+        // 'window, the region overlay) can refresh their overlays before
+        // redisplay reads them. Placed AFTER the visible-state skip check so it
+        // never runs on a skipped redisplay; `last_redisplay_signature` is
+        // recomputed at the end of this function and absorbs any overlay change,
+        // keeping the next unchanged redisplay skippable (no thrash).
+        self.run_pre_redisplay_function();
         let has_fn = self.redisplay_fn.is_some();
         tracing::debug!("redisplay called (has_fn={})", has_fn);
         if let Some(mut f) = self.redisplay_fn.take() {
@@ -6723,6 +6732,40 @@ impl Context {
             let _ = super::builtins::run_redisplay_window_change_hooks(self);
         }
         self.last_redisplay_signature = Some(self.redisplay_signature());
+    }
+
+    /// Run `pre-redisplay-function` (the driver of the `pre-redisplay-functions`
+    /// hook) just before laying out, mirroring GNU `prepare_menu_bars`
+    /// (xdisp.c:14230-14246). Features such as `global-hl-line-mode`
+    /// (`global-hl-line-sticky-flag` = 'window) and the region overlay register
+    /// on `pre-redisplay-functions` and depend on this to refresh their overlays
+    /// before redisplay reads them; without it hl-line never highlights the
+    /// current line.
+    ///
+    /// `inhibit-redisplay` is bound to t (GNU's redisplay is already
+    /// `redisplaying_p`, and `run_redisplay_window_change_hooks` does the same)
+    /// so a nested redisplay triggered by a hook is a no-op; an error from the
+    /// hook is demoted (GNU calls via `dsafe_calln`, and the lisp driver wraps
+    /// each hook in `with-demoted-errors`).
+    fn run_pre_redisplay_function(&mut self) {
+        let Some(function) = self.obarray.symbol_value("pre-redisplay-function").copied() else {
+            return;
+        };
+        if function.is_nil() {
+            return;
+        }
+        let specpdl_count = self.specpdl.len();
+        self.specbind(
+            crate::emacs_core::intern::intern("inhibit-redisplay"),
+            Value::T,
+        );
+        // GNU passes the list of windows being redisplayed; `t` makes
+        // `redisplay--pre-redisplay-functions` iterate every live window.
+        let result = self.funcall_general(function, vec![Value::T]);
+        self.unbind_to(specpdl_count);
+        if let Err(flow) = result {
+            tracing::debug!("pre-redisplay-function signalled (ignored): {flow:?}");
+        }
     }
 
     fn redisplay_signature(&self) -> RedisplaySignature {
