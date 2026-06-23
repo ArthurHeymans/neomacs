@@ -6754,23 +6754,6 @@ impl Context {
         if function.is_nil() {
             return;
         }
-        // Skip while a minibuffer window is selected (an active minibuffer).
-        // The runner (`redisplay--pre-redisplay-functions`) iterates every live
-        // window and calls `(window-buffer WIN)` on each; for the *active*
-        // minibuffer window neomacs resolves a transient buffer state
-        // mid-redisplay, so `global-hl-line-window-redisplay` (and any other
-        // pre-redisplay hook) signals `wrong-type-argument` — demoted, but it
-        // spams the echo area during M-x / isearch / `M-:`. The visible windows'
-        // overlays don't need refreshing while the minibuffer is active, and the
-        // *inactive* minibuffer window resolves fine, so passing `t` below still
-        // gives full multi-window parity in the normal case.
-        if self
-            .frames
-            .selected_frame()
-            .is_some_and(|f| f.minibuffer_window == Some(f.selected_window))
-        {
-            return;
-        }
         let specpdl_count = self.specpdl.len();
         self.specbind(
             crate::emacs_core::intern::intern("inhibit-redisplay"),
