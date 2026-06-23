@@ -4522,6 +4522,60 @@ mod ownership_tests {
         );
     }
 
+    /// Workstream A path-collapse safety net (characterization): a forced
+    /// `collect_exact` retains a rooted live cons graph and reclaims an unrooted
+    /// one, INDEPENDENT of which internal path (concurrent / incremental /
+    /// STW-full) runs it. This must keep passing as the incremental slicer + the
+    /// `NEOVM_GC_CONCURRENT`/`NEOVM_GC_SATB` env flags are deleted in the collapse.
+    #[test]
+    fn collect_exact_retains_rooted_and_frees_unrooted() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        const N: i64 = 1_000;
+        // Rooted list: rooted_head -> cons(N-1) -> ... -> cons(0) -> fixnum(0).
+        let mut rooted = TaggedValue::fixnum(0);
+        for i in 0..N {
+            rooted = heap.alloc_cons(TaggedValue::fixnum(i), rooted);
+        }
+        let rooted_head = rooted;
+        // Unrooted list (never named in the explicit root set): must be reclaimed.
+        // A precise collector roots only the iterator passed to collect_exact, not
+        // the Rust stack, so holding this local does NOT keep it alive.
+        let mut unrooted = TaggedValue::fixnum(0);
+        for i in 0..N {
+            unrooted = heap.alloc_cons(TaggedValue::fixnum(1_000_000 + i), unrooted);
+        }
+        let _unrooted_head = unrooted;
+        let before = heap.cons_live_count;
+
+        // Force a full collection with only the rooted list reachable.
+        heap.collect_exact(std::iter::once(rooted_head));
+        let after = heap.cons_live_count;
+
+        // The unrooted list was reclaimed...
+        assert!(
+            after < before,
+            "unrooted conses must be reclaimed (before={before}, after={after})",
+        );
+        // ...and the entire rooted spine survives + is readable (a swept cons here
+        // would be a use-after-free the asserts / sanitizer catch).
+        let mut node = rooted_head;
+        let mut count = 0i64;
+        while node.is_cons() {
+            let car = unsafe { (*node.xcons_ptr()).load_car() };
+            assert_eq!(
+                car.0,
+                TaggedValue::fixnum(N - 1 - count).0,
+                "rooted car intact at index {count}",
+            );
+            node = unsafe { (*node.xcons_ptr()).load_cdr() };
+            count += 1;
+        }
+        assert_eq!(count, N, "the whole rooted list survived collection");
+    }
+
     #[test]
     fn ordinary_non_cons_ownership_index_tracks_sweep() {
         crate::test_utils::init_test_tracing();
