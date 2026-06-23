@@ -2389,3 +2389,80 @@ fn delete_overlay_twice_is_ok() {
     let result = builtin_delete_overlay(&mut eval, vec![ov]);
     assert!(result.is_ok());
 }
+
+// -----------------------------------------------------------------------
+// A WINDOW object as the OBJECT arg resolves to the window's buffer
+// (GNU textprop.c / editfns.c window handling), instead of signalling
+// (wrong-type-argument buffer-or-string-p #<window>).
+// -----------------------------------------------------------------------
+
+/// Build an evaluator with a frame+window over a `*scratch*` buffer so that
+/// `(selected-window)` yields a live window Value backed by the current buffer.
+fn eval_with_frame_window() -> Context {
+    let mut eval = Context::new();
+    let buf = eval.buffers.create_buffer("*scratch*");
+    eval.buffers.set_current(buf);
+    eval.frames.create_frame("F1", 800, 600, buf);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&eval);
+    eval
+}
+
+#[test]
+fn get_pos_property_resolves_window_object_to_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_frame_window();
+    // Insert text and put a `face` property covering positions 1..6.
+    eval.eval_str_each(
+        r#"(progn
+             (insert "hello world")
+             (put-text-property 1 6 'face 'bold)
+             (put-text-property 1 6 'front-sticky t))"#,
+    );
+
+    // With a WINDOW object, get-pos-property must resolve to the window's
+    // buffer and return the (front-sticky) property, NOT signal.
+    let results = eval
+        .eval_str_each("(get-pos-property 2 'face (selected-window))")
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(results, vec!["OK bold".to_string()]);
+}
+
+#[test]
+fn next_single_char_property_change_resolves_window_object_to_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_frame_window();
+    eval.eval_str_each(
+        r#"(progn
+             (insert "hello world")
+             (put-text-property 1 6 'face 'bold))"#,
+    );
+
+    // With a WINDOW object, next-single-char-property-change must resolve to
+    // the window's buffer and find the boundary at position 6, NOT signal.
+    let results = eval
+        .eval_str_each("(next-single-char-property-change 1 'face (selected-window))")
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(results, vec!["OK 6".to_string()]);
+}
+
+#[test]
+fn previous_single_char_property_change_resolves_window_object_to_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_frame_window();
+    eval.eval_str_each(
+        r#"(progn
+             (insert "hello world")
+             (put-text-property 1 6 'face 'bold))"#,
+    );
+
+    let results = eval
+        .eval_str_each("(previous-single-char-property-change 11 'face (selected-window))")
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(results, vec!["OK 6".to_string()]);
+}

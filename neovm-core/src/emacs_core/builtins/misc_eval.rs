@@ -13,12 +13,13 @@ pub(crate) fn builtin_get_pos_property(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_get_pos_property_impl(&eval.obarray, &[], &eval.buffers, args)
+    builtin_get_pos_property_impl(&eval.obarray, &[], Some(&eval.frames), &eval.buffers, args)
 }
 
 pub(crate) fn builtin_get_pos_property_impl(
     obarray: &crate::emacs_core::symbol::Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
+    frames: Option<&crate::window::FrameManager>,
     buffers: &crate::buffer::BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -38,21 +39,10 @@ pub(crate) fn builtin_get_pos_property_impl(
         return Ok(Value::NIL);
     }
 
-    let buf_id = match args.get(2) {
-        None => buffers
-            .current_buffer()
-            .map(|b| b.id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
-        Some(v) if v.is_nil() => buffers
-            .current_buffer()
-            .map(|b| b.id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
-        Some(v) if v.is_buffer() => Ok(v.as_buffer_id().unwrap()),
-        Some(other) => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("buffer-or-string-p"), *other],
-        )),
-    }?;
+    // GNU editfns.c `get-pos-property`: a WINDOW object resolves to its buffer
+    // (XWINDOW(object)->contents), a buffer/nil resolves as usual.
+    let buf_id =
+        super::textprop::resolve_char_property_buffer_id_with_frames(frames, buffers, args.get(2))?;
 
     let buf = buffers
         .get(buf_id)
@@ -312,28 +302,23 @@ pub(crate) fn builtin_next_single_char_property_change(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_next_single_char_property_change_in_buffers(&eval.obarray, &eval.buffers, args)
+    builtin_next_single_char_property_change_in_buffers(
+        &eval.obarray,
+        Some(&eval.frames),
+        &eval.buffers,
+        args,
+    )
 }
 
 fn char_property_buffer_id_for_object(
+    frames: Option<&crate::window::FrameManager>,
     buffers: &crate::buffer::BufferManager,
     object: Option<&Value>,
 ) -> Result<crate::buffer::BufferId, Flow> {
-    match object {
-        None => buffers
-            .current_buffer()
-            .map(|b| b.id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
-        Some(v) if v.is_nil() => buffers
-            .current_buffer()
-            .map(|b| b.id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
-        Some(v) if v.is_buffer() => Ok(v.as_buffer_id().expect("buffer value has id")),
-        Some(other) => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("buffer-or-string-p"), *other],
-        )),
-    }
+    // GNU textprop.c `next/previous-single-char-property-change` defer object
+    // resolution to `Fget_char_property`, which resolves a WINDOW object to its
+    // buffer. Mirror that here so a window OBJECT works.
+    super::textprop::resolve_char_property_buffer_id_with_frames(frames, buffers, object)
 }
 
 fn next_char_property_change_for_buffer(
@@ -391,6 +376,7 @@ fn previous_char_property_change_for_buffer(
 
 pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     obarray: &crate::emacs_core::symbol::Obarray,
+    frames: Option<&crate::window::FrameManager>,
     buffers: &crate::buffer::BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -420,7 +406,7 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
-    let buf_id = char_property_buffer_id_for_object(buffers, object)?;
+    let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
@@ -431,7 +417,7 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
         get_args.push(*object);
     }
     let initial_value =
-        super::textprop::builtin_get_char_property_in_state(obarray, buffers, get_args)?;
+        super::textprop::builtin_get_char_property_with_frames(obarray, buffers, frames, get_args)?;
     let limit = match args.get(3) {
         Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
         _ => point_max,
@@ -452,8 +438,9 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
         if let Some(object) = object {
             value_args.push(*object);
         }
-        let value =
-            super::textprop::builtin_get_char_property_in_state(obarray, buffers, value_args)?;
+        let value = super::textprop::builtin_get_char_property_with_frames(
+            obarray, buffers, frames, value_args,
+        )?;
         if !eq_value(&value, &initial_value) || cursor >= point_max {
             return Ok(Value::fixnum(cursor));
         }
@@ -464,11 +451,17 @@ pub(crate) fn builtin_previous_single_char_property_change(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_previous_single_char_property_change_in_buffers(&eval.obarray, &eval.buffers, args)
+    builtin_previous_single_char_property_change_in_buffers(
+        &eval.obarray,
+        Some(&eval.frames),
+        &eval.buffers,
+        args,
+    )
 }
 
 pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     obarray: &crate::emacs_core::symbol::Obarray,
+    frames: Option<&crate::window::FrameManager>,
     buffers: &crate::buffer::BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -495,7 +488,7 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
-    let buf_id = char_property_buffer_id_for_object(buffers, object)?;
+    let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
@@ -516,7 +509,7 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
         get_args.push(*object);
     }
     let initial_value =
-        super::textprop::builtin_get_char_property_in_state(obarray, buffers, get_args)?;
+        super::textprop::builtin_get_char_property_with_frames(obarray, buffers, frames, get_args)?;
 
     let mut cursor = position;
     loop {
@@ -532,8 +525,9 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
         if let Some(object) = object {
             value_args.push(*object);
         }
-        let value =
-            super::textprop::builtin_get_char_property_in_state(obarray, buffers, value_args)?;
+        let value = super::textprop::builtin_get_char_property_with_frames(
+            obarray, buffers, frames, value_args,
+        )?;
         if !eq_value(&value, &initial_value) {
             return Ok(Value::fixnum(cursor));
         }

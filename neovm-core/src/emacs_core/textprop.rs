@@ -672,6 +672,20 @@ fn resolve_char_property_target_in_state(
     }
 }
 
+/// Resolve a char-property OBJECT argument (None/nil/buffer/window) to a
+/// `BufferId`, matching GNU `get_char_property_and_overlay`'s window handling:
+/// a WINDOW object resolves to its buffer (requires `frames` to be `Some`).
+/// The window-specific overlay matching is dropped here; callers that need the
+/// `WindowId` for overlay matching use `resolve_char_property_target_in_state`
+/// directly.
+pub(crate) fn resolve_char_property_buffer_id_with_frames(
+    frames: Option<&FrameManager>,
+    buffers: &BufferManager,
+    object: Option<&Value>,
+) -> Result<BufferId, Flow> {
+    resolve_char_property_target_in_state(frames, buffers, object).map(|(id, _wid)| id)
+}
+
 fn current_buffer_id_in_buffers(buffers: &BufferManager) -> Result<BufferId, Flow> {
     buffers
         .current_buffer_id()
@@ -1436,7 +1450,7 @@ pub(crate) fn builtin_get_char_property_in_state(
     builtin_get_char_property_with_frames(obarray, buffers, None, args)
 }
 
-fn builtin_get_char_property_with_frames(
+pub(crate) fn builtin_get_char_property_with_frames(
     obarray: &Obarray,
     buffers: &BufferManager,
     frames: Option<&FrameManager>,

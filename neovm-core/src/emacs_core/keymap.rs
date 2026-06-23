@@ -2057,6 +2057,7 @@ fn keymap_property_at_position(
     builtin_get_pos_property_impl(
         obarray,
         &[],
+        None,
         buffers,
         vec![Value::fixnum(char_pos), prop_symbol, buffer_object],
     )

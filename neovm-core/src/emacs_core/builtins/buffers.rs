@@ -2359,6 +2359,7 @@ pub(crate) fn builtin_constrain_to_field(
         let old_capture = crate::emacs_core::builtins::misc_eval::builtin_get_pos_property_impl(
             &eval.obarray,
             &[],
+            None,
             &mut eval.buffers,
             vec![Value::fixnum(old_pos), *capture_prop],
         )?;
@@ -2557,6 +2558,7 @@ fn field_property_at_position_in_state(
     crate::emacs_core::builtins::misc_eval::builtin_get_pos_property_impl(
         obarray,
         dynamic,
+        None,
         buffers,
         vec![Value::fixnum(pos), Value::symbol("field")],
     )
@@ -2575,7 +2577,7 @@ fn previous_field_change_in_buffers(
     }
     expect_int(
         &crate::emacs_core::builtins::misc_eval::builtin_previous_single_char_property_change_in_buffers(
-            obarray, buffers, args,
+            obarray, None, buffers, args,
         )?,
     )
 }
@@ -2593,7 +2595,7 @@ fn next_field_change_in_buffers(
     }
     expect_int(
         &crate::emacs_core::builtins::misc_eval::builtin_next_single_char_property_change_in_buffers(
-            obarray, buffers, args,
+            obarray, None, buffers, args,
         )?,
     )
 }
