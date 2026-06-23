@@ -16487,6 +16487,103 @@ fn buffer_text_pixel_size_honors_display_space_width() {
     );
 }
 
+/// `window-text-pixel-size` must traverse overlay `after-string`s — including
+/// their own `display (space :align-to N)` props and embedded newlines — when
+/// computing the max line width, mirroring GNU's display iterator.
+///
+/// Regression: vertico's candidate list is an overlay after-string at point-max
+/// whose widest candidate line carries a right-aligned marginalia annotation as
+/// a `(space :align-to (+ left N))` space.  Because the measurement skipped
+/// overlay strings, the M-x posframe measured only the short prompt and clipped
+/// the annotation.  The fix folds the after-string's widest line into the width.
+#[test]
+fn window_text_pixel_size_includes_overlay_after_string_align_to() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("win-pixel-overlay-after", 200, 24, buf_id);
+    eval.frames.select_frame(frame_id);
+    {
+        let frame = eval.frames.selected_frame_mut().expect("selected frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+
+    // Short prompt buffer text (4 columns).
+    eval.buffers.get_mut(buf_id).expect("buffer").insert("M-x ");
+
+    // Overlay after-string at point-max: a multi-line candidate list whose
+    // WIDEST line is `cand1` + `(space :align-to 80)` + `ann1` => 84 columns.
+    // Other lines are short.  Built in elisp so the string carries real text
+    // properties (the `display` space) on the alignment char.
+    eval.eval_str(
+        r#"
+        (let* ((ov (make-overlay (point-max) (point-max)))
+               (sp (propertize " "
+                     'display '(space :align-to 80)))
+               (after (concat "cand1" sp "ann1" "\n"
+                              "c2" "\n"
+                              "candidate3")))
+          (overlay-put ov 'after-string after))"#,
+    )
+    .expect("install overlay after-string");
+
+    let result =
+        crate::emacs_core::xdisp::builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::NIL])
+            .expect("window-text-pixel-size");
+    assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
+
+    // char_width == 1.0 so pixels == columns.  Widest line is the align-to line:
+    // "cand1" -> col 5, space jumps to col 80, "ann1" -> col 84.  This dominates
+    // the 4-column prompt; without the overlay traversal the width would be 4.
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(84),
+        "overlay after-string's align-to line should drive the width to 84, not the 4-col prompt"
+    );
+}
+
+/// Overlay `before-string`s anchored at a position contribute their columns too,
+/// and embedded newlines split the string into lines for the max-width measure.
+#[test]
+fn buffer_text_pixel_size_includes_overlay_before_string_multiline() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("buf-pixel-overlay-before", 200, 24, buf_id);
+    eval.frames.select_frame(frame_id);
+    {
+        let frame = eval.frames.selected_frame_mut().expect("selected frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+
+    eval.buffers.get_mut(buf_id).expect("buffer").insert("abc");
+
+    // Before-string at buffer start whose widest embedded line is 10 columns.
+    eval.eval_str(
+        r#"
+        (let ((ov (make-overlay (point-min) (point-min))))
+          (overlay-put ov 'before-string "short\nten-cols!!\nx"))"#,
+    )
+    .expect("install overlay before-string");
+
+    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    assert_eq!(
+        result.cons_car(),
+        Value::fixnum(10),
+        "before-string widest line (ten-cols!! = 10) should drive width past the 3-col buffer text"
+    );
+}
+
 /// Plain text without a width-affecting `display` property still measures by
 /// per-char display width (wide chars count as 2), unchanged by the fix.
 #[test]

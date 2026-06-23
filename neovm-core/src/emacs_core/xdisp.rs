@@ -347,42 +347,31 @@ pub(crate) fn region_text_metrics_with_display(
     }
 
     let display_sym = Value::symbol("display");
-    let mut max_cols = 0usize;
-    let mut lines = 1usize;
-    let mut cur_col = 0usize;
-    let mut last_code: Option<u32> = None;
-    // Once the running line is capped by `x_limit`, ignore further width on it.
-    let mut line_capped = false;
-
-    let cap_line = |cur_col: &mut usize, line_capped: &mut bool| {
-        if let Some(limit) = x_limit {
-            if *cur_col >= limit {
-                *cur_col = limit;
-                *line_capped = true;
-            }
-        }
-    };
+    let mut state = ScanState::new(char_width, x_limit, y_limit);
 
     let mut scan = from.get();
     let end = scan_end.get();
     while scan < end {
-        if y_limit.is_some_and(|limit| lines > limit) {
-            lines = lines.saturating_sub(1);
+        if state.y_limit_reached() {
             break;
         }
+
+        // GNU's display iterator processes overlay strings anchored at a
+        // position *before* the buffer character there: before-strings of
+        // overlays starting here, plus after-strings of overlays ending here
+        // (see `load_overlay_strings`/`get_overlay_strings` in xdisp.c).  Each
+        // contributes its own laid-out columns to the running line width.
+        process_overlay_strings_at(eval, buf, scan, &display_sym, &mut state);
 
         // A `display` property (text property or overlay) whose value is a
         // `(space ...)` spec replaces the covered text for layout.  Resolve its
         // column width and advance over the whole property/overlay run atomically.
         if let Some((width, run_end)) =
-            display_space_run(eval, buf, scan, cur_col, &display_sym, end)
+            display_space_run(eval, buf, scan, state.cur_col, &display_sym, end)
         {
             if run_end > scan {
-                if !line_capped {
-                    cur_col = cur_col.saturating_add(width);
-                    cap_line(&mut cur_col, &mut line_capped);
-                }
-                last_code = None;
+                state.advance_columns(width);
+                state.last_code = None;
                 scan = run_end.min(end);
                 continue;
             }
@@ -397,36 +386,118 @@ pub(crate) fn region_text_metrics_with_display(
             .map(|len| len.get().max(1))
             .unwrap_or(1);
 
+        state.push_char(code);
+        scan += char_len;
+    }
+
+    // The after-string of an overlay ending exactly at the scan end (e.g. the
+    // `vertico--candidates-ov` after-string anchored at point-max) is appended
+    // after the last buffer char.  GNU's iterator reaches that position and
+    // processes those after-strings before stopping, so include them here.
+    if !state.y_limit_reached() {
+        process_overlay_after_strings_at(eval, buf, end, &display_sym, &mut state);
+    }
+
+    state.finish()
+}
+
+/// Mutable accounting state shared between the buffer-text scan and the
+/// overlay-string walk in [`region_text_metrics_with_display`].  Tracks the
+/// running column on the current line, the widest line seen, the line count,
+/// and the `x_limit`/`y_limit` caps, so overlay strings contribute their
+/// columns and embedded newlines exactly like buffer text.
+struct ScanState {
+    char_width: CharColumnWidth,
+    x_limit: Option<usize>,
+    y_limit: Option<usize>,
+    max_cols: usize,
+    lines: usize,
+    cur_col: usize,
+    last_code: Option<u32>,
+    /// Once the running line is capped by `x_limit`, ignore further width on it.
+    line_capped: bool,
+}
+
+impl ScanState {
+    fn new(char_width: CharColumnWidth, x_limit: Option<usize>, y_limit: Option<usize>) -> Self {
+        Self {
+            char_width,
+            x_limit,
+            y_limit,
+            max_cols: 0,
+            lines: 1,
+            cur_col: 0,
+            last_code: None,
+            line_capped: false,
+        }
+    }
+
+    /// True once the line count has exceeded `y_limit`; the caller stops and the
+    /// over-counted line is rolled back so the result matches GNU's cap.
+    fn y_limit_reached(&mut self) -> bool {
+        if self.y_limit.is_some_and(|limit| self.lines > limit) {
+            self.lines = self.lines.saturating_sub(1);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn cap_line(&mut self) {
+        if let Some(limit) = self.x_limit {
+            if self.cur_col >= limit {
+                self.cur_col = limit;
+                self.line_capped = true;
+            }
+        }
+    }
+
+    /// Advance the running column by a resolved `(space ...)` width.
+    fn advance_columns(&mut self, width: usize) {
+        if !self.line_capped {
+            self.cur_col = self.cur_col.saturating_add(width);
+            self.cap_line();
+        }
+    }
+
+    /// End the current line, record its width, and reset for the next line.
+    fn newline(&mut self) {
+        self.lines += 1;
+        self.max_cols = self.max_cols.max(self.cur_col);
+        self.cur_col = 0;
+        self.line_capped = false;
+    }
+
+    /// Account for one character `code` (newline, tab, or normal), tracking it
+    /// as the last code seen so a trailing newline can be rolled back.
+    fn push_char(&mut self, code: u32) {
         if code == '\n' as u32 {
-            lines += 1;
-            max_cols = max_cols.max(cur_col);
-            cur_col = 0;
-            line_capped = false;
-        } else if !line_capped {
+            self.newline();
+        } else if !self.line_capped {
             if code == '\t' as u32 {
-                cur_col = (cur_col + 8) & !7;
+                self.cur_col = (self.cur_col + 8) & !7;
             } else {
-                cur_col += match char_width {
+                self.cur_col += match self.char_width {
                     CharColumnWidth::One => 1,
                     CharColumnWidth::DisplayWidth => char::from_u32(code)
                         .map(crate::encoding::char_width)
                         .unwrap_or(1),
                 };
             }
-            cap_line(&mut cur_col, &mut line_capped);
+            self.cap_line();
         }
-        last_code = Some(code);
-        scan += char_len;
+        self.last_code = Some(code);
     }
 
-    // Match `region_text_metrics`: a trailing newline does not open a new line.
-    if last_code == Some('\n' as u32) {
-        lines = lines.saturating_sub(1);
-    }
-
-    RegionTextMetrics {
-        lines,
-        max_columns: max_cols.max(cur_col),
+    fn finish(mut self) -> RegionTextMetrics {
+        // Match `region_text_metrics`: a trailing newline does not open a line.
+        if self.last_code == Some('\n' as u32) {
+            self.lines = self.lines.saturating_sub(1);
+        }
+        RegionTextMetrics {
+            lines: self.lines,
+            max_columns: self.max_cols.max(self.cur_col),
+        }
     }
 }
 
@@ -497,6 +568,282 @@ fn display_space_run(
     };
 
     Some((width, run_end.min(region_end)))
+}
+
+/// One overlay string anchored at the scan position, with the metadata GNU's
+/// `compare_overlay_entries` needs to interleave it among the other strings.
+struct OverlayStringEntry {
+    string: Value,
+    overlay: Value,
+    /// True for an `after-string`, false for a `before-string`.
+    after_string_p: bool,
+    priority: i64,
+}
+
+fn overlay_string_priority(overlay: Value) -> i64 {
+    overlay
+        .as_overlay_data()
+        .and_then(|data| {
+            super::plist::plist_get(data.plist, &Value::symbol("priority"))
+                .and_then(|p| p.as_fixnum())
+        })
+        .unwrap_or(0)
+}
+
+/// Rust port of GNU `compare_overlay_entries` (`src/xdisp.c`), mirroring the
+/// layout engine's `neovm_bridge::compare_overlay_entries`.  Orders the strings
+/// into one visual sequence: different kinds → after-string in front of
+/// before-string for *different* overlays but before-string in front of
+/// after-string for the *same* overlay; same kind → before-strings sort by
+/// increasing priority, after-strings by decreasing priority.
+fn compare_overlay_string_entries(
+    e1: &OverlayStringEntry,
+    e2: &OverlayStringEntry,
+) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    if e1.after_string_p != e2.after_string_p {
+        if eq_value(&e1.overlay, &e2.overlay) {
+            if e1.after_string_p {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }
+        } else if e1.after_string_p {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    } else if e1.priority != e2.priority {
+        if e1.after_string_p {
+            e2.priority.cmp(&e1.priority)
+        } else {
+            e1.priority.cmp(&e2.priority)
+        }
+    } else {
+        Ordering::Equal
+    }
+}
+
+/// Collect the overlay strings anchored at buffer byte `pos`: `before-string`
+/// of every overlay *starting* at `pos`, and `after-string` of every overlay
+/// *ending* at `pos`.  Mirrors GNU `load_overlay_strings` (which scans overlays
+/// starting or ending at the iterator position).  The entries are ordered by
+/// `compare_overlay_string_entries`.  When `before` is false, only after-strings
+/// are gathered (used at the scan end, where no buffer char follows).
+fn collect_overlay_strings_at(buf: &Buffer, pos: usize, before: bool) -> Vec<OverlayStringEntry> {
+    let bytepos = EmacsBytePos::new(pos);
+    // Overlays starting or ending at `pos` may be zero-length (e.g. the vertico
+    // completion overlay at point-max), so scan the [pos-1, pos+1) neighborhood
+    // — exactly as the layout bridge's `overlay_strings_at` does — and then
+    // filter by exact start/end below.
+    let scan_range = EmacsByteRange::new(
+        EmacsBytePos::new(pos.saturating_sub(1)),
+        EmacsBytePos::new(pos + 1),
+    );
+    let mut overlay_ids = buf.overlays.overlays_in_emacs_byte_range(scan_range);
+    overlay_ids.sort();
+    overlay_ids.dedup();
+
+    let mut entries = Vec::new();
+    for oid in overlay_ids {
+        let priority = overlay_string_priority(oid);
+
+        if before && buf.overlays.overlay_start_emacs_byte_pos(oid) == Some(bytepos) {
+            if let Some(val) = buf
+                .overlays
+                .overlay_get_named(oid, Value::symbol("before-string"))
+            {
+                if val.is_string() {
+                    entries.push(OverlayStringEntry {
+                        string: val,
+                        overlay: oid,
+                        after_string_p: false,
+                        priority,
+                    });
+                }
+            }
+        }
+
+        if buf.overlays.overlay_end_emacs_byte_pos(oid) == Some(bytepos) {
+            if let Some(val) = buf
+                .overlays
+                .overlay_get_named(oid, Value::symbol("after-string"))
+            {
+                if val.is_string() {
+                    entries.push(OverlayStringEntry {
+                        string: val,
+                        overlay: oid,
+                        after_string_p: true,
+                        priority,
+                    });
+                }
+            }
+        }
+    }
+
+    // Stable insertion sort by `compare_overlay_string_entries`.  A manual sort
+    // is used (not `sort_by`) because the comparator is NOT a total order — a
+    // zero-length overlay carrying both a before- and an after-string can form a
+    // comparison cycle that GNU's qsort tolerates but Rust's `sort_by` may
+    // panic on.  Overlay-string counts at a position are tiny, so O(n^2) is fine.
+    for i in 1..entries.len() {
+        let mut j = i;
+        while j > 0
+            && compare_overlay_string_entries(&entries[j], &entries[j - 1])
+                == std::cmp::Ordering::Less
+        {
+            entries.swap(j, j - 1);
+            j -= 1;
+        }
+    }
+    entries
+}
+
+/// Process the overlay before- and after-strings anchored at buffer byte `pos`,
+/// folding each one's laid-out columns (and embedded newlines) into `state`.
+fn process_overlay_strings_at(
+    eval: &super::eval::Context,
+    buf: &Buffer,
+    pos: usize,
+    display_sym: &Value,
+    state: &mut ScanState,
+) {
+    if buf.overlays.is_empty() {
+        return;
+    }
+    for entry in collect_overlay_strings_at(buf, pos, true) {
+        walk_overlay_string(eval, entry.string, display_sym, state);
+    }
+}
+
+/// Process only the overlay *after-strings* anchored at byte `pos` (used at the
+/// scan end, where no buffer character follows).
+fn process_overlay_after_strings_at(
+    eval: &super::eval::Context,
+    buf: &Buffer,
+    pos: usize,
+    display_sym: &Value,
+    state: &mut ScanState,
+) {
+    if buf.overlays.is_empty() {
+        return;
+    }
+    for entry in collect_overlay_strings_at(buf, pos, false) {
+        walk_overlay_string(eval, entry.string, display_sym, state);
+    }
+}
+
+/// Walk an overlay string character by character, folding it into `state`.
+///
+/// The string carries its OWN `display` text properties: a `(space :align-to N)`
+/// / `(space :width N)` advances/jumps the running column exactly like the same
+/// spec in buffer text (resolved via the shared [`space_spec_advance_columns`]),
+/// replacing the covered string chars.  Embedded newlines end the current line
+/// (updating the max width) and reset the column to 0 — critical for the
+/// multi-line vertico candidate after-string, whose widest line determines the
+/// posframe width.  Other chars count as their display width.
+fn walk_overlay_string(
+    eval: &super::eval::Context,
+    string: Value,
+    display_sym: &Value,
+    state: &mut ScanState,
+) {
+    let Some(s) = string.as_lisp_string() else {
+        return;
+    };
+    let schars = s.schars();
+    if schars == 0 {
+        return;
+    }
+    let bytes = s.as_bytes();
+    let multibyte = s.is_multibyte();
+
+    let mut char_index = 0usize; // 0-based char position into the string
+    let mut byte_off = 0usize;
+    while char_index < schars && byte_off < bytes.len() {
+        if state.y_limit_reached() {
+            return;
+        }
+
+        // Resolve this string's own `display` property at the char position.  A
+        // width-bearing `(space ...)` spec replaces the run up to the next
+        // `display` change, advancing the column by the resolved width.
+        if let Some((width, run_end_char)) =
+            string_display_space_run(eval, string, char_index, state.cur_col, display_sym)
+        {
+            if run_end_char > char_index {
+                state.advance_columns(width);
+                // Skip the covered chars (advance both char and byte cursors).
+                let mut skip = run_end_char.min(schars) - char_index;
+                while skip > 0 && byte_off < bytes.len() {
+                    let len = if multibyte {
+                        super::emacs_char::string_char(&bytes[byte_off..]).1.max(1)
+                    } else {
+                        1
+                    };
+                    byte_off += len;
+                    char_index += 1;
+                    skip -= 1;
+                }
+                state.last_code = None;
+                continue;
+            }
+        }
+
+        let (code, len) = if multibyte {
+            let (code, len) = super::emacs_char::string_char(&bytes[byte_off..]);
+            (code, len.max(1))
+        } else {
+            (bytes[byte_off] as u32, 1)
+        };
+        state.push_char(code);
+        byte_off += len;
+        char_index += 1;
+    }
+}
+
+/// String-object analogue of [`display_space_run`]: if the overlay string
+/// carries a `display` text property at char position `char_index` whose value
+/// is a width-bearing `(space ...)` spec, return `(column_width, run_end_char)`.
+/// `cur_col` is the running column at the spec, needed for `:align-to` (an
+/// absolute target).  `run_end_char` is the next `display`-property change in
+/// the string (the end of the covered run), defaulting to the string length.
+fn string_display_space_run(
+    eval: &super::eval::Context,
+    string: Value,
+    char_index: usize,
+    cur_col: usize,
+    display_sym: &Value,
+) -> Option<(usize, usize)> {
+    // `get-text-property` on a string takes a 0-based char position.
+    let display = super::textprop::builtin_get_text_property_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        vec![Value::fixnum(char_index as i64), *display_sym, string],
+    )
+    .ok()?;
+
+    // Only `(space ...)` specs affect the measured column width here.
+    if !(display.is_cons() && display.cons_car() == Value::symbol("space")) {
+        return None;
+    }
+    let width = space_spec_advance_columns(display.cons_cdr(), cur_col)?;
+
+    let schars = string.as_lisp_string().map(|s| s.schars()).unwrap_or(0);
+    let run_end_char = super::textprop::builtin_next_single_property_change_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        vec![Value::fixnum(char_index as i64), *display_sym, string],
+    )
+    .ok()
+    .and_then(|v| match v.kind() {
+        ValueKind::Fixnum(n) if n >= 0 => Some(n as usize),
+        _ => None,
+    })
+    .unwrap_or(schars)
+    .min(schars);
+
+    Some((width, run_end_char))
 }
 
 fn trim_window_text_to_non_empty_line_end(bytes: &[u8]) -> &[u8] {
