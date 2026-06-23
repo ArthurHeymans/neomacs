@@ -456,6 +456,11 @@ impl LispSymbol {
     /// Switch this symbol to `Varalias` and store the target id.
     #[inline]
     pub fn set_alias_target(&mut self, target: SymId) {
+        // SATB: a Plainval cell holds a heap Value about to become a non-heap alias
+        // SymId — retain its pre-image during a concurrent mark before the clobber.
+        if self.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { self.val.plain });
+        }
         self.flags.set_redirect(SymbolRedirect::Varalias);
         self.val = SymbolVal { alias: target };
     }
@@ -1067,6 +1072,12 @@ impl Obarray {
         let raw = Box::into_raw(blv);
         self.blvs.push(raw);
         let sym = self.ensure_symbol_id(target);
+        // SATB: a Plainval cell holds a heap Value about to be replaced by the BLV
+        // pointer — retain its pre-image during a concurrent mark (it only survives
+        // transitively if it equals `default`, so log it unconditionally here).
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
         sym.flags.set_redirect(SymbolRedirect::Localized);
         sym.val = SymbolVal { blv: raw };
         raw
@@ -1181,6 +1192,11 @@ impl Obarray {
         fwd: &'static crate::emacs_core::forward::LispBufferObjFwd,
     ) {
         let sym = self.ensure_symbol_id(id);
+        // SATB: a Plainval cell holds a heap Value about to be replaced by a
+        // forwarder descriptor — retain its pre-image during a concurrent mark.
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
         sym.flags.set_redirect(SymbolRedirect::Forwarded);
         sym.flags.set_declared_special(true);
         sym.val = SymbolVal {
@@ -1513,6 +1529,13 @@ impl Obarray {
         match sym.flags.redirect() {
             SymbolRedirect::Forwarded => { /* no-op placeholder */ }
             _ => {
+                // SATB: a Plainval cell holds a heap Value about to be clobbered —
+                // retain its pre-image during a concurrent mark. Gated on the OLD
+                // redirect (set_redirect runs after) so `val.plain` is the live
+                // union arm; a Varalias `_` holds a non-heap SymId, so skip it.
+                if sym.flags.redirect() == SymbolRedirect::Plainval {
+                    crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+                }
                 sym.flags.set_redirect(SymbolRedirect::Plainval);
                 sym.val = SymbolVal { plain: value };
             }
@@ -1531,20 +1554,23 @@ impl Obarray {
                     // Safety: redirect=Plainval guarantees val.plain is live.
                     let v = unsafe { &mut sym.val.plain };
                     if *v != Value::UNBOUND {
+                        // SATB: this closure mutates the value cell in place, so
+                        // retain the pre-image during a concurrent mark before f.
+                        crate::tagged::gc::note_root_overwrite(*v);
                         f(v);
                     }
                 }
                 SymbolRedirect::Localized => {
-                    // Visit the BLV defcell default.
+                    // Visit the BLV defcell default. Route the write back through
+                    // `set_cdr` so the heap SATB barrier logs the old cdr — the
+                    // original raw-pointer write to the defcell cons bypassed it.
                     // Safety: redirect=Localized guarantees val.blv is valid.
                     unsafe {
                         let blv = &mut *sym.val.blv;
-                        let cdr = blv.defcell.cons_cdr();
+                        let mut cdr = blv.defcell.cons_cdr();
                         if cdr != Value::UNBOUND {
-                            // Mutate the cdr of the defcell cons in the heap.
-                            let cons_ptr =
-                                blv.defcell.xcons_ptr() as *mut crate::tagged::header::ConsCell;
-                            f(&mut (*cons_ptr).cdr_or_next.cdr);
+                            f(&mut cdr);
+                            blv.defcell.set_cdr(cdr);
                         }
                     }
                 }
@@ -1604,6 +1630,8 @@ impl Obarray {
         let id = intern(name);
         self.mark_global_member(id);
         let sym = self.ensure_symbol_id(id);
+        // SATB: retain the function cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.function);
         sym.function = function;
         sym.function_unbound = false;
         self.note_function_redefined(id);
@@ -1632,6 +1660,8 @@ impl Obarray {
     pub fn set_symbol_function_id(&mut self, id: SymId, function: Value) {
         self.ensure_global_member_if_canonical(id);
         let sym = self.ensure_symbol_id(id);
+        // SATB: retain the function cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.function);
         sym.function = function;
         sym.function_unbound = false;
         self.note_function_redefined(id);
@@ -1649,6 +1679,8 @@ impl Obarray {
         let was_unbound = sym.function_unbound;
         let was_bound_function = !sym.function.is_nil();
         sym.function_unbound = true;
+        // SATB: retain the function cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.function);
         sym.function = Value::NIL;
         if !was_unbound || was_bound_function {
             self.note_function_redefined(id);
@@ -1666,6 +1698,8 @@ impl Obarray {
         let mut redefined = false;
         if let Some(sym) = self.slot_mut(id) {
             if !sym.function.is_nil() {
+                // SATB: retain the function cell's pre-image during a concurrent mark.
+                crate::tagged::gc::note_root_overwrite(sym.function);
                 sym.function = Value::NIL;
                 redefined = true;
             }
@@ -1687,6 +1721,12 @@ impl Obarray {
         let target = self.resolve_alias_for_write(id);
         if let Some(sym) = self.slot_mut(target) {
             if sym.flags.trapped_write() != SymbolTrappedWrite::NoWrite {
+                // SATB: retain the old plain value during a concurrent mark before
+                // clobbering to UNBOUND. Only the Plainval arm holds a heap value;
+                // a Localized blv stays reachable via the BLV pool root.
+                if sym.flags.redirect() == SymbolRedirect::Plainval {
+                    crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+                }
                 // Plainval / UNBOUND is the "no value" state, matching
                 // GNU where makunbound sets val.value = Qunbound.
                 sym.flags.set_redirect(SymbolRedirect::Plainval);
@@ -1775,6 +1815,8 @@ impl Obarray {
             Value::from_sym_id(intern(prop)),
             value,
         )?;
+        // SATB: retain the plist cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.plist);
         sym.plist = new_plist;
         Ok(())
     }
@@ -1793,6 +1835,8 @@ impl Obarray {
         let sym = self.ensure_symbol_id(symbol);
         let (new_plist, _changed) =
             crate::emacs_core::plist::plist_put(sym.plist, Value::from_sym_id(prop), value)?;
+        // SATB: retain the plist cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.plist);
         sym.plist = new_plist;
         Ok(())
     }
@@ -1814,6 +1858,8 @@ impl Obarray {
             Value::list(flat)
         };
         let sym = self.ensure_symbol_id(symbol);
+        // SATB: retain the plist cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.plist);
         sym.plist = new_plist;
     }
 
@@ -1823,6 +1869,8 @@ impl Obarray {
     pub fn set_symbol_plist_id(&mut self, symbol: SymId, plist: Value) {
         self.ensure_global_member_if_canonical(symbol);
         let sym = self.ensure_symbol_id(symbol);
+        // SATB: retain the plist cell's pre-image during a concurrent mark.
+        crate::tagged::gc::note_root_overwrite(sym.plist);
         sym.plist = plist;
     }
 
@@ -1954,6 +2002,11 @@ impl Obarray {
     pub fn delete_variable_alias_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);
         let sym = self.ensure_symbol_id(id);
+        // SATB: normally the prior redirect is Varalias (a non-heap SymId), but
+        // guard for a Plainval heap value being clobbered to UNBOUND during a mark.
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
         sym.flags.set_redirect(SymbolRedirect::Plainval);
         sym.val = SymbolVal {
             plain: Value::UNBOUND,

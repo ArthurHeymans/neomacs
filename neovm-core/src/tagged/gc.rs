@@ -411,6 +411,29 @@ fn note_heap_write_record(record: HeapWriteRecord) {
     with_tagged_heap(|heap| heap.record_heap_write(record));
 }
 
+/// SATB deletion barrier for ROOT-slot overwrites — specifically a symbol's
+/// value / function / plist cell. A symbol `TaggedValue` is a `SymId`, not a heap
+/// pointer, so symbol-cell writes are ROOT writes that bypass `note_heap_write`
+/// (which gates on `owner.is_heap_object()`). Without logging them, the
+/// concurrent mark must re-scan the whole obarray at termination to catch any
+/// object that became reachable only through a symbol cell.
+///
+/// Call with the OLD value of the cell BEFORE the store (Yuasa snapshot-at-the-
+/// beginning: the value being deleted from the root must be retained for this
+/// cycle). No-ops outside a concurrent mark — a single thread-local load + branch,
+/// no heap touch — and for non-heap pre-images (fixnum / UNBOUND / nil /
+/// symbol-id), so cold-path callers pay essentially nothing when GC is idle.
+#[inline]
+pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
+    if !pre_image.is_heap_object() {
+        return;
+    }
+    if !TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get()) {
+        return;
+    }
+    with_tagged_heap(|heap| heap.note_root_overwrite_value(pre_image));
+}
+
 // ---------------------------------------------------------------------------
 // Cons block allocator
 // ---------------------------------------------------------------------------
@@ -3499,6 +3522,19 @@ impl TaggedHeap {
             let mut shared = self.satb_shared.lock().unwrap();
             shared.extend(self.gray_queue.drain(..));
         }
+    }
+
+    /// SATB sink for a ROOT-slot overwrite (a symbol value/function/plist cell):
+    /// log the pre-image VALUE itself so the concurrent mark grays and traces it
+    /// (`join_concurrent_mark` folds `satb_shared` into the gray queue), keeping a
+    /// symbol-only-reachable object live across the cycle. Unlike
+    /// `push_value_children_to_satb_shared`, the retained thing is the overwritten
+    /// value itself, not an owner's children — the symbol cell's "owner" is a
+    /// non-heap root. No `concurrent_mark_running` assert: the caller already gated
+    /// on the `TAGGED_HEAP_CONCURRENT_ACTIVE` thread-local (the source of truth),
+    /// and an extra entry is at worst one cycle of floating garbage.
+    fn note_root_overwrite_value(&mut self, pre_image: TaggedValue) {
+        self.satb_shared.lock().unwrap().push(pre_image);
     }
 
     // ---------------------------------------------------------------------
