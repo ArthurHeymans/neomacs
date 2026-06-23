@@ -1863,6 +1863,108 @@ fn test_window_text_pixel_size_honors_display_space_width() {
     );
 }
 
+/// Reproduces the live vertico-posframe width bug.  Vertico stores the
+/// candidate list in the `before-string` of a zero-length overlay anchored at
+/// `point-max` (see vertico.el `vertico--display-candidates`:
+/// `(make-overlay (point-max) (point-max) ...)` + `overlay-put ... 'before-string`).
+/// Each candidate line carries marginalia's `display (space :align-to (+ left N))`
+/// to right-pad the annotation.  posframe's `fit-frame-to-buffer` measures this
+/// minibuffer with `window-text-pixel-size`, so the measured width MUST include
+/// the aligned annotation — otherwise the child frame is too narrow and the
+/// marginalia description is pushed off-screen.
+///
+/// Before the fix, `region_text_metrics_with_display` never processes the
+/// *before-string* of an overlay anchored at the scan end (`point-max`): the
+/// scan loop only visits positions `scan < end`, and the end-of-scan handler
+/// processes *after-strings* only.  So the wide candidate line is invisible to
+/// the measurement and the width collapses to the bare minibuffer prompt width.
+#[test]
+fn test_window_text_pixel_size_measures_overlay_before_string_at_point_max() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    // The minibuffer text: a short prompt "M-x ".  point-max is right after it.
+    eval.buffers.get_mut(buf_id).expect("buffer").insert("M-x ");
+    let point_max = eval
+        .buffers
+        .get(buf_id)
+        .expect("buffer")
+        .accessible_char_region()
+        .end()
+        .get() as i64
+        + 1; // 1-based char pos of point-max
+
+    // Build the candidate before-string exactly like vertico:
+    //   "\ncand1<space>desc1\ncand2<space>desc2"
+    // where each <space> carries `display (space :align-to (+ left 40))`, which
+    // pushes the description to column 40 (the marginalia annotation alignment).
+    let s = "\ndescribe-function desc-a\nfind-file          desc-b";
+    let before_string = Value::string(s);
+    // Positions of the two alignment spaces (0-based char offsets into the
+    // string): right after "describe-function" and after "find-file".
+    let align_pos1 = s.find("describe-function ").unwrap() + "describe-function".len();
+    let align_pos2 = s.rfind("find-file").unwrap() + "find-file".len();
+    let spec = || {
+        Value::list(vec![
+            Value::symbol("space"),
+            Value::symbol(":align-to"),
+            Value::list(vec![
+                Value::symbol("+"),
+                Value::symbol("left"),
+                Value::fixnum(40),
+            ]),
+        ])
+    };
+    set_string_text_properties_for_value(
+        before_string,
+        vec![
+            StringTextPropertyRun {
+                start: align_pos1,
+                end: align_pos1 + 1,
+                plist: Value::list(vec![Value::symbol("display"), spec()]),
+            },
+            StringTextPropertyRun {
+                start: align_pos2,
+                end: align_pos2 + 1,
+                plist: Value::list(vec![Value::symbol("display"), spec()]),
+            },
+        ],
+    );
+
+    // Zero-length overlay at point-max with the candidate `before-string`,
+    // mirroring `(make-overlay (point-max) (point-max) nil t t)`.
+    let overlay = crate::emacs_core::textprop::builtin_make_overlay(
+        &mut eval,
+        vec![
+            Value::fixnum(point_max),
+            Value::fixnum(point_max),
+            Value::NIL,
+            Value::T,
+            Value::T,
+        ],
+    )
+    .expect("make candidates overlay");
+    crate::emacs_core::textprop::builtin_overlay_put(
+        &mut eval,
+        vec![overlay, Value::symbol("before-string"), before_string],
+    )
+    .expect("set before-string");
+
+    let result =
+        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+            .expect("window-text-pixel-size");
+    let width = result.cons_car().as_int().expect("width");
+    // char_width == 1.0, so pixels == columns.  With align-to honored, each
+    // candidate line reaches column 40 + len("desc-a") == 46.  Without the fix
+    // the before-string at point-max is skipped entirely and width is ~4 (the
+    // "M-x " prompt only).
+    assert!(
+        width >= 46,
+        "candidate before-string at point-max must be measured (with its \
+         align-to annotation): expected width >= 46, got {width}"
+    );
+}
+
 /// Plain text with no width-affecting `display` property must be unchanged: a
 /// `display` STRING/other spec we do not model falls through to per-char column
 /// counting (the covered char still counts as one column).

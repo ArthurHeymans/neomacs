@@ -390,12 +390,18 @@ pub(crate) fn region_text_metrics_with_display(
         scan += char_len;
     }
 
-    // The after-string of an overlay ending exactly at the scan end (e.g. the
-    // `vertico--candidates-ov` after-string anchored at point-max) is appended
-    // after the last buffer char.  GNU's iterator reaches that position and
-    // processes those after-strings before stopping, so include them here.
+    // The overlay strings anchored at the scan end (`point-max`) are appended
+    // after the last buffer char: the *before-string* of an overlay STARTING at
+    // `end` (e.g. the zero-length `vertico--candidates-ov` whose before-string
+    // holds the whole candidate list — see vertico.el
+    // `(make-overlay (point-max) (point-max) ...)` + `'before-string`), and the
+    // *after-string* of an overlay ENDING at `end`.  GNU's display iterator
+    // reaches `point-max` and runs `handle_stop` -> `get_overlay_strings` there,
+    // laying out both kinds before stopping, so we must too.  The main loop only
+    // visits positions `scan < end`, so `end` itself is processed exactly once
+    // here with the same full `before = true` collection used in the loop body.
     if !state.y_limit_reached() {
-        process_overlay_after_strings_at(eval, buf, end, &display_sym, &mut state);
+        process_overlay_strings_at(eval, buf, end, &display_sym, &mut state);
     }
 
     state.finish()
@@ -712,23 +718,6 @@ fn process_overlay_strings_at(
         return;
     }
     for entry in collect_overlay_strings_at(buf, pos, true) {
-        walk_overlay_string(eval, entry.string, display_sym, state);
-    }
-}
-
-/// Process only the overlay *after-strings* anchored at byte `pos` (used at the
-/// scan end, where no buffer character follows).
-fn process_overlay_after_strings_at(
-    eval: &super::eval::Context,
-    buf: &Buffer,
-    pos: usize,
-    display_sym: &Value,
-    state: &mut ScanState,
-) {
-    if buf.overlays.is_empty() {
-        return;
-    }
-    for entry in collect_overlay_strings_at(buf, pos, false) {
         walk_overlay_string(eval, entry.string, display_sym, state);
     }
 }
