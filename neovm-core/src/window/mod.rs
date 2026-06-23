@@ -2677,6 +2677,24 @@ impl FrameManager {
             let mut bounds = *mini.bounds();
             bounds.height = unit;
             mini.set_bounds(bounds);
+            // Reset any stale vscroll left on the mini-window by
+            // vertico-posframe (which scrolls the real minibuffer out of view
+            // while its child frame shows the candidates). A nonzero vscroll on
+            // a one-line mini-window drives `visible_max_rows` to 0 (the
+            // posframe-hiding guard in the layout engine), which silently drops
+            // the echo row — so after a C-g abort the "Quit"/message text is
+            // laid out but produces no glyphs. GNU's `resize_mini_window`
+            // resets the window's scroll on unwind; mirror that here, matching
+            // the split-reset path elsewhere in this file.
+            if let Window::Leaf {
+                vscroll,
+                preserve_vscroll_p,
+                ..
+            } = mini
+            {
+                *vscroll = 0;
+                *preserve_vscroll_p = false;
+            }
         }
         // Hand the freed rows back to the root window and reposition the
         // mini-window below it, exactly like `shrink_mini_window`.
