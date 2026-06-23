@@ -34,6 +34,7 @@ use super::intern::{
 };
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::emacs_core::error::Flow;
+use crate::tagged::header::{load_value_atomic, store_value_atomic};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -297,6 +298,15 @@ pub struct LispSymbol {
     function_unbound: bool,
 }
 
+// Compile-time layout guard for the relaxed-atomic symbol-cell accesses
+// (`load_value_atomic`/`store_value_atomic`). They reinterpret a one-word
+// `Value` slot as `AtomicUsize`, which is only sound if `Value` is exactly a
+// machine word wide and at least word-aligned.
+const _: () = {
+    assert!(core::mem::align_of::<Value>() >= core::mem::align_of::<usize>());
+    assert!(core::mem::size_of::<Value>() == core::mem::size_of::<usize>());
+};
+
 /// Mirrors GNU `swap_in_symval_forwarding` (`src/data.c:1539-1571`).
 ///
 /// Loads the BLV's `valcell` from the current buffer's
@@ -320,9 +330,10 @@ fn swap_in_blv(
     // Find this symbol in the new buffer's alist.
     let key = Value::from_sym_id(sym_id);
     let found_cell = assq(key, local_var_alist);
-    blv.where_buf = current_buffer;
+    store_value_atomic(&mut blv.where_buf, current_buffer);
     blv.found = !found_cell.is_nil();
-    blv.valcell = if blv.found { found_cell } else { blv.defcell };
+    let new_valcell = if blv.found { found_cell } else { blv.defcell };
+    store_value_atomic(&mut blv.valcell, new_valcell);
 }
 
 /// Walk an alist looking for the cons whose car is `eq` to `key`.
@@ -1518,7 +1529,7 @@ impl Obarray {
         // target alist before every LOCALIZED write.
         let key = Value::from_sym_id(sym_id);
         let mut cell = assq(key, new_alist);
-        blv.where_buf = target_buf;
+        store_value_atomic(&mut blv.where_buf, target_buf);
         blv.found = true;
 
         if cell.is_nil() {
@@ -1536,7 +1547,7 @@ impl Obarray {
                 new_alist = Value::cons(cell, new_alist);
             }
         }
-        blv.valcell = cell;
+        store_value_atomic(&mut blv.valcell, cell);
 
         // Step 2: actually write the new value into valcell's cdr.
         // The BLV's valcell is a shared cons whose cdr lives in the
@@ -1603,7 +1614,7 @@ impl Obarray {
                     crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
                 }
                 sym.flags.set_redirect(SymbolRedirect::Plainval);
-                sym.val = SymbolVal { plain: value };
+                store_value_atomic(unsafe { &mut sym.val.plain }, value);
             }
         }
     }
@@ -1618,12 +1629,13 @@ impl Obarray {
             match sym.flags.redirect() {
                 SymbolRedirect::Plainval => {
                     // Safety: redirect=Plainval guarantees val.plain is live.
-                    let v = unsafe { &mut sym.val.plain };
-                    if *v != Value::UNBOUND {
+                    let mut v = unsafe { sym.val.plain };
+                    if v != Value::UNBOUND {
                         // SATB: this closure mutates the value cell in place, so
                         // retain the pre-image during a concurrent mark before f.
-                        crate::tagged::gc::note_root_overwrite(*v);
-                        f(v);
+                        crate::tagged::gc::note_root_overwrite(v);
+                        f(&mut v);
+                        store_value_atomic(unsafe { &mut sym.val.plain }, v);
                     }
                 }
                 SymbolRedirect::Localized => {
@@ -1698,7 +1710,7 @@ impl Obarray {
         let sym = self.ensure_symbol_id(id);
         // SATB: retain the function cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.function);
-        sym.function = function;
+        store_value_atomic(&mut sym.function, function);
         sym.function_unbound = false;
         self.note_function_redefined(id);
     }
@@ -1728,7 +1740,7 @@ impl Obarray {
         let sym = self.ensure_symbol_id(id);
         // SATB: retain the function cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.function);
-        sym.function = function;
+        store_value_atomic(&mut sym.function, function);
         sym.function_unbound = false;
         self.note_function_redefined(id);
     }
@@ -1747,7 +1759,7 @@ impl Obarray {
         sym.function_unbound = true;
         // SATB: retain the function cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.function);
-        sym.function = Value::NIL;
+        store_value_atomic(&mut sym.function, Value::NIL);
         if !was_unbound || was_bound_function {
             self.note_function_redefined(id);
         }
@@ -1766,7 +1778,7 @@ impl Obarray {
             if !sym.function.is_nil() {
                 // SATB: retain the function cell's pre-image during a concurrent mark.
                 crate::tagged::gc::note_root_overwrite(sym.function);
-                sym.function = Value::NIL;
+                store_value_atomic(&mut sym.function, Value::NIL);
                 redefined = true;
             }
         }
@@ -1883,7 +1895,7 @@ impl Obarray {
         )?;
         // SATB: retain the plist cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.plist);
-        sym.plist = new_plist;
+        store_value_atomic(&mut sym.plist, new_plist);
         Ok(())
     }
 
@@ -1903,7 +1915,7 @@ impl Obarray {
             crate::emacs_core::plist::plist_put(sym.plist, Value::from_sym_id(prop), value)?;
         // SATB: retain the plist cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.plist);
-        sym.plist = new_plist;
+        store_value_atomic(&mut sym.plist, new_plist);
         Ok(())
     }
 
@@ -1926,7 +1938,7 @@ impl Obarray {
         let sym = self.ensure_symbol_id(symbol);
         // SATB: retain the plist cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.plist);
-        sym.plist = new_plist;
+        store_value_atomic(&mut sym.plist, new_plist);
     }
 
     /// Store `plist` verbatim as the symbol's property list. Matches GNU
@@ -1937,7 +1949,7 @@ impl Obarray {
         let sym = self.ensure_symbol_id(symbol);
         // SATB: retain the plist cell's pre-image during a concurrent mark.
         crate::tagged::gc::note_root_overwrite(sym.plist);
-        sym.plist = plist;
+        store_value_atomic(&mut sym.plist, plist);
     }
 
     /// Get the symbol's full plist as a flat list.
@@ -2413,8 +2425,10 @@ impl GcTrace for Obarray {
             match sym.flags.redirect() {
                 SymbolRedirect::Plainval => {
                     // Safety: redirect==Plainval guarantees val.plain is
-                    // the live union variant. TaggedValue is Copy.
-                    let v = unsafe { sym.val.plain };
+                    // the live union variant. TaggedValue is Copy. Relaxed
+                    // atomic load: a concurrent mutator may store via
+                    // store_value_atomic into the same word.
+                    let v = load_value_atomic(unsafe { &sym.val.plain });
                     if v != Value::UNBOUND {
                         roots.push(v);
                     }
@@ -2426,15 +2440,15 @@ impl GcTrace for Obarray {
                 | SymbolRedirect::Forwarded
                 | SymbolRedirect::Localized => {}
             }
-            roots.push(sym.function);
-            roots.push(sym.plist);
+            roots.push(load_value_atomic(&sym.function));
+            roots.push(load_value_atomic(&sym.plist));
         }
         // BLV contents for LOCALIZED symbols. Unchanged.
         for &blv_ptr in &self.blvs {
             let blv = unsafe { &*blv_ptr };
-            roots.push(blv.defcell);
-            roots.push(blv.valcell);
-            roots.push(blv.where_buf);
+            roots.push(load_value_atomic(&blv.defcell));
+            roots.push(load_value_atomic(&blv.valcell));
+            roots.push(load_value_atomic(&blv.where_buf));
         }
     }
 }
