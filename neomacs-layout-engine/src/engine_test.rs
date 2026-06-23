@@ -10823,3 +10823,34 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
         "child width (200px) must derive its own ncols, not inherit the parent (800px): child={child_cols} parent={parent_cols}"
     );
 }
+
+#[test]
+fn echo_content_rows_measures_displayed_message_height() {
+    // The inactive mini-window's auto-resize measures the echo buffer's
+    // CONTENT (this helper), not a cached glyph matrix. This is what makes the
+    // echo area shrink back to one line after `M-x`/`C-g` (empty or "Quit")
+    // while still growing for a genuine multi-line message.
+    assert_eq!(echo_content_rows("", 80), 1, "empty echo is one line");
+    assert_eq!(
+        echo_content_rows("Quit", 80),
+        1,
+        "a one-line message is one line"
+    );
+    assert_eq!(
+        echo_content_rows("AAAA\nBBBB\nCCCC", 80),
+        3,
+        "a three-line message occupies three rows"
+    );
+    // Wrapping: a single logical line wider than the window wraps.
+    assert_eq!(
+        echo_content_rows(&"x".repeat(170), 80),
+        3,
+        "170 columns at width 80 wraps to three rows"
+    );
+    // Wrapping combines with explicit newlines.
+    assert_eq!(
+        echo_content_rows(&format!("{}\nshort", "y".repeat(85)), 80),
+        3,
+        "an 85-col line (2 rows) plus a short line (1 row) is three rows"
+    );
+}

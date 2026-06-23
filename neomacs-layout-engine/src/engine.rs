@@ -95,6 +95,23 @@ fn cursor_width_for_style(
         .width_px(face_char_w)
 }
 
+/// Wrapping-aware display-row count of echo-area `text` at `cols` columns,
+/// approximating GNU `resize_mini_window`'s `move_it_to (ZV)` content
+/// measurement. Empty text is one line; each logical line contributes at
+/// least one row plus any wrapped continuation rows.
+fn echo_content_rows(text: &str, cols: usize) -> usize {
+    let cols = cols.max(1);
+    if text.is_empty() {
+        return 1;
+    }
+    let mut rows = 0usize;
+    for line in text.split('\n') {
+        let width = line.chars().count();
+        rows += width.div_ceil(cols).max(1);
+    }
+    rows.max(1)
+}
+
 fn max_mini_window_lines_for_window(
     evaluator: &mut neovm_core::emacs_core::Context,
     params: &WindowParams,
@@ -651,7 +668,9 @@ impl LayoutEngine {
                             // the minibuffer is active.
                             let mini_window_id =
                                 neovm_core::window::WindowId(mini_params.window_id as u64);
-                            let buf_id = if !evaluator.minibuffer_window_is_active(mini_window_id) {
+                            let minibuffer_active =
+                                evaluator.minibuffer_window_is_active(mini_window_id);
+                            let buf_id = if !minibuffer_active {
                                 evaluator.ensure_echo_area_buffers();
                                 evaluator
                                     .buffer_manager()
@@ -665,8 +684,29 @@ impl LayoutEngine {
                                 .get(buf_id)
                                 .map(|b| b.accessible_emacs_byte_range().is_empty())
                                 .unwrap_or(true);
-                            let mini_rows_used = if visible_region_empty {
-                                1
+                            // For an INACTIVE mini-window, measure the displayed echo
+                            // buffer's content height directly (GNU `resize_mini_window`
+                            // measures `w->contents` via `move_it_to (ZV)`) rather than
+                            // the engine's cached enabled-row count. That matrix goes
+                            // STALE: the inactive mini-window is laid out with ~zero text
+                            // height and skipped, so it keeps the active minibuffer's
+                            // candidate-overlay row count (e.g. 35). With the stale
+                            // matrix, the instant any echo message ("Quit" after C-g)
+                            // makes the buffer non-empty, the window re-grows to that
+                            // stale height. Content measurement keeps "Quit"/empty one
+                            // line. When the minibuffer is ACTIVE the matrix is fresh and
+                            // includes the candidate overlay, so keep using it there.
+                            let mini_rows_used = if !minibuffer_active {
+                                let cols = (mini_params.bounds.width
+                                    / frame_params.char_width.max(1.0))
+                                .floor()
+                                .max(1.0) as usize;
+                                let text = evaluator
+                                    .buffer_manager()
+                                    .get(buf_id)
+                                    .map(|b| b.full_text_string())
+                                    .unwrap_or_default();
+                                echo_content_rows(&text, cols)
                             } else {
                                 mini_rows_used
                             };

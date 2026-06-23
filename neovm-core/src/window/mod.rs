@@ -2649,6 +2649,40 @@ impl FrameManager {
         self.frames.get_mut(&id)
     }
 
+    /// Force the frame's minibuffer window back to exactly one line, content
+    /// independent.
+    ///
+    /// This is neomacs's analogue of GNU's unconditional
+    /// `resize_mini_window (XWINDOW (minibuf_window), 0)` at the outermost
+    /// minibuffer unwind (`minibuf.c:1188-1190`). Unlike the layout-engine
+    /// auto-resize heuristic (which only *reacts* to measured content and is
+    /// the steady-state mechanism), this asserts the end state imperatively at
+    /// teardown so the mini-window cannot stay grown after the active
+    /// minibuffer is gone.
+    ///
+    /// It reuses the existing minibuffer split / shrink machinery
+    /// (`reposition_minibuffer_below_root` via `sync_window_area_bounds`) to
+    /// set the mini-window height to one line and return the freed space to the
+    /// root. The next redisplay re-measures the inactive mini-window from its
+    /// displayed echo buffer's *content* (see the layout engine's
+    /// `echo_content_rows`), so it correctly stays one line for an empty echo
+    /// or "Quit", and re-grows for a genuine multi-line message — without any
+    /// stale-matrix override that would suppress such a message.
+    pub fn force_resize_mini_window_to_one_line(&mut self, id: FrameId) {
+        let Some(frame) = self.frames.get_mut(&id) else {
+            return;
+        };
+        let unit = frame.char_height.max(1.0);
+        if let Some(mini) = frame.minibuffer_leaf.as_mut() {
+            let mut bounds = *mini.bounds();
+            bounds.height = unit;
+            mini.set_bounds(bounds);
+        }
+        // Hand the freed rows back to the root window and reposition the
+        // mini-window below it, exactly like `shrink_mini_window`.
+        frame.sync_window_area_bounds();
+    }
+
     pub fn frames_mut(&mut self) -> impl Iterator<Item = &mut Frame> {
         self.frames.values_mut()
     }

@@ -444,7 +444,76 @@ fn erase_expired_minibuffer_buffer_in_state(
     buffers: &mut crate::buffer::BufferManager,
     minibuf_id: crate::buffer::BufferId,
 ) {
+    // GNU `read_minibuf_unwind` (minibuf.c:1181) erases the expired buffer's
+    // text, and its companion `get_minibuffer` reuse path (minibuf.c:1062-1063)
+    // drops the buffer's overlays. neomacs previously erased text only, so a
+    // vertico candidate `after-string` overlay anchored on ` *Minibuf-N*`
+    // survived teardown and kept the mini-window measuring as multi-line. Delete
+    // the overlays here so the expired buffer is fully reset (text + overlays).
+    let _ = buffers.delete_all_buffer_overlays(minibuf_id);
     let _ = buffers.replace_buffer_contents(minibuf_id, "");
+}
+
+/// Tear down one minibuffer level, mirroring GNU's two-responsibility unwind
+/// (`read_minibuf_unwind` + `minibuffer_unwind`, minibuf.c) as a single unit.
+///
+/// This is the ONLY path through which minibuffer exit and abort flow, so the
+/// two are provably identical (GNU runs the same unwind on both — both leave via
+/// `(throw 'exit …)`; there is no abort-specific teardown). The steps, in GNU
+/// order, are:
+///
+/// - **R1** Reset the expired ` *Minibuf-N*` completely — delete its overlays
+///   *and* erase its text (the vertico candidate `after-string` overlay is the
+///   actual carrier of the multi-line content, so text-erase alone is not
+///   enough), then run `minibuffer-inactive-mode`.
+/// - **R2** Restore the mini-window's buffer to ` *Minibuf-0*` (the saved
+///   `previous_minibuffer_buffer`), the analogue of `minibuffer_unwind`.
+/// - **R3** At the OUTERMOST level only (`minibuffers.depth() == 0` after the
+///   pop, matching GNU's `minibuf_level == 0` guard at minibuf.c:1188), force
+///   the mini-window back to exactly one line, content-independent.
+/// - **R4** Invalidate the mini-window's cached glyph-matrix row count (folded
+///   into `force_resize_mini_window_to_one_line`) so the layout engine cannot
+///   reuse the stale 35-row matrix on the next redisplay.
+///
+/// `depth_after_pop` is `minibuffers.depth()` taken AFTER the exit/abort pop has
+/// already run. `run_inactive_mode` runs `minibuffer-inactive-mode` and its
+/// result is returned for the caller to `?`-propagate, exactly as before.
+#[allow(clippy::too_many_arguments)]
+fn teardown_minibuffer_level_in_state(
+    frames: &mut crate::window::FrameManager,
+    buffers: &mut crate::buffer::BufferManager,
+    minibuffer_selected_window: &mut Option<crate::window::WindowId>,
+    active_minibuffer_window: &mut Option<crate::window::WindowId>,
+    minibuf_id: crate::buffer::BufferId,
+    depth_after_pop: usize,
+    saved: ActiveMinibufferWindowState,
+    run_inactive_mode: impl FnOnce() -> EvalResult,
+) -> EvalResult {
+    let teardown_frame_id = saved.frame_id;
+
+    // (R1) Completely reset the expired *Minibuf-N* (overlays + text), then run
+    // minibuffer-inactive-mode.
+    erase_expired_minibuffer_buffer_in_state(buffers, minibuf_id);
+    let inactive_mode_result = run_inactive_mode();
+
+    // (R2) Restore the mini-window's buffer to *Minibuf-0* / the prev buffer.
+    restore_minibuffer_window_in_state(
+        frames,
+        buffers,
+        minibuffer_selected_window,
+        active_minibuffer_window,
+        saved,
+    );
+
+    // (R3 + R4) At the outermost level, force the mini-window back to one line
+    // and invalidate its cached matrix so the engine cannot reuse the stale
+    // row count. Guarded by depth==0 so a nested minibuffer popping back to an
+    // outer (still active) one does not collapse the outer minibuffer's window.
+    if depth_after_pop == 0 {
+        frames.force_resize_mini_window_to_one_line(teardown_frame_id);
+    }
+
+    inactive_mode_result
 }
 
 fn find_or_create_minibuffer_buffer_in_state(
@@ -452,9 +521,20 @@ fn find_or_create_minibuffer_buffer_in_state(
     depth: usize,
 ) -> crate::buffer::BufferId {
     let minibuf_name = format!(" *Minibuf-{depth}*");
-    let minibuf_id = buffers
-        .find_buffer_by_name(&minibuf_name)
-        .unwrap_or_else(|| buffers.create_buffer(&minibuf_name));
+    let minibuf_id = match buffers.find_buffer_by_name(&minibuf_name) {
+        Some(existing) => {
+            // GNU `get_minibuffer` (minibuf.c:1062-1063) resets every reused
+            // minibuffer pool buffer with `delete_all_overlays + reset_buffer`
+            // so a new activation never inherits stale overlays or text from a
+            // prior (possibly aborted) session. Mirror that defense-in-depth
+            // here on the reuse branch: even if a teardown was skipped, the
+            // buffer starts clean.
+            let _ = buffers.delete_all_buffer_overlays(existing);
+            let _ = buffers.replace_buffer_contents(existing, "");
+            existing
+        }
+        None => buffers.create_buffer(&minibuf_name),
+    };
     let _ = buffers.configure_buffer_undo_list(minibuf_id, Value::NIL);
     let _ = buffers.set_buffer_local_property(minibuf_id, "truncate-lines", Value::NIL);
     minibuf_id
@@ -1020,7 +1100,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     mut run_active_mode: impl FnMut() -> EvalResult,
     mut run_setup_hook: impl FnMut() -> EvalResult,
     mut run_exit_hook: impl FnMut() -> EvalResult,
-    mut run_inactive_mode: impl FnMut() -> EvalResult,
+    run_inactive_mode: impl FnOnce() -> EvalResult,
     mut run_recursive_edit: impl FnMut() -> EvalResult,
 ) -> EvalResult {
     // Check inhibit-interaction — GNU Emacs signals an error when any
@@ -1169,23 +1249,26 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         }
     }
 
-    // Restore state
-    let inactive_mode_result = if active_window_state.is_some() {
+    // Restore state. Route the full teardown (reset expired buffer + overlays,
+    // inactive-mode, restore window buffer, force-resize at the outermost level)
+    // through the single `teardown_minibuffer_level_in_state` boundary so exit
+    // and abort tear down identically (GNU runs the same unwind for both).
+    let depth_after_pop = minibuffers.depth();
+    let inactive_mode_result = if let Some(saved) = active_window_state {
         let _ = buffers.switch_current_unrecorded(minibuf_id);
-        erase_expired_minibuffer_buffer_in_state(buffers, minibuf_id);
-        run_inactive_mode()
-    } else {
-        Ok(Value::NIL)
-    };
-    if let Some(saved) = active_window_state {
-        restore_minibuffer_window_in_state(
+        teardown_minibuffer_level_in_state(
             frames,
             buffers,
             minibuffer_selected_window,
             active_minibuffer_window,
+            minibuf_id,
+            depth_after_pop,
             saved,
-        );
-    }
+            run_inactive_mode,
+        )
+    } else {
+        Ok(Value::NIL)
+    };
     if let Some(buf_id) = saved_buffer_id {
         buffers.switch_current(buf_id);
     }
@@ -1756,22 +1839,35 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         }
     }
 
-    let inactive_mode_result = if active_window_state.is_some() {
+    // Route the full teardown through the single
+    // `teardown_minibuffer_level_in_state` boundary (the same one the eval-side
+    // `finish_read_from_minibuffer_in_state_with_recursive_edit` uses) so exit
+    // and abort are provably identical here too. The `minibuffer-inactive-mode`
+    // hook needs `&mut shared`, while the boundary borrows individual `shared`
+    // fields; mirror this file's established pattern and run the hook through a
+    // raw pointer so the two borrows do not alias at the type level.
+    let depth_after_pop = shared.minibuffers.depth();
+    let inactive_mode_result = if let Some(saved) = active_window_state {
         let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
-        erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_id);
-        run_minibuffer_mode_if_bound(shared, "minibuffer-inactive-mode")
-    } else {
-        Ok(Value::NIL)
-    };
-    if let Some(saved) = active_window_state {
-        restore_minibuffer_window_in_state(
+        let shared_ptr = std::ptr::NonNull::from(&mut *shared);
+        teardown_minibuffer_level_in_state(
             &mut shared.frames,
             &mut shared.buffers,
             &mut shared.minibuffer_selected_window,
             &mut shared.active_minibuffer_window,
+            minibuf_id,
+            depth_after_pop,
             saved,
-        );
-    }
+            move || unsafe {
+                run_minibuffer_mode_if_bound(
+                    shared_ptr.as_ptr().as_mut().unwrap(),
+                    "minibuffer-inactive-mode",
+                )
+            },
+        )
+    } else {
+        Ok(Value::NIL)
+    };
     if let Some(buf_id) = saved_buffer_id {
         shared.buffers.switch_current(buf_id);
     }
@@ -2755,6 +2851,9 @@ pub(crate) fn finish_read_key_sequence_vector_interactive_in_runtime(
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+#[cfg(test)]
+#[path = "reader_minibuffer_teardown_test.rs"]
+mod minibuffer_teardown_tests;
 #[cfg(test)]
 #[path = "reader_raw_bytes_test.rs"]
 mod raw_bytes_tests;
