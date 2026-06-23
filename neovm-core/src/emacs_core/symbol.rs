@@ -149,7 +149,7 @@ impl SymbolFlags {
 
     #[inline]
     pub fn set_redirect(&mut self, r: SymbolRedirect) {
-        self.0 = (self.0 & !Self::REDIRECT_MASK) | r.gnu_code();
+        self.store_byte((self.0 & !Self::REDIRECT_MASK) | r.gnu_code());
     }
 
     #[inline]
@@ -161,7 +161,7 @@ impl SymbolFlags {
 
     #[inline]
     pub fn set_trapped_write(&mut self, t: SymbolTrappedWrite) {
-        self.0 = (self.0 & !Self::TRAPPED_WRITE_MASK) | (t.gnu_code() << Self::TRAPPED_WRITE_SHIFT);
+        self.store_byte((self.0 & !Self::TRAPPED_WRITE_MASK) | (t.gnu_code() << Self::TRAPPED_WRITE_SHIFT));
     }
 
     #[inline]
@@ -173,7 +173,7 @@ impl SymbolFlags {
 
     #[inline]
     pub fn set_interned(&mut self, i: SymbolInterned) {
-        self.0 = (self.0 & !Self::INTERNED_MASK) | (i.gnu_code() << Self::INTERNED_SHIFT);
+        self.store_byte((self.0 & !Self::INTERNED_MASK) | (i.gnu_code() << Self::INTERNED_SHIFT));
     }
 
     #[inline]
@@ -183,11 +183,34 @@ impl SymbolFlags {
 
     #[inline]
     pub fn set_declared_special(&mut self, v: bool) {
-        if v {
-            self.0 |= Self::DECLARED_SPECIAL_BIT;
+        let byte = if v {
+            self.0 | Self::DECLARED_SPECIAL_BIT
         } else {
-            self.0 &= !Self::DECLARED_SPECIAL_BIT;
-        }
+            self.0 & !Self::DECLARED_SPECIAL_BIT
+        };
+        self.store_byte(byte);
+    }
+
+    /// Atomic (relaxed) store of the whole flags byte so a concurrent GC reader
+    /// (`load_redirect`) never observes a torn byte. Mirrors `ConsCell::set_car`:
+    /// the field stays a plain `u8`, accessed atomically via a raw cast. There is
+    /// a single mutator, so the caller's plain read of `self.0` to compute `byte`
+    /// does not race (the GC thread only ever reads this byte).
+    #[inline]
+    fn store_byte(&mut self, byte: u8) {
+        let p = &self.0 as *const u8 as *const std::sync::atomic::AtomicU8;
+        unsafe { (*p).store(byte, std::sync::atomic::Ordering::Relaxed) };
+    }
+
+    /// Atomic (relaxed) read of the redirect tag, for the concurrent GC obarray
+    /// scan. Pairs with the `store_byte` writes above so the scan never reads a
+    /// torn flags byte while the mutator changes a redirect/flag bit.
+    #[inline]
+    pub fn load_redirect(&self) -> SymbolRedirect {
+        let p = &self.0 as *const u8 as *const std::sync::atomic::AtomicU8;
+        let byte = unsafe { (*p).load(std::sync::atomic::Ordering::Relaxed) };
+        SymbolRedirect::try_from(byte & Self::REDIRECT_MASK)
+            .expect("symbol redirect flag contains valid GNU symbol_redirect code")
     }
 }
 
@@ -510,17 +533,40 @@ const OBARRAY_CHUNK: usize = 4096;
 /// stable chunk address lets the GC thread scan a chunk concurrently with no
 /// realloc UAF. Slot `idx` (== `SymId`) lives at `chunks[idx >> 12][idx & 4095]`,
 /// preserving the dense `SymId == slot-index` identity the dump + iteration rely on.
-#[derive(Clone)]
 struct SymbolChunks {
     chunks: Vec<Box<[Option<LispSymbol>; OBARRAY_CHUNK]>>,
+    /// Per-chunk seqlock (one `AtomicU32` per chunk, index-aligned with `chunks`).
+    /// Boxed so the counter address stays stable for the concurrent GC reader even
+    /// when the `Vec` spine reallocs. Even = stable; odd = a `(flags, val)` write
+    /// is in flight in that chunk. Only ever bumped while a concurrent mark is
+    /// active (Stage 1b); zero cost otherwise. The GC reads it with the standard
+    /// seqlock protocol (retry while odd / changed).
+    seqs: Vec<Box<std::sync::atomic::AtomicU32>>,
     /// Logical slot count; grows to a chunk boundary as chunks are appended.
     len: usize,
+}
+
+impl Clone for SymbolChunks {
+    fn clone(&self) -> Self {
+        // A cloned obarray is never concurrently marked, so the seqlocks reset
+        // to 0 (even). (`AtomicU32` is not `Clone`, hence the manual impl.)
+        Self {
+            chunks: self.chunks.clone(),
+            seqs: self
+                .chunks
+                .iter()
+                .map(|_| Box::new(std::sync::atomic::AtomicU32::new(0)))
+                .collect(),
+            len: self.len,
+        }
+    }
 }
 
 impl SymbolChunks {
     fn new() -> Self {
         Self {
             chunks: Vec::new(),
+            seqs: Vec::new(),
             len: 0,
         }
     }
@@ -546,6 +592,8 @@ impl SymbolChunks {
     fn ensure(&mut self, idx: usize) -> &mut Option<LispSymbol> {
         while self.len <= idx {
             self.chunks.push(Box::new(std::array::from_fn(|_| None)));
+            self.seqs
+                .push(Box::new(std::sync::atomic::AtomicU32::new(0)));
             self.len += OBARRAY_CHUNK;
         }
         &mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)]
@@ -564,6 +612,21 @@ impl SymbolChunks {
 
     fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<LispSymbol>> {
         self.chunks.iter_mut().flat_map(|c| c.iter_mut())
+    }
+
+    /// Raw pointer to the seqlock guarding the chunk that holds slot `idx`. The
+    /// seq box never moves, so the pointer stays valid for the concurrent reader
+    /// even across a spine realloc. Returns `None` if `idx`'s chunk does not yet
+    /// exist (the slot was never `ensure`d). Returning a raw pointer (not a
+    /// borrow) lets a write site bump the seqlock and then take a `&mut` to the
+    /// slot without a borrow conflict (the `AtomicU32` is interior-mutable).
+    // Used by the write-site seqlock bump + the GC scan in the next increment.
+    #[allow(dead_code)]
+    #[inline(always)]
+    fn chunk_seq_ptr(&self, idx: usize) -> Option<*const std::sync::atomic::AtomicU32> {
+        self.seqs
+            .get(idx >> 12)
+            .map(|b| &**b as *const std::sync::atomic::AtomicU32)
     }
 }
 
