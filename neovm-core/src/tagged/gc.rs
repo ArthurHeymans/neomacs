@@ -199,6 +199,12 @@ struct ConcurrentMarkJob {
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Signalled when the loop exits, so the mutator can take over the gray queue.
     exited: std::sync::mpsc::Sender<()>,
+    /// Stage 1b CONCURRENT OBARRAY SCAN: a start-captured snapshot of the obarray's
+    /// chunked symbol store. When `Some`, the GC thread scans these symbol cells
+    /// ONCE per cycle, feeding each symbol's heap children into `gray` (conses) /
+    /// `deferred` (non-cons) like the gray-drain cons branch. `None` (flag off) =>
+    /// no scan, behaviour-neutral; the start seed walked the symbol cells instead.
+    obarray: Option<crate::emacs_core::symbol::ObarrayScanSnapshot>,
 }
 
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
@@ -271,6 +277,12 @@ unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
 /// the shared SATB buffer until both are empty and the mutator asks it to stop.
 fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     use std::sync::atomic::Ordering;
+    // Stage 1b CONCURRENT OBARRAY SCAN: when an obarray snapshot was handed over,
+    // scan the symbol cells ONCE per cycle. Guarded by this local so it runs a
+    // single time regardless of how many gray/SATB drain rounds happen. The scan
+    // feeds children into `gray` (conses) / `deferred` (non-cons) exactly like the
+    // cons-drain branch below, then the outer loop re-drains to a fixpoint.
+    let mut obarray_scanned = false;
     loop {
         // Drain the local gray worklist (GC-thread-owned; no sharing).
         while let Some(val) = job.gray.pop() {
@@ -301,6 +313,34 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                 // Float/string/veclike: backing may be reallocated by the mutator,
                 // so never read it here — defer the trace to the STW termination.
                 job.deferred.lock().unwrap().push(val);
+            }
+        }
+        // Stage 1b CONCURRENT OBARRAY SCAN (once per cycle): after the initial
+        // gray-drain, scan the snapshotted symbol cells, routing each heap child to
+        // gray (conses) / deferred (non-cons) just like the cons-drain branch. We
+        // move the snapshot out of `job` (`take`) so the scan closure can borrow the
+        // other `job` fields (`gray`, `deferred`) without a borrow conflict; once
+        // scanned it stays `None`, so the `obarray_scanned` guard + the empty
+        // `job.obarray` both ensure single execution. Pushing into `gray` means the
+        // outer loop re-drains the symbol cells' transitive children to a fixpoint.
+        if !obarray_scanned {
+            obarray_scanned = true;
+            if let Some(snap) = job.obarray.take() {
+                // Safety: `snap` was captured at this cycle's world-stopped start
+                // handshake; its chunk + seq pointers address the live, non-moving
+                // obarray storage, and we are on the GC thread.
+                unsafe {
+                    snap.scan(|child| {
+                        if child.is_cons() {
+                            job.gray.push(child);
+                        } else {
+                            job.deferred.lock().unwrap().push(child);
+                        }
+                    });
+                }
+                // New children were pushed; loop back to drain them before deciding
+                // we are done.
+                continue;
             }
         }
         // Fold the mutator's SATB log (overwritten children) into gray.
@@ -441,6 +481,18 @@ pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
 #[inline]
 pub(crate) fn concurrent_mark_active() -> bool {
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get())
+}
+
+/// Stage 1b CONCURRENT OBARRAY SCAN feature flag (env `NEOVM_GC_CONCURRENT_OBARRAY`
+/// == "1"). Default OFF: when off, no obarray snapshot is built at the start
+/// handshake and the GC thread does no obarray scan, so behaviour is byte-identical
+/// to the pre-Stage-1b path (the start seed walks the symbol cells as before). When
+/// on, the start handshake hands the GC thread a start-captured chunk snapshot, the
+/// GC thread scans the obarray symbol cells concurrently, and the start seed skips
+/// the symbol-cell walk. Read once via `OnceLock`.
+pub(crate) fn gc_concurrent_obarray_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_OBARRAY").as_deref() == Ok("1"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,6 +1118,19 @@ pub struct TaggedHeap {
     /// Receives when the GC thread has exited its mark loop (so the mutator's
     /// termination can safely take over the gray queue). Set at start.
     gc_exited: Option<std::sync::mpsc::Receiver<()>>,
+    /// Stage 1b CONCURRENT OBARRAY SCAN: a start-captured obarray chunk snapshot
+    /// staged by the start handshake (`start_concurrent_mark`) just before
+    /// `launch_concurrent_mark`, which moves it into the `ConcurrentMarkJob`. The
+    /// heap cannot reach the Context-side obarray itself, so the snapshot is built
+    /// Context-side and parked here for the launch to consume. `None` when the
+    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag is off (zero behaviour change).
+    pending_obarray_scan: Option<crate::emacs_core::symbol::ObarrayScanSnapshot>,
+    /// Stage 1b: the obarray slot count captured at the start handshake, retained
+    /// across the cycle (the snapshot itself is moved into the GC job). At the STW
+    /// termination, the residual re-seed covers new symbols in slots `>= this`
+    /// (interned mid-cycle, never scanned by the GC thread). `None` when the flag
+    /// is off.
+    concurrent_obarray_start_slots: Option<usize>,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
     // is deferred and drained in bounded slices at later safe points, so the
@@ -1140,6 +1205,8 @@ impl TaggedHeap {
             gc_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_exited: None,
+            pending_obarray_scan: None,
+            concurrent_obarray_start_slots: None,
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
@@ -3443,6 +3510,27 @@ impl TaggedHeap {
     /// start non-blocking concurrent marking. Returns immediately; the mutator
     /// resumes while the GC thread marks. Allocate-black turns on so new objects
     /// survive this cycle's sweep, and the SATB barrier starts logging.
+    /// Stage 1b: stash the start-captured obarray scan snapshot for the next
+    /// `launch_concurrent_mark` to move into the job. Called from
+    /// `start_concurrent_mark` at the world-stopped start handshake when the
+    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag is on; never called when off.
+    pub(crate) fn set_pending_obarray_scan(
+        &mut self,
+        snap: crate::emacs_core::symbol::ObarrayScanSnapshot,
+    ) {
+        // Retain the start slot count for the termination residual re-seed before
+        // the snapshot is moved into the GC job at `launch_concurrent_mark`.
+        self.concurrent_obarray_start_slots = Some(snap.n_slots());
+        self.pending_obarray_scan = Some(snap);
+    }
+
+    /// Stage 1b: take the start-of-cycle obarray slot count (set at the start
+    /// handshake) for the termination residual re-seed. `None` when the
+    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag was off this cycle (no residual needed).
+    pub(crate) fn take_concurrent_obarray_start_slots(&mut self) -> Option<usize> {
+        self.concurrent_obarray_start_slots.take()
+    }
+
     pub(crate) fn launch_concurrent_mark(&mut self) {
         // Immutable snapshot of owned cons-block bases — read-only on the GC
         // thread. New blocks allocated during marking are absent, which is fine:
@@ -3472,6 +3560,10 @@ impl TaggedHeap {
             done: self.gc_done.clone(),
             stop: self.gc_stop.clone(),
             exited: exited_tx,
+            // Stage 1b: consume the obarray snapshot the start handshake staged
+            // (Some only when NEOVM_GC_CONCURRENT_OBARRAY is on). Take it so it is
+            // not left dangling for a later cycle.
+            obarray: self.pending_obarray_scan.take(),
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))

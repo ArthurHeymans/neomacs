@@ -627,6 +627,123 @@ impl SymbolChunks {
             .get(idx >> 12)
             .map(|b| &**b as *const std::sync::atomic::AtomicU32)
     }
+
+    /// Capture the start-of-cycle scan parts for the Stage 1b concurrent obarray
+    /// scan: per existing chunk, its slots-array base pointer + its seqlock pointer,
+    /// plus the logical live-slot count. The chunk arrays and seq boxes never move
+    /// once allocated, so these raw pointers stay valid for the whole GC cycle even
+    /// if the mutator appends new chunks (the `Vec` spines may realloc, but the
+    /// boxed targets do not). Kept inside `SymbolChunks` so the private fields are
+    /// in scope.
+    fn snapshot_parts(
+        &self,
+    ) -> (
+        Vec<(
+            *const Option<LispSymbol>,
+            *const std::sync::atomic::AtomicU32,
+        )>,
+        usize,
+    ) {
+        let parts = self
+            .chunks
+            .iter()
+            .zip(self.seqs.iter())
+            .map(|(chunk, seqbox)| {
+                (
+                    chunk.as_ptr(),
+                    &**seqbox as *const std::sync::atomic::AtomicU32,
+                )
+            })
+            .collect();
+        (parts, self.len)
+    }
+}
+
+/// Start-of-cycle snapshot of the obarray's chunked symbol store for the Stage 1b
+/// CONCURRENT OBARRAY SCAN. Captures, per chunk present at start, the chunk's
+/// slots-array base pointer and its per-chunk seqlock pointer, the logical
+/// live-slot count, and the chunk count. The GC thread walks slots `[0, n_slots)`
+/// across these chunks, reading each symbol's heap children via the seqlock
+/// protocol ([`read_symbol_children_consistent`]). Chunks (and slots) interned
+/// mid-cycle live beyond `n_chunks`/`n_slots` and are NOT in the snapshot; they are
+/// allocate-black-equivalent in the obarray sense and are picked up by the
+/// termination re-seed of the new range.
+///
+/// The raw pointers are valid for the whole cycle because chunk arrays + seq boxes
+/// never move (see [`SymbolChunks`]). Single mutator, single GC thread.
+pub(crate) struct ObarrayScanSnapshot {
+    /// (slots-array base ptr, chunk seqlock ptr) for each chunk present at start.
+    chunks: Vec<(
+        *const Option<LispSymbol>,
+        *const std::sync::atomic::AtomicU32,
+    )>,
+    /// Logical live-slot count at start (so the scan covers slots [0, n_slots)).
+    n_slots: usize,
+    /// Chunk count at start (chunks beyond this are interned mid-cycle).
+    n_chunks: usize,
+}
+
+// Safety: the snapshot holds raw pointers into the obarray's non-moving chunk
+// arrays + seq boxes, which the obarray owns and keeps alive for the whole GC
+// cycle. The GC thread only READS through them (the seqlock protocol coordinates
+// with the single mutator's arm writes), so handing the snapshot to the GC thread
+// is sound.
+unsafe impl Send for ObarrayScanSnapshot {}
+
+impl ObarrayScanSnapshot {
+    /// Chunk count captured at start. Symbols interned mid-cycle live in chunks
+    /// `>= n_chunks` (slots `>= n_slots`) and are not covered by this scan; the
+    /// termination re-seed covers that new range.
+    #[inline]
+    pub(crate) fn n_chunks(&self) -> usize {
+        self.n_chunks
+    }
+
+    /// Logical live-slot count captured at start. The scan covers slots
+    /// `[0, n_slots)`; the termination re-seed covers `[n_slots, current_len)`.
+    #[inline]
+    pub(crate) fn n_slots(&self) -> usize {
+        self.n_slots
+    }
+
+    /// Scan the snapshotted obarray symbol cells ONCE, on the GC thread, reading
+    /// each present symbol's heap children via the seqlock protocol and invoking
+    /// `push` for each heap-object child. The caller routes each pushed child to
+    /// the gray worklist (conses) or the deferred list (non-cons), exactly like the
+    /// gray-drain cons branch. Walks chunks in `SymId` order, stopping at the global
+    /// slot index `n_slots`.
+    ///
+    /// # Safety
+    /// Must run on the GC thread for a snapshot captured at the world-stopped start
+    /// handshake of the CURRENTLY-RUNNING concurrent mark; the chunk + seq pointers
+    /// must still address the live, non-moving obarray storage (guaranteed because
+    /// chunk arrays + seq boxes never move, and the obarray outlives the cycle).
+    pub(crate) unsafe fn scan(&self, mut push: impl FnMut(Value)) {
+        let mut global_idx = 0usize;
+        for &(slots_ptr, seq_ptr) in &self.chunks {
+            if global_idx >= self.n_slots {
+                break;
+            }
+            // Safety: seq_ptr addresses this chunk's boxed seqlock, which never
+            // moves; valid for the whole cycle.
+            let seq = unsafe { &*seq_ptr };
+            for offset in 0..OBARRAY_CHUNK {
+                if global_idx >= self.n_slots {
+                    break;
+                }
+                // Safety: slots_ptr is this chunk's [Option<LispSymbol>; CHUNK]
+                // base; `offset < OBARRAY_CHUNK` is in bounds; the chunk never
+                // moves. A concurrent mutator only mutates the value-cell ARM
+                // (flags + val word) under the seqlock, which the read protocol
+                // validates — it never resizes or relocates the slot.
+                let sym_opt = unsafe { &*slots_ptr.add(offset) };
+                if let Some(sym) = sym_opt {
+                    read_symbol_children_consistent(seq, sym, &mut push);
+                }
+                global_idx += 1;
+            }
+        }
+    }
 }
 
 /// Brackets a symbol value-cell ARM change (redirect tag + val word) with the
@@ -673,7 +790,6 @@ impl Drop for SeqlockWriteGuard {
 /// Caller must hold the start-of-cycle chunk snapshot so `sym`/`seq` address live,
 /// non-moving memory. Bounded in practice: with a single mutator the odd window
 /// is ~4 stores, so the retry loop converges immediately.
-#[allow(dead_code)] // wired into run_concurrent_mark by the scan increment
 pub(crate) fn read_symbol_children_consistent(
     seq: &std::sync::atomic::AtomicU32,
     sym: &LispSymbol,
@@ -823,6 +939,55 @@ impl Obarray {
             None
         };
         SeqlockWriteGuard::new(seq)
+    }
+
+    /// Capture a start-of-cycle [`ObarrayScanSnapshot`] for the Stage 1b concurrent
+    /// obarray scan. MUST be called at the world-stopped start handshake (the same
+    /// point the cons-block snapshot is taken), so `n_slots`/`n_chunks` are a
+    /// consistent picture of the obarray at start. Chunk arrays + seq boxes never
+    /// move, so the captured raw pointers stay valid for the whole cycle.
+    pub(crate) fn scan_snapshot(&self) -> ObarrayScanSnapshot {
+        let (chunks, n_slots) = self.symbols.snapshot_parts();
+        let n_chunks = chunks.len();
+        ObarrayScanSnapshot {
+            chunks,
+            n_slots,
+            n_chunks,
+        }
+    }
+
+    /// Current logical slot count (chunk-boundary-rounded). Used by the Stage 1b
+    /// termination residual to bound the new-symbol re-seed range.
+    pub(crate) fn current_slot_len(&self) -> usize {
+        self.symbols.len()
+    }
+
+    /// Stage 1b termination residual: seed the val/function/plist roots for symbols
+    /// interned MID-CYCLE — slots `[from_slot, len)` that were not in the start
+    /// snapshot and so were never scanned by the GC thread. Mirrors the symbol-cell
+    /// arm of [`trace_roots`] but bounded to the new range. Runs at the STW
+    /// termination (single-threaded, no seqlock needed). The BLV pool is re-scanned
+    /// separately by the unbounded `trace_roots` BLV loop, so it is not repeated here.
+    pub(crate) fn trace_new_symbol_cells(&self, from_slot: usize, mut push: impl FnMut(Value)) {
+        let len = self.symbols.len();
+        for idx in from_slot..len {
+            let Some(Some(sym)) = self.symbols.get(idx) else {
+                continue;
+            };
+            match sym.flags.redirect() {
+                SymbolRedirect::Plainval => {
+                    let v = load_value_atomic(unsafe { &sym.val.plain });
+                    if v != Value::UNBOUND {
+                        push(v);
+                    }
+                }
+                SymbolRedirect::Varalias
+                | SymbolRedirect::Forwarded
+                | SymbolRedirect::Localized => {}
+            }
+            push(load_value_atomic(&sym.function));
+            push(load_value_atomic(&sym.plist));
+        }
     }
 
     fn mark_global_member(&mut self, id: SymId) {
