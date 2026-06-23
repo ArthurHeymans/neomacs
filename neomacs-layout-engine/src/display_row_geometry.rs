@@ -739,7 +739,6 @@ impl DisplayRowGeometryState {
 }
 
 impl DisplayRowMarker {
-    #[cfg(test)]
     pub(crate) fn is_active_on(&self, geometry: &DisplayRowGeometryState) -> bool {
         matches!(self, Self::Row(row) if *row == geometry.row)
     }
@@ -766,7 +765,6 @@ impl<T> DisplayRowScopedValue<T> {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn value_on(&self, geometry: &DisplayRowGeometryState) -> Option<&T> {
         match self {
             Self::Active { row, value } if row.is_active_on(geometry) => Some(value),

@@ -25,7 +25,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::render_window_chrome_rows;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
@@ -291,6 +291,10 @@ impl BufferSourceOutputSetup {
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
             self.row_limit,
+            // Frame background = default-face background pixel. Used to gate the
+            // trailing `:extend` fill (GNU extend_face_to_end_of_line): a fill
+            // whose bg equals the frame bg is a visual no-op and is skipped.
+            Color::from_pixel(default_face.face().bg),
         );
         let row_prelude_context =
             local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);

@@ -15,6 +15,7 @@ use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_source::DisplaySourceStepChar;
 use crate::types::WindowParams;
+use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -34,6 +35,7 @@ pub(crate) struct BufferSourceLoopRequestContext {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+    frame_background: Color,
 }
 
 impl BufferSourceLoopRequestContext {
@@ -52,6 +54,7 @@ impl BufferSourceLoopRequestContext {
         display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
+        frame_background: Color,
     ) -> Self {
         Self {
             buffer_id,
@@ -69,6 +72,7 @@ impl BufferSourceLoopRequestContext {
             display_text_row_base,
             max_rows,
             row_limit,
+            frame_background,
         }
     }
 
@@ -147,6 +151,7 @@ impl BufferSourceLoopRequestContext {
         self,
         source_char: DisplaySourceStepChar,
         text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferSourceLineBreakRenderRequest<'a> {
@@ -167,6 +172,8 @@ impl BufferSourceLoopRequestContext {
                 self.display_text_row_base,
                 self.max_rows,
                 self.row_limit,
+                append_surface,
+                self.frame_background,
                 overlay_context,
             ),
         )
@@ -199,6 +206,10 @@ impl BufferSourceLoopRequestContext {
 
     pub(crate) fn content_x(self) -> f32 {
         self.content_x
+    }
+
+    pub(crate) fn frame_background(self) -> Color {
+        self.frame_background
     }
 
     pub(crate) fn char_height(self) -> f32 {

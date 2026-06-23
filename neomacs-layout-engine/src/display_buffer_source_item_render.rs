@@ -22,6 +22,7 @@ use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
+use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +59,7 @@ pub(crate) struct BufferSourceItemRenderRequest<'a> {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+    frame_background: Color,
 }
 
 impl<'a> BufferSourceItemRenderRequest<'a> {
@@ -90,6 +92,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             loop_context.display_text_row_base(),
             loop_context.max_rows(),
             loop_context.row_limit(),
+            loop_context.frame_background(),
         )
     }
 
@@ -114,6 +117,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
+        frame_background: Color,
     ) -> Self {
         Self {
             layout_resolution_context,
@@ -135,6 +139,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             display_text_row_base,
             max_rows,
             row_limit,
+            frame_background,
         }
     }
 
@@ -227,6 +232,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         let request = self.loop_context.line_break_request(
             source_char,
             self.text,
+            self.append_surface,
             state.overlay_context,
             self.active_face_state,
         );
@@ -355,6 +361,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             self.display_text_row_base,
             self.max_rows,
             self.row_limit,
+            self.frame_background,
         )
         .render_and_apply(
             source_item,

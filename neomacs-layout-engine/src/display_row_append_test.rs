@@ -2739,6 +2739,8 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             0,
             4,
             row_limit,
+            &surface,
+            Color::from_pixel(0x00FFFFFF),
             overlay_context,
         ),
     )
@@ -3582,6 +3584,8 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
             0,
             4,
             row_limit,
+            DisplayRowMeasuredFaceMetrics::new(8.0, 16.0, 12.0, 8.0),
+            Color::from_pixel(0x00FFFFFF),
         ),
     )
     .render_if_needed_and_apply(
@@ -6326,6 +6330,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
         0,
         4,
         context.row_limit,
+        Color::from_pixel(0x00FFFFFF),
     );
 
     let continue_buffer_walk = BufferSourceRenderRequest::new(
@@ -6467,6 +6472,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
         0,
         4,
         context.row_limit,
+        Color::from_pixel(0x00FFFFFF),
     );
 
     let continue_buffer_walk = BufferSourceRenderRequest::new(
@@ -6615,6 +6621,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
         0,
         4,
         context.row_limit,
+        Color::from_pixel(0x00FFFFFF),
     );
 
     let continue_buffer_walk = BufferSourceRenderRequest::new(
@@ -6765,6 +6772,7 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
         0,
         4,
         context.row_limit,
+        Color::from_pixel(0x00FFFFFF),
     );
 
     let continue_buffer_walk = BufferSourceRenderRequest::new(
@@ -11055,6 +11063,7 @@ fn display_property_live_render_outcome(
             0,
             4,
             context.row_limit,
+            Color::from_pixel(0x00FFFFFF),
         );
 
         let cont = BufferSourceRenderRequest::new(

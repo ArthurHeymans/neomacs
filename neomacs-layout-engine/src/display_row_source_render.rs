@@ -20,7 +20,7 @@ use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
 };
-use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_policy::DisplayRowRenderPolicy;
 use crate::display_row_render_state::{
@@ -36,6 +36,7 @@ use crate::display_source_resolver::{
 };
 use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font_metrics::FontMetricsService;
+use crate::glyph_row_writer::push_stretch_to_area;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -45,6 +46,8 @@ use crate::window_output::{
     transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
@@ -92,6 +95,90 @@ struct DisplayRowNaturalSourceFragmentMutation<'a, 'request, 'metrics, 'face, 'h
     render_executor: &'a mut DisplayRowRenderExecutor<'metrics, 'face, 'host>,
     source: &'a mut S,
     source_state: &'a mut DisplayRowSourceState,
+}
+
+/// Geometry + face payload for one trailing `:extend` fill (GNU
+/// `extend_face_to_end_of_line`). `face_id` is the extend face installed on the
+/// row; `bg` is its background pixel; `(width_px, height_px, ascent_px)` are the
+/// stretch geometry; `char_width` is the face's column advance used to size the
+/// stretch column count.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RowExtendFill {
+    bg: Color,
+    face_id: u32,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    char_width: f32,
+}
+
+impl RowExtendFill {
+    pub(crate) fn new(
+        bg: Color,
+        face_id: u32,
+        width_px: f32,
+        height_px: f32,
+        ascent_px: f32,
+        char_width: f32,
+    ) -> Self {
+        Self {
+            bg,
+            face_id,
+            width_px,
+            height_px,
+            ascent_px,
+            char_width,
+        }
+    }
+
+    /// Number of stretch columns (>=1) covering `width_px` at the face advance.
+    fn width_cols(self) -> u16 {
+        let cw = self.char_width.max(1.0);
+        ((self.width_px / cw).ceil() as i64).clamp(1, u16::MAX as i64) as u16
+    }
+}
+
+/// Mutation that appends the trailing extend-face stretch to the current row's
+/// TEXT area, without emitting any output span. Mirrors GNU
+/// `extend_face_to_end_of_line`: an empty row first gets a leading space glyph
+/// (xdisp.c:24420) so the row `displays_text` and carries a face anchor; the
+/// fill stretch is then pushed to the text-area right edge. Returns `true` when
+/// a fill was applied.
+struct RowExtendFillMutation {
+    fill: RowExtendFill,
+}
+
+impl DisplayCurrentRowMutation for RowExtendFillMutation {
+    type Output = bool;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        // R2L safety: never fill a reversed row (the stretch would reorder to
+        // the visual left). The caller already guards on reversed_p, but the
+        // row is the authoritative source so we re-check here.
+        if row.reversed_p {
+            return false;
+        }
+        let text_index = GlyphArea::Text.index();
+        // Empty row: push a leading space carrying the extend face so the row
+        // displays text and has a face anchor (GNU xdisp.c:24420).
+        if row.glyphs[text_index].is_empty() {
+            row.glyphs[text_index].push(
+                Glyph::char(' ', self.fill.face_id, 0)
+                    .with_pixel_width(self.fill.char_width.max(1.0)),
+            );
+            row.displays_text = true;
+        }
+        push_stretch_to_area(
+            row,
+            text_index,
+            self.fill.width_cols(),
+            self.fill.face_id,
+            self.fill.width_px,
+            self.fill.height_px,
+            self.fill.ascent_px,
+        );
+        true
+    }
 }
 
 impl<S, P> DisplayCurrentRowMutation
@@ -432,6 +519,15 @@ impl<'a> TextRowOutputRenderState<'a> {
         )
     }
 
+    /// Append a trailing `:extend` fill stretch to the current row's TEXT area
+    /// without emitting an output span. Returns `true` when a fill was applied.
+    fn extend_current_row_face_to_end_of_line(&mut self, fill: RowExtendFill) -> bool {
+        self.output
+            .current_row_output()
+            .apply_current_row_mutation(RowExtendFillMutation { fill })
+            .unwrap_or(false)
+    }
+
     fn finish_current_text_row_render(
         &mut self,
         output: TextRowOutput,
@@ -703,6 +799,43 @@ impl<'a> TextRowSourceRenderState<'a> {
             .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
     }
 
+    /// Fill the current row's background from the current pen `x` to the
+    /// text-area `right_edge` with the active `:extend` face (GNU
+    /// `extend_face_to_end_of_line`). No-op (returns `false`) when the row is
+    /// reversed (R2L), when the fill width is non-positive, or when the extend
+    /// background equals the frame background.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn extend_face_to_end_of_line(
+        &mut self,
+        row_extend: &DisplayRowScopedValue<(Color, u32)>,
+        row_geometry: &DisplayRowGeometryState,
+        current_x: f32,
+        right_edge: f32,
+        frame_background: Color,
+        reversed_p: bool,
+        height_px: f32,
+        ascent_px: f32,
+        char_width: f32,
+    ) -> bool {
+        if reversed_p {
+            return false;
+        }
+        let fill_px = right_edge - current_x;
+        if fill_px <= 0.0 {
+            return false;
+        }
+        let Some(&(bg, face_id)) = row_extend.value_on(row_geometry) else {
+            return false;
+        };
+        if bg == frame_background {
+            return false;
+        }
+        self.output_render
+            .extend_current_row_face_to_end_of_line(RowExtendFill::new(
+                bg, face_id, fill_px, height_px, ascent_px, char_width,
+            ))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_display_property_replacement_row_request(
         &mut self,
@@ -818,3 +951,7 @@ fn current_text_measure_state<'emit>(
         face_ids,
     )
 }
+
+#[cfg(test)]
+#[path = "display_row_extend_fill_test.rs"]
+mod extend_fill_tests;

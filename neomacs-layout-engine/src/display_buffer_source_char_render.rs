@@ -19,6 +19,7 @@ use crate::display_source::DisplaySourceStepItem;
 use crate::display_source_item_append::DisplaySourcePreparedCharAppend;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
+use neomacs_display_protocol::types::Color;
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSourceCharRenderRequest<'a> {
@@ -35,6 +36,7 @@ pub(crate) struct BufferSourceCharRenderRequest<'a> {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+    frame_background: Color,
 }
 
 impl<'a> BufferSourceCharRenderRequest<'a> {
@@ -53,6 +55,7 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
+        frame_background: Color,
     ) -> Self {
         Self {
             text,
@@ -68,6 +71,7 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
             display_text_row_base,
             max_rows,
             row_limit,
+            frame_background,
         }
     }
 
@@ -224,6 +228,8 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
                 self.display_text_row_base,
                 self.max_rows,
                 self.row_limit,
+                active_face_state.metrics(),
+                self.frame_background,
             ),
         )
         .render_if_needed_and_apply(

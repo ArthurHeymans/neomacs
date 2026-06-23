@@ -1372,6 +1372,8 @@ pub(crate) struct BufferSourceLineBreakRenderContext<'a> {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+    append_surface: &'a DisplayRowAppendSurface,
+    frame_background: Color,
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
 }
 
@@ -1392,6 +1394,8 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
         display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
+        append_surface: &'a DisplayRowAppendSurface,
+        frame_background: Color,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     ) -> Self {
         Self {
@@ -1409,6 +1413,8 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
             display_text_row_base,
             max_rows,
             row_limit,
+            append_surface,
+            frame_background,
             overlay_context,
         }
     }
@@ -1486,6 +1492,23 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_position.x_px(),
             row_position.col(),
         );
+        {
+            let metrics = context.active_face_state.metrics();
+            // R2L (reversed_p) is read from the GlyphRow inside the mutation,
+            // which is the authoritative source; pass `false` here. R2L rows are
+            // a documented limitation (the fill is suppressed for them).
+            source_render.extend_face_to_end_of_line(
+                row_extend,
+                row_geometry,
+                progress.row_progress().x(),
+                context.append_surface.right_edge(),
+                context.frame_background,
+                false,
+                metrics.row_height(),
+                metrics.ascent(),
+                metrics.char_width(),
+            );
+        }
         line_break_action.apply_before_row_transition(
             row_geometry,
             trailing_whitespace,

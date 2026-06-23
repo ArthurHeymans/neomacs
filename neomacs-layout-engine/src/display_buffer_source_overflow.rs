@@ -10,6 +10,7 @@ use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowVisibilityLimit,
 };
+use crate::display_row_metrics::DisplayRowMeasuredFaceMetrics;
 use crate::display_row_transition::{
     DisplayRowOverflowTransitionPlan, DisplayRowTextWindowEmitContext,
     DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
@@ -51,6 +52,8 @@ pub(crate) struct BufferSourceOverflowRenderContext {
     display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+    active_face_metrics: DisplayRowMeasuredFaceMetrics,
+    frame_background: Color,
 }
 
 impl BufferSourceOverflowRenderContext {
@@ -67,6 +70,8 @@ impl BufferSourceOverflowRenderContext {
         display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
+        active_face_metrics: DisplayRowMeasuredFaceMetrics,
+        frame_background: Color,
     ) -> Self {
         Self {
             ch,
@@ -80,6 +85,8 @@ impl BufferSourceOverflowRenderContext {
             display_text_row_base,
             max_rows,
             row_limit,
+            active_face_metrics,
+            frame_background,
         }
     }
 }
@@ -201,6 +208,21 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
             } => {
                 let word_wrap_action = BufferSourceWordWrapAction::new(wrap_break);
                 let mut source_position = progress.source_position();
+                {
+                    let metrics = context.active_face_metrics;
+                    // R2L (reversed_p) handled inside the mutation; pass `false`.
+                    source_render.extend_face_to_end_of_line(
+                        row_extend,
+                        row_geometry,
+                        progress.row_progress().x(),
+                        context.right_edge_px,
+                        context.frame_background,
+                        false,
+                        metrics.row_height(),
+                        metrics.ascent(),
+                        metrics.char_width(),
+                    );
+                }
                 let (x, col) = progress.row_progress_mut().coordinates_mut();
                 word_wrap_action.apply_before_row_transition(
                     source_render.output_emitter(),
@@ -254,6 +276,21 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
             DisplaySourceTextCharOverflowAction::CharacterWrap { transition } => {
                 let character_wrap_action =
                     BufferSourceCharacterWrapAction::from_source_step_char(self.source_step_char);
+                {
+                    let metrics = context.active_face_metrics;
+                    // R2L (reversed_p) handled inside the mutation; pass `false`.
+                    source_render.extend_face_to_end_of_line(
+                        row_extend,
+                        row_geometry,
+                        progress.row_progress().x(),
+                        context.right_edge_px,
+                        context.frame_background,
+                        false,
+                        metrics.row_height(),
+                        metrics.ascent(),
+                        metrics.char_width(),
+                    );
+                }
                 character_wrap_action.apply_before_row_transition(
                     row_extend,
                     progress.row_progress_mut().x_mut(),

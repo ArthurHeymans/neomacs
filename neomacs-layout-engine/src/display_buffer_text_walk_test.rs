@@ -4,7 +4,7 @@ use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_plan::BufferSourceOutputSetup;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::types::WindowKind;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::window::{FrameId, WindowId};
 
 fn window_params() -> WindowParams {
@@ -266,6 +266,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         2,
         5,
         output_setup.row_limit(),
+        Color::from_pixel(0x00FFFFFF),
     );
 
     assert_eq!(context.buffer_id(), neovm_core::buffer::BufferId(42));
