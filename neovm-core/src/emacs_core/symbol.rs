@@ -655,6 +655,63 @@ impl Drop for SeqlockWriteGuard {
     }
 }
 
+/// Read a symbol's traceable heap children CONSISTENTLY with concurrent mutator
+/// arm changes, for the Stage 1b concurrent obarray scan (the GC-thread read
+/// side; pairs with [`SeqlockWriteGuard`] on the write side).
+///
+/// `seq` is the symbol's per-chunk seqlock; `sym` the symbol in that chunk. The
+/// standard seqlock read protocol (retry while the counter is odd or changes
+/// across the read) guarantees the `(redirect, val)` pair is observed from a
+/// single epoch — never torn — so `val` is interpreted only as the arm the
+/// consistently-observed `redirect` names. Only `Plainval` holds a heap value
+/// cell: alias = a non-heap `SymId`, localized = a `*mut BLV`, forwarded = a raw
+/// fwd ptr — none is a heap `Value` to trace here (BLV interiors are reached via
+/// the BLV-pool root). `function`/`plist` are single-word atomic `Value`s with no
+/// discriminant, so they are always consistent. `push` is called for each
+/// heap-object child to enqueue onto the GC gray set.
+///
+/// Caller must hold the start-of-cycle chunk snapshot so `sym`/`seq` address live,
+/// non-moving memory. Bounded in practice: with a single mutator the odd window
+/// is ~4 stores, so the retry loop converges immediately.
+#[allow(dead_code)] // wired into run_concurrent_mark by the scan increment
+pub(crate) fn read_symbol_children_consistent(
+    seq: &std::sync::atomic::AtomicU32,
+    sym: &LispSymbol,
+    mut push: impl FnMut(Value),
+) {
+    use std::sync::atomic::Ordering;
+    loop {
+        let s1 = seq.load(Ordering::Acquire);
+        if s1 & 1 != 0 {
+            // A `(flags, val)` arm change is in flight in this chunk — wait it out.
+            std::hint::spin_loop();
+            continue;
+        }
+        let redirect = sym.flags.load_redirect();
+        // Read `val` as a raw word regardless of arm; it is only INTERPRETED
+        // below when the consistently-observed redirect is `Plainval`.
+        let plain = load_value_atomic(unsafe { &sym.val.plain });
+        let function = load_value_atomic(&sym.function);
+        let plist = load_value_atomic(&sym.plist);
+        if seq.load(Ordering::Acquire) != s1 {
+            // An arm change landed during the read — the quadruple may be torn.
+            continue;
+        }
+        // Consistent snapshot. `is_heap_object()` excludes fixnums, nil, symbol
+        // ids and UNBOUND, so the Plainval gate never traces a non-heap word.
+        if redirect == SymbolRedirect::Plainval && plain.is_heap_object() {
+            push(plain);
+        }
+        if function.is_heap_object() {
+            push(function);
+        }
+        if plist.is_heap_object() {
+            push(plist);
+        }
+        return;
+    }
+}
+
 impl std::fmt::Debug for Obarray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Obarray")
