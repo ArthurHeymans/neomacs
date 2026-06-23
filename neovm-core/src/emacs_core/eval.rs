@@ -7083,7 +7083,16 @@ impl Context {
             // residual SATB + deferred work back into the gray queue.
             (*heap_ptr).join_concurrent_mark();
             (*heap_ptr).reseed_runtime_and_remembered_roots();
-            self.seed_all_context_roots(heap_ptr);
+            {
+                // Stage 1a: the symbol-cell SATB barrier retained every
+                // value/function/plist overwrite during the mark window, so this
+                // TERMINATION re-seed skips the ~450k-symbol obarray walk (the
+                // dominant root pause). The guard still seeds the BLV-pool residual
+                // + every non-obarray Context root, and restores full-scan on drop
+                // so the start seed + STW full-collection seeds are unaffected.
+                let _skip = crate::emacs_core::symbol::ObarraySymbolCellSkipGuard::new();
+                self.seed_all_context_roots(heap_ptr);
+            }
             roots_us = term_t0.elapsed().as_micros();
             let bytes_before = (*heap_ptr).live_bytes();
             let pause_t0 = std::time::Instant::now();

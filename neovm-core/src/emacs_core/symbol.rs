@@ -2332,7 +2332,18 @@ impl Obarray {
 
 impl GcTrace for Obarray {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
+        // The concurrent-mark TERMINATION re-seed skips this per-symbol
+        // val/function/plist walk: the symbol-cell SATB barrier
+        // (crate::tagged::gc::note_root_overwrite) already retained every overwrite
+        // during the mark window. The flag is false everywhere else (start seed +
+        // STW full collection) => full scan. The BLV-pool loop below ALWAYS runs —
+        // the barrier does not track BLV valcell/where_buf rebinds, so it stays a
+        // per-termination residual.
+        let skip_symbol_cells = SEED_SKIP_OBARRAY_SYMBOL_CELLS.with(|c| c.get());
         for sym in self.symbols.iter().flatten() {
+            if skip_symbol_cells {
+                continue;
+            }
             match sym.flags.redirect() {
                 SymbolRedirect::Plainval => {
                     // Safety: redirect==Plainval guarantees val.plain is
@@ -2361,6 +2372,38 @@ impl GcTrace for Obarray {
         }
     }
 }
+
+thread_local! {
+    /// Set ONLY during the concurrent-mark termination re-seed (see
+    /// [`ObarraySymbolCellSkipGuard`]). When set, [`Obarray::trace_roots`] skips
+    /// the ~450k-symbol value/function/plist walk because the symbol-cell SATB
+    /// barrier ([`crate::tagged::gc::note_root_overwrite`]) already retained every
+    /// such overwrite during the mark window. False elsewhere => full scan.
+    static SEED_SKIP_OBARRAY_SYMBOL_CELLS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+/// RAII guard that suppresses the obarray symbol-cell walk in
+/// [`Obarray::trace_roots`] for its lifetime — used to wrap ONLY the
+/// concurrent-mark termination re-seed, so it seeds the BLV-pool residual + the
+/// non-obarray Context roots without the dominant per-symbol pass. `Drop` restores
+/// the full-scan default (panic-safe). MUST NOT wrap the start seed or the STW
+/// full-collection seeds, which require the complete obarray scan.
+pub(crate) struct ObarraySymbolCellSkipGuard;
+
+impl ObarraySymbolCellSkipGuard {
+    pub(crate) fn new() -> Self {
+        SEED_SKIP_OBARRAY_SYMBOL_CELLS.with(|c| c.set(true));
+        Self
+    }
+}
+
+impl Drop for ObarraySymbolCellSkipGuard {
+    fn drop(&mut self) {
+        SEED_SKIP_OBARRAY_SYMBOL_CELLS.with(|c| c.set(false));
+    }
+}
+
 #[cfg(test)]
 #[path = "symbol_test.rs"]
 mod tests;
