@@ -3207,3 +3207,30 @@ fn div_core_divergence_surface_thread_signal_condition_handler() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_standard_display_ascii_table_mutation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((char-table [91 65 93]) (char-table [66 66]))
+    // Neomacs:   OK ((err wrong-type-argument arrayp) (char-table nil))
+    // standard-display-ascii creates standard-display-table when nil and sets
+    // the requested character in GNU. Neomacs errors when the table is nil, and
+    // even with a preexisting display table it leaves the character entry nil.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-ascii ?A "[A]")
+         (list (type-of standard-display-table)
+               (aref standard-display-table ?A)))
+     (error (list 'err (car err) (cadr err)))))
+ (let ((standard-display-table (make-display-table)))
+   (standard-display-ascii ?B "BB")
+   (list (type-of standard-display-table)
+         (aref standard-display-table ?B))))
+"##,
+    );
+}
