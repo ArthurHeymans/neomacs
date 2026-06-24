@@ -2678,3 +2678,76 @@ fn div_core_divergence_surface_load_history_defcustom_recording() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_case_table_word_casing_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("[ello World" "[abc Def" "[abc" "[hello]" "{foo} Bar" "{foo Bar}" t)
+    // Neomacs:   OK ("[Ello World" "[Abc Def" "]Abc" "[Hello]" "{Foo} Bar" "{Foo Bar}" nil)
+    assert_oracle_parity(
+        r##"
+(let ((bracket-table (copy-case-table (standard-case-table)))
+      (brace-table (copy-case-table (standard-case-table))))
+  (set-case-syntax-pair ?\[ ?\] bracket-table)
+  (set-case-syntax-pair ?\{ ?\} brace-table)
+  (list
+   (with-temp-buffer
+     (set-case-table bracket-table)
+     (capitalize "[ello world"))
+   (with-temp-buffer
+     (set-case-table bracket-table)
+     (upcase-initials "[abc def"))
+   (with-temp-buffer
+     (set-case-table bracket-table)
+     (capitalize "]abc"))
+   (with-temp-buffer
+     (set-case-table bracket-table)
+     (insert "[hello]")
+     (capitalize-region (point-min) (point-max))
+     (buffer-string))
+   (with-temp-buffer
+     (set-case-table brace-table)
+     (insert "{foo} bar")
+     (goto-char (point-min))
+     (capitalize-word 2)
+     (buffer-string))
+   (with-temp-buffer
+     (set-case-table brace-table)
+     (insert "{foo bar}")
+     (upcase-initials-region (point-min) (point-max))
+     (buffer-string))
+   (with-temp-buffer
+     (set-case-table brace-table)
+     (char-equal ?\{ ?\}))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_process_attributes_running_child_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (t "/bin/sh -c sleep\\ 0.2" "")
+    // Neomacs:   OK (nil "/bin/sh -c sleep 0.2" "pipe:[...]")
+    assert_oracle_parity(
+        r##"
+(let ((proc (make-process
+             :name "probe-attrs-child"
+             :command '("/bin/sh" "-c" "sleep 0.2")
+             :connection-type 'pipe)))
+  (unwind-protect
+      (let* ((attrs (process-attributes (process-id proc)))
+             (args (cdr (assq 'args attrs)))
+             (ttname (cdr (assq 'ttname attrs))))
+        (list (process-running-child-p proc)
+              args
+              (if (and (stringp ttname)
+                       (string-match-p "\\`pipe:" ttname))
+                  "pipe:[...]"
+                ttname)))
+    (when (process-live-p proc)
+      (delete-process proc))))
+"##,
+    );
+}
