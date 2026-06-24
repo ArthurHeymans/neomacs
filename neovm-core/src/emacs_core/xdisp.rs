@@ -5504,7 +5504,12 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // guard fail, so the driver was never installed and `pre-redisplay-functions`
     // (hl-line with sticky 'window, the region overlay, …) never ran.
     obarray.set_symbol_value("pre-redisplay-function", Value::symbol("ignore"));
-    obarray.set_symbol_value("pre-redisplay-functions", Value::NIL);
+    // Do NOT pre-bind the *plural* `pre-redisplay-functions`: it is a pure lisp
+    // defvar (simple.el) whose default is `(redisplay--update-region-highlight)`
+    // — the function that creates the active-region highlight overlay. Binding it
+    // to nil here shadowed that defvar, so the region overlay was never created
+    // (and `global-hl-line-mode` then `add-hook`'d onto an empty list). Leaving
+    // it unbound lets simple.el install GNU's default.
     obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
     obarray.make_special("display-line-numbers-major-tick");
     obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
