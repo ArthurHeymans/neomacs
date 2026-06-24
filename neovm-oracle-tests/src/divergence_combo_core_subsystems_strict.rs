@@ -2901,3 +2901,25 @@ fn div_core_divergence_surface_self_insert_command_inherits_properties() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_encode_coding_string_dos_eol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("a\r\nb" 4 (97 13 10 98) (120 13 10 121 13 10 122))
+    // Neomacs:   OK ("" 0 nil (120 13 10 121 13 10 122))
+    // encode-coding-string with the bare `dos` coding system produces empty
+    // output in Neomacs, while GNU correctly applies CRLF EOL conversion.
+    // The explicit utf-8-dos variant works in both, isolating the `dos`
+    // (undecided base + dos EOL) alias as the divergent path.
+    assert_oracle_parity(
+        r##"
+(let ((dos-encoded (encode-coding-string "a\nb" 'dos))
+      (utf8-dos-encoded (encode-coding-string "x\ny\nz" 'utf-8-dos)))
+  (list dos-encoded
+        (string-bytes dos-encoded)
+        (append dos-encoded nil)
+        (append utf8-dos-encoded nil)))
+"##,
+    );
+}
