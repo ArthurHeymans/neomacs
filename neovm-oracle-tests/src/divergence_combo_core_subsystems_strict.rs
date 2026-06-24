@@ -2854,3 +2854,28 @@ fn div_core_divergence_surface_signal_process_signal_name_symbol() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_insert_and_inherit_full_plist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("AXB" 0 3 (face bold rear-nonsticky nil))
+    //                (face bold rear-nonsticky nil) (face bold rear-nonsticky nil))
+    // Neomacs:   OK (#("AXB" 0 1 (face bold rear-nonsticky nil) 1 2 (face bold)
+    //                2 3 (face bold rear-nonsticky nil)) (face bold)
+    //                (face bold rear-nonsticky nil))
+    // GNU inherits the full property plist (including rear-nonsticky nil) for
+    // the inserted char and coalesces the spans; Neomacs inherits only `face`
+    // and leaves a fragmented interval with a partial plist.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert (propertize "AB" 'face 'bold 'rear-nonsticky nil))
+  (goto-char 2)
+  (insert-and-inherit "X")
+  (list (buffer-string)
+        (text-properties-at 2)
+        (text-properties-at 3)))
+"##,
+    );
+}
