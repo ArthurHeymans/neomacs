@@ -3167,3 +3167,43 @@ fn div_core_divergence_surface_insert_char_inherit_property_plist() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_thread_signal_condition_handler() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil (join-err arith-error ("bad")) nil nil
+    //                ((caught arith-error ("bad"))))
+    // Neomacs:   OK (nil (join-err arith-error ("bad")) nil nil nil)
+    // A signalled arith-error reaches the worker's condition-case handler in
+    // GNU (the handler logs `caught`), but Neomacs still makes thread-join
+    // report the error without running the worker's matching condition handler.
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((th (make-thread
+             (lambda ()
+               (condition-case err
+                   (progn
+                     (sleep-for 1)
+                     'done)
+                 (arith-error
+                  (push (list 'caught (car err) (cdr err)) log)
+                  'caught)))
+             "probe-thread-signal-condition")))
+    (let ((signal-result
+           (condition-case err
+               (thread-signal th 'arith-error '("bad"))
+             (error (list 'signal-err (car err) (cdr err))))))
+      (let ((join-result
+             (condition-case err
+                 (thread-join th)
+               (error (list 'join-err (car err) (cdr err))))))
+        (list signal-result
+              join-result
+              (thread-live-p th)
+              (thread-last-error th)
+              log)))))
+"##,
+    );
+}
