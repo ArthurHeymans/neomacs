@@ -202,15 +202,15 @@ struct ConcurrentMarkJob {
     /// Stage 1b CONCURRENT OBARRAY SCAN: a start-captured snapshot of the obarray's
     /// chunked symbol store. When `Some`, the GC thread scans these symbol cells
     /// ONCE per cycle, feeding each symbol's heap children into `gray` (conses) /
-    /// `deferred` (non-cons) like the gray-drain cons branch. `None` (flag off) =>
-    /// no scan, behaviour-neutral; the start seed walked the symbol cells instead.
+    /// `deferred` (non-cons) like the gray-drain cons branch. Always `Some` for a
+    /// concurrent mark — the start handshake captures it.
     obarray: Option<crate::emacs_core::symbol::ObarrayScanSnapshot>,
     /// Stage 2 Tier B CONCURRENT VECTOR SCAN: a start-captured snapshot of every
     /// OWNED/Mapped vector backing (base ptr + len). When `Some`, the GC thread
     /// traces these backings ONCE per cycle, feeding each slot's heap children into
     /// `gray` (conses) / `deferred` (non-cons) like the gray-drain cons branch, so
     /// vectors are marked concurrently instead of deferred to the STW termination.
-    /// `None` (flag off) => no scan, behaviour-neutral; vectors stay deferred.
+    /// Always `Some` for a concurrent mark — the start handshake captures it.
     vectors: Option<crate::tagged::header::VectorScanSnapshot>,
 }
 
@@ -520,36 +520,6 @@ pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
 #[inline]
 pub(crate) fn concurrent_mark_active() -> bool {
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get())
-}
-
-/// Stage 1b CONCURRENT OBARRAY SCAN feature flag (env `NEOVM_GC_CONCURRENT_OBARRAY`).
-/// Default ON: the start handshake hands the GC thread a start-captured chunk
-/// snapshot, the GC thread scans the obarray symbol cells concurrently (moving the
-/// start-handshake obarray walk off the GC pause), and the start seed skips the
-/// symbol-cell walk. Set the env to `0` to disable (kill switch), restoring the
-/// byte-identical pre-Stage-1b path (the start seed walks the symbol cells as
-/// before). Read once via `OnceLock`. Validated: full suite + partition-verify on
-/// AND off = 7442/7442; a seqlock read-race test (+ negative control) proves the
-/// concurrent read never tears the (redirect, val) union arm.
-pub(crate) fn gc_concurrent_obarray_on() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_OBARRAY").as_deref() != Ok("0"))
-}
-
-/// Stage 2 Tier B CONCURRENT VECTOR SCAN feature flag (env `NEOVM_GC_CONCURRENT_VECTOR`).
-/// Default OFF (mirrors Stage 1b but opt-in until the flag-on gate + race test are
-/// run): when on, the start handshake snapshots every OWNED/Mapped vector backing
-/// (base ptr + len) and the GC thread traces those backings concurrently instead of
-/// deferring them to the STW termination. A clone-on-write hook in
-/// `with_vector_data_mut` keeps each snapshotted Owned backing immutable + alive for
-/// the cycle (retired, freed at join). DEFAULT ON; set the env to `0` to disable
-/// (kill switch), restoring the byte-identical pre-Tier-B path (no snapshot, no
-/// clone-on-write — vectors stay deferred to the STW termination). Read once via
-/// `OnceLock`. Validated: full suite + partition-verify on AND off = 7444/7444;
-/// clone-on-write measured rare+tiny (145 events of len 20 across the suite).
-pub(crate) fn gc_concurrent_vectors_on() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_VECTOR").as_deref() != Ok("0"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,28 +1149,28 @@ pub struct TaggedHeap {
     /// staged by the start handshake (`start_concurrent_mark`) just before
     /// `launch_concurrent_mark`, which moves it into the `ConcurrentMarkJob`. The
     /// heap cannot reach the Context-side obarray itself, so the snapshot is built
-    /// Context-side and parked here for the launch to consume. `None` when the
-    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag is off (zero behaviour change).
+    /// Context-side and parked here for the launch to consume. `None` except
+    /// between a start handshake and the launch consuming it.
     pending_obarray_scan: Option<crate::emacs_core::symbol::ObarrayScanSnapshot>,
     /// Stage 1b: the obarray slot count captured at the start handshake, retained
     /// across the cycle (the snapshot itself is moved into the GC job). At the STW
     /// termination, the residual re-seed covers new symbols in slots `>= this`
-    /// (interned mid-cycle, never scanned by the GC thread). `None` when the flag
-    /// is off.
+    /// (interned mid-cycle, never scanned by the GC thread). `None` outside a
+    /// concurrent mark.
     concurrent_obarray_start_slots: Option<usize>,
     /// Stage 2 Tier B CONCURRENT VECTOR SCAN: retired vector backings — the ORIGINAL
     /// `Vec` of each OWNED vector whose backing was clone-on-write replaced during
     /// this concurrent mark (`with_vector_data_mut`). The GC thread's snapshot still
     /// points at these immutable buffers, so they must stay alive until the GC thread
     /// joins. Drained + dropped in `join_concurrent_mark` (the GC thread has provably
-    /// exited — the only safe free point). Empty when the flag is off.
+    /// exited — the only safe free point). Empty unless a clone-on-write fired.
     retired_vector_buffers: Vec<Vec<TaggedValue>>,
     /// Stage 2 Tier B CONCURRENT VECTOR SCAN: per-cycle clone-on-write dedup set,
     /// keyed on each vector owner's `TaggedValue` bits. On an owner's FIRST bulk
     /// mutation this cycle we clone+retire its OWNED backing once; later mutations of
     /// the same owner skip the clone (they touch the already-cloned live backing the
     /// GC's snapshot does NOT point at). Cleared at every mark start
-    /// (`concurrent_begin`/`begin_collection`). Empty when the flag is off.
+    /// (`concurrent_begin`/`begin_collection`). Empty unless a clone-on-write fired.
     concurrent_cloned_vectors: FxHashSet<usize>,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
@@ -3589,8 +3559,8 @@ impl TaggedHeap {
     /// survive this cycle's sweep, and the SATB barrier starts logging.
     /// Stage 1b: stash the start-captured obarray scan snapshot for the next
     /// `launch_concurrent_mark` to move into the job. Called from
-    /// `start_concurrent_mark` at the world-stopped start handshake when the
-    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag is on; never called when off.
+    /// `start_concurrent_mark` at the world-stopped start handshake (once per
+    /// concurrent mark).
     pub(crate) fn set_pending_obarray_scan(
         &mut self,
         snap: crate::emacs_core::symbol::ObarrayScanSnapshot,
@@ -3602,8 +3572,8 @@ impl TaggedHeap {
     }
 
     /// Stage 1b: take the start-of-cycle obarray slot count (set at the start
-    /// handshake) for the termination residual re-seed. `None` when the
-    /// `NEOVM_GC_CONCURRENT_OBARRAY` flag was off this cycle (no residual needed).
+    /// handshake) for the termination residual re-seed. `None` for a cycle with
+    /// no concurrent mark (e.g. a stop-the-world full collection).
     pub(crate) fn take_concurrent_obarray_start_slots(&mut self) -> Option<usize> {
         self.concurrent_obarray_start_slots.take()
     }
@@ -3616,7 +3586,7 @@ impl TaggedHeap {
         for block in &self.cons_blocks {
             owned.insert(block.base_addr());
         }
-        // Stage 2 Tier B CONCURRENT VECTOR SCAN: when the flag is on, snapshot every
+        // Stage 2 Tier B CONCURRENT VECTOR SCAN: snapshot every
         // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
         // cons `owned_bases` snapshot is taken and the roots are seeded), so the GC
         // thread can trace vectors concurrently instead of deferring them to the STW
@@ -3624,11 +3594,11 @@ impl TaggedHeap {
         // seam, unlike the Context-side obarray). `non_cons_object_addrs` holds every
         // owned non-cons object's `GcHeader` addr; pick out the ones tagged
         // `VecLikeType::Vector`. Vectors allocated mid-cycle are absent from this set
-        // capture and are covered by allocate-black. `None` when the flag is off
-        // (vectors stay deferred — behaviour-neutral).
-        let vectors = if gc_concurrent_vectors_on() {
-            let mut snap =
-                crate::tagged::header::VectorScanSnapshot::with_capacity(self.non_cons_object_addrs.len());
+        // capture and are covered by allocate-black.
+        let vectors = {
+            let mut snap = crate::tagged::header::VectorScanSnapshot::with_capacity(
+                self.non_cons_object_addrs.len(),
+            );
             for &addr in &self.non_cons_object_addrs {
                 // Safety: `addr` is an owned non-cons object's live `GcHeader` addr; a
                 // VecLike header begins with its `GcHeader`, so casting to
@@ -3645,8 +3615,6 @@ impl TaggedHeap {
                 }
             }
             Some(snap)
-        } else {
-            None
         };
         let gray = std::mem::take(&mut self.gray_queue);
         let (exited_tx, exited_rx) = std::sync::mpsc::channel();
@@ -3669,12 +3637,10 @@ impl TaggedHeap {
             done: self.gc_done.clone(),
             stop: self.gc_stop.clone(),
             exited: exited_tx,
-            // Stage 1b: consume the obarray snapshot the start handshake staged
-            // (Some only when NEOVM_GC_CONCURRENT_OBARRAY is on). Take it so it is
-            // not left dangling for a later cycle.
+            // Stage 1b: consume the obarray snapshot the start handshake staged.
+            // Take it so it is not left dangling for a later cycle.
             obarray: self.pending_obarray_scan.take(),
-            // Stage 2 Tier B: the vector-backing snapshot captured just above (Some
-            // only when NEOVM_GC_CONCURRENT_VECTOR is on).
+            // Stage 2 Tier B: the vector-backing snapshot captured just above.
             vectors,
         };
         gc_thread()
@@ -3704,7 +3670,7 @@ impl TaggedHeap {
         // mark loop (the `rx.recv()` above), so its snapshot pointers into the retired
         // vector backings are no longer in use — this is the ONLY safe free point.
         // Drain + drop the retired originals and clear the per-cycle clone-dedup set.
-        // Both are empty when the flag is off (no clone-on-write fired).
+        // Both are empty unless a clone-on-write fired this cycle.
         let retired = std::mem::take(&mut self.retired_vector_buffers);
         drop(retired);
         self.concurrent_cloned_vectors.clear();
@@ -3760,7 +3726,7 @@ impl TaggedHeap {
 
     /// Stage 2 Tier B CONCURRENT VECTOR SCAN clone-on-write hook. Called from
     /// `with_vector_data_mut` BEFORE a vector's OWNED backing is bulk-mutated, while a
-    /// concurrent mark is active and the flag is on. On the owner's FIRST such
+    /// concurrent mark is active. On the owner's FIRST such
     /// mutation this cycle, if the backing is currently OWNED, replace it with a clone
     /// and RETIRE the original (kept alive to join) so the GC thread's start-of-cycle
     /// snapshot pointer keeps addressing an immutable, live buffer; the closure then

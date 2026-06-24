@@ -7062,23 +7062,19 @@ impl Context {
     unsafe fn start_concurrent_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
         unsafe {
             (*heap_ptr).concurrent_begin();
-            if crate::tagged::gc::gc_concurrent_obarray_on() {
-                // Stage 1b CONCURRENT OBARRAY SCAN. Capture the obarray chunk
-                // snapshot at THIS world-stopped point — the same instant the cons
-                // snapshot is taken (inside `launch_concurrent_mark`) and the roots
-                // are seeded — so `n_slots`/`n_chunks` reflect the start-of-cycle
-                // obarray. The heap can't reach the Context-side obarray, so we
-                // build it here and stage it on the heap for the launch to move into
-                // the job. Wrap the start seed in the symbol-cell skip guard so the
-                // start seed does NOT also push the symbol cells the GC thread now
-                // owns (the BLV pool + non-obarray roots still seed normally).
-                let snap = self.obarray.scan_snapshot();
-                (*heap_ptr).set_pending_obarray_scan(snap);
+            // CONCURRENT OBARRAY SCAN (Stage 1b). Capture the obarray chunk snapshot
+            // at THIS world-stopped point — the same instant the cons snapshot is
+            // taken (inside `launch_concurrent_mark`) and the roots are seeded — so
+            // `n_slots`/`n_chunks` reflect the start-of-cycle obarray. The heap can't
+            // reach the Context-side obarray, so we build it here and stage it on the
+            // heap for the launch to move into the job. The symbol-cell skip guard,
+            // scoped to just the seed, keeps the start seed from also pushing the
+            // symbol cells the GC thread now owns (the BLV pool + non-obarray roots
+            // still seed normally).
+            let snap = self.obarray.scan_snapshot();
+            (*heap_ptr).set_pending_obarray_scan(snap);
+            {
                 let _skip = crate::emacs_core::symbol::ObarraySymbolCellSkipGuard::new();
-                self.seed_all_context_roots(heap_ptr);
-            } else {
-                // Flag off: byte-identical to the pre-Stage-1b path. No snapshot, no
-                // skip — the start seed walks the obarray symbol cells as before.
                 self.seed_all_context_roots(heap_ptr);
             }
             (*heap_ptr).launch_concurrent_mark();
@@ -7119,19 +7115,20 @@ impl Context {
             // brand-new symbol's initial val/function/plist). So at this STW point,
             // bounded-re-seed exactly the new range. Chosen over the "seed the FULL
             // obarray un-skipped" fallback: it preserves the Stage 1a win (no full
-            // ~450k-symbol walk) while staying correct. When the flag was off this is
-            // `None` and the residual is skipped (behaviour-neutral).
+            // ~450k-symbol walk) while staying correct. `None` only if no start
+            // snapshot was captured, in which case the residual is skipped.
             if let Some(start_slots) = (*heap_ptr).take_concurrent_obarray_start_slots() {
-                self.obarray.trace_new_symbol_cells(start_slots, &mut |root| {
-                    #[cfg(debug_assertions)]
-                    {
-                        (*heap_ptr).seed_root_with_origin(root, "stage1b-new-symbol");
-                    }
-                    #[cfg(not(debug_assertions))]
-                    {
-                        (*heap_ptr).seed_root(root);
-                    }
-                });
+                self.obarray
+                    .trace_new_symbol_cells(start_slots, &mut |root| {
+                        #[cfg(debug_assertions)]
+                        {
+                            (*heap_ptr).seed_root_with_origin(root, "stage1b-new-symbol");
+                        }
+                        #[cfg(not(debug_assertions))]
+                        {
+                            (*heap_ptr).seed_root(root);
+                        }
+                    });
             }
             roots_us = term_t0.elapsed().as_micros();
             let bytes_before = (*heap_ptr).live_bytes();
