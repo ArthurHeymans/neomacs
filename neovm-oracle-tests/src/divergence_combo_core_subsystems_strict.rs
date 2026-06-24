@@ -2751,3 +2751,64 @@ fn div_core_divergence_surface_process_attributes_running_child_combo() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_unibyte_search_raw_byte_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil nil 4 (3 3 3 1 169)) ; raw-byte search-forward finds
+    //            the 0xA9 byte at position 2 (point 3) inside the é sequence.
+    // Neomacs:   OK (nil nil 4 (5 3 3 1 169)) ; search-forward skips the byte
+    //            embedded in é and only matches the standalone trailing byte.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert (unibyte-string 195 169 65 169))
+  (let ((pat (unibyte-string 169)))
+    (list enable-multibyte-characters
+          (multibyte-string-p (buffer-string))
+          (string-bytes (buffer-string))
+          (list (progn
+                  (goto-char (point-min))
+                  (search-forward pat nil t))
+                (progn
+                  (goto-char (point-min))
+                  (re-search-forward pat nil t))
+                (progn
+                  (goto-char (point-min))
+                  (skip-chars-forward (unibyte-string 195 169))
+                  (point))
+                (string-match pat (buffer-string))
+                (char-after 4)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_unibyte_multibyte_search_mismatch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (3 nil nil nil) ; a multibyte char never matches in a
+    //            unibyte buffer, so search-forward of (string ?é) returns nil.
+    // Neomacs:   OK (3 3 nil nil)   ; search-forward incorrectly matches the
+    //            multibyte char against the raw é byte sequence.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert (unibyte-string 195 169 65 169))
+  (let ((raw-pat (unibyte-string 195 169)))
+    (list (progn
+            (goto-char (point-min))
+            (search-forward raw-pat nil t))
+          (progn
+            (goto-char (point-min))
+            (search-forward (string ?é) nil t))
+          (progn
+            (goto-char (point-min))
+            (re-search-forward (string ?é) nil t))
+          (string-match (string ?é) (buffer-string)))))
+"##,
+    );
+}
