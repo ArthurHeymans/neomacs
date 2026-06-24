@@ -2515,3 +2515,78 @@ fn div_core_divergence_surface_set_visited_file_name_update_hook() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_keymap_parent_accessible_keymaps_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (parent-cmd [3 112] ([] [3] [3]))
+    // Neomacs:   OK (parent-cmd [3 112] ([] [3]))
+    assert_oracle_parity(
+        r##"
+(let ((parent (make-sparse-keymap))
+      (child (make-sparse-keymap)))
+  (define-key parent (kbd "C-c p") 'parent-cmd)
+  (define-key child (kbd "C-c c") 'child-cmd)
+  (set-keymap-parent child parent)
+  (list (lookup-key child (kbd "C-c p"))
+        (where-is-internal 'parent-cmd child t)
+        (mapcar #'car (accessible-keymaps child))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_keymap_remap_where_is_parent_child_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (child-new nil nil child-new)
+    // Neomacs:   OK (child-new [remap old] [remap old] child-new)
+    assert_oracle_parity(
+        r##"
+(let ((parent (make-sparse-keymap))
+      (child (make-sparse-keymap)))
+  (define-key parent [remap old] 'parent-new)
+  (define-key child [remap old] 'child-new)
+  (set-keymap-parent child parent)
+  (list (command-remapping 'old nil (list child))
+        (where-is-internal 'parent-new child t)
+        (where-is-internal 'child-new child t)
+        (lookup-key child [remap old])))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_mutex_lock_blocks_other_thread() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((t (start)) done nil (got start) "probe-mutex-block")
+    // Neomacs:   OK ((nil (got start)) done nil (got start) "probe-mutex-block")
+    assert_oracle_parity(
+        r##"
+(let ((m (make-mutex "probe-mutex-block"))
+      (log nil))
+  (mutex-lock m)
+  (let ((th (make-thread
+             (lambda ()
+               (push 'start log)
+               (mutex-lock m)
+               (push 'got log)
+               'done)
+             "mutex-wait")))
+    (let ((i 0))
+      (while (and (< i 20) (null log))
+        (sleep-for 0.01)
+        (setq i (1+ i))))
+    (let ((before (list (thread-live-p th) log)))
+      (mutex-unlock m)
+      (let ((res (thread-join th)))
+        (list before
+              res
+              (thread-live-p th)
+              log
+              (mutex-name m))))))
+"##,
+    );
+}
