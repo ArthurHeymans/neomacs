@@ -3261,3 +3261,44 @@ fn div_core_divergence_surface_standard_display_graphic_table_mutation() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_standard_display_default_g1_8bit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((char-table nil) (char-table nil) (char-table [0]) (char-table nil nil))
+    // Neomacs:   OK ((err wrong-type-argument arrayp) (char-table nil) (char-table nil)
+    //                (err wrong-type-argument arrayp))
+    // More standard-display helpers share the table-creation/mutation bug:
+    // standard-display-default and standard-display-8bit create a table when
+    // standard-display-table is nil in GNU but error in Neomacs; standard-display-g1
+    // mutates an existing table in GNU but leaves the entry nil in Neomacs.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-default ?A ?Z)
+         (list (type-of standard-display-table)
+               (aref standard-display-table ?A)))
+     (error (list 'err (car err) (cadr err)))))
+ (let ((standard-display-table (make-display-table)))
+   (standard-display-default ?B ?Y)
+   (list (type-of standard-display-table)
+         (aref standard-display-table ?B)))
+ (let ((standard-display-table (make-display-table)))
+   (standard-display-g1 ?C ?X)
+   (list (type-of standard-display-table)
+         (aref standard-display-table ?C)))
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-8bit 160 161)
+         (list (type-of standard-display-table)
+               (aref standard-display-table 160)
+               (aref standard-display-table 161)))
+     (error (list 'err (car err) (cadr err))))))
+"##,
+    );
+}
