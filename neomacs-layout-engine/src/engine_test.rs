@@ -9806,6 +9806,107 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
 }
 
 #[test]
+fn layout_frame_rust_applies_face_only_overlay_starting_mid_run() {
+    // Regression (isearch current-match highlight): a face-only overlay (no
+    // display string) that begins/ends INSIDE a text-property run must bound the
+    // run so each piece carries its own face. GNU folds `next_overlay_change`
+    // into `compute_stop_pos` (src/xdisp.c). Before the fix, the run was bounded
+    // only by text-property changes, so an overlay starting mid-run never split
+    // it and the overlay face never painted (C-s "counter" left the match
+    // unhighlighted because the overlay began inside the "my-counter" run).
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abcdef");
+        let len = buf.total_emacs_byte_len().get();
+        // One uniform text-property face over the WHOLE run, so the only face
+        // boundaries come from the overlay (start at 2, end at 4).
+        buf.put_text_property(0, len, Value::symbol("face"), Value::symbol("bold"));
+        // Face-only overlay (distinctive background) over "cd" — text before
+        // ('ab') and after ('ef'), so it begins AND ends mid-run.
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 2,
+            end: 4,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("face"),
+            Value::list(vec![Value::keyword("background"), Value::string("#00ff00")]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-midrun-overlay", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let bg_of = |ch: char| {
+        let face_id = entry
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+            .flat_map(|row| row.glyphs[1].iter())
+            .find_map(|glyph| match glyph.glyph_type {
+                GlyphType::Char { ch: c } if c == ch => Some(glyph.face_id),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("glyph {ch:?} not found"));
+        state
+            .faces
+            .get(&face_id)
+            .unwrap_or_else(|| panic!("face for {ch:?}"))
+            .background
+    };
+
+    let overlay_bg = bg_of('c');
+    assert_ne!(
+        overlay_bg,
+        bg_of('a'),
+        "face-only overlay over 'cd' must paint its background; 'a' (before it) \
+         must keep the plain face — the run must split at the overlay START"
+    );
+    assert_eq!(
+        overlay_bg,
+        bg_of('d'),
+        "'d' is inside the same overlay as 'c'"
+    );
+    assert_ne!(
+        overlay_bg,
+        bg_of('e'),
+        "'e' (after the overlay) must keep the plain face — the run must split \
+         at the overlay END too"
+    );
+}
+
+#[test]
 fn layout_frame_rust_continues_eob_before_string_after_overlong_line() {
     let mut eval = Context::new();
     let buf_id = eval

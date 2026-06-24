@@ -124,12 +124,29 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         )
     }
 
+    /// neomacs equivalent of GNU `compute_stop_pos`: the next position at which
+    /// the face/display can change, i.e. where the current text run must end.
+    /// GNU folds the next text-property change AND the next *overlay* change
+    /// (`next_overlay_change`) into `it->stop_charpos` (src/xdisp.c
+    /// compute_stop_pos). We mirror both: without the overlay-change bound, a
+    /// face-only overlay (isearch current-match, lazy-highlight, region) that
+    /// begins or ends *inside* a text-property run would not split the run, so
+    /// the run would keep the face resolved at its start and the overlay would
+    /// never paint (or would paint over the whole run).
     fn next_property_change(&self, char_pos: CharPos0) -> CharPos0 {
-        self.buffer
-            .layout_next_text_prop_change_after_emacs_byte_pos(self.byte_pos(char_pos))
+        let byte = self.byte_pos(char_pos);
+        let prop_change = self
+            .buffer
+            .layout_next_text_prop_change_after_emacs_byte_pos(byte)
             .map(|byte_pos| self.buffer.layout_emacs_byte_pos_to_char_pos(byte_pos))
-            .unwrap_or(self.end)
-            .min(self.end)
+            .unwrap_or(self.end);
+        let overlay_change = self
+            .buffer
+            .layout_overlays()
+            .next_boundary_after_emacs_byte_pos(byte)
+            .map(|byte_pos| self.buffer.layout_emacs_byte_pos_to_char_pos(byte_pos))
+            .unwrap_or(self.end);
+        prop_change.min(overlay_change).min(self.end)
     }
 
     fn display_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
@@ -169,18 +186,48 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         )
     }
 
+    /// Resolve the face for the run beginning at `char_pos`, mirroring GNU
+    /// `face_at_buffer_position` (src/xfaces.c): merge the `face` text property
+    /// (with `font-lock-face` fallback) FIRST, then overlay faces in ascending
+    /// priority order (higher priority wins). Resolving overlay faces here — not
+    /// only into the row's base face (which is resolved once at column 0) — is
+    /// what lets a face-only overlay (isearch current-match, lazy-highlight,
+    /// region) that begins mid-run actually paint: the run is already bounded at
+    /// every overlay boundary by `next_property_change` (our compute_stop_pos),
+    /// so each piece carries its own overlay-merged face into the glyph.
     fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
-        let face = self
+        let bytepos = self.byte_pos(char_pos);
+        let text_face = self
             .buffer
-            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("face"))
+            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"))
             .or_else(|| {
-                self.buffer.layout_text_prop_at_emacs_byte_pos(
-                    self.byte_pos(char_pos),
-                    Value::symbol("font-lock-face"),
-                )
+                self.buffer
+                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"))
             });
-        face.map(|value| context.resolve_face_ref(self.base_face, value))
-            .unwrap_or(self.base_face)
+        let mut face = text_face
+            .map(|value| context.resolve_face_ref(self.base_face, value))
+            .unwrap_or(self.base_face);
+
+        let overlays = self.buffer.layout_overlays();
+        let overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
+        if !overlay_ids.is_empty() {
+            let mut overlay_faces: Vec<(i64, Value)> = overlay_ids
+                .iter()
+                .filter_map(|oid| {
+                    let face_value = overlays.overlay_get_named(*oid, Value::symbol("face"))?;
+                    let priority = overlays
+                        .overlay_get_named(*oid, Value::symbol("priority"))
+                        .and_then(|value| value.as_int())
+                        .unwrap_or(0);
+                    Some((priority, face_value))
+                })
+                .collect();
+            overlay_faces.sort_by_key(|(priority, _)| *priority);
+            for (_priority, face_value) in overlay_faces {
+                face = context.resolve_face_ref(face, face_value);
+            }
+        }
+        face
     }
 
     fn next_text_run_end(&self, start: CharPos0, limit: CharPos0) -> CharPos0 {
