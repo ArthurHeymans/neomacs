@@ -2812,3 +2812,45 @@ fn div_core_divergence_surface_unibyte_multibyte_search_mismatch() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_signal_process_signal_name_symbol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (0 signal 15 (("terminated\n" signal 15)))
+    // Neomacs:   OK ((err "Undefined signal name TERM") run 0 nil)
+    // GNU accepts signal-name symbols (TERM) for signal-process; Neomacs only
+    // accepts integer signal numbers and errors on the symbol, leaving the
+    // process running with no sentinel event.
+    assert_oracle_parity(
+        r##"
+(let ((proc (make-process
+             :name "probe-signal-name"
+             :command '("/bin/sh" "-c" "sleep 5")
+             :connection-type 'pipe)))
+  (set-process-query-on-exit-flag proc nil)
+  (let ((log nil))
+    (set-process-sentinel
+     proc
+     (lambda (p e)
+       (push (list e (process-status p) (process-exit-status p)) log)))
+    (let ((ret (condition-case err
+                   (signal-process proc 'TERM)
+                 (error (list 'err (cadr err))))))
+      (let ((i 0))
+        (while (and (< i 40) (process-live-p proc))
+          (accept-process-output proc 0.05)
+          (setq i (1+ i))))
+      (let ((j 0))
+        (while (and (< j 20) (null log))
+          (accept-process-output proc 0.05)
+          (setq j (1+ j))))
+      (prog1 (list ret
+                   (process-status proc)
+                   (process-exit-status proc)
+                   (nreverse log))
+        (when (process-live-p proc)
+          (delete-process proc))))))
+"##,
+    );
+}
