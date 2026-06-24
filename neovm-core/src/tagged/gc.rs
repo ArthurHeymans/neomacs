@@ -483,16 +483,18 @@ pub(crate) fn concurrent_mark_active() -> bool {
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get())
 }
 
-/// Stage 1b CONCURRENT OBARRAY SCAN feature flag (env `NEOVM_GC_CONCURRENT_OBARRAY`
-/// == "1"). Default OFF: when off, no obarray snapshot is built at the start
-/// handshake and the GC thread does no obarray scan, so behaviour is byte-identical
-/// to the pre-Stage-1b path (the start seed walks the symbol cells as before). When
-/// on, the start handshake hands the GC thread a start-captured chunk snapshot, the
-/// GC thread scans the obarray symbol cells concurrently, and the start seed skips
-/// the symbol-cell walk. Read once via `OnceLock`.
+/// Stage 1b CONCURRENT OBARRAY SCAN feature flag (env `NEOVM_GC_CONCURRENT_OBARRAY`).
+/// Default ON: the start handshake hands the GC thread a start-captured chunk
+/// snapshot, the GC thread scans the obarray symbol cells concurrently (moving the
+/// start-handshake obarray walk off the GC pause), and the start seed skips the
+/// symbol-cell walk. Set the env to `0` to disable (kill switch), restoring the
+/// byte-identical pre-Stage-1b path (the start seed walks the symbol cells as
+/// before). Read once via `OnceLock`. Validated: full suite + partition-verify on
+/// AND off = 7442/7442; a seqlock read-race test (+ negative control) proves the
+/// concurrent read never tears the (redirect, val) union arm.
 pub(crate) fn gc_concurrent_obarray_on() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_OBARRAY").as_deref() == Ok("1"))
+    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_OBARRAY").as_deref() != Ok("0"))
 }
 
 // ---------------------------------------------------------------------------
