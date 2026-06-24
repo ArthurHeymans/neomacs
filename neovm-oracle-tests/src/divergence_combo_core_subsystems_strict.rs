@@ -3442,3 +3442,38 @@ fn div_core_divergence_surface_standard_display_underline_table_mutation() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_process_send_bare_eol_coding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 13 10 98) (97 13 98) (97 10 98) (97 13 10 98))
+    // Neomacs:   OK ((97 10 98) (97 10 98) (97 10 98) (97 10 98))
+    // With process output coding set to bare dos/mac/unix, GNU applies the
+    // requested EOL conversion before sending to the child process. Neomacs
+    // sends plain LF for all three, and even fails to apply CRLF for utf-8-dos.
+    assert_oracle_parity(
+        r##"
+(let ((run
+       (lambda (output-coding)
+         (let ((out nil))
+           (let ((proc (make-process
+                        :name "probe-send-eol"
+                        :command '("cat")
+                        :connection-type 'pipe
+                        :filter (lambda (_ s)
+                                  (setq out (concat out s))))))
+             (set-process-query-on-exit-flag proc nil)
+             (set-process-coding-system proc 'binary output-coding)
+             (process-send-string proc "a\nb")
+             (process-send-eof proc)
+             (while (process-live-p proc)
+               (accept-process-output proc 0.05))
+             (append (or out "") nil))))))
+  (list (funcall run 'dos)
+        (funcall run 'mac)
+        (funcall run 'unix)
+        (funcall run 'utf-8-dos)))
+"##,
+    );
+}
