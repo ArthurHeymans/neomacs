@@ -3029,3 +3029,38 @@ fn div_core_divergence_surface_missing_program_error_data() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_start_process_missing_program_deferred() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (process exit 127 (("exited abnormally with code 127\n" exit 127)))
+    // Neomacs:   OK (err file-missing 2)
+    // start-process with a missing program returns a live process in GNU and
+    // defers the failure to an asynchronous sentinel (status exit, code 127);
+    // Neomacs instead raises a synchronous file-missing error.
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (condition-case err
+      (let ((p (start-process
+                "probe-start-missing"
+                nil
+                "/nonexistent/neo-probe-xyz")))
+        (set-process-sentinel
+         p
+         (lambda (pr e)
+           (push (list e (process-status pr) (process-exit-status pr)) log)))
+        (let ((i 0))
+          (while (and (< i 30)
+                      (or (eq (process-status p) 'run) (null log)))
+            (accept-process-output nil 0.05)
+            (setq i (1+ i))))
+        (list 'process
+              (process-status p)
+              (process-exit-status p)
+              (nreverse log)))
+    (error (list 'err (car err) (length (cdr err))))))
+"##,
+    );
+}
