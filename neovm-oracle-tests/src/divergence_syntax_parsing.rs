@@ -222,3 +222,215 @@ fn div_sp_unbalanced_paren_error() {
 "##,
     );
 }
+
+// ---------------------------------------------------------------------------
+// parse-sexp-ignore-comments sexp scanning (PR #134 / #118)
+//
+// forward-sexp/backward-sexp/scan-sexps/scan-lists skip whole comment bodies
+// when `parse-sexp-ignore-comments' is non-nil, matching GNU's
+// scan_sexps_forward / scan_lists comment-skipping (src/syntax.c).  These lock
+// in that a stray/unbalanced paren inside a comment body is ignored, and that
+// the non-ignore path (parse-sexp-ignore-comments nil) is unaffected.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn div_sp_ignore_comments_forward_sexp_line_comment_stray_paren() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // emacs-lisp-mode has parse-sexp-ignore-comments t by default; the stray
+    // "(" inside the ";; oops (" comment must not be treated as an open paren,
+    // so forward-sexp skips the comment and the "(real sexp)" list -> 22.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert ";; oops (\n(real sexp)\n")
+  (goto-char (point-min))
+  (forward-sexp)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_forward_sexp_c_block_comment_parens() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // The C block comment "/* ) ( */" holds an unbalanced close+open; with
+    // parse-sexp-ignore-comments t forward-sexp skips the comment body and the
+    // whole list "(a /* ) ( */ b)" -> 16.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a /* ) ( */ b)")
+  (goto-char (point-min))
+  (forward-sexp)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_backward_sexp_line_comment_stray_paren() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // backward-sexp 2 from end skips "(bar)" then the "; c (" comment with its
+    // stray "(" and lands at the start of "(foo)" -> 1.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "(foo) ; c (\n(bar)")
+  (goto-char (point-max))
+  (backward-sexp 2)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_backward_sexp_nested_c_block_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // c-mode treats /* */ as nestable here; backward-sexp from end skips the
+    // "(b)" then must skip the whole nested "/* outer /* inner */ */" comment,
+    // landing at the start of "(b)" line -> 29.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a) /* outer /* inner */ */\n(b)")
+  (goto-char (point-max))
+  (backward-sexp)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_scan_sexps_unbalanced_paren_in_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // The #118 case: the unmatched "(" lives inside the ";  unmatched (" line
+    // comment, so scan-sexps over the "(a ... b)" list finds the real closing
+    // paren and returns 21 instead of signaling.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "(a ; unmatched (\n b)")
+  (scan-sexps 1 1))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_forward_sexp_two_block_comments_in_list() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Two separate block comments inside a single list; forward-sexp must skip
+    // both and the whole list "(a /* c */ b /* d */ e)" -> 24.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a /* c */ b /* d */ e)")
+  (goto-char (point-min))
+  (forward-sexp)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_scan_lists_backward_over_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // scan-lists backward over a comment containing a stray close paren must
+    // skip the comment body and land before "(b)" -> 13.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a) /* ) */ (b)")
+  (scan-lists (point-max) -1 0))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_eof_unterminated_c_block_signals() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // An unterminated C block comment runs to EOF; GNU signals scan-error
+    // because the enclosing list never closes.  Lock the signal class.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a /* unterminated")
+  (goto-char (point-min))
+  (condition-case err
+      (progn (forward-sexp) (point))
+    (scan-error (list 'scan-error))
+    (error (car err))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_eof_unterminated_line_signals() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // An unterminated line comment swallows the rest of the buffer; the
+    // enclosing list "(a ; ..." never closes -> scan-error.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "(a ; unterminated")
+  (goto-char (point-min))
+  (condition-case err
+      (progn (forward-sexp) (point))
+    (scan-error (list 'scan-error))
+    (error (car err))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_disabled_line_comment_stops_in_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // With parse-sexp-ignore-comments nil the comment is NOT skipped: ";" is a
+    // comment-starter but not a sexp boundary, so forward-sexp over ";; oops "
+    // stops just before the stray "(" at 8.  Locks the non-ignore path.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (setq parse-sexp-ignore-comments nil)
+  (insert ";; oops (\n(real sexp)\n")
+  (goto-char (point-min))
+  (condition-case err
+      (progn (forward-sexp) (point))
+    (scan-error (list 'scan-error))
+    (error (car err))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_disabled_scan_sexps_sees_comment_paren() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // With parse-sexp-ignore-comments nil the stray "(" inside the comment is
+    // counted as a real open paren, leaving the list unbalanced -> scan-error.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (setq parse-sexp-ignore-comments nil)
+  (insert "(a ; unmatched (\n b)")
+  (condition-case err
+      (scan-sexps 1 1)
+    (scan-error (list 'scan-error))
+    (error (car err))))
+"##,
+    );
+}
