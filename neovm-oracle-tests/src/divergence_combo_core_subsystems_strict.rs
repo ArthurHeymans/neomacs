@@ -3510,3 +3510,25 @@ fn div_core_divergence_surface_process_filter_bare_eol_decoding() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_unicode_normalization_decomposition() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("é" "é" 3 "fi" "1")
+    // Neomacs:   OK ("é" "é" 2 "fi" "①")
+    // GNU decomposes precomposed é to e + combining acute under NFD, and
+    // compatibility-decomposes circled digit one to "1" under NFKD. Neomacs
+    // leaves both forms composed/unchanged while NFKC for the fi ligature works.
+    assert_oracle_parity(
+        r##"
+(progn
+  (require 'ucs-normalize)
+  (list (ucs-normalize-NFC-string "e\u0301")
+        (ucs-normalize-NFD-string "é")
+        (string-bytes (ucs-normalize-NFD-string "é"))
+        (ucs-normalize-NFKC-string "ﬁ")
+        (ucs-normalize-NFKD-string "①")))
+"##,
+    );
+}
