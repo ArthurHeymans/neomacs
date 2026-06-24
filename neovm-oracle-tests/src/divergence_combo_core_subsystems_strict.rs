@@ -1322,3 +1322,160 @@ fn div_core_divergence_surface_window_prev_buffers_after_previous_buffer() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_buffer_rename_update_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("probe-rename-new" ("*scratch*" "probe-rename-new"))
+    // Neomacs:   OK ("probe-rename-new" ("*scratch*"))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (buffer-list-update-hook nil))
+  (add-hook 'buffer-list-update-hook
+            (lambda () (push (buffer-name) log)))
+  (let ((b (generate-new-buffer "probe-rename")))
+    (unwind-protect
+        (with-current-buffer b
+          (rename-buffer "probe-rename-new" t)
+          (list (buffer-name) (nreverse log)))
+      (when (buffer-live-p b) (kill-buffer b)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_set_buffer_major_mode_change_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (fundamental-mode "Fundamental" (text-mode))
+    // Neomacs:   OK (fundamental-mode "Fundamental" nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (with-temp-buffer
+    (setq major-mode 'text-mode
+          mode-name "Text")
+    (add-hook 'change-major-mode-hook
+              (lambda () (push major-mode log))
+              nil t)
+    (set-buffer-major-mode (current-buffer))
+    (list major-mode mode-name (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_global_major_mode_hook_order_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (fundamental-mode ((change fundamental-mode) (text-hook text-mode) (after text-mode) (change text-mode) (after fundamental-mode)))
+    // Neomacs:   OK (fundamental-mode ((text-hook text-mode) (after text-mode) (after fundamental-mode)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (change-major-mode-hook nil)
+      (after-change-major-mode-hook nil)
+      (text-mode-hook nil))
+  (add-hook 'change-major-mode-hook
+            (lambda () (push (list 'change major-mode) log)))
+  (add-hook 'after-change-major-mode-hook
+            (lambda () (push (list 'after major-mode) log)))
+  (add-hook 'text-mode-hook
+            (lambda () (push (list 'text-hook major-mode) log)))
+  (with-temp-buffer
+    (text-mode)
+    (fundamental-mode)
+    (list major-mode (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_overlay_category_evaporate_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("aef" nil nil nil #("<" 0 1 (face bold)) ">")
+    // Neomacs:   OK ("aef" #<killed buffer> 2 2 #("<" 0 1 (face bold)) ">")
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((o (make-overlay 2 5)))
+    (overlay-put o 'before-string (propertize "<" 'face 'bold))
+    (overlay-put o 'after-string ">")
+    (overlay-put o 'category 'probe-cat)
+    (put 'probe-cat 'evaporate t)
+    (delete-region 2 5)
+    (list (buffer-string)
+          (overlay-buffer o)
+          (overlay-start o)
+          (overlay-end o)
+          (overlay-get o 'before-string)
+          (overlay-get o 'after-string))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_bury_buffer_update_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (" *probe-bury*" ("*scratch*" " *probe-bury*" " *probe-bury*"))
+    // Neomacs:   OK (" *probe-bury*" ("*scratch*" " *probe-bury*"))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (buffer-list-update-hook nil)
+      (b (get-buffer-create " *probe-bury*")))
+  (unwind-protect
+      (progn
+        (add-hook 'buffer-list-update-hook
+                  (lambda () (push (buffer-name) log)))
+        (switch-to-buffer b)
+        (bury-buffer b)
+        (list (buffer-name (current-buffer)) (nreverse log)))
+    (when (buffer-live-p b) (kill-buffer b))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_window_configuration_hook_batch_split() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (1 nil)
+    // Neomacs:   OK (1 ((config 2)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (b1 (get-buffer-create " *probe-wh3-a*"))
+      (b2 (get-buffer-create " *probe-wh3-b*")))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (setq window-configuration-change-hook nil
+              window-buffer-change-functions nil
+              window-size-change-functions nil
+              window-selection-change-functions nil)
+        (add-hook 'window-configuration-change-hook
+                  (lambda () (push (list 'config (count-windows)) log)))
+        (add-hook 'window-buffer-change-functions
+                  (lambda (w)
+                    (push (list 'buf (buffer-name (window-buffer w))) log)))
+        (add-hook 'window-size-change-functions
+                  (lambda (f) (push (list 'size (framep f) (count-windows)) log)))
+        (add-hook 'window-selection-change-functions
+                  (lambda (f) (push (list 'select (framep f) (buffer-name)) log)))
+        (switch-to-buffer b1)
+        (let ((w2 (split-window nil nil 'right)))
+          (set-window-buffer w2 b2)
+          (select-window w2)
+          (delete-window w2))
+        (list (count-windows) (nreverse log)))
+    (when (buffer-live-p b1) (kill-buffer b1))
+    (when (buffer-live-p b2) (kill-buffer b2))))
+"##,
+    );
+}
