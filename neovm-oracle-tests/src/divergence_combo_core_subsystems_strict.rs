@@ -2963,3 +2963,38 @@ fn div_core_divergence_surface_decode_coding_string_eol_detection() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_insert_file_contents_unix_keeps_cr() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("a\nb\nc" (97 13 10 98 13 10 99))
+    // Neomacs:   OK ("a\nb\nc" (97 10 98 10 99))
+    // Reading a CRLF file with coding-system-for-read 'dos collapses CRLF->LF
+    // in both. With the bare 'unix alias GNU performs no EOL conversion and
+    // keeps the raw CR bytes, while Neomacs strips them.
+    assert_oracle_parity(
+        r##"
+(let ((file (make-temp-file "neo-crlf-read" nil ".txt")))
+  (unwind-protect
+      (progn
+        (let ((coding-system-for-write 'binary))
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert "a\r\nb\r\nc")
+            (write-region (point-min) (point-max) file nil 'silent)))
+        (let ((read-as-dos
+               (with-temp-buffer
+                 (let ((coding-system-for-read 'dos))
+                   (insert-file-contents file))
+                 (buffer-string)))
+              (read-as-unix
+               (with-temp-buffer
+                 (let ((coding-system-for-read 'unix))
+                   (insert-file-contents file))
+                 (append (buffer-string) nil))))
+          (list read-as-dos read-as-unix)))
+    (delete-file file)))
+"##,
+    );
+}
