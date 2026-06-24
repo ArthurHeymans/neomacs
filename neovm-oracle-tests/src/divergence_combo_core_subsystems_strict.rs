@@ -2000,3 +2000,87 @@ fn div_core_divergence_surface_quit_process_sentinel_message() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_stop_continue_delete_process_sentinels() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal 9 (("run" run 0) ("killed\n" signal 9)))
+    // Neomacs:   OK (signal 9 nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((proc (make-process
+               :name "probe-stop-cont-sent2"
+               :command '("/bin/sh" "-c" "read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e
+                                       (process-status p)
+                                       (process-exit-status p))
+                                 log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (stop-process proc)
+    (let ((i 0))
+      (while (and (< i 10) (< (length log) 1))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (continue-process proc)
+    (let ((i 0))
+      (while (and (< i 10) (< (length log) 2))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (delete-process proc)
+    (let ((i 0))
+      (while (and (< i 20) (< (length log) 3))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (list (process-status proc)
+          (process-exit-status proc)
+          (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_execute_kbd_macro_command_keys() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("abc" nil nil "" [] [])
+    // Neomacs:   OK ("abc" nil nil "c" [99] [97 98 99])
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (let ((executing-kbd-macro nil)
+        (last-kbd-macro nil))
+    (execute-kbd-macro (kbd "a b c"))
+    (list (buffer-string)
+          last-kbd-macro
+          executing-kbd-macro
+          (this-command-keys)
+          (this-command-keys-vector)
+          (recent-keys))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("xy" "xy" nil "")
+    // Neomacs:   ERR (error "No keyboard macro has been defined")
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (let ((executing-kbd-macro nil)
+        (last-kbd-macro nil))
+    (setq last-kbd-macro (kbd "x y"))
+    (call-last-kbd-macro nil)
+    (list (buffer-string)
+          last-kbd-macro
+          executing-kbd-macro
+          (this-command-keys))))
+"##,
+    );
+}
