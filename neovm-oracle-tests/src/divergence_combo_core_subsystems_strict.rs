@@ -1144,3 +1144,181 @@ fn div_core_divergence_surface_message_repetition_coalescing() {
 "##,
     );
 }
+
+#[test]
+fn div_core_variable_watcher_set_and_buffer_local_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: variable watchers receive global set/setq-default events,
+    // buffer-local set events, and makunbound from kill-local-variable.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((log nil))
+   (defvar probe--watch 0)
+   (let ((watcher (lambda (sym new op where)
+                    (push (list sym new op (bufferp where)) log))))
+     (add-variable-watcher 'probe--watch watcher)
+     (unwind-protect
+         (progn
+           (setq probe--watch 1)
+           (set 'probe--watch 2)
+           (setq-default probe--watch 3)
+           (list probe--watch (default-value 'probe--watch) (nreverse log)))
+       (remove-variable-watcher 'probe--watch watcher))))
+ (let ((log nil))
+   (defvar probe--watch-local 0)
+   (let ((watcher (lambda (sym new op where)
+                    (push (list sym new op
+                                (and (bufferp where) (buffer-name where)))
+                          log))))
+     (add-variable-watcher 'probe--watch-local watcher)
+     (unwind-protect
+         (with-temp-buffer
+           (rename-buffer " *probe-watch-local*" t)
+           (setq-local probe--watch-local 10)
+           (setq probe--watch-local 11)
+           (kill-local-variable 'probe--watch-local)
+           (list probe--watch-local
+                 (default-value 'probe--watch-local)
+                 (nreverse log)))
+       (remove-variable-watcher 'probe--watch-local watcher)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_make_variable_buffer_local_default_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: automatically buffer-local variables keep per-buffer values
+    // after a default value mutation.
+    assert_oracle_parity(
+        r##"
+(progn
+  (defvar probe--auto-local 'global)
+  (make-variable-buffer-local 'probe--auto-local)
+  (let ((b1 (generate-new-buffer " *probe-auto-a*"))
+        (b2 (generate-new-buffer " *probe-auto-b*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer b1 (setq probe--auto-local 'a))
+          (with-current-buffer b2 (setq probe--auto-local 'b))
+          (setq-default probe--auto-local 'new-default)
+          (list (default-value 'probe--auto-local)
+                (buffer-local-value 'probe--auto-local b1)
+                (buffer-local-value 'probe--auto-local b2)
+                (local-variable-if-set-p 'probe--auto-local b1)
+                (local-variable-if-set-p 'probe--auto-local b2)))
+      (kill-buffer b1)
+      (kill-buffer b2))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_window_state_get_put_keymap_and_face_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: window-state-get/put, remapping keymaps, event descriptions,
+    // and batch face attributes in one broader basic-subsystem probe.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((b1 (get-buffer-create " *probe-state-a*"))
+       (b2 (get-buffer-create " *probe-state-b*")))
+   (unwind-protect
+       (progn
+         (delete-other-windows)
+         (switch-to-buffer b1)
+         (let ((w2 (split-window nil nil 'right)))
+           (set-window-buffer w2 b2)
+           (set-window-parameter w2 'probe 'yes)
+           (let ((state (window-state-get nil t)))
+             (delete-other-windows)
+             (window-state-put state nil 'safe)
+             (list (count-windows)
+                   (mapcar (lambda (w) (buffer-name (window-buffer w)))
+                           (window-list nil 'nomini))
+                   (mapcar (lambda (w) (window-parameter w 'probe))
+                           (window-list nil 'nomini))))))
+     (when (buffer-live-p b1) (kill-buffer b1))
+     (when (buffer-live-p b2) (kill-buffer b2))))
+ (let ((map (make-sparse-keymap)))
+   (define-key map [remap old-cmd] 'new-cmd)
+   (define-key map (kbd "C-c n") 'new-cmd)
+   (list (command-remapping 'old-cmd nil (list map))
+         (where-is-internal 'new-cmd map t)
+         (lookup-key map [remap old-cmd])))
+ (list (key-description [C-a])
+       (key-description [C-S-a])
+       (single-key-description ?\C-a)
+       (kbd "C-c <f5>")
+       (event-modifiers 'C-S-a)
+       (event-basic-type 'C-S-a))
+ (list (facep 'default)
+       (face-attribute 'default :foreground nil 'default)
+       (face-attribute 'default :background nil 'default)
+       (face-attribute 'bold :weight nil 'default)
+       (face-all-attributes 'bold nil)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_permanent_local_mode_change_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (local t nil nil ((change local probe)))
+    // Neomacs:   OK (local t nil nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (defvar probe--perm2 'global)
+  (put 'probe--perm2 'permanent-local t)
+  (with-temp-buffer
+    (setq-local probe--perm2 'local)
+    (setq-local transient-mark-mode 'probe)
+    (add-hook 'change-major-mode-hook
+              (lambda () (push (list 'change probe--perm2 transient-mark-mode)
+                               log))
+              nil t)
+    (fundamental-mode)
+    (text-mode)
+    (list probe--perm2
+          (local-variable-p 'probe--perm2)
+          transient-mark-mode
+          (local-variable-p 'transient-mark-mode)
+          (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_window_prev_buffers_after_previous_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("*scratch*" nil (" *probe-prev-c*"))
+    // Neomacs:   OK ("*scratch*" (("*scratch*" 1 1)) (" *probe-prev-c*"))
+    assert_oracle_parity(
+        r##"
+(let ((b1 (get-buffer-create " *probe-prev-a*"))
+      (b2 (get-buffer-create " *probe-prev-b*"))
+      (b3 (get-buffer-create " *probe-prev-c*")))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (switch-to-buffer b1)
+        (switch-to-buffer b2)
+        (switch-to-buffer b3)
+        (previous-buffer)
+        (let ((w (selected-window)))
+          (list (buffer-name (window-buffer w))
+                (mapcar (lambda (e)
+                          (list (buffer-name (nth 0 e))
+                                (marker-position (nth 1 e))
+                                (marker-position (nth 2 e))))
+                        (window-prev-buffers w))
+                (mapcar #'buffer-name (window-next-buffers w)))))
+    (mapc (lambda (b) (when (buffer-live-p b) (kill-buffer b)))
+          (list b1 b2 b3))))
+"##,
+    );
+}
