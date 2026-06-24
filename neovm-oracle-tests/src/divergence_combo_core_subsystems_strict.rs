@@ -2590,3 +2590,91 @@ fn div_core_divergence_surface_mutex_lock_blocks_other_thread() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_thread_dynamic_binding_isolation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (global "*scratch*" local)
+    // Neomacs:   OK (main "*scratch*" local)
+    assert_oracle_parity(
+        r##"
+(progn
+  (defvar probe-thread-dyn 'global)
+  (let ((buf (get-buffer-create " *probe-thread-buf*"))
+        (probe-thread-dyn 'main))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf
+            (setq-local probe-thread-dyn 'local))
+          (let ((th
+                 (make-thread
+                  (lambda ()
+                    (list probe-thread-dyn
+                          (buffer-name)
+                          (with-current-buffer buf probe-thread-dyn)))
+                  "dyn-thread")))
+            (thread-join th)))
+      (when (buffer-live-p buf)
+        (kill-buffer buf)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_all_threads_includes_live_worker() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((nil "probe-list-thread") (nil) (run))
+    // Neomacs:   OK ((nil) (nil) (run))
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((th (make-thread
+             (lambda ()
+               (push 'run log)
+               (sleep-for 0.1)
+               'done)
+             "probe-list-thread")))
+    (let ((names-while-live (mapcar #'thread-name (all-threads))))
+      (thread-join th)
+      (list names-while-live
+            (mapcar #'thread-name (all-threads))
+            log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_load_history_defcustom_recording() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((require defface probe-lh-custom defun provide) (probe-lh-custom ...))
+    // Neomacs:   OK ((require defface defun provide) nil)
+    assert_oracle_parity(
+        r##"
+(let* ((contents
+        ";;; -*- lexical-binding: t -*-
+(require 'custom)
+(defgroup probe-lh nil \"\" :group 'emacs)
+(defface probe-lh-face '((t (:weight bold))) \"\")
+(defcustom probe-lh-custom 3 \"\" :type 'integer :group 'probe-lh)
+(defalias 'probe-lh-alias 'ignore)
+(provide 'probe-lh)
+")
+       (file (make-temp-file "neo-loadhist-custom" nil ".el" contents))
+       (load-history nil))
+  (unwind-protect
+      (progn
+        (load file nil t nil t)
+        (let ((entry (cdr (assoc file load-history))))
+          (list (mapcar (lambda (x)
+                          (if (consp x) (car x) x))
+                        entry)
+                (memq 'probe-lh-custom entry)
+                (assq 'defface entry)
+                entry)))
+    (delete-file file)))
+"##,
+    );
+}
