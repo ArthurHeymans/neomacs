@@ -2631,7 +2631,7 @@ fn raw_fixnum_maxmin(
 /// pass the live stack as block arguments. Validated by differential tests
 /// against the interpreter and the force-deopt gate.
 pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, CompileError> {
-    use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
+    use mir::MirOp;
 
     // The MIR tier handles a CALL (MirOp::Opaque{Call/Apply}) via PRECISE deopt:
     // such a body threads vmctx + the runtime shims and routes EVERY guard to a
@@ -2668,6 +2668,12 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         .any(|i| matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none());
     let needs_rt = has_call || has_escaping_cons;
 
+    // --- JIT-only module prologue (the wrapper). ----------------------------
+    // The three ObjectModule-incompatible seams that stay here (and out of the
+    // generic build fn `build_mir_leaf_fn`): `builder.symbol(...)` bakes the shim
+    // host addresses (AOT replaces this with `Linkage::Import` + dlopen);
+    // `JITModule::new` (AOT: `ObjectModule::new`); `finalize_definitions` +
+    // `get_finalized_function` below (AOT: `ObjectModule::finish()` + `dlsym`).
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
     if needs_rt {
@@ -2681,8 +2687,6 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     }
     let mut module = JITModule::new(builder);
-    let call_conv = module.target_config().default_call_conv;
-    let ptr_ty = module.target_config().pointer_type();
 
     // Precise-deopt spill buffer + cells, sized to the deepest pre-op operand stack
     // (the framestate a post-call guard spills). Empty/inert for pure bodies (which
@@ -2729,6 +2733,84 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
     }
     let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
 
+    // Build + define the leaf into the module via the module-generic seam
+    // (`build_mir_leaf_fn`). The buffers are owned here and threaded in by
+    // reference so their addresses (baked into the generated loads) stay stable
+    // and so the wrapper can move them into the returned `CompiledLeaf`.
+    let fid = build_mir_leaf_fn(
+        &mut module,
+        m,
+        &deopt_spill,
+        &deopt_meta,
+        &reloc_data,
+        &reloc_index,
+        has_call,
+        &cons_repl,
+        needs_rt,
+    )?;
+
+    // --- JIT-only module epilogue (the wrapper). ----------------------------
+    module
+        .finalize_definitions()
+        .map_err(|e| CompileError::Backend(BackendError::Finalize(e.to_string())))?;
+    let entry = module.get_finalized_function(fid);
+
+    Ok(CompiledLeaf {
+        arity: m.arity,
+        required: m.arity,
+        has_rest: false,
+        has_binds: false,
+        has_handlers: false,
+        // Set by compile_bytecode_function_inner after a successful inline pass.
+        inline_epoch: None,
+        // A call-bearing body runs a side effect ahead of its (precise) deopts, so
+        // it must never rerun-from-start (the refuse-to-rerun guard).
+        has_side_effects: has_call,
+        // Baseline default; compile_bytecode_function_inner overrides with the
+        // actual inlined-callee SymIds after the inline pass.
+        inline_deps: Box::from([]),
+        spec_slots: Box::from([]),
+        deopt_spill,
+        deopt_meta,
+        reloc_data,
+        entry,
+        _module: module,
+    })
+}
+
+/// Module-generic build seam for [`lower_mir_pure`]: sets up the leaf ABI
+/// signature, lowers the MIR through a `FunctionBuilder`, then declares +
+/// defines the function into `module`, returning its `FuncId`. CLIF output is
+/// byte-identical to the previous in-line lowering — this is a pure extraction.
+///
+/// Generic over `M: Module` so the same lowering drives the `JITModule` JIT
+/// path today and an `ObjectModule` AOT path later, unchanged. The buffers
+/// (`deopt_spill`/`deopt_meta`/`reloc_data`) are borrowed: their stable
+/// addresses are baked into the generated code, and the caller retains
+/// ownership to move them into the `CompiledLeaf`.
+///
+/// This fn deliberately contains NONE of the three ObjectModule-incompatible
+/// JIT seams, which stay in the [`lower_mir_pure`] wrapper:
+///   * `builder.symbol(...)`    — AOT: `Linkage::Import` resolved via dlopen.
+///   * `finalize_definitions()` — AOT: `ObjectModule::finish()`.
+///   * `get_finalized_function` — AOT: `dlsym` of the exported entry symbol.
+#[allow(clippy::too_many_arguments)]
+fn build_mir_leaf_fn<M: Module>(
+    module: &mut M,
+    m: &mir::MirFunction,
+    deopt_spill: &[core::cell::Cell<i64>],
+    deopt_meta: &DeoptCells,
+    reloc_data: &[Value],
+    reloc_index: &std::collections::HashMap<usize, u32>,
+    has_call: bool,
+    cons_repl: &[Option<(mir::MirValue, mir::MirValue)>],
+    needs_rt: bool,
+) -> Result<cranelift_module::FuncId, CompileError> {
+    use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
+
+    let call_conv = module.target_config().default_call_conv;
+    let ptr_ty = module.target_config().pointer_type();
+
     // ABI identical to lower_leaf: fn(vmctx, args, out) -> status.
     let mut sig = Signature::new(call_conv);
     sig.params.push(AbiParam::new(ptr_ty)); // vmctx (unused for pure)
@@ -2758,7 +2840,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // when the body has a call. declare_rt_refs declares the full import set;
         // only the referenced shims (call/apply/gc_*) are resolved at finalize.
         let rt = if needs_rt {
-            let refs = declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
+            // `module` is already `&mut M`; reborrow it for the call.
+            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = m
                 .blocks
@@ -2801,7 +2884,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // ALL-PRECISE deopt for call-bearing bodies (see mir_deopt_block): never
         // rerun-from-start after a call. Pure bodies keep the shared rerun block.
         let precise = has_call;
-        // (cons_repl + needs_rt computed at the top, before the JITBuilder.)
+        // (cons_repl + needs_rt computed by the wrapper, threaded in as params.)
         let mut pending: Vec<PendingDeopt> = Vec::new();
         // Shared signal-propagation block (returns STATUS_SIGNAL), created lazily by
         // the first call lowering.
@@ -3209,32 +3292,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         .define_function(fid, &mut ctx)
         .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
     module.clear_context(&mut ctx);
-    module
-        .finalize_definitions()
-        .map_err(|e| CompileError::Backend(BackendError::Finalize(e.to_string())))?;
-    let entry = module.get_finalized_function(fid);
 
-    Ok(CompiledLeaf {
-        arity: m.arity,
-        required: m.arity,
-        has_rest: false,
-        has_binds: false,
-        has_handlers: false,
-        // Set by compile_bytecode_function_inner after a successful inline pass.
-        inline_epoch: None,
-        // A call-bearing body runs a side effect ahead of its (precise) deopts, so
-        // it must never rerun-from-start (the refuse-to-rerun guard).
-        has_side_effects: has_call,
-        // Baseline default; compile_bytecode_function_inner overrides with the
-        // actual inlined-callee SymIds after the inline pass.
-        inline_deps: Box::from([]),
-        spec_slots: Box::from([]),
-        deopt_spill,
-        deopt_meta,
-        reloc_data,
-        entry,
-        _module: module,
-    })
+    Ok(fid)
 }
 
 /// Per-function runtime-call machinery: shim references plus the vmctx variable
@@ -3294,9 +3353,14 @@ struct RtRefs {
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
 /// refs. The matching addresses are registered on the `JITBuilder` in
-/// [`lower_leaf`] via `builder.symbol(...)`.
-fn declare_rt_refs(
-    module: &mut JITModule,
+/// [`lower_leaf`] via `builder.symbol(...)` (the JIT seam); under AOT the same
+/// `Linkage::Import` declarations resolve via the dynamic loader instead.
+///
+/// Generic over the module type (`M: Module`) so it serves both the `JITModule`
+/// JIT path and the future `ObjectModule` AOT path with no change — it only
+/// calls `Module::declare_function`, a trait method available on both.
+fn declare_rt_refs<M: Module>(
+    module: &mut M,
     func: &mut Function,
     call_conv: cranelift_codegen::isa::CallConv,
     ptr_ty: Type,
@@ -3330,7 +3394,7 @@ fn declare_rt_refs(
     sig_symp.params.push(AbiParam::new(i64t));
     sig_symp.returns.push(AbiParam::new(i64t));
 
-    let declare = |module: &mut JITModule, name: &str, sig: &Signature| {
+    let declare = |module: &mut M, name: &str, sig: &Signature| {
         module
             .declare_function(name, Linkage::Import, sig)
             .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))
@@ -5635,8 +5699,6 @@ pub fn lower_leaf_full(
     );
     builder.symbol("neovm_jit_call_spec", neovm_jit_call_spec as *const u8);
     let mut module = JITModule::new(builder);
-    let call_conv = module.target_config().default_call_conv;
-    let ptr_ty = module.target_config().pointer_type();
     // Backward jumps need the back-edge service poll (GC safepoint + quit),
     // mirroring the interpreter's branch_to! wrap path. Switch targets count:
     // a jump-table edge can also close a loop.
@@ -5692,6 +5754,110 @@ pub fn lower_leaf_full(
                 )
         });
 
+    // Build + define the leaf into the module via the module-generic seam
+    // (`build_leaf_fn`). Buffers (`spec_slots`/`deopt_*`/`reloc_data`) are owned
+    // here, threaded in by reference so their baked addresses stay stable, and
+    // moved into the returned `CompiledLeaf` below.
+    let fid = build_leaf_fn(
+        &mut module,
+        ops,
+        constants,
+        arity,
+        &cfg,
+        &known_fixnum_slots,
+        &spec_sites,
+        &spec_slots,
+        n,
+        &deopt_spill,
+        &deopt_meta,
+        &reloc_data,
+        &reloc_index,
+        has_backedge,
+        needs_rt,
+    )?;
+
+    // --- JIT-only module epilogue (the wrapper). ----------------------------
+    module
+        .finalize_definitions()
+        .map_err(|e| CompileError::Backend(BackendError::Finalize(e.to_string())))?;
+
+    let entry = module.get_finalized_function(fid);
+    Ok(CompiledLeaf {
+        arity,
+        // Plain fixed-arity defaults; compile_bytecode_function overrides for
+        // &optional/&rest lambda lists.
+        required: arity,
+        has_rest: false,
+        // The baseline never inlines; only the MIR tier sets this.
+        inline_epoch: None,
+        // The baseline is all-precise (every guard is STATUS_DEOPT_AT, never a
+        // rerun-from-start after a call), so it never needs the refuse-to-rerun.
+        has_side_effects: false,
+        // The baseline never inlines.
+        inline_deps: Box::from([]),
+        has_binds: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::VarBind(_)
+                    | Op::Unbind(_)
+                    | Op::SaveCurrentBuffer
+                    | Op::SaveExcursion
+                    | Op::SaveRestriction
+                    | Op::UnwindProtectPop
+            )
+        }),
+        has_handlers: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
+            )
+        }),
+        spec_slots,
+        deopt_spill,
+        deopt_meta,
+        reloc_data,
+        entry,
+        _module: module,
+    })
+}
+
+/// Module-generic build seam for [`lower_leaf_full`]: sets up the leaf ABI
+/// signature, lowers the bytecode `ops` through a `FunctionBuilder`, then
+/// declares + defines the function into `module`, returning its `FuncId`. CLIF
+/// output is byte-identical to the previous in-line lowering (pure extraction).
+///
+/// Generic over `M: Module` so the same lowering drives the `JITModule` JIT
+/// path today and an `ObjectModule` AOT path later, unchanged. The
+/// address-stable buffers (`spec_slots`/`deopt_spill`/`deopt_meta`/`reloc_data`)
+/// are borrowed: their addresses are baked into the generated code, and the
+/// caller retains ownership to move them into the `CompiledLeaf`.
+///
+/// This fn deliberately contains NONE of the three ObjectModule-incompatible
+/// JIT seams, which stay in the [`lower_leaf_full`] wrapper:
+///   * `builder.symbol(...)`    — AOT: `Linkage::Import` resolved via dlopen.
+///   * `finalize_definitions()` — AOT: `ObjectModule::finish()`.
+///   * `get_finalized_function` — AOT: `dlsym` of the exported entry symbol.
+#[allow(clippy::too_many_arguments)]
+fn build_leaf_fn<M: Module>(
+    module: &mut M,
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    cfg: &Cfg,
+    known_fixnum_slots: &HashMap<usize, Vec<bool>>,
+    spec_sites: &HashMap<usize, SpecSite>,
+    spec_slots: &[SpecSlot],
+    n: usize,
+    deopt_spill: &[core::cell::Cell<i64>],
+    deopt_meta: &DeoptCells,
+    reloc_data: &[Value],
+    reloc_index: &std::collections::HashMap<usize, u32>,
+    has_backedge: bool,
+    needs_rt: bool,
+) -> Result<cranelift_module::FuncId, CompileError> {
+    let call_conv = module.target_config().default_call_conv;
+    let ptr_ty = module.target_config().pointer_type();
+
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
     // result bits via `out` on success, STATUS_DEOPT on a failed guard, or
@@ -5711,7 +5877,8 @@ pub fn lower_leaf_full(
         // Declare the runtime-call machinery into this function if the body
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
-            let refs = declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
+            // `module` is already `&mut M`; reborrow it for the call.
+            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()
@@ -6158,7 +6325,7 @@ pub fn lower_leaf_full(
                             other,
                             &known_fixnum,
                             reloc_base,
-                            &reloc_index,
+                            reloc_index,
                         )?;
                         // Re-sync the raw mask after the op: raw-preserving ops keep
                         // it in lockstep (assert); every other op force-tagged the
@@ -6220,48 +6387,7 @@ pub fn lower_leaf_full(
         .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
     module.clear_context(&mut ctx);
 
-    module
-        .finalize_definitions()
-        .map_err(|e| CompileError::Backend(BackendError::Finalize(e.to_string())))?;
-
-    let entry = module.get_finalized_function(fid);
-    Ok(CompiledLeaf {
-        arity,
-        // Plain fixed-arity defaults; compile_bytecode_function overrides for
-        // &optional/&rest lambda lists.
-        required: arity,
-        has_rest: false,
-        // The baseline never inlines; only the MIR tier sets this.
-        inline_epoch: None,
-        // The baseline is all-precise (every guard is STATUS_DEOPT_AT, never a
-        // rerun-from-start after a call), so it never needs the refuse-to-rerun.
-        has_side_effects: false,
-        // The baseline never inlines.
-        inline_deps: Box::from([]),
-        has_binds: ops.iter().any(|o| {
-            matches!(
-                o,
-                Op::VarBind(_)
-                    | Op::Unbind(_)
-                    | Op::SaveCurrentBuffer
-                    | Op::SaveExcursion
-                    | Op::SaveRestriction
-                    | Op::UnwindProtectPop
-            )
-        }),
-        has_handlers: ops.iter().any(|o| {
-            matches!(
-                o,
-                Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
-            )
-        }),
-        spec_slots,
-        deopt_spill,
-        deopt_meta,
-        reloc_data,
-        entry,
-        _module: module,
-    })
+    Ok(fid)
 }
 
 #[cfg(test)]

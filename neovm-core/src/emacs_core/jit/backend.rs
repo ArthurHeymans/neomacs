@@ -64,45 +64,14 @@ pub fn smoke_compile_add(arg: i64, addend: i64) -> Result<i64, BackendError> {
         .map_err(|e| BackendError::ModuleInit(e.to_string()))?;
     let mut module = JITModule::new(builder);
 
-    // The platform C calling convention (SystemV on Linux x86-64), which matches
-    // the `extern "C" fn` type we transmute the finalized pointer to below.
-    let call_conv = module.target_config().default_call_conv;
-
-    // 2. Signature: (i64) -> i64.
-    let mut sig = Signature::new(call_conv);
-    sig.params.push(AbiParam::new(types::I64));
-    sig.returns.push(AbiParam::new(types::I64));
-
-    // 3. Build the function body: `block0(v0: i64): return v0 + addend`.
-    let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
-    let mut fbctx = FunctionBuilderContext::new();
-    {
-        let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
-        let block = fb.create_block();
-        fb.append_block_params_for_function_params(block);
-        fb.switch_to_block(block);
-        fb.seal_block(block);
-
-        let arg_val = fb.block_params(block)[0];
-        let addend_val = fb.ins().iconst(types::I64, addend);
-        let sum = fb.ins().iadd(arg_val, addend_val);
-        fb.ins().return_(&[sum]);
-
-        fb.finalize();
-    }
-
-    // 4. Declare + define the function in the module.
-    let fid = module
-        .declare_function("__neovm_jit_smoke_add", Linkage::Local, &sig)
-        .map_err(|e| BackendError::Define(e.to_string()))?;
-    let mut ctx = module.make_context();
-    ctx.func = func;
-    module
-        .define_function(fid, &mut ctx)
-        .map_err(|e| BackendError::Define(e.to_string()))?;
-    module.clear_context(&mut ctx);
+    // 2-4. Build, declare, and define the function into the module via the
+    //       module-generic build seam (the R1b proof: this same body will later
+    //       drive an `ObjectModule` for AOT, with no JIT-specific calls inside).
+    let fid = build_smoke_fn(&mut module, addend)?;
 
     // 5. Finalize: apply relocations and commit the code to executable memory.
+    //    (`finalize_definitions` is JITModule-only — it is *the* seam that AOT
+    //    replaces with `ObjectModule::finish()`, so it stays in this wrapper.)
     module
         .finalize_definitions()
         .map_err(|e| BackendError::Finalize(e.to_string()))?;
@@ -121,6 +90,63 @@ pub fn smoke_compile_add(arg: i64, addend: i64) -> Result<i64, BackendError> {
 
     // `module` drops here, releasing the JIT memory — strictly after the call.
     Ok(result)
+}
+
+/// Module-generic build seam for [`smoke_compile_add`]: builds the signature,
+/// the `block0(v0: i64): return v0 + addend` body, then declares + defines the
+/// function into `module`. Returns the `FuncId`.
+///
+/// This is the cheapest proof of the R1b `M: Module` seam: the body contains
+/// **none** of the three `ObjectModule`-incompatible operations, all of which
+/// stay in the JIT wrapper:
+///   * `builder.symbol(...)`   — for AOT becomes a `Linkage::Import` + dlopen.
+///   * `finalize_definitions`  — for AOT becomes `ObjectModule::finish()`.
+///   * `get_finalized_function`— for AOT becomes a `dlsym` lookup.
+fn build_smoke_fn<M: Module>(
+    module: &mut M,
+    addend: i64,
+) -> Result<cranelift_module::FuncId, BackendError> {
+    // The platform C calling convention (SystemV on Linux x86-64), which matches
+    // the `extern "C" fn` type the JIT wrapper transmutes the finalized pointer
+    // to. Derived from the module's own target config, so it is correct for both
+    // the JIT host ISA and any AOT target ISA.
+    let call_conv = module.target_config().default_call_conv;
+
+    // Signature: (i64) -> i64.
+    let mut sig = Signature::new(call_conv);
+    sig.params.push(AbiParam::new(types::I64));
+    sig.returns.push(AbiParam::new(types::I64));
+
+    // Build the function body: `block0(v0: i64): return v0 + addend`.
+    let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
+    let mut fbctx = FunctionBuilderContext::new();
+    {
+        let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
+        let block = fb.create_block();
+        fb.append_block_params_for_function_params(block);
+        fb.switch_to_block(block);
+        fb.seal_block(block);
+
+        let arg_val = fb.block_params(block)[0];
+        let addend_val = fb.ins().iconst(types::I64, addend);
+        let sum = fb.ins().iadd(arg_val, addend_val);
+        fb.ins().return_(&[sum]);
+
+        fb.finalize();
+    }
+
+    // Declare + define the function in the module.
+    let fid = module
+        .declare_function("__neovm_jit_smoke_add", Linkage::Local, &sig)
+        .map_err(|e| BackendError::Define(e.to_string()))?;
+    let mut ctx = module.make_context();
+    ctx.func = func;
+    module
+        .define_function(fid, &mut ctx)
+        .map_err(|e| BackendError::Define(e.to_string()))?;
+    module.clear_context(&mut ctx);
+
+    Ok(fid)
 }
 
 #[cfg(test)]
