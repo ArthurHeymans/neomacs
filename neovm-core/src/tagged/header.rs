@@ -475,6 +475,144 @@ impl LispValueVec {
             TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
         })
     }
+
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN: capture this backing's base pointer,
+    /// length, and storage kind for the start-of-cycle [`VectorScanSnapshot`]. The
+    /// GC thread reads `[base, base+len)` via atomic loads (`load_value_atomic`).
+    ///
+    /// The base pointer is the backing's contiguous `TaggedValue` array — the `Vec`'s
+    /// heap buffer for `Owned`, the immutable mapped span for `Mapped`. It stays
+    /// valid for the whole cycle because: a `Mapped` backing addresses the immutable
+    /// pdump image; an `Owned` backing is retired (kept alive to join) the instant a
+    /// mutation would reallocate/replace it (clone-on-write in `with_vector_data_mut`).
+    #[inline]
+    pub(crate) fn scan_entry(&self) -> VectorScanEntry {
+        match self.storage {
+            LispValueVecStorage::Owned(ref items) => VectorScanEntry {
+                base: items.as_ptr(),
+                len: items.len(),
+                is_mapped: false,
+            },
+            LispValueVecStorage::Mapped { ptr, len } => VectorScanEntry {
+                base: ptr,
+                len,
+                is_mapped: true,
+            },
+        }
+    }
+
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN clone-on-write: whether this backing is
+    /// currently `Owned`. Only `Owned` backings need cloning before a concurrent
+    /// mutation (a `Mapped` backing reads the immutable dump; `ensure_owned` promotes
+    /// it to a fresh `Owned` the GC's snapshot never points at, so no clone needed).
+    #[inline]
+    pub(crate) fn is_owned(&self) -> bool {
+        matches!(self.storage, LispValueVecStorage::Owned(_))
+    }
+
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN clone-on-write: replace this `Owned`
+    /// backing's `Vec` with a clone and return the ORIGINAL `Vec` so the caller can
+    /// retire it (keep it alive + immutable until the GC thread joins). The GC's
+    /// snapshot pointer still addresses the returned original; subsequent mutations
+    /// touch the fresh clone. Must only be called when `is_owned()` is true.
+    #[inline]
+    pub(crate) fn clone_owned_backing(&mut self) -> Vec<TaggedValue> {
+        match self.storage {
+            LispValueVecStorage::Owned(ref mut items) => {
+                let clone = items.clone();
+                std::mem::replace(items, clone)
+            }
+            LispValueVecStorage::Mapped { .. } => {
+                unreachable!("clone_owned_backing called on a mapped vector backing")
+            }
+        }
+    }
+}
+
+/// One entry of a [`VectorScanSnapshot`]: a vector backing's contiguous slot array
+/// captured at the world-stopped start handshake. `base`/`len` delimit the slots the
+/// GC thread reads via [`load_value_atomic`]; `is_mapped` records whether the backing
+/// was `Mapped` (immutable pdump span) or `Owned` (a Rust `Vec` buffer kept alive +
+/// immutable for the cycle by the clone-on-write retire path). The scan reads both
+/// kinds identically (both are contiguous `TaggedValue` arrays).
+pub(crate) struct VectorScanEntry {
+    pub(crate) base: *const TaggedValue,
+    pub(crate) len: usize,
+    pub(crate) is_mapped: bool,
+}
+
+/// Start-of-cycle snapshot of every OWNED/Mapped vector backing for the Stage 2 Tier
+/// B CONCURRENT VECTOR SCAN. Captured on the heap thread inside
+/// `launch_concurrent_mark` (vectors are heap-side, unlike the Context-side obarray):
+/// each entry holds a backing's base ptr + len + kind. The GC thread walks each
+/// entry's `[0, len)` ONCE per cycle via atomic loads, feeding heap-object children
+/// into the gray worklist (conses) / deferred list (non-cons) exactly like the
+/// gray-drain cons branch. Mirrors [`ObarrayScanSnapshot`].
+///
+/// Pointer validity for the whole cycle: a `Mapped` entry addresses the immutable
+/// pdump image; an `Owned` entry addresses a `Vec` buffer that the mutator's
+/// clone-on-write hook (`with_vector_data_mut`) retires — keeping the original
+/// pointer's buffer alive + immutable — on the owner's first bulk mutation this cycle,
+/// before any realloc/replace. Vectors allocated mid-cycle are absent (allocate-black).
+pub(crate) struct VectorScanSnapshot {
+    entries: Vec<VectorScanEntry>,
+}
+
+// Safety: the snapshot holds raw base pointers into vector backings the heap keeps
+// alive for the whole GC cycle (Mapped = immutable dump; Owned = retired-on-write,
+// so the snapshot pointer always addresses a live, immutable buffer). The GC thread
+// only READS through them via relaxed atomic loads, coordinated with the single
+// mutator by the retire-before-replace clone-on-write hook, so handing the snapshot
+// to the GC thread is sound.
+unsafe impl Send for VectorScanSnapshot {}
+
+impl VectorScanSnapshot {
+    /// Build an empty snapshot; entries are pushed during the world-stopped capture.
+    #[inline]
+    pub(crate) fn with_capacity(cap: usize) -> Self {
+        Self {
+            entries: Vec::with_capacity(cap),
+        }
+    }
+
+    /// Append one captured vector-backing entry.
+    #[inline]
+    pub(crate) fn push(&mut self, entry: VectorScanEntry) {
+        self.entries.push(entry);
+    }
+
+    /// Number of captured vector backings (diagnostic).
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Scan every snapshotted vector backing ONCE, on the GC thread, reading each
+    /// slot via an atomic load and invoking `push` for each heap-object child. The
+    /// caller routes each pushed child to the gray worklist (conses) or the deferred
+    /// list (non-cons), exactly like the gray-drain cons branch. Both Owned and
+    /// Mapped entries are contiguous `TaggedValue` arrays, read identically.
+    ///
+    /// # Safety
+    /// Must run on the GC thread for a snapshot captured at the world-stopped start
+    /// handshake of the CURRENTLY-RUNNING concurrent mark; each entry's `base`/`len`
+    /// must still address a live, immutable backing (guaranteed: Mapped = immutable
+    /// dump; Owned = retired-before-replace by `with_vector_data_mut`).
+    pub(crate) unsafe fn scan(&self, mut push: impl FnMut(TaggedValue)) {
+        for entry in &self.entries {
+            for i in 0..entry.len {
+                // Safety: `base` addresses a contiguous `[TaggedValue; len]` backing
+                // kept alive + immutable for the cycle; `i < len` is in bounds. The
+                // read is a relaxed atomic load (pairs with the mutator's atomic slot
+                // stores on the live, non-retired backing — never this retired one).
+                let slot = unsafe { &*entry.base.add(i) };
+                let child = load_value_atomic(slot);
+                if child.is_heap_object() {
+                    push(child);
+                }
+            }
+        }
+    }
 }
 
 /// Atomic (relaxed) load of a single `TaggedValue` slot in place — for GC reads

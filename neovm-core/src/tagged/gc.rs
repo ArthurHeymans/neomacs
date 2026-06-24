@@ -205,6 +205,13 @@ struct ConcurrentMarkJob {
     /// `deferred` (non-cons) like the gray-drain cons branch. `None` (flag off) =>
     /// no scan, behaviour-neutral; the start seed walked the symbol cells instead.
     obarray: Option<crate::emacs_core::symbol::ObarrayScanSnapshot>,
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN: a start-captured snapshot of every
+    /// OWNED/Mapped vector backing (base ptr + len). When `Some`, the GC thread
+    /// traces these backings ONCE per cycle, feeding each slot's heap children into
+    /// `gray` (conses) / `deferred` (non-cons) like the gray-drain cons branch, so
+    /// vectors are marked concurrently instead of deferred to the STW termination.
+    /// `None` (flag off) => no scan, behaviour-neutral; vectors stay deferred.
+    vectors: Option<crate::tagged::header::VectorScanSnapshot>,
 }
 
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
@@ -283,6 +290,9 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     // feeds children into `gray` (conses) / `deferred` (non-cons) exactly like the
     // cons-drain branch below, then the outer loop re-drains to a fixpoint.
     let mut obarray_scanned = false;
+    // Stage 2 Tier B CONCURRENT VECTOR SCAN: same single-execution guard for the
+    // vector-backing scan below.
+    let mut vectors_scanned = false;
     loop {
         // Drain the local gray worklist (GC-thread-owned; no sharing).
         while let Some(val) = job.gray.pop() {
@@ -329,6 +339,35 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                 // Safety: `snap` was captured at this cycle's world-stopped start
                 // handshake; its chunk + seq pointers address the live, non-moving
                 // obarray storage, and we are on the GC thread.
+                unsafe {
+                    snap.scan(|child| {
+                        if child.is_cons() {
+                            job.gray.push(child);
+                        } else {
+                            job.deferred.lock().unwrap().push(child);
+                        }
+                    });
+                }
+                // New children were pushed; loop back to drain them before deciding
+                // we are done.
+                continue;
+            }
+        }
+        // Stage 2 Tier B CONCURRENT VECTOR SCAN (once per cycle): after the obarray
+        // scan, trace the snapshotted vector backings, routing each heap child to gray
+        // (conses) / deferred (non-cons) just like the cons-drain branch. We move the
+        // snapshot out of `job` (`take`) so the scan closure can borrow the other
+        // `job` fields without a borrow conflict; once scanned it stays `None`, so the
+        // `vectors_scanned` guard + the empty `job.vectors` both ensure single
+        // execution. Pushing into `gray` means the outer loop re-drains the backings'
+        // transitive children to a fixpoint. Mirrors the obarray block above.
+        if !vectors_scanned {
+            vectors_scanned = true;
+            if let Some(snap) = job.vectors.take() {
+                // Safety: `snap` was captured at this cycle's world-stopped start
+                // handshake; each entry's base/len addresses a live, immutable backing
+                // (Mapped dump or retired-on-write Owned buffer), and we are on the GC
+                // thread.
                 unsafe {
                     snap.scan(|child| {
                         if child.is_cons() {
@@ -495,6 +534,20 @@ pub(crate) fn concurrent_mark_active() -> bool {
 pub(crate) fn gc_concurrent_obarray_on() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_OBARRAY").as_deref() != Ok("0"))
+}
+
+/// Stage 2 Tier B CONCURRENT VECTOR SCAN feature flag (env `NEOVM_GC_CONCURRENT_VECTOR`).
+/// Default OFF (mirrors Stage 1b but opt-in until the flag-on gate + race test are
+/// run): when on, the start handshake snapshots every OWNED/Mapped vector backing
+/// (base ptr + len) and the GC thread traces those backings concurrently instead of
+/// deferring them to the STW termination. A clone-on-write hook in
+/// `with_vector_data_mut` keeps each snapshotted Owned backing immutable + alive for
+/// the cycle (retired, freed at join). Set the env to `1` to enable. Read once via
+/// `OnceLock`. Flag OFF is byte-identical to current behaviour (no snapshot, no
+/// clone-on-write, no concurrent vector scan — vectors stay deferred as before).
+pub(crate) fn gc_concurrent_vectors_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_VECTOR").as_deref() == Ok("1"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1133,6 +1186,20 @@ pub struct TaggedHeap {
     /// (interned mid-cycle, never scanned by the GC thread). `None` when the flag
     /// is off.
     concurrent_obarray_start_slots: Option<usize>,
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN: retired vector backings — the ORIGINAL
+    /// `Vec` of each OWNED vector whose backing was clone-on-write replaced during
+    /// this concurrent mark (`with_vector_data_mut`). The GC thread's snapshot still
+    /// points at these immutable buffers, so they must stay alive until the GC thread
+    /// joins. Drained + dropped in `join_concurrent_mark` (the GC thread has provably
+    /// exited — the only safe free point). Empty when the flag is off.
+    retired_vector_buffers: Vec<Vec<TaggedValue>>,
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN: per-cycle clone-on-write dedup set,
+    /// keyed on each vector owner's `TaggedValue` bits. On an owner's FIRST bulk
+    /// mutation this cycle we clone+retire its OWNED backing once; later mutations of
+    /// the same owner skip the clone (they touch the already-cloned live backing the
+    /// GC's snapshot does NOT point at). Cleared at every mark start
+    /// (`concurrent_begin`/`begin_collection`). Empty when the flag is off.
+    concurrent_cloned_vectors: FxHashSet<usize>,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
     // is deferred and drained in bounded slices at later safe points, so the
@@ -1209,6 +1276,8 @@ impl TaggedHeap {
             gc_exited: None,
             pending_obarray_scan: None,
             concurrent_obarray_start_slots: None,
+            retired_vector_buffers: Vec::new(),
+            concurrent_cloned_vectors: FxHashSet::default(),
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
@@ -2361,6 +2430,10 @@ impl TaggedHeap {
         // start-of-cycle reachability (a carried-over entry would wrongly suppress
         // the snapshot of an owner whose children differ this cycle).
         self.satb_snapshotted_owners.clear();
+        // Stage 2 Tier B CONCURRENT VECTOR SCAN: the per-cycle clone-on-write dedup
+        // set must start empty so each vector owner is cloned+retired at most once
+        // per cycle (a carried-over entry would wrongly suppress this cycle's clone).
+        self.concurrent_cloned_vectors.clear();
         self.seed_internal_runtime_roots();
         if partitioned {
             // Re-scan dumped/tenured objects mutated to point at young heap
@@ -3541,6 +3614,38 @@ impl TaggedHeap {
         for block in &self.cons_blocks {
             owned.insert(block.base_addr());
         }
+        // Stage 2 Tier B CONCURRENT VECTOR SCAN: when the flag is on, snapshot every
+        // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
+        // cons `owned_bases` snapshot is taken and the roots are seeded), so the GC
+        // thread can trace vectors concurrently instead of deferring them to the STW
+        // termination. Vectors are heap-side, so capture directly here (no eval.rs
+        // seam, unlike the Context-side obarray). `non_cons_object_addrs` holds every
+        // owned non-cons object's `GcHeader` addr; pick out the ones tagged
+        // `VecLikeType::Vector`. Vectors allocated mid-cycle are absent from this set
+        // capture and are covered by allocate-black. `None` when the flag is off
+        // (vectors stay deferred — behaviour-neutral).
+        let vectors = if gc_concurrent_vectors_on() {
+            let mut snap =
+                crate::tagged::header::VectorScanSnapshot::with_capacity(self.non_cons_object_addrs.len());
+            for &addr in &self.non_cons_object_addrs {
+                // Safety: `addr` is an owned non-cons object's live `GcHeader` addr; a
+                // VecLike header begins with its `GcHeader`, so casting to
+                // `*const VecLikeHeader` and reading `type_tag` is valid. Only when the
+                // tag is `Vector` do we cast to `VectorObj` and read its backing.
+                let header = addr as *const VecLikeHeader;
+                let is_vector = unsafe {
+                    (*(addr as *const GcHeader)).kind == HeapObjectKind::VecLike
+                        && (*header).type_tag == VecLikeType::Vector
+                };
+                if is_vector {
+                    let obj = unsafe { &*(header as *const VectorObj) };
+                    snap.push(obj.data.scan_entry());
+                }
+            }
+            Some(snap)
+        } else {
+            None
+        };
         let gray = std::mem::take(&mut self.gray_queue);
         let (exited_tx, exited_rx) = std::sync::mpsc::channel();
         self.gc_done
@@ -3566,6 +3671,9 @@ impl TaggedHeap {
             // (Some only when NEOVM_GC_CONCURRENT_OBARRAY is on). Take it so it is
             // not left dangling for a later cycle.
             obarray: self.pending_obarray_scan.take(),
+            // Stage 2 Tier B: the vector-backing snapshot captured just above (Some
+            // only when NEOVM_GC_CONCURRENT_VECTOR is on).
+            vectors,
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
@@ -3590,6 +3698,14 @@ impl TaggedHeap {
         self.gray_queue.extend(satb);
         let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
         self.gray_queue.extend(deferred);
+        // Stage 2 Tier B CONCURRENT VECTOR SCAN: the GC thread has provably exited its
+        // mark loop (the `rx.recv()` above), so its snapshot pointers into the retired
+        // vector backings are no longer in use — this is the ONLY safe free point.
+        // Drain + drop the retired originals and clear the per-cycle clone-dedup set.
+        // Both are empty when the flag is off (no clone-on-write fired).
+        let retired = std::mem::take(&mut self.retired_vector_buffers);
+        drop(retired);
+        self.concurrent_cloned_vectors.clear();
     }
 
     /// SATB barrier path for concurrent marking: append the owner's current
@@ -3638,6 +3754,44 @@ impl TaggedHeap {
     /// and an extra entry is at worst one cycle of floating garbage.
     fn note_root_overwrite_value(&mut self, pre_image: TaggedValue) {
         self.satb_shared.lock().unwrap().push(pre_image);
+    }
+
+    /// Stage 2 Tier B CONCURRENT VECTOR SCAN clone-on-write hook. Called from
+    /// `with_vector_data_mut` BEFORE a vector's OWNED backing is bulk-mutated, while a
+    /// concurrent mark is active and the flag is on. On the owner's FIRST such
+    /// mutation this cycle, if the backing is currently OWNED, replace it with a clone
+    /// and RETIRE the original (kept alive to join) so the GC thread's start-of-cycle
+    /// snapshot pointer keeps addressing an immutable, live buffer; the closure then
+    /// mutates the clone. Idempotent per owner per cycle (dedup set), and a no-op when
+    /// the backing is MAPPED (the snapshot points at the immutable dump; `ensure_owned`
+    /// will promote it to a fresh OWNED the snapshot never reads, so no clone needed).
+    ///
+    /// Reachability of the pre-image children is handled separately by the
+    /// `note_heap_write(VectorBulk)` SATB barrier the caller fires first; this hook
+    /// only preserves the snapshot pointer's buffer for the concurrent READ.
+    ///
+    /// Safety: `owner` must be a live `VecLikeType::Vector` value on this heap.
+    pub(crate) fn concurrent_clone_on_write_vector(&mut self, owner: TaggedValue) {
+        // First mutation of this owner this cycle? `insert` returns false if already
+        // present, so later mutations of the same owner skip the clone (they touch the
+        // already-cloned live backing the snapshot does not point at).
+        if !self.concurrent_cloned_vectors.insert(owner.bits()) {
+            return;
+        }
+        let Some(header) = owner.as_veclike_ptr() else {
+            return;
+        };
+        let obj = unsafe { &mut *(header as *mut VectorObj) };
+        // Only OWNED backings need cloning: a MAPPED backing reads the immutable dump
+        // span the snapshot captured; `ensure_owned` (run by the caller next) promotes
+        // it to a brand-new OWNED buffer the snapshot never addresses.
+        if !obj.data.is_owned() {
+            return;
+        }
+        // Replace the backing with a clone; retire the original so the GC's snapshot
+        // pointer keeps addressing it (immutable + alive) until the join free point.
+        let original = obj.data.clone_owned_backing();
+        self.retired_vector_buffers.push(original);
     }
 
     // ---------------------------------------------------------------------

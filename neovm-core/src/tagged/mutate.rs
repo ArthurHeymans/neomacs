@@ -47,7 +47,18 @@ pub fn with_vector_data_mut<R>(
     if value.veclike_type()? != VecLikeType::Vector {
         return None;
     }
+    // SATB reachability barrier (pre-image children) — must fire before the mutation.
     note_heap_write(value, HeapWriteKind::VectorBulk);
+    // Stage 2 Tier B CONCURRENT VECTOR SCAN clone-on-write: during a concurrent mark
+    // (flag on), the GC thread holds a start-of-cycle snapshot pointer into this
+    // vector's OWNED backing. Before mutating, clone+retire that backing (once per
+    // owner per cycle) so the snapshot keeps addressing an immutable, live buffer and
+    // the closure below mutates the fresh clone. No-op when the flag is off, outside a
+    // concurrent mark, or for a MAPPED backing (see the heap-side hook). A single
+    // thread-local load gates it, so the off path pays essentially nothing.
+    if super::gc::gc_concurrent_vectors_on() && super::gc::concurrent_mark_active() {
+        super::gc::with_tagged_heap(|heap| heap.concurrent_clone_on_write_vector(value));
+    }
     let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
     Some(f(unsafe { (*ptr).data.ensure_owned() }))
 }
