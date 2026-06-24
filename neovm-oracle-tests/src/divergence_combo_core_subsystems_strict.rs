@@ -3559,3 +3559,38 @@ fn div_core_divergence_surface_call_process_region_eol_encoding() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_file_name_handler_copy_rename_delete_args() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs logs expand-file-name / directory-file-name dispatches before
+    // copy-file, rename-file, and delete-file, and passes full operation arg
+    // lists including optional args normalized to nil.
+    // Neomacs dispatches copy-file/rename-file directly with truncated arg
+    // lists and misses several GNU handler calls before those operations.
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (file-name-handler-alist nil))
+  (letrec ((handler
+            (lambda (op &rest args)
+              (push (list op args) log)
+              (cond
+               ((memq op '(copy-file rename-file delete-file))
+                (list 'handled op))
+               ((eq op 'file-directory-p)
+                nil)
+               (t
+                (let ((inhibit-file-name-handlers
+                       (cons handler inhibit-file-name-handlers))
+                      (inhibit-file-name-operation op))
+                  (apply op args)))))))
+    (setq file-name-handler-alist `(("\\`/h:" . ,handler)))
+    (list (copy-file "/h:/a" "/h:/b" t)
+          (rename-file "/h:/b" "/h:/c" t)
+          (delete-file "/h:/c")
+          (nreverse log))))
+"##,
+    );
+}
