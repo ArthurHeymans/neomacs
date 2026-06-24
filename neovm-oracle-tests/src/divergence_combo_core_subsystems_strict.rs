@@ -2923,3 +2923,24 @@ fn div_core_divergence_surface_encode_coding_string_dos_eol() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_encode_coding_string_mac_unix_eol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 13 98) (97 10 98) (104 105) (97 10 98) (97 13 98))
+    // Neomacs:   OK (nil nil nil (97 10 98) (97 13 98))
+    // encode-coding-string with the bare mac/unix EOL aliases returns empty
+    // output in Neomacs (even for a newline-free string like "hi"), while GNU
+    // applies the correct EOL conversion. The fully-qualified latin-1-unix and
+    // utf-8-mac coding systems work in both, isolating the EOL-only aliases.
+    assert_oracle_parity(
+        r##"
+(list (append (encode-coding-string "a\nb" 'mac) nil)
+      (append (encode-coding-string "a\nb" 'unix) nil)
+      (append (encode-coding-string "hi" 'unix) nil)
+      (append (encode-coding-string "a\nb" 'latin-1-unix) nil)
+      (append (encode-coding-string "a\nb" 'utf-8-mac) nil))
+"##,
+    );
+}
