@@ -18,13 +18,14 @@
 //! [`super::compile::analyze_cfg`] already hands us the block leaders and the
 //! operand-stack depth at every block entry).
 //!
-//! **Phase 4a (this file's current scope)** is the foundation: the IR types and
-//! the bytecode→MIR builder, validated structurally in isolation. It is NOT yet
-//! wired into the live compile pipeline — the baseline JIT is untouched — so it
-//! is behaviour-neutral. Later phases add MIR→CLIF lowering (behaviour-identical
-//! to the baseline first), deopt framestates, guard elimination, unboxing, and
-//! inlining. Handler / `Switch` / `Throw` opcodes are deferred: the builder
-//! bails on them for now (the baseline tier still handles those functions).
+//! **Status:** wired into the live compile pipeline as the optimizing Tier-2.
+//! `super::compile::compile_bytecode_function_inner` builds the MIR for pure
+//! required-only bodies and lowers it via `super::compile::lower_mir_pure`, with
+//! MIR→CLIF lowering, precise deopt framestates, guard elimination, fixnum
+//! unboxing, pure single-block inlining, and cons-escape scalar-replacement all
+//! in place; it falls back to the baseline tier on any bail. Handler / `Switch`
+//! / `Throw` opcodes are deferred: the builder bails on them (the baseline tier
+//! still handles those functions).
 
 use std::collections::HashMap;
 use std::fmt;
@@ -45,9 +46,8 @@ pub struct MirBlockId(pub u32);
 /// The lisp-type lattice attached to every [`MirValue`]. `Unknown` is the
 /// bottom (no information yet), `Any` the top (could be anything). Concrete
 /// types in between let later passes prove a value is a fixnum (drop its guard,
-/// keep it unboxed), a cons (skip the consp guard on `car`), etc. Phase 4a
-/// computes only the trivial facts (constants, type-predicate results); the
-/// real narrowing pass comes later.
+/// keep it unboxed), a cons (skip the consp guard on `car`), etc. — the narrowing
+/// the unboxing + guard-elision passes consume.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LispType {
     /// No information (a fresh block parameter before inference).
@@ -171,7 +171,7 @@ pub enum MirOp {
     Arg(usize),
     /// A compile-time constant from the function's constant pool.
     Const(Value),
-    /// Fixnum-fast-path binary arithmetic (guards added in a later phase).
+    /// Fixnum-fast-path binary arithmetic (guards emitted at CLIF lowering).
     Bin(BinKind, MirValue, MirValue),
     /// Fixnum-fast-path unary arithmetic.
     Unary(UnaryKind, MirValue),
@@ -249,7 +249,7 @@ pub enum MirTerm {
 #[derive(Clone, Debug)]
 pub struct MirBlockData {
     /// The bytecode index this block starts at (its leader) — the anchor for
-    /// deopt framestates in later phases.
+    /// deopt framestates.
     pub bytecode_pc: usize,
     /// Entry operand stack = block parameters (one `MirValue` per slot).
     pub params: Vec<MirValue>,

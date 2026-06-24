@@ -2604,20 +2604,19 @@ fn raw_fixnum_maxmin(
     fb.ins().select(cond, av, bv)
 }
 
-/// **MIR Tier-2, Phase 4b (pure subset).** Lower a [`mir::MirFunction`] to a
-/// [`CompiledLeaf`] by driving CLIF emission from the MIR instead of a bytecode
-/// walk — the first proof that the bytecode→MIR→CLIF pipeline produces runnable
-/// native code. Scoped to the *pure* op subset (arithmetic / comparisons /
-/// type predicates / car-cdr / stack — no calls, cons, eq, or other shim-using
-/// ops; those and precise-deopt framestates come in follow-up increments), so
-/// no vmctx is needed and a failing guard can rerun the interpreter from the
-/// start (sound: a pure body has no side effect before any guard).
+/// **MIR Tier-2 lowering.** Lower a [`mir::MirFunction`] to a [`CompiledLeaf`] by
+/// driving CLIF emission from the MIR instead of a bytecode walk. Wired into
+/// `compile_bytecode_function_inner` as the live optimizing tier. A *pure* body
+/// (arithmetic / comparisons / type predicates / car-cdr / stack — no shim-using
+/// ops) needs no vmctx and reruns the interpreter from the start on a failing
+/// guard (sound: no side effect precedes any guard). A call-bearing body threads
+/// vmctx + the runtime shims and routes every guard to a per-site precise deopt
+/// (see below).
 ///
 /// Uses CLIF **block parameters** as the SSA phis — each MIR block becomes a
 /// CLIF block whose params are its entry operand stack, and terminator edges
-/// pass the live stack as block arguments. Behaviour-neutral: not wired into
-/// the live compile pipeline; validated only by differential tests against the
-/// interpreter.
+/// pass the live stack as block arguments. Validated by differential tests
+/// against the interpreter and the force-deopt gate.
 pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
 

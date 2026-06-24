@@ -3,11 +3,11 @@
 //! design + phased roadmap.
 //!
 //! Gated behind the `jit` cargo feature, which is **default-ON** (`default =
-//! ["jit"]`): the baseline (Tier-1) Cranelift JIT is qualified and shipping. The
-//! bytecode interpreter (`bytecode::Vm`) is always the **Tier 0** engine — the
+//! ["jit"]`): both the baseline (Tier-1) Cranelift JIT and the optimizing
+//! typed-MIR Tier-2 above it are qualified and shipping. The bytecode
+//! interpreter (`bytecode::Vm`) is always the **Tier 0** engine — the
 //! correctness oracle that mirrors GNU Emacs 31.0.90 and the deoptimization
-//! landing pad. It is never removed. (The optimizing speculative Tier-2 on the
-//! typed-SSA MIR is the in-progress frontier; see the modernization plan.)
+//! landing pad. It is never removed.
 //!
 //! Design rule (carried over from the GC work): every dispatch over an
 //! execution tier is an **exhaustive `match`** with no catch-all arm, so adding
@@ -42,10 +42,11 @@ pub mod compile;
 pub mod cache;
 
 /// MIR: typed SSA IR for the optimizing Tier-2 (above the baseline `compile`).
-/// Phase 4a is the foundation only — the IR types + bytecode→MIR builder,
-/// validated in isolation and NOT yet wired into the live compile pipeline, so
-/// the baseline JIT is behaviourally untouched. Only built with the `jit`
-/// feature. See `jit/mir.rs`.
+/// Live: `compile::compile_bytecode_function_inner` builds the MIR for pure
+/// required-only bodies, runs the pure inliner + type/unboxing/guard-elision and
+/// cons-escape passes, and lowers it via `compile::lower_mir_pure`, falling back
+/// to the baseline tier otherwise. Only built with the `jit` feature. See
+/// `jit/mir.rs`.
 #[cfg(feature = "jit")]
 pub mod mir;
 
@@ -54,10 +55,11 @@ pub use cache::try_run_compiled;
 
 /// Which execution tier currently backs a compiled function.
 ///
-/// Only [`Tier::Bytecode`] exists today. Later phases add `Baseline`
-/// (copy-and-patch, `dynasmrt`) and `Optimized` (Cranelift). Do NOT add a
-/// catch-all when matching on this — let the compiler enforce that each new
-/// tier is handled everywhere.
+/// This enum models only the interpreter tier; the compiled tiers — the
+/// baseline Cranelift JIT and the optimizing typed-MIR Tier-2 — live in
+/// `compile.rs` and are selected there, reached via [`Plan::Compiled`]. Do NOT
+/// add a catch-all when matching on this — let the compiler enforce that each
+/// new tier is handled everywhere.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tier {
     /// Tier 0 — interpret the function's bytecode `ops` via `bytecode::Vm`.
@@ -71,11 +73,11 @@ pub enum Tier {
 pub enum Plan {
     /// Run the Tier-0 bytecode interpreter.
     Interpret,
-    /// The function is hot — consult the baseline JIT: compile-on-first-use and
-    /// run native, or fall back to the interpreter on a deopt / non-compilable
-    /// body. See [`cache::try_run_compiled`].
+    /// The function is hot — consult the JIT (the baseline tier or the
+    /// optimizing typed-MIR Tier-2, selected in `compile.rs`): compile-on-first-
+    /// use and run native, or fall back to the interpreter on a deopt /
+    /// non-compilable body. See [`cache::try_run_compiled`].
     Compiled,
-    // Phase 4+: RunOptimized(OptimizedCode),
 }
 
 // ---------------------------------------------------------------------------
