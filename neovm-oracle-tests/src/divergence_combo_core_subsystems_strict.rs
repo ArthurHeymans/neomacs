@@ -2084,3 +2084,81 @@ fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_help_window_return_message_keys() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK "Type C-x 1 to delete the help window, C-M-v to scroll help.\n"
+    // Neomacs:   OK #("Type C-x 1 to delete the help window, ESC C-v to scroll help.\n" ...)
+    assert_oracle_parity(
+        r##"
+(let ((message-log-max t)
+      (help-window-select nil))
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (let ((inhibit-read-only t))
+      (erase-buffer)))
+  (with-help-window "*probe-help-msg*"
+    (princ "help"))
+  (prog1 (with-current-buffer "*Messages*" (buffer-string))
+    (when (get-buffer "*probe-help-msg*")
+      (kill-buffer "*probe-help-msg*"))
+    (delete-other-windows)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_help_window_selected_message_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK "Type q to delete help window, C-v to scroll help.\n"
+    // Neomacs:   OK #("Type q to delete help window, C-v to scroll help.\n" ...)
+    assert_oracle_parity(
+        r##"
+(let ((message-log-max t)
+      (help-window-select t))
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (let ((inhibit-read-only t))
+      (erase-buffer)))
+  (with-help-window "*probe-help-msg2*"
+    (princ "help"))
+  (prog1 (with-current-buffer "*Messages*" (buffer-string))
+    (when (get-buffer "*probe-help-msg2*")
+      (kill-buffer "*probe-help-msg2*"))
+    (delete-other-windows)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_substitute_command_keys_meta_vector() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (... #("Press ‘C-h’ then ‘C-M-v’" ...) [134217750] "C-M-v")
+    // Neomacs:   OK (... #("Press ‘C-h’ then ‘ESC C-v’" ...) [27 22] "ESC C-v")
+    assert_oracle_parity(
+        r##"
+(list (substitute-command-keys "\\[keyboard-quit]")
+      (substitute-command-keys "Press `\\[help-command]' then `\\[scroll-other-window]'")
+      (where-is-internal 'scroll-other-window nil t)
+      (key-description (where-is-internal 'scroll-other-window nil t)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_help_key_description_escape_meta() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("C-M-v" ...) #("C-M-v" ...) #("C-x 1" ...) #("q" ...))
+    // Neomacs:   OK (#("C-M-v" ...) #("ESC C-v" ...) #("C-x 1" ...) #("q" ...))
+    assert_oracle_parity(
+        r##"
+(list (help-key-description (kbd "C-M-v") nil)
+      (help-key-description (kbd "ESC C-v") nil)
+      (help-key-description (kbd "C-x 1") nil)
+      (help-key-description (kbd "q") nil))
+"##,
+    );
+}
