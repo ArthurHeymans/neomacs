@@ -1823,3 +1823,180 @@ fn div_core_divergence_surface_next_previous_buffer_after_bury() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_kill_buffer_live_process_hangup() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal nil #<killed buffer> nil (("hangup\n" signal nil)))
+    // Neomacs:   OK (run (run open listen connect stop) #<killed buffer> nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((buf (get-buffer-create " *probe-proc-killbuf2*"))
+      (log nil))
+  (let ((proc (make-process
+               :name "probe-proc-killbuf2"
+               :buffer buf
+               :command '("/bin/sh" "-c" "read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e
+                                       (process-status p)
+                                       (buffer-live-p (process-buffer p)))
+                                 log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (let (result)
+      (unwind-protect
+          (progn
+            (kill-buffer buf)
+            (let ((i 0))
+              (while (and (process-live-p proc) (< i 20))
+                (accept-process-output proc 0.05)
+                (setq i (1+ i))))
+            (setq result
+                  (list (process-status proc)
+                        (process-live-p proc)
+                        (process-buffer proc)
+                        (marker-buffer (process-mark proc))
+                        (nreverse log))))
+        (when (process-live-p proc) (delete-process proc)))
+      result)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_delete_process_missing_sentinel() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal nil (("killed\n" signal)))
+    // Neomacs:   OK (signal nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((proc (make-process
+               :name "probe-del-sent-clean"
+               :command '("/bin/sh" "-c" "read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e (process-status p)) log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (delete-process proc)
+    (let ((i 0))
+      (while (and (null log) (< i 20))
+        (accept-process-output nil 0.05)
+        (setq i (1+ i))))
+    (list (process-status proc)
+          (process-live-p proc)
+          (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal 2 (("interrupt\n" signal 2)))
+    // Neomacs:   OK (signal 2 nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((proc (make-process
+               :name "probe-interrupt-sent"
+               :command '("/bin/sh" "-c" "trap 'exit 42' INT; read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e
+                                       (process-status p)
+                                       (process-exit-status p))
+                                 log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (interrupt-process proc)
+    (let ((i 0))
+      (while (and (process-live-p proc) (< i 20))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (let ((j 0))
+      (while (and (null log) (< j 20))
+        (accept-process-output proc 0.05)
+        (setq j (1+ j))))
+    (prog1 (list (process-status proc)
+                 (process-exit-status proc)
+                 (nreverse log))
+      (when (process-live-p proc) (delete-process proc)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_kill_process_missing_sentinel() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal 9 (("killed\n" signal 9)))
+    // Neomacs:   OK (signal 9 nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((proc (make-process
+               :name "probe-kill-sent"
+               :command '("/bin/sh" "-c" "read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e
+                                       (process-status p)
+                                       (process-exit-status p))
+                                 log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (kill-process proc)
+    (let ((i 0))
+      (while (and (process-live-p proc) (< i 20))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (let ((j 0))
+      (while (and (null log) (< j 20))
+        (accept-process-output proc 0.05)
+        (setq j (1+ j))))
+    (prog1 (list (process-status proc)
+                 (process-exit-status proc)
+                 (nreverse log))
+      (when (process-live-p proc) (delete-process proc)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_quit_process_sentinel_message() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (signal 3 (("quit (core dumped)\n" signal 3)))
+    // Neomacs:   OK (signal 3 (("quit\n" signal 3)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (let ((proc (make-process
+               :name "probe-quit-sent"
+               :command '("/bin/sh" "-c" "read line")
+               :connection-type 'pipe
+               :sentinel (lambda (p e)
+                           (push (list e
+                                       (process-status p)
+                                       (process-exit-status p))
+                                 log)))))
+    (set-process-query-on-exit-flag proc nil)
+    (quit-process proc)
+    (let ((i 0))
+      (while (and (process-live-p proc) (< i 20))
+        (accept-process-output proc 0.05)
+        (setq i (1+ i))))
+    (let ((j 0))
+      (while (and (null log) (< j 20))
+        (accept-process-output proc 0.05)
+        (setq j (1+ j))))
+    (prog1 (list (process-status proc)
+                 (process-exit-status proc)
+                 (nreverse log))
+      (when (process-live-p proc) (delete-process proc)))))
+"##,
+    );
+}
