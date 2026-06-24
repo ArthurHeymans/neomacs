@@ -2879,3 +2879,25 @@ fn div_core_divergence_surface_insert_and_inherit_full_plist() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_self_insert_command_inherits_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("abcXdef" 0 4 (face bold) 4 7 (face italic)) (face bold))
+    // Neomacs:   OK (#("abcXdef" 0 3 (face bold) 4 7 (face italic)) nil)
+    // self-insert-command inherits text properties from the preceding char in
+    // GNU (X gets `face bold` and the span coalesces); Neomacs inserts X with
+    // no inherited properties, leaving an unpropertized gap.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert (propertize "abc" 'face 'bold))
+  (insert (propertize "def" 'face 'italic))
+  (goto-char 4)
+  (self-insert-command 1 ?X)
+  (list (buffer-string)
+        (text-properties-at 4)))
+"##,
+    );
+}
