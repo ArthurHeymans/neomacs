@@ -981,3 +981,166 @@ fn div_core_divergence_surface_read_only_before_change_hook_count() {
 "##,
     );
 }
+
+#[test]
+fn div_core_file_temp_attributes_and_insert_file_contents_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: temp file creation, file attributes, and insert-file-contents
+    // without retaining volatile absolute temp names in the asserted result.
+    assert_oracle_parity(
+        r##"
+(let* ((dir (make-temp-file "neo-probe" t))
+       (f1 (expand-file-name "a.txt" dir))
+       (f2 (make-temp-file "neo-probe" nil ".txt" "abc\ndef")))
+  (unwind-protect
+      (progn
+        (write-region "hello" nil f1 nil 'silent)
+        (list
+         (file-exists-p f1)
+         (file-readable-p f1)
+         (file-directory-p dir)
+         (nth 7 (file-attributes f1 'integer))
+         (file-name-nondirectory (file-truename f1))
+         (with-temp-buffer
+           (let ((ret (insert-file-contents f2)))
+             (list (string-match-p "\\`neo-probe.*\\.txt\\'" (file-name-nondirectory (car ret)))
+                   (cadr ret)
+                   (buffer-string)
+                   buffer-file-name
+                   (buffer-modified-p))))))
+    (delete-directory dir t)
+    (delete-file f2)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_call_process_environment_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: call-process, shell-command-switch, process-environment, and
+    // getenv binding all agree in batch mode.
+    assert_oracle_parity(
+        r##"
+(let ((process-environment (cons "NEO_PROBE_VAR=xyz" process-environment)))
+  (list
+   (with-temp-buffer
+     (let ((status (call-process shell-file-name nil t nil
+                                 shell-command-switch "printf 'a\\nb'")))
+       (list status (buffer-string))))
+   (with-temp-buffer
+     (let ((status (call-process shell-file-name nil t nil
+                                 shell-command-switch "printf $NEO_PROBE_VAR")))
+       (list status (buffer-string) (getenv "NEO_PROBE_VAR"))))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_register_point_text_and_rectangle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: point registers, text registers, and rectangle registers.
+    assert_oracle_parity(
+        r##"
+(list
+ (with-temp-buffer
+   (insert "abcdef")
+   (goto-char 4)
+   (point-to-register ?a)
+   (copy-to-register ?b 2 5)
+   (list (markerp (get-register ?a))
+         (marker-position (get-register ?a))
+         (get-register ?b)))
+ (with-temp-buffer
+   (insert "aa11\nbb22\ncc33\n")
+   (copy-rectangle-to-register ?r 3 13)
+   (erase-buffer)
+   (insert-register ?r)
+   (list (get-register ?r) (buffer-string))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_timer_absolute_and_idle_shape_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: absolute timer and idle timer shape are stable when the
+    // scheduled time is explicit.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((tm (run-at-time '(0 1 2 345000) nil (lambda () 'never))))
+   (unwind-protect
+       (list (timerp tm) (timer--time tm) (timer--repeat-delay tm))
+     (cancel-timer tm)))
+ (let ((tm (run-with-idle-timer 1000 nil (lambda () 'never))))
+   (unwind-protect
+       (list (timerp tm) (memq tm timer-idle-list) (timer--idle-delay tm))
+     (cancel-timer tm))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_relative_timer_microseconds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: relative run-at-time retains a nonzero microsecond component.
+    // Neomacs:   relative run-at-time reports zero microseconds.
+    assert_oracle_parity(
+        r##"
+(let ((tm (run-at-time 1000 nil (lambda () 'never))))
+  (unwind-protect
+      (let ((tt (timer--time tm)))
+        (list (timerp tm)
+              (integerp (nth 0 tt))
+              (integerp (nth 1 tt))
+              (integerp (nth 2 tt))
+              (not (zerop (nth 3 tt)))
+              (timer--repeat-delay tm)))
+    (cancel-timer tm)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_repeating_timer_microseconds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: repeating run-at-time keeps a nonzero microsecond component.
+    // Neomacs:   repeating run-at-time reports zero microseconds.
+    assert_oracle_parity(
+        r##"
+(let ((tm (run-at-time 10 5 (lambda () 'never))))
+  (unwind-protect
+      (let ((tt (timer--time tm)))
+        (list (timerp tm)
+              (integerp (nth 0 tt))
+              (integerp (nth 1 tt))
+              (integerp (nth 2 tt))
+              (not (zerop (nth 3 tt)))
+              (timer--repeat-delay tm)))
+    (cancel-timer tm)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_message_repetition_coalescing() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil "same [3 times]\n")
+    // Neomacs:   OK (nil "same\nsame\nsame\n")
+    assert_oracle_parity(
+        r##"
+(let ((message-log-max t))
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (let ((inhibit-read-only t))
+      (erase-buffer)))
+  (message "same")
+  (message "same")
+  (message "same")
+  (list (current-message)
+        (with-current-buffer "*Messages*" (buffer-string))))
+"##,
+    );
+}
