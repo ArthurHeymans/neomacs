@@ -18,7 +18,7 @@ Neomacs is a long-term project that takes significant ongoing work to build, tes
 
 > **Note:** Neomacs is in active alpha development. Expect rough edges, breaking changes, and missing features. Contributions and bug reports are very welcome!
 
-> **Fork notice:** Neomacs is a hard fork of GNU Emacs, forked from commit [`705c0e3729`](https://git.savannah.gnu.org/cgit/emacs.git/commit/?id=705c0e3729bf53db9e84ae7c8b932ebc3b2da934). The changes are too invasive to ever be accepted upstream, so we did not preserve the original git history to keep the repository lightweight. If you need the full Emacs git history for reference, open an issue, and we can re-add it.
+> **Fork notice:** Neomacs is a hard fork of GNU Emacs, forked from commit [`705c0e3729`](https://git.savannah.gnu.org/cgit/emacs.git/commit/?id=705c0e3729bf53db9e84ae7c8b932ebc3b2da934). The initial Neomacs source tree was synced up to GNU Emacs commit [`0ee48ac4df2`](https://git.savannah.gnu.org/cgit/emacs.git/commit/?id=0ee48ac4df2), tagged `emacs-31.0.90`. The changes are too invasive to ever be accepted upstream, so we did not preserve the original git history to keep the repository lightweight. If you need the full Emacs git history for reference, open an issue, and we can re-add it.
 
 > **Why a fork, not from scratch?** Neomacs aims for 100% compatibility with official GNU Emacs — every config, package, and workflow should just work. By forking, we keep the original Emacs C code as a reference and test oracle: we can verifying that each Rust rewrite produces identical behavior, ensuring nothing breaks as subsystems are replaced one by one.
 
