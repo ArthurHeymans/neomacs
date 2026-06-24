@@ -596,9 +596,13 @@ fn display_row_prefix_request_tracks_pending_prefix_mode() {
         Some("wrap-default".to_string())
     );
 
+    // The line prefix is now requested unconditionally so the per-row
+    // `line-prefix` TEXT PROPERTY is always consulted (the variable default is
+    // only a fallback); the no-prefix case is gated downstream by
+    // `source_from_values` returning None, not by skipping the request.
     assert_eq!(
         DisplayRowPrefixRequest::initial(false, true),
-        DisplayRowPrefixRequest::None
+        DisplayRowPrefixRequest::Line
     );
 
     request.clear();
@@ -618,11 +622,15 @@ fn display_row_prefix_request_tracks_pending_prefix_mode() {
     );
 
     request.clear();
+    // A transition requests the prefix regardless of the variable default so the
+    // per-row text property is consulted; the no-prefix case is handled by
+    // `source_from_values` returning None, not by skipping the request.
     request.apply_transition_prefix_action(
         false,
         crate::display_row_walk_state::TextRowTransitionPrefixAction::Line,
     );
-    assert!(!request.is_requested());
+    assert!(request.is_requested());
+    assert_eq!(request, DisplayRowPrefixRequest::Line);
 }
 
 #[test]

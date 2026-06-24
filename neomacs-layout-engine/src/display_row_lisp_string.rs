@@ -266,12 +266,12 @@ pub(crate) struct DisplayRowPrefixSource {
 }
 
 impl DisplayRowPrefixRequest {
-    pub(crate) fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
-        if has_prefix && has_line_prefix {
-            Self::Line
-        } else {
-            Self::None
-        }
+    pub(crate) fn initial(_has_prefix: bool, _has_line_prefix: bool) -> Self {
+        // The first visible row is a line start: request the line prefix so its
+        // per-row `line-prefix` TEXT PROPERTY is consulted even when the buffer
+        // sets no `line-prefix` variable (e.g. org-indent virtual indentation).
+        // The text-property read returns None for unprefixed lines (cheap).
+        Self::Line
     }
 
     pub(crate) fn request_line(&mut self) {
@@ -292,12 +292,15 @@ impl DisplayRowPrefixRequest {
 
     pub(crate) fn apply_transition_prefix_action(
         &mut self,
-        has_prefix: bool,
+        _has_prefix: bool,
         action: TextRowTransitionPrefixAction,
     ) {
-        if !has_prefix {
-            return;
-        }
+        // Always request the prefix at a row transition so the per-row
+        // `line-prefix`/`wrap-prefix` TEXT PROPERTY is consulted (GNU checks it
+        // per line). The variable (`_has_prefix`) is only a default; properties
+        // like org-indent's virtual indentation set the property without setting
+        // the variable. The text-property read returns None for unprefixed lines
+        // (cheap) and `source_from_values` falls back to the variable default.
         match action {
             TextRowTransitionPrefixAction::Line => self.request_line(),
             TextRowTransitionPrefixAction::Wrap => self.request_wrap(),
