@@ -542,12 +542,14 @@ pub(crate) fn gc_concurrent_obarray_on() -> bool {
 /// (base ptr + len) and the GC thread traces those backings concurrently instead of
 /// deferring them to the STW termination. A clone-on-write hook in
 /// `with_vector_data_mut` keeps each snapshotted Owned backing immutable + alive for
-/// the cycle (retired, freed at join). Set the env to `1` to enable. Read once via
-/// `OnceLock`. Flag OFF is byte-identical to current behaviour (no snapshot, no
-/// clone-on-write, no concurrent vector scan — vectors stay deferred as before).
+/// the cycle (retired, freed at join). DEFAULT ON; set the env to `0` to disable
+/// (kill switch), restoring the byte-identical pre-Tier-B path (no snapshot, no
+/// clone-on-write — vectors stay deferred to the STW termination). Read once via
+/// `OnceLock`. Validated: full suite + partition-verify on AND off = 7444/7444;
+/// clone-on-write measured rare+tiny (145 events of len 20 across the suite).
 pub(crate) fn gc_concurrent_vectors_on() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_VECTOR").as_deref() == Ok("1"))
+    *ON.get_or_init(|| std::env::var("NEOVM_GC_CONCURRENT_VECTOR").as_deref() != Ok("0"))
 }
 
 // ---------------------------------------------------------------------------
