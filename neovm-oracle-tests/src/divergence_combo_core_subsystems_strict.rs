@@ -1680,3 +1680,146 @@ fn div_core_divergence_surface_recenter_window_end_state() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_set_window_configuration_killed_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (2 (" *probe-ks-a*" "*scratch*"))
+    // Neomacs:   OK (2 (" *probe-ks-a*" nil))   ; leaves a window whose buffer is nil
+    //            and emits a "Selecting deleted buffer" redisplay error.
+    assert_oracle_parity(
+        r##"
+(let ((a (get-buffer-create " *probe-ks-a*"))
+      (b (get-buffer-create " *probe-ks-b*")))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (switch-to-buffer a)
+        (let ((w2 (split-window-below)))
+          (set-window-buffer w2 b)
+          (let ((cfg (current-window-configuration)))
+            (delete-other-windows)
+            (kill-buffer b)
+            (set-window-configuration cfg)
+            (list (count-windows)
+                  (mapcar (lambda (w) (buffer-name (window-buffer w)))
+                          (window-list nil 'nomini))))))
+    (when (buffer-live-p a) (kill-buffer a))
+    (when (buffer-live-p b) (kill-buffer b))
+    (delete-other-windows)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_compare_window_configurations_split_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK nil   ; split + delete leaves a configuration GNU treats as different
+    // Neomacs:   OK t     ; Neomacs treats it as identical to the pre-split configuration
+    assert_oracle_parity(
+        r##"
+(let ((a (get-buffer-create " *probe-cfg-cmp2-a*")))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (switch-to-buffer a)
+        (let ((cfg1 (current-window-configuration))
+              (w2 (split-window-below)))
+          (delete-window w2)
+          (compare-window-configurations cfg1 (current-window-configuration))))
+    (when (buffer-live-p a) (kill-buffer a))
+    (delete-other-windows)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_window_configuration_register_killed_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (2 (" *probe-winreg-a*" "*scratch*"))
+    // Neomacs:   OK (2 (" *probe-winreg-a*" nil))   ; register restore leaves a nil-buffer window
+    //            and emits a "Selecting deleted buffer" redisplay error.
+    assert_oracle_parity(
+        r##"
+(let ((a (get-buffer-create " *probe-winreg-a*"))
+      (b (get-buffer-create " *probe-winreg-b*"))
+      (register-alist nil))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (switch-to-buffer a)
+        (let ((w2 (split-window-below)))
+          (set-window-buffer w2 b)
+          (window-configuration-to-register ?w)
+          (delete-other-windows)
+          (kill-buffer b)
+          (jump-to-register ?w)
+          (list (count-windows)
+                (mapcar (lambda (w) (buffer-name (window-buffer w)))
+                        (window-list nil 'nomini)))))
+    (when (buffer-live-p a) (kill-buffer a))
+    (when (buffer-live-p b) (kill-buffer b))
+    (delete-other-windows)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_frame_buffer_list_after_bury() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((" *probe-frame-buf-a*" "*scratch*") (" *probe-frame-buf-a*" "*scratch*") (" *probe-frame-buf-b*"))
+    // Neomacs:   OK ((" *probe-frame-buf-a*") (" *probe-frame-buf-a*") (" *probe-frame-buf-b*"))
+    assert_oracle_parity(
+        r##"
+(let ((a (get-buffer-create " *probe-frame-buf-a*"))
+      (b (get-buffer-create " *probe-frame-buf-b*")))
+  (unwind-protect
+      (progn
+        (switch-to-buffer a)
+        (switch-to-buffer b)
+        (bury-buffer b)
+        (let ((params (frame-parameters)))
+          (list (mapcar #'buffer-name (frame-parameter nil 'buffer-list))
+                (mapcar #'buffer-name (cdr (assq 'buffer-list params)))
+                (mapcar #'buffer-name (cdr (assq 'buried-buffer-list params))))))
+    (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x)))
+          (list a b))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_next_previous_buffer_after_bury() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("*Messages*" "*scratch*" ("*Messages*") ("*Messages*"))
+    // Neomacs:   OK ("*Messages*" "*scratch*" ("*Messages*" "*scratch*") ("*Messages*"))
+    assert_oracle_parity(
+        r##"
+(let ((a (get-buffer-create " *probe-nextbuf-a*"))
+      (b (get-buffer-create " *probe-nextbuf-b*"))
+      (c (get-buffer-create " *probe-nextbuf-c*")))
+  (unwind-protect
+      (progn
+        (delete-other-windows)
+        (switch-to-buffer a)
+        (switch-to-buffer b)
+        (switch-to-buffer c)
+        (bury-buffer b)
+        (next-buffer)
+        (let ((after-next (buffer-name)))
+          (previous-buffer)
+          (list after-next
+                (buffer-name)
+                (mapcar (lambda (e) (buffer-name (car e)))
+                        (window-prev-buffers))
+                (mapcar #'buffer-name (window-next-buffers)))))
+    (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x)))
+          (list a b c))))
+"##,
+    );
+}
