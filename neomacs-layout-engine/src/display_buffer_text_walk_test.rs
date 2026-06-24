@@ -25,6 +25,8 @@ fn window_params() -> WindowParams {
         wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
+        scroll_conservatively: 0,
+        scroll_margin: 0,
         tab_stop_list: vec![],
         default_fg: 0x00ff_ffff,
         default_bg: 0,

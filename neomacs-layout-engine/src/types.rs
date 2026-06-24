@@ -214,6 +214,16 @@ pub struct WindowParams {
     /// Empty means use fixed-width tab_width stops only.
     pub tab_stop_list: Vec<i32>,
 
+    /// `scroll-conservatively` (buffer-local with global fallback). When point
+    /// jumps more than this many lines off-screen, redisplay RECENTERS point to
+    /// the window middle instead of scrolling minimally (GNU `try_scrolling`
+    /// SCROLLING_FAILED → the `recenter:` label, src/xdisp.c:19360/21108). A
+    /// value above 100 (GNU `SCROLL_LIMIT`) disables recentering entirely.
+    pub scroll_conservatively: i64,
+    /// `scroll-margin`: minimum lines of context kept between point and the top
+    /// or bottom window edge on a minimal scroll (GNU `window_scroll_margin`).
+    pub scroll_margin: i64,
+
     /// Default face foreground/background for this window
     pub default_fg: u32,
     pub default_bg: u32,

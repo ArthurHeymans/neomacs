@@ -1136,6 +1136,11 @@ pub fn window_params_from_neovm_with_font_sizing(
     let wrap_mode = effective_wrap_mode(window, buffer, frame, obarray, hscroll);
     let word_wrap = effective_buffer_bool(buffer, obarray, "word-wrap");
     let tab_width = effective_buffer_int(buffer, obarray, "tab-width", 8) as i32;
+    // GNU `try_scrolling` reads `scroll-conservatively` / `scroll-margin`
+    // (buffer-local with a global fallback) to choose between minimal scrolling
+    // and recentering point when point jumps off-screen (src/xdisp.c).
+    let scroll_conservatively = effective_buffer_int(buffer, obarray, "scroll-conservatively", 0);
+    let scroll_margin = effective_buffer_int(buffer, obarray, "scroll-margin", 0);
 
     // GNU window.c gates chrome reservation through window_wants_*:
     // a mode/header/tab line is shown only for leaf non-minibuffer
@@ -1273,6 +1278,8 @@ pub fn window_params_from_neovm_with_font_sizing(
         wrap_mode,
         word_wrap,
         tab_width,
+        scroll_conservatively,
+        scroll_margin,
         tab_stop_list: buffer_local_list_values(buffer, "tab-stop-list")
             .iter()
             .filter_map(|v| v.as_int().map(|n| n as i32))
