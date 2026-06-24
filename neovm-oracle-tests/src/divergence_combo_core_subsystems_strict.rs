@@ -1479,3 +1479,107 @@ fn div_core_divergence_surface_window_configuration_hook_batch_split() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_overlay_category_modification_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("abXdef" 2 5 ((cat nil 3 3 nil 2 5) (cat t 3 5 0 2 7) (cat nil 4 6 nil 2 7) (cat t 4 4 2 2 5)))
+    // Neomacs:   OK ("abXdef" 2 5 nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((log nil))
+    (put 'probe-cat3 'modification-hooks
+         (list (lambda (o after beg end &optional len)
+                 (push (list 'cat after beg end len
+                             (overlay-start o) (overlay-end o))
+                       log))))
+    (let ((o (make-overlay 2 5)))
+      (overlay-put o 'category 'probe-cat3)
+      (goto-char 3)
+      (insert "XX")
+      (delete-region 4 6)
+      (list (buffer-string)
+            (overlay-start o)
+            (overlay-end o)
+            (nreverse log)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_overlay_category_insert_in_front_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("abXXcdef" 3 3 ((front nil 3 3 nil 3 3) (front t 3 5 0 3 3)))
+    // Neomacs:   OK ("abXXcdef" 3 3 nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((log nil))
+    (put 'probe-cat4 'insert-in-front-hooks
+         (list (lambda (o after beg end &optional len)
+                 (push (list 'front after beg end len
+                             (overlay-start o) (overlay-end o))
+                       log))))
+    (let ((o (make-overlay 3 3 nil t nil)))
+      (overlay-put o 'category 'probe-cat4)
+      (goto-char 3)
+      (insert "XX")
+      (list (buffer-string)
+            (overlay-start o)
+            (overlay-end o)
+            (nreverse log)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_overlay_category_insert_behind_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("abXXcdef" 3 5 ((behind nil 3 3 nil 3 3) (behind t 3 5 0 3 5)))
+    // Neomacs:   OK ("abXXcdef" 3 5 nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((log nil))
+    (put 'probe-cat5 'insert-behind-hooks
+         (list (lambda (o after beg end &optional len)
+                 (push (list 'behind after beg end len
+                             (overlay-start o) (overlay-end o))
+                       log))))
+    (let ((o (make-overlay 3 3 nil nil t)))
+      (overlay-put o 'category 'probe-cat5)
+      (goto-char 3)
+      (insert "XX")
+      (list (buffer-string)
+            (overlay-start o)
+            (overlay-end o)
+            (nreverse log)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_frame_parameters_buffer_list_modeline() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((no-accept-focus) (modeline . t) nil ("*scratch*") nil)
+    // Neomacs:   OK (nil nil (font-parameter) nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((params (frame-parameters (selected-frame))))
+  (list (assq 'no-accept-focus params)
+        (assq 'modeline params)
+        (assq 'font-parameter params)
+        (mapcar (lambda (b) (buffer-name b))
+                (cdr (assq 'buffer-list params)))
+        (cdr (assq 'buried-buffer-list params))))
+"##,
+    );
+}
