@@ -525,3 +525,197 @@ fn div_sp_ignore_comments_disabled_scan_sexps_sees_comment_paren() {
 "##,
     );
 }
+
+#[test]
+fn div_sp_ignore_comments_string_beats_block_comment_syntax() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // The first "/* ... */" appears inside a string and must not be treated as
+    // a comment opener.  Only the later real C block comment is skipped, so the
+    // whole outer list is one sexp.
+    // GNU: 41
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a \"/* not comment ) */\" /* real ) */ b)")
+  (goto-char (point-min))
+  (forward-sexp)
+  (point))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_respects_narrowing_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Comment skipping must operate inside the accessible region only and
+    // preserve GNU's absolute point values while narrowed.
+    // GNU: (8 22 21 21)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "prefix (a /* ) */ b) suffix")
+  (narrow-to-region 8 22)
+  (goto-char (point-min))
+  (list (point-min) (point-max)
+        (progn (forward-sexp) (point))
+        (scan-sexps (point-min) 1)))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_forward_and_backward_multicount_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Multi-count sexp motion repeats the skip logic across line comments in
+    // both directions.  The stray open paren and close paren in comments are
+    // both ignored while counting foo, (bar), and baz as three sexps.
+    // GNU: (34 1)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "foo ; stray (\n(bar) ; stray )\nbaz")
+  (goto-char (point-min))
+  (let ((fwd (progn (forward-sexp 3) (point))))
+    (goto-char (point-max))
+    (let ((back (progn (backward-sexp 3) (point))))
+      (list fwd back))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_motion_from_inside_line_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Starting inside a comment body is a distinct path from starting before
+    // the comment opener.  GNU skips to the next real sexp when moving forward
+    // and back to the previous real sexp when moving backward.
+    // GNU: (14 22)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "(a) ; comment with ( and )\n(b)")
+  (goto-char 8)
+  (let ((fwd (progn (forward-sexp) (point))))
+    (goto-char 23)
+    (let ((back (progn (backward-sexp) (point))))
+      (list fwd back))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_forward_list_down_up_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Exercise list wrappers around scan-lists in one path: forward-list,
+    // backward-list, down-list, forward-sexp with a comment before the nested
+    // list, and up-list from inside the outer list.
+    // GNU: (33 1 2 32 33)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(/* ) */ (inner /* ( */ x) tail)")
+  (goto-char (point-min))
+  (list (progn (forward-list) (point))
+        (progn (backward-list) (point))
+        (progn (down-list) (point))
+        (progn (forward-sexp 2) (point))
+        (progn (up-list) (point))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_scan_lists_depth_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // scan-lists with a nonzero depth takes different exits than scan-sexps.
+    // This locks forward depth exit, backward depth exit, and the unbalanced
+    // depth error payload in the presence of a skipped block comment.
+    // GNU: (20 1 (scan-error "Unbalanced parentheses" 4 22))
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a /* ) */ (b c) d) z")
+  (list (scan-lists 4 1 1)
+        (scan-lists 18 -1 1)
+        (condition-case err
+            (scan-lists 4 1 2)
+          (scan-error (cons 'scan-error (cdr err)))
+          (error (cons (car err) (cdr err)))))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_comment_fence_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Scomment_fence is another comment representation used by syntax tables.
+    // Treat "!" as a fence comment delimiter; the unmatched parens inside the
+    // fenced comment must be ignored while scanning the outer list.
+    // GNU: (nil 31 31)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (let ((st (make-syntax-table)))
+    (with-syntax-table st
+      (modify-syntax-entry ?! "!" st)
+      (setq parse-sexp-ignore-comments t)
+      (insert "(a ! comment with ) and ( ! b)")
+      (goto-char (point-min))
+      (list (forward-sexp) (point) (scan-sexps 1 1)))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_syntax_property_comment_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // The syntax-table text property can dynamically turn a span into a
+    // comment.  This covers the honor-properties path combined with
+    // parse-sexp-ignore-comments and syntax-ppss state reporting.
+    // GNU: (nil 19 (1 1 6 nil nil nil 0 nil nil (1) nil))
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a x not-comment ) b)")
+  (put-text-property 4 17 'syntax-table (string-to-syntax "<"))
+  (put-text-property 17 18 'syntax-table (string-to-syntax ">"))
+  (goto-char (point-min))
+  (condition-case err
+      (list (forward-sexp) (point) (syntax-ppss 12))
+    (scan-error (cons 'scan-error (cdr err)))
+    (error (cons (car err) (cdr err)))))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_ignore_comments_backward_over_strings_and_comments_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Mixed strings and comments in both directions: delimiters embedded in
+    // strings are inert, the real block comment is skipped, and backward sexp
+    // scanning returns to the outer list start.
+    // GNU: (42 1 1)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (c-mode)
+  (setq parse-sexp-ignore-comments t)
+  (insert "(a \"/* not ) */\" /* ) */ (b \"; not (\" c))")
+  (list (scan-sexps 1 1)
+        (scan-sexps (point-max) -1)
+        (progn (goto-char (point-max)) (backward-sexp) (point))))
+"##,
+    );
+}
