@@ -3064,3 +3064,36 @@ fn div_core_divergence_surface_start_process_missing_program_deferred() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_replace_region_contents_function_arg() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("aXYef" "aZZef")
+    // Neomacs:   OK ((err wrong-type-argument) (err wrong-type-argument))
+    // replace-region-contents accepts a function returning the replacement
+    // string/buffer in GNU; Neomacs rejects a callable replacement with
+    // wrong-type-argument (expects a string/buffer/vector directly).
+    assert_oracle_parity(
+        r##"
+(list
+ (with-temp-buffer
+   (insert "abcdef")
+   (condition-case err
+       (progn
+         (replace-region-contents 2 5 (lambda () "XY"))
+         (buffer-string))
+     (error (list 'err (car err)))))
+ (with-temp-buffer
+   (insert "abcdef")
+   (condition-case err
+       (let ((src (generate-new-buffer " *probe-rrc-src*")))
+         (with-current-buffer src (insert "ZZ"))
+         (prog1 (progn
+                  (replace-region-contents 2 5 (lambda () src))
+                  (buffer-string))
+           (kill-buffer src)))
+     (error (list 'err (car err))))))
+"##,
+    );
+}
