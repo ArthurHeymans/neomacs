@@ -3628,3 +3628,33 @@ fn div_core_divergence_surface_insert_file_contents_literally_handler_expand() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_overwrite_mode_self_insert_replaces_chars() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("abXdef" 4 overwrite-mode-textual "abXYef" 5 overwrite-mode-textual)
+    // Neomacs:   OK ("abXcdef" 4 overwrite-mode-textual "abXYcdef" 5 overwrite-mode-textual)
+    // self-insert-command in overwrite-mode should replace the character at
+    // point. GNU replaces `c` with X and `d` with Y; Neomacs inserts X/Y
+    // without deleting the overwritten characters.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (goto-char 3)
+  (overwrite-mode 1)
+  (self-insert-command 1 ?X)
+  (let ((after-first (buffer-string))
+        (point-after-first (point))
+        (mode-after-first overwrite-mode))
+    (self-insert-command 1 ?Y)
+    (list after-first
+          point-after-first
+          mode-after-first
+          (buffer-string)
+          (point)
+          overwrite-mode)))
+"##,
+    );
+}
