@@ -3477,3 +3477,36 @@ fn div_core_divergence_surface_process_send_bare_eol_coding() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_process_filter_bare_eol_decoding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 10 98) (97 10 98) (97 10 98) (97 13 10 98))
+    // Neomacs:   OK ((97 13 10 98) (97 13 98) (97 10 98) (97 13 10 98))
+    // With process input coding set to bare dos/mac, GNU decodes CRLF/CR to LF
+    // before invoking the process filter. Neomacs leaves raw CR bytes for bare
+    // dos/mac, while utf-8-dos and binary behave like GNU.
+    assert_oracle_parity(
+        r##"
+(let ((run
+       (lambda (input-coding payload)
+         (let ((out nil))
+           (let ((proc (make-process
+                        :name "probe-proc-decode"
+                        :command `("/bin/sh" "-c" ,(concat "printf '" payload "'"))
+                        :connection-type 'pipe
+                        :filter (lambda (_ s)
+                                  (setq out (concat out s))))))
+             (set-process-query-on-exit-flag proc nil)
+             (set-process-coding-system proc input-coding 'binary)
+             (while (process-live-p proc)
+               (accept-process-output proc 0.05))
+             (append (or out "") nil))))))
+  (list (funcall run 'dos "a\r\nb")
+        (funcall run 'mac "a\rb")
+        (funcall run 'utf-8-dos "a\r\nb")
+        (funcall run 'binary "a\r\nb")))
+"##,
+    );
+}
