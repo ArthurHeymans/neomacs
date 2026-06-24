@@ -2998,3 +2998,34 @@ fn div_core_divergence_surface_insert_file_contents_unix_keeps_cr() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_missing_program_error_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((file-missing 3 "Doing vfork")
+    //                (file-missing 4 "Searching for program"))
+    // Neomacs:   OK ((file-missing 3 "Searching for program")
+    //                (file-missing 3 "Searching for program"))
+    // For a missing program GNU's make-process error message is "Doing vfork"
+    // (Neomacs uses "Searching for program"), and GNU's call-process error
+    // data has 4 elements (including the errno string) while Neomacs's has
+    // only 3.
+    assert_oracle_parity(
+        r##"
+(let ((make-err
+       (condition-case err
+           (make-process
+            :name "probe-missing-prog"
+            :command '("/nonexistent/neo-probe-xyz")
+            :connection-type 'pipe)
+         (error err)))
+      (call-err
+       (condition-case err
+           (call-process "/nonexistent/neo-probe-xyz" nil nil nil)
+         (error err))))
+  (list (list (car make-err) (length make-err) (nth 1 make-err))
+        (list (car call-err) (length call-err) (nth 1 call-err))))
+"##,
+    );
+}
