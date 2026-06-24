@@ -26,7 +26,7 @@ use crate::display_rendered_row_output_install::{
 };
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_measured_state::MeasuredDisplayRow;
 use crate::display_row_render_state::RenderedDisplayRowMedia;
@@ -251,6 +251,17 @@ impl<'a> TextWindowOutputTarget<'a> {
 
     pub(crate) fn current_row_output(&mut self) -> DisplayRowCurrentRowOutput<'_> {
         DisplayRowCurrentRowOutput::from_output_builder(self.builder())
+    }
+
+    /// Capture the current output row's glyph counts so a later word-wrap break
+    /// can truncate the row back to a word boundary. Returns the default
+    /// (zero-length) checkpoint when no row is open; such a checkpoint is never
+    /// applied (it belongs to an unavailable word-wrap candidate).
+    pub(crate) fn capture_current_row_glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
+        self.output_builder
+            .current_row_for_render()
+            .map(DisplayRowGlyphCheckpoint::capture)
+            .unwrap_or_default()
     }
 
     pub(crate) fn install_resolved_face(

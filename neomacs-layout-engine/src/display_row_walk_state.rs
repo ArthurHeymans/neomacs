@@ -1,4 +1,5 @@
 use crate::coords::lisp_char_pos_to_layout_i64;
+use crate::display_row_builder::DisplayRowGlyphCheckpoint;
 #[cfg(test)]
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -16,6 +17,11 @@ pub(crate) struct WordWrapBreakCandidate {
     display_point_count: usize,
     row_first_display_pos: Option<LispCharPos1>,
     row_last_display_pos: Option<LispCharPos1>,
+    /// Glyph-row checkpoint captured when this candidate was recorded, i.e. the
+    /// row's drawn-glyph counts *before* the candidate (word-start) char was
+    /// pushed. The word-wrap break restores it so the partial word that already
+    /// fit on the current row is rolled off and re-rendered on the next row.
+    glyph_checkpoint: DisplayRowGlyphCheckpoint,
     available: bool,
 }
 
@@ -162,12 +168,14 @@ impl WordWrapBreakCandidate {
         charpos: i64,
         display_point_count: usize,
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
     ) {
         self.byte_idx = byte_idx;
         self.charpos = charpos;
         self.display_point_count = display_point_count;
         self.row_first_display_pos = row_display_positions.0;
         self.row_last_display_pos = row_display_positions.1;
+        self.glyph_checkpoint = glyph_checkpoint;
         self.available = true;
     }
 
@@ -193,6 +201,10 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+
+    pub(crate) fn glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
+        self.glyph_checkpoint
     }
 }
 
@@ -382,6 +394,7 @@ impl WordWrapRenderState {
         charpos: i64,
         display_point_count: usize,
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
     ) {
         if self.can_record_candidate(ch) {
             self.candidate.record(
@@ -389,6 +402,7 @@ impl WordWrapRenderState {
                 charpos,
                 display_point_count,
                 row_display_positions,
+                glyph_checkpoint,
             );
         }
     }

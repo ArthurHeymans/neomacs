@@ -31,7 +31,6 @@ use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{LineWrapMode, WindowParams};
-use crate::window_output::WindowOutputEmitter;
 
 pub(crate) trait DisplaySourceCharAppendContext {
     fn append_source_char_plan_to_text_row(
@@ -365,15 +364,24 @@ impl DisplaySourceStepChar {
     pub(crate) fn record_word_wrap_candidate(
         self,
         word_wrap: &mut WordWrapRenderState,
-        output_emitter: &WindowOutputEmitter,
+        source_render: &TextRowSourceRenderState<'_>,
     ) {
         if word_wrap.can_record_candidate(self.ch()) {
+            // Capture the glyph checkpoint at the SAME moment as the display-point
+            // count, so the word-wrap break truncates the row's drawn glyphs and
+            // its cursor/hit metadata back to the same word boundary. The
+            // candidate char has not yet been pushed to the row here, so this
+            // snapshots everything up to (and including) the char before the
+            // candidate (e.g. the space before `word10`).
+            let glyph_checkpoint = source_render.capture_glyph_checkpoint();
+            let output_emitter = source_render.output_emitter_ref();
             word_wrap.record_candidate(
                 self.ch(),
                 self.start_byte_idx(),
                 self.start_charpos(),
                 output_emitter.display_point_len(),
                 output_emitter.current_row_display_positions(),
+                glyph_checkpoint,
             );
         }
     }

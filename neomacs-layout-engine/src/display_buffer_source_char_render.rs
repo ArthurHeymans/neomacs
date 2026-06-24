@@ -122,7 +122,7 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         let (source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
             source_item.into_render_parts();
         let ch = source_step_char.ch();
-        source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
+        source_step_char.record_word_wrap_candidate(word_wrap, &source_render);
 
         let buffer_source_char = source_step_char.source_char(self.params.nobreak_char_display);
         let prepared_append = append_context.prepare_source_item_for_current_text_row(

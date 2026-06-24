@@ -120,6 +120,34 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.source_consumption.prepend_pending_render_items(items);
     }
 
+    /// Rewind the source consumption + cursor state to a word-wrap break
+    /// candidate so the candidate char (the word boundary) is re-produced on the
+    /// continuation row.
+    ///
+    /// During the overflow attempt the candidate char was already consumed: when
+    /// its text run was split per-character, the remainder of the run was queued
+    /// in `pending_render_items` at a position *after* the candidate, and the
+    /// `BufferTextSourceCursor` advanced past it. The word-wrap break rewinds
+    /// `progress`/`source_position` to the candidate, but without this the next
+    /// source item produced is the stale pending remainder (candidate + 1),
+    /// skipping the candidate char entirely (it stays drawn once on the previous
+    /// row and is never re-rendered on the continuation row).
+    ///
+    /// This mirrors GNU's word-wrap rewind (`it = it_before_word`, RESTORE_IT in
+    /// `display_line`/`move_it_in_display_line_to`), which reseats the whole
+    /// iterator — not just its buffer position — back to the word boundary.
+    /// Clearing the pending queue drops the stale remainder; reseating the cursor
+    /// to the candidate's char position makes the next consumption re-read the
+    /// candidate char from the buffer.
+    pub(crate) fn rewind_source_consumption_to(
+        &mut self,
+        source_position: DisplaySourceTextPosition,
+    ) {
+        self.source_consumption.clear_pending_render_items();
+        self.source_cursor
+            .reset_to(CharPos0::new(source_position.charpos().max(0) as usize));
+    }
+
     fn consume_source_item(
         &mut self,
         mut source_position: DisplaySourceTextPosition,

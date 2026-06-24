@@ -10,7 +10,7 @@ use crate::display_cursor::{
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
+    DisplayRowAppendProgress, DisplayRowGlyphCheckpoint, DisplayRowGlyphSlot, DisplayRowPosition,
 };
 use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -160,6 +160,11 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         let output_row_positions_start = source_render
             .output_emitter()
             .current_row_display_positions();
+        // Snapshot the row's drawn-glyph counts BEFORE this run is appended. The
+        // whole-run word-wrap path records candidates after the append, so each
+        // candidate's glyph boundary is this base plus its `char_offset` text
+        // glyphs (natural runs map one source char to one text glyph).
+        let row_glyph_checkpoint_start = source_render.capture_glyph_checkpoint();
         let source_end_charpos = source_item.source_end_charpos();
         let source_end_byte_idx = source_item.source_end_byte_idx();
         let source_text = source_item.raw_text_run().unwrap_or_default().to_owned();
@@ -193,6 +198,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
             word_wrap,
             output_display_point_start,
             output_row_positions_start,
+            row_glyph_checkpoint_start,
             &append_progress,
         );
         progress.apply_row_position(append_progress.end());
@@ -335,6 +341,7 @@ fn apply_whole_text_run_word_wrap_state(
     word_wrap: &mut WordWrapRenderState,
     output_display_point_start: usize,
     output_row_positions_start: (Option<LispCharPos1>, Option<LispCharPos1>),
+    row_glyph_checkpoint_start: DisplayRowGlyphCheckpoint,
     append_progress: &DisplayRowAppendProgress,
 ) {
     if !word_wrap.is_enabled() {
@@ -353,6 +360,10 @@ fn apply_whole_text_run_word_wrap_state(
                     charpos,
                     output_display_point_start + char_offset,
                     (row_first, previous_charpos),
+                    // The candidate (word start) sits at `char_offset` text
+                    // glyphs into this run, so the boundary's glyph checkpoint is
+                    // the pre-run snapshot advanced by `char_offset`.
+                    row_glyph_checkpoint_start.with_added_text_glyphs(char_offset),
                 );
             }
             first_run_charpos = row_first;

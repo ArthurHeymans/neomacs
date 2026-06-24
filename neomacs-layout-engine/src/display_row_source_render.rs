@@ -16,7 +16,7 @@ use crate::display_row::{
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
 };
 use crate::display_row_append_context::DisplayRowAppendSourceRenderRequest;
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 use crate::display_row_face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
 };
@@ -188,6 +188,24 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
             last.charpos = NO_BUFFER_POSITION_CHARPOS;
         }
         true
+    }
+}
+
+/// Mutation that rolls the current row's drawn glyphs back to a previously
+/// captured `DisplayRowGlyphCheckpoint`. Used by the word-wrap break to drop the
+/// partial-word glyphs that fit on the current row but belong on the next
+/// continuation row. GNU keeps whole words by rewinding its iterator to the word
+/// boundary; we mirror that by truncating the glyph row here while the source
+/// position is rewound to the same boundary.
+struct DisplayRowGlyphCheckpointRestoreMutation {
+    checkpoint: DisplayRowGlyphCheckpoint,
+}
+
+impl DisplayCurrentRowMutation for DisplayRowGlyphCheckpointRestoreMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        self.checkpoint.restore(row);
     }
 }
 
@@ -478,6 +496,10 @@ impl<'a> TextRowOutputRenderState<'a> {
         self.output_emitter
     }
 
+    fn output_emitter_ref(&self) -> &WindowOutputEmitter {
+        self.output_emitter
+    }
+
     fn output_rows(&self) -> &[DisplayRowSnapshot] {
         self.output_emitter.rows()
     }
@@ -527,6 +549,19 @@ impl<'a> TextRowOutputRenderState<'a> {
             self.evaluator.display_host.as_deref(),
             face_ids,
         )
+    }
+
+    /// Capture the current output row's glyph counts for a word-wrap candidate.
+    fn capture_current_row_glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
+        self.output.capture_current_row_glyph_checkpoint()
+    }
+
+    /// Truncate the current output row's drawn glyphs back to `checkpoint`,
+    /// dropping the partial-word glyphs that the word-wrap break rewinds past.
+    fn restore_current_row_glyph_checkpoint(&mut self, checkpoint: DisplayRowGlyphCheckpoint) {
+        self.output
+            .current_row_output()
+            .apply_current_row_mutation(DisplayRowGlyphCheckpointRestoreMutation { checkpoint });
     }
 
     /// Append a trailing `:extend` fill stretch to the current row's TEXT area
@@ -876,6 +911,23 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
         self.output_render.output_emitter()
+    }
+
+    pub(crate) fn output_emitter_ref(&self) -> &WindowOutputEmitter {
+        self.output_render.output_emitter_ref()
+    }
+
+    /// Capture the current row's drawn-glyph counts at a word-wrap candidate so
+    /// the eventual break can roll the partial word off the row.
+    pub(crate) fn capture_glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
+        self.output_render.capture_current_row_glyph_checkpoint()
+    }
+
+    /// Roll the current row's drawn glyphs back to `checkpoint` when the
+    /// word-wrap break rewinds to a word boundary.
+    pub(crate) fn restore_glyph_checkpoint(&mut self, checkpoint: DisplayRowGlyphCheckpoint) {
+        self.output_render
+            .restore_current_row_glyph_checkpoint(checkpoint);
     }
 
     pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {

@@ -14,7 +14,9 @@ use crate::display_row::{
     DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame,
 };
-use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_builder::{
+    DisplayGlyphMeasurer, DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayTabPolicy,
+};
 use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_row_transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
@@ -117,6 +119,7 @@ fn word_wrap_break_candidate_records_rewind_position_and_clears() {
         42,
         3,
         (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+        DisplayRowGlyphCheckpoint::default(),
     );
 
     assert!(candidate.is_available());
@@ -126,6 +129,10 @@ fn word_wrap_break_candidate_records_rewind_position_and_clears() {
     assert_eq!(
         candidate.row_display_positions(),
         (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13)))
+    );
+    assert_eq!(
+        candidate.glyph_checkpoint(),
+        DisplayRowGlyphCheckpoint::default()
     );
 
     candidate.clear();
@@ -145,6 +152,7 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
         42,
         3,
         (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+        DisplayRowGlyphCheckpoint::default(),
     );
 
     assert!(!state.candidate().is_available());
@@ -156,6 +164,7 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
         42,
         3,
         (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+        DisplayRowGlyphCheckpoint::default(),
     );
 
     assert!(state.candidate().is_available());
@@ -168,7 +177,14 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
 
     let mut disabled = WordWrapRenderState::new(false);
     disabled.allow_after_current_char(' ');
-    disabled.record_candidate('a', 1, 2, 3, (None, None));
+    disabled.record_candidate(
+        'a',
+        1,
+        2,
+        3,
+        (None, None),
+        DisplayRowGlyphCheckpoint::default(),
+    );
 
     assert!(!disabled.candidate().is_available());
 }
@@ -180,7 +196,14 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
     hscroll.consume_columns(2);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
-    word_wrap.record_candidate('a', 7, 11, 2, (None, None));
+    word_wrap.record_candidate(
+        'a',
+        7,
+        11,
+        2,
+        (None, None),
+        DisplayRowGlyphCheckpoint::default(),
+    );
     let mut trailing = TrailingWhitespaceRenderState::new(true, 0x00112233);
     trailing.track_rendered_char(
         ' ',
@@ -220,7 +243,14 @@ fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
     hscroll.consume_columns(2);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
-    word_wrap.record_candidate('a', 7, 11, 2, (None, None));
+    word_wrap.record_candidate(
+        'a',
+        7,
+        11,
+        2,
+        (None, None),
+        DisplayRowGlyphCheckpoint::default(),
+    );
     let mut trailing = TrailingWhitespaceRenderState::new(true, 0x00112233);
     trailing.track_rendered_char(
         '\t',
@@ -244,7 +274,14 @@ fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
     assert_eq!(line_numbers.current_line(), 3);
     assert_eq!(hscroll.consumed_columns(), 2);
     assert_eq!(word_wrap.candidate().byte_idx(), 7);
-    word_wrap.record_candidate('b', 9, 13, 4, (None, None));
+    word_wrap.record_candidate(
+        'b',
+        9,
+        13,
+        4,
+        (None, None),
+        DisplayRowGlyphCheckpoint::default(),
+    );
     assert_eq!(word_wrap.candidate().byte_idx(), 7);
     assert_eq!(trailing.start_marker(), DisplayRowStartMarker::Inactive);
 }
@@ -316,7 +353,14 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
 
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
-    word_wrap.record_candidate('a', 7, 11, 2, (Some(LispCharPos1::new(3)), None));
+    word_wrap.record_candidate(
+        'a',
+        7,
+        11,
+        2,
+        (Some(LispCharPos1::new(3)), None),
+        DisplayRowGlyphCheckpoint::default(),
+    );
 
     assert_eq!(
         DisplayRowTextOverflowDecision::for_char(
@@ -2129,6 +2173,88 @@ fn layout_frame_rust_lays_out_word_wrap() {
     let trace = layout_trace_with_buffer_setup(text, 120, 120, setup);
 
     assert!(!trace.matrix_rows.is_empty());
+}
+
+/// Full-pipeline regression for the word-wrap word-splitting bug: with
+/// `word-wrap=t` / `truncate-lines=nil`, GNU keeps whole words across a wrapped
+/// break (`...word02 `|`word03...`), never splitting a word (`...word02 wor`|
+/// `d03...`) or dropping the word-start char (`...word02 `|`d03...`).
+///
+/// The bug had TWO coupled parts and this test catches BOTH:
+///   A. the partial word that fit on the first row was left drawn (leftover
+///      glyphs), and
+///   B. the word-start (candidate) char was already consumed during the
+///      overflow attempt and never re-produced — so the continuation row
+///      started AFTER it, dropping the word prefix.
+/// A first-row-only check catches only (A). This drives a real buffer through
+/// the whole layout pipeline and asserts the CONTINUATION row re-renders
+/// starting at the SAME word-boundary char the first row stopped before, which
+/// only holds when (B) is fixed too (the consumption cursor is rewound).
+#[test]
+fn word_wrap_keeps_words_whole_across_wrapped_rows() {
+    // Equal-length space-separated words: word00 starts at charpos 0, and word
+    // N starts at charpos 7*N (each "wordNN " is 7 chars). Buffer chars are pure
+    // ASCII so charpos == byte index.
+    let text = "word00 word01 word02 word03 word04 word05 word06 word07 word08 word09 word10 word11 word12";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+        buffer.set_buffer_local("word-wrap", Value::T);
+    };
+    let trace = layout_trace_with_buffer_setup(text, 200, 240, setup);
+
+    // The first text glyph (char + its charpos) of each non-mode-line Text row.
+    let row_first_text_glyphs: Vec<(usize, char)> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .filter_map(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .find_map(|glyph| match glyph.kind {
+                    GlyphKindTrace::Char(ch) => Some((glyph.charpos, ch)),
+                    _ => None,
+                })
+        })
+        .collect();
+
+    // The buffer wraps onto multiple rows (200px / 8px-per-char ≈ 24 cols, the
+    // 89-char line needs >=4 rows). Need at least one wrapped continuation row to
+    // exercise the break.
+    assert!(
+        row_first_text_glyphs.len() >= 2,
+        "expected the long line to wrap onto multiple rows, got {row_first_text_glyphs:?}"
+    );
+
+    // Every Text row (the first AND every continuation row) must begin at a WORD
+    // START. Word starts are at charpos 7*N ('w'); a split/dropped word would
+    // begin mid-word (e.g. charpos 22 'r' of word03 after dropping "wor", or
+    // charpos 25 '0' if the whole "word" prefix was dropped). This is the
+    // load-bearing assertion that part B fixes: without the consumption-cursor
+    // rewind the continuation row starts AFTER the candidate char.
+    for (charpos, ch) in &row_first_text_glyphs {
+        assert_eq!(
+            charpos % 7,
+            0,
+            "continuation row starts mid-word at charpos {charpos} (char {ch:?}); \
+             word-wrap split or dropped a word. first-text glyphs per row: {row_first_text_glyphs:?}"
+        );
+        assert_eq!(
+            *ch, 'w',
+            "the word-start char at charpos {charpos} should be 'w' (the 'w' of a 'wordNN'); \
+             got {ch:?} — the candidate char was dropped. rows: {row_first_text_glyphs:?}"
+        );
+    }
+
+    // Pin the EXACT continuation seam: the first wrapped continuation row must
+    // re-render starting at the candidate char 'w' of word03 (charpos 21) — the
+    // same word boundary the first row stopped before. With the bug, this row
+    // instead started at charpos 25 ('0' of "...03"), dropping "word".
+    assert_eq!(
+        row_first_text_glyphs[1],
+        (21, 'w'),
+        "first continuation row must re-render the dropped word-start char (word03 @ charpos 21); \
+         rows: {row_first_text_glyphs:?}"
+    );
 }
 
 // Walk-state coverage guards: these scenarios exercise the typed-source walk

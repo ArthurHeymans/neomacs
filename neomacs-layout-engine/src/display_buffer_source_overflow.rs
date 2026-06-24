@@ -6,6 +6,7 @@
 
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
+use crate::display_row_builder::DisplayRowGlyphCheckpoint;
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowVisibilityLimit,
@@ -208,6 +209,16 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
             } => {
                 let word_wrap_action = BufferSourceWordWrapAction::new(wrap_break);
                 let mut source_position = progress.source_position();
+                // Roll the current row's drawn glyphs back to the word-wrap
+                // candidate (the word boundary) before extending the trailing
+                // background and finishing the row. The chars between the
+                // candidate and the overflow point already fit and were pushed to
+                // the row; without this they would remain drawn, splitting the
+                // word. GNU keeps whole words by rewinding its iterator to the
+                // boundary; this is the glyph-side of that rewind. (The
+                // display-point/hit metadata is rewound to the same boundary by
+                // `apply_before_row_transition` below.)
+                source_render.restore_glyph_checkpoint(word_wrap_action.glyph_checkpoint());
                 {
                     let metrics = context.active_face_metrics;
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
@@ -232,6 +243,17 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     x,
                     context.content_x,
                 );
+                // `apply_before_row_transition` rewound `source_position` (and,
+                // above, the row's drawn glyphs + display points) back to the word
+                // boundary. Rewind the source consumption + cursor state to the
+                // SAME boundary so the candidate char is RE-produced on the
+                // continuation row. Without this the stale pending text-run
+                // remainder (candidate + 1, queued when this run was split
+                // per-char during the overflow attempt) is replayed first,
+                // skipping the candidate char: it stays drawn once on the previous
+                // row (now truncated away by the glyph checkpoint) and never
+                // appears on the continuation row, splitting/dropping the word.
+                source_walk.rewind_source_consumption_to(source_position);
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
@@ -431,6 +453,10 @@ pub(crate) struct BufferSourceWordWrapAction {
 impl BufferSourceWordWrapAction {
     pub(crate) fn new(break_candidate: WordWrapBreakCandidate) -> Self {
         Self { break_candidate }
+    }
+
+    pub(crate) fn glyph_checkpoint(self) -> DisplayRowGlyphCheckpoint {
+        self.break_candidate.glyph_checkpoint()
     }
 
     pub(crate) fn restore_row_output_progress(self, output_emitter: &mut WindowOutputEmitter) {

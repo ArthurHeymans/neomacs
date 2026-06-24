@@ -414,14 +414,14 @@ impl DisplayRowWriteMetrics {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct DisplayRowGlyphCheckpoint {
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct DisplayRowGlyphCheckpoint {
     area_lengths: [usize; 3],
     displays_text: bool,
 }
 
 impl DisplayRowGlyphCheckpoint {
-    fn capture(row: &GlyphRow) -> Self {
+    pub(crate) fn capture(row: &GlyphRow) -> Self {
         Self {
             area_lengths: [
                 row.glyphs[GlyphArea::LeftMargin.index()].len(),
@@ -432,11 +432,26 @@ impl DisplayRowGlyphCheckpoint {
         }
     }
 
-    fn restore(self, row: &mut GlyphRow) {
+    pub(crate) fn restore(self, row: &mut GlyphRow) {
         row.glyphs[GlyphArea::LeftMargin.index()].truncate(self.area_lengths[0]);
         row.glyphs[GlyphArea::Text.index()].truncate(self.area_lengths[1]);
         row.glyphs[GlyphArea::RightMargin.index()].truncate(self.area_lengths[2]);
         row.displays_text = self.displays_text;
+    }
+
+    /// Derive a checkpoint `added` text glyphs further along than `self`. Used by
+    /// the whole-text-run word-wrap path, which records candidates *after* the
+    /// run is appended: the base checkpoint snapshots the row before the run, and
+    /// each candidate's boundary is `base + char_offset` text glyphs (natural
+    /// text runs map one source char to one text glyph). Any added text glyph
+    /// means the row now displays text.
+    pub(crate) fn with_added_text_glyphs(self, added: usize) -> Self {
+        let mut area_lengths = self.area_lengths;
+        area_lengths[GlyphArea::Text.index()] += added;
+        Self {
+            area_lengths,
+            displays_text: self.displays_text || added > 0,
+        }
     }
 }
 

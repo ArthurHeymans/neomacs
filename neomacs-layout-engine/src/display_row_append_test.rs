@@ -41,8 +41,9 @@ use crate::display_row::{
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
-    DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphCheckpoint,
+    DisplayRowGlyphSlot, DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics,
+    DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
@@ -1051,6 +1052,7 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
         4,
         2,
         (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
@@ -2436,18 +2438,36 @@ fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
 
 #[test]
 fn buffer_text_source_step_char_records_word_wrap_candidate() {
-    let context = RowTransitionTestContext::new("source-step-char-word-wrap");
+    let mut context = RowTransitionTestContext::new("source-step-char-word-wrap");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
     let source_char = DisplaySourceStepChar::new('a', 1, 6);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
 
-    source_char.record_word_wrap_candidate(&mut word_wrap, &context.output_emitter);
+    {
+        let source_render = text_row_source_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        source_char.record_word_wrap_candidate(&mut word_wrap, &source_render);
+    }
 
     let candidate = word_wrap.candidate();
     assert!(candidate.is_available());
     assert_eq!(candidate.byte_idx(), 1);
     assert_eq!(candidate.charpos(), 6);
     assert_eq!(candidate.display_point_count(), 0);
+    // The current row is empty here, so the captured glyph checkpoint is the
+    // zero-length default (nothing to roll back).
+    assert_eq!(
+        candidate.glyph_checkpoint(),
+        crate::display_row_builder::DisplayRowGlyphCheckpoint::default()
+    );
 }
 
 #[test]
@@ -3159,6 +3179,7 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
         12,
         3,
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     let action = BufferSourceWordWrapAction::new(break_candidate);
     let mut position = DisplaySourceTextPosition::new(20, 30);
@@ -3186,6 +3207,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         12,
         3,
         (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     let action = BufferSourceWordWrapAction::new(break_candidate);
     let mut position = DisplaySourceTextPosition::new(20, 30);
@@ -3226,6 +3248,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         4,
         2,
         (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
@@ -3268,6 +3291,94 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         trailing_whitespace.start_marker(),
         DisplayRowStartMarker::Inactive
     );
+}
+
+#[test]
+fn word_wrap_break_glyph_checkpoint_rolls_partial_word_off_first_row() {
+    // GUI bug repro: with word-wrap on, the chars between the last word boundary
+    // and the overflow point (e.g. the `wo` of `word10`) already fit and were
+    // pushed to the current row's glyph buffer. The word-wrap break must roll
+    // those partial-word glyphs back to the boundary so GNU's "keep whole words"
+    // behavior holds. This exercises the capture (at the boundary) /restore (at
+    // the break) round-trip through `source_render` on a real builder row.
+    let mut context = RowTransitionTestContext::new("word-wrap-glyph-checkpoint");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
+
+    // Draw the first full word and its trailing space onto the row.
+    for (offset, ch) in "word09 ".chars().enumerate() {
+        write_char_to_current_row_with_width(&mut context.builder, ch, 0, offset, 8.0);
+    }
+
+    // At the word boundary (start of the next word `word10`), word-wrap records
+    // a candidate. Capture the glyph checkpoint at that exact moment, BEFORE the
+    // candidate char is drawn.
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    let break_candidate = {
+        let source_render = text_row_source_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        DisplaySourceStepChar::new('w', 7, 11)
+            .record_word_wrap_candidate(&mut word_wrap, &source_render);
+        word_wrap.candidate()
+    };
+    assert!(break_candidate.is_available());
+
+    // The checkpoint must point at the boundary: 7 text glyphs (`word09 `) drawn.
+    {
+        let row = context.builder.current_row_for_test().expect("current row");
+        assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 7);
+    }
+
+    // Now the partial next word (`wo` of `word10`) fits and gets drawn before the
+    // overflow is detected.
+    for (offset, ch) in "wo".chars().enumerate() {
+        write_char_to_current_row_with_width(&mut context.builder, ch, 0, 7 + offset, 8.0);
+    }
+    {
+        let row = context.builder.current_row_for_test().expect("current row");
+        assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 9);
+    }
+
+    // The word-wrap break restores the captured glyph checkpoint, rolling the
+    // partial word off the first row.
+    let action = BufferSourceWordWrapAction::new(break_candidate);
+    {
+        let mut source_render = text_row_source_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        source_render.restore_glyph_checkpoint(action.glyph_checkpoint());
+    }
+
+    // The first row's TEXT glyphs now end at the word boundary: exactly
+    // `word09 ` with no partial word.
+    let row = context.builder.current_row_for_test().expect("current row");
+    let text = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(text.len(), 7);
+    let drawn: String = text
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawn, "word09 ");
+    // The last drawn text glyph is the trailing space (the boundary), not part
+    // of `word10`.
+    assert!(matches!(
+        text.last().expect("last text glyph").glyph_type,
+        GlyphType::Char { ch: ' ' }
+    ));
 }
 
 #[test]
@@ -3703,6 +3814,7 @@ fn display_row_transition_render_state_applies_overflow_wrap_policy() {
         4,
         2,
         (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     let break_candidate = word_wrap.candidate();
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -6249,6 +6361,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         0,
         2,
         (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+        DisplayRowGlyphCheckpoint::default(),
     );
     assert!(matches!(
         prepared_append.overflow_action('a', 4.0, LineWrapMode::Wrap, word_wrap),
