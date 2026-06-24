@@ -1583,3 +1583,100 @@ fn div_core_divergence_surface_frame_parameters_buffer_list_modeline() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_text_category_modification_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("abXdef" 1 2 (category probe-text-cat3) 3 4 (category probe-text-cat3)) ((4 6)))
+    // Neomacs:   OK (#("abXdef" 1 2 (category probe-text-cat3) 3 4 (category probe-text-cat3)) nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((log nil))
+    (put 'probe-text-cat3 'modification-hooks
+         (list (lambda (&rest args) (push args log))))
+    (put-text-property 2 5 'category 'probe-text-cat3)
+    (goto-char 3)
+    (insert "XX")
+    (delete-region 4 6)
+    (list (buffer-string) (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_window_scroll_error_and_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((err beginning-of-buffer 13 13 201 50) (ok 201 145 201))
+    // Neomacs:   OK ((err end-of-buffer 1 1 93 50) (ok 189 189 201))
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((b (get-buffer-create " *probe-win-scroll*")))
+   (unwind-protect
+       (progn
+         (with-current-buffer b
+           (erase-buffer)
+           (dotimes (i 50) (insert (format "l%02d\n" i))))
+         (delete-other-windows)
+         (switch-to-buffer b)
+         (goto-char (point-min))
+         (condition-case err
+             (progn
+               (scroll-up 3)
+               (let ((s1 (window-start))
+                     (p1 (point)))
+                 (scroll-down 1)
+                 (list 'ok s1 p1 (window-start) (point))))
+           (error (list 'err
+                        (car err)
+                        (point)
+                        (window-start)
+                        (window-end nil t)
+                        (count-lines (point-min) (point-max))))))
+     (when (buffer-live-p b) (kill-buffer b))))
+ (let ((b (get-buffer-create " *probe-win-scroll2*")))
+   (unwind-protect
+       (progn
+         (with-current-buffer b
+           (erase-buffer)
+           (dotimes (i 50) (insert (format "l%02d\n" i))))
+         (delete-other-windows)
+         (switch-to-buffer b)
+         (goto-char (point-max))
+         (condition-case err
+             (progn
+               (scroll-down 3)
+               (list 'ok (point) (window-start) (window-end nil t)))
+           (error (list 'err (car err) (point) (window-start) (window-end nil t)))))
+     (when (buffer-live-p b) (kill-buffer b)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_recenter_window_end_state() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (80 57 201)
+    // Neomacs:   OK (80 57 149)
+    assert_oracle_parity(
+        r##"
+(let ((b (get-buffer-create " *probe-recenter*")))
+  (unwind-protect
+      (progn
+        (with-current-buffer b
+          (erase-buffer)
+          (dotimes (i 50) (insert (format "l%02d\n" i))))
+        (delete-other-windows)
+        (switch-to-buffer b)
+        (goto-char 80)
+        (recenter 5)
+        (list (point) (window-start) (window-end nil t)))
+    (when (buffer-live-p b) (kill-buffer b))))
+"##,
+    );
+}
