@@ -2257,3 +2257,261 @@ fn div_core_divergence_surface_substitute_command_keys_escape_meta() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_file_name_handler_operation_args_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: logs expand-file-name before handled insert-file-contents,
+    // write-region, and directory-files, and passes full GNU operation args.
+    // Neomacs:   skips several expand-file-name handler dispatches and passes
+    // truncated insert-file-contents/write-region/directory-files arg lists.
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (file-name-handler-alist nil))
+  (letrec ((handler
+            (lambda (op &rest args)
+              (push (list op args) log)
+              (cond
+               ((eq op 'file-exists-p) 'exists)
+               ((eq op 'insert-file-contents)
+                (insert "HANDLED")
+                (list (car args) 7))
+               ((eq op 'write-region)
+                (push (list 'write-data (nth 0 args) (nth 1 args) (nth 2 args))
+                      log)
+                nil)
+               ((eq op 'directory-files)
+                '("." ".." "alpha"))
+               (t
+                (let ((inhibit-file-name-handlers
+                       (cons handler inhibit-file-name-handlers))
+                      (inhibit-file-name-operation op))
+                  (apply op args)))))))
+    (setq file-name-handler-alist `(("\\`/probe:" . ,handler)))
+    (list (file-exists-p "/probe:/x")
+          (with-temp-buffer
+            (insert-file-contents "/probe:/x")
+            (buffer-string))
+          (with-temp-buffer
+            (insert "abc")
+            (write-region 1 3 "/probe:/out" nil 'silent))
+          (directory-files "/probe:/dir" nil "a" t)
+          (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_thread_join_error_delivery() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil nil (arith-error "bad"))
+    // Neomacs:   OK ((join-error arith-error ("bad")) nil (arith-error "bad"))
+    assert_oracle_parity(
+        r##"
+(let ((th (make-thread
+           (lambda () (signal 'arith-error '("bad")))
+           "probe-thread-error")))
+  (let ((join-result
+         (condition-case err
+             (thread-join th)
+           (error (list 'join-error (car err) (cdr err))))))
+    (list join-result
+          (thread-live-p th)
+          (thread-last-error th))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_network_client_open_delete_sentinels() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (listen closed ((server-sentinel "open from 127.0.0.1\n" open)
+    //                               (client-sentinel "deleted\n" closed)))
+    // Neomacs:   OK (listen closed ((client-sentinel "open\n" open)
+    //                               (server-sentinel "open from 127.0.0.1\n" open)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      server
+      client)
+  (unwind-protect
+      (progn
+        (setq server
+              (make-network-process
+               :name "probe-net-sentinel-server"
+               :server t
+               :host 'local
+               :service t
+               :noquery t
+               :sentinel (lambda (p e)
+                           (push (list 'server-sentinel
+                                       e
+                                       (process-status p))
+                                 log))))
+        (setq client
+              (make-network-process
+               :name "probe-net-sentinel-client"
+               :host 'local
+               :service (process-contact server :service)
+               :noquery t
+               :sentinel (lambda (p e)
+                           (push (list 'client-sentinel
+                                       e
+                                       (process-status p))
+                                 log))))
+        (let ((i 0))
+          (while (and (< i 10) (null log))
+            (accept-process-output nil 0.05)
+            (setq i (1+ i))))
+        (delete-process client)
+        (let ((i 0))
+          (while (and (< i 20) (< (length log) 2))
+            (accept-process-output nil 0.05)
+            (setq i (1+ i))))
+        (list (process-status server)
+              (process-status client)
+              (nreverse log)))
+    (when (processp client) (delete-process client))
+    (when (processp server) (delete-process server))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_load_history_defvar_recording() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: loaded file entry records (provide . feature),
+    //            (defun . function), and the defvar symbol.
+    // Neomacs:   loaded file entry records provide/defun but omits defvar.
+    assert_oracle_parity(
+        r##"
+(let* ((contents
+        ";;; -*- lexical-binding: t -*-
+(provide 'probe-load-history-feature)
+(defun probe-load-history-fn () 42)
+(defvar probe-load-history-var 9)
+")
+       (file (make-temp-file "neo-load-history" nil ".el" contents))
+       (load-history nil))
+  (unwind-protect
+      (progn
+        (load file nil t nil t)
+        (let ((entry (cdr (assoc file load-history))))
+          (list (featurep 'probe-load-history-feature)
+                (probe-load-history-fn)
+                probe-load-history-var
+                entry
+                (memq 'probe-load-history-var entry))))
+    (when (get-file-buffer file)
+      (kill-buffer (get-file-buffer file)))
+    (delete-file file)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_case_table_search_and_conversion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (120 121 "xAx" "xay" 0 0 2 121 121)
+    // Neomacs:   OK (88 121 "XAY" "xay" 0 0 4 121 121)
+    assert_oracle_parity(
+        r##"
+(let ((table (copy-case-table (standard-case-table))))
+  (set-case-syntax-pair ?x ?y table)
+  (with-temp-buffer
+    (set-case-table table)
+    (insert "x y X Y")
+    (let ((case-fold-search t))
+      (list (upcase ?x)
+            (downcase ?y)
+            (upcase "xay")
+            (downcase "XAY")
+            (string-match-p "x" "y")
+            (string-match-p "y" "x")
+            (progn
+              (goto-char 1)
+              (search-forward "y" nil t))
+            (aref (current-case-table) ?x)
+            (aref (current-case-table) ?y)))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_visited_file_modtime_set_clear_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (((1 2 3 4000) nil) 0 t nil)
+    // Neomacs:   OK (((0 1 0 0) nil) (0 1 0 0) nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((file (make-temp-file "neo-visit-explicit" nil ".txt" "abc")))
+  (unwind-protect
+      (let ((buf (find-file-noselect file)))
+        (with-current-buffer buf
+          (set-visited-file-modtime '(1 2 3 4000))
+          (let ((explicit (list (visited-file-modtime)
+                                (verify-visited-file-modtime buf))))
+            (clear-visited-file-modtime)
+            (list explicit
+                  (visited-file-modtime)
+                  (verify-visited-file-modtime buf)
+                  (buffer-modified-p)))))
+    (when (get-file-buffer file)
+      (kill-buffer (get-file-buffer file)))
+    (delete-file file)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_set_visited_file_name_update_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (0 0 nil ((update 0 0))) ; normalized temp-name matches
+    // Neomacs:   OK (0 0 nil nil)
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (file-a (make-temp-file "neo-set-vfn-a" nil ".txt" "a"))
+      (file-b (make-temp-file "neo-set-vfn-b" nil ".txt" "b")))
+  (unwind-protect
+      (let ((buf (find-file-noselect file-a)))
+        (with-current-buffer buf
+          (let ((buffer-list-update-hook
+                 (list (lambda ()
+                         (push (list 'update
+                                     (file-name-nondirectory
+                                      (or buffer-file-name ""))
+                                     (buffer-name))
+                               log)))))
+            (set-visited-file-name file-b nil t)
+            (list (string-match-p
+                   "\\`neo-set-vfn-b.*\\.txt\\'"
+                   (file-name-nondirectory buffer-file-name))
+                  (string-match-p "\\`neo-set-vfn-b.*\\.txt\\'" (buffer-name))
+                  (buffer-modified-p)
+                  (mapcar (lambda (entry)
+                            (list (car entry)
+                                  (string-match-p
+                                   "\\`neo-set-vfn-b.*\\.txt\\'"
+                                   (cadr entry))
+                                  (string-match-p
+                                   "\\`neo-set-vfn-b.*\\.txt\\'"
+                                   (caddr entry))))
+                          (nreverse log))))))
+    (when (get-file-buffer file-a)
+      (kill-buffer (get-file-buffer file-a)))
+    (when (get-file-buffer file-b)
+      (kill-buffer (get-file-buffer file-b)))
+    (delete-file file-a)
+    (delete-file file-b)))
+"##,
+    );
+}
