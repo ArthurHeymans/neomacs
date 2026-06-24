@@ -27,6 +27,7 @@ use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
+use crate::tagged::header::store_value_atomic;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
     FontWidth, LFACE_ATTRS, LFACE_VECTOR_SIZE, LFaceAttr, UnderlineStyle,
@@ -3740,9 +3741,9 @@ fn reset_lisp_face_vector(vector: Value) {
         if slots.len() != LISP_FACE_VECTOR_LEN {
             *slots = vec![unspecified; LISP_FACE_VECTOR_LEN];
         }
-        slots[0] = face_tag_symbol();
+        store_value_atomic(&mut slots[0], face_tag_symbol());
         for slot in slots.iter_mut().take(LISP_FACE_VECTOR_LEN).skip(1) {
-            *slot = unspecified;
+            store_value_atomic(slot, unspecified);
         }
     });
 }

@@ -7,6 +7,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
+use crate::tagged::header::store_value_atomic;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -500,7 +501,7 @@ fn set_case_table_extra(table: Value, idx: usize, value: Value) {
     }
     table.with_vector_data_mut(|vec| {
         if let Some(slot) = vec.get_mut(CT_EXTRA_START + idx) {
-            *slot = value;
+            store_value_atomic(slot, value);
         }
     });
 }

@@ -20,6 +20,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::{Context, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, intern, resolve_sym};
 use super::value::*;
+use crate::tagged::header::store_value_atomic;
 use std::collections::{BTreeMap, BTreeSet};
 
 // ---------------------------------------------------------------------------
@@ -553,7 +554,7 @@ fn ct_update_ascii_cache(vec: &mut [Value], min: i64, max: i64, value: Value) {
     let start = min.max(0) as usize;
     let end = max.min(CT_ASCII_CACHE_LEN as i64 - 1) as usize;
     for ch in start..=end {
-        vec[range.start + ch] = value;
+        store_value_atomic(&mut vec[range.start + ch], value);
     }
 }
 
@@ -1146,7 +1147,7 @@ pub(crate) fn builtin_set_char_table_range(
                 return Ok(*value);
             }
             table.with_vector_data_mut(|vec| {
-                vec[CT_DEFAULT] = *value;
+                store_value_atomic(&mut vec[CT_DEFAULT], *value);
             });
         }
         // t -> set all characters, but not the default slot.
@@ -2805,7 +2806,7 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
 
     let slot_idx = CT_EXTRA_START + n as usize;
     table.with_vector_data_mut(|vec| {
-        vec[slot_idx] = *value;
+        store_value_atomic(&mut vec[slot_idx], *value);
         maybe_optimize_completed_translation_table(vec, n);
     });
     Ok(*value)
