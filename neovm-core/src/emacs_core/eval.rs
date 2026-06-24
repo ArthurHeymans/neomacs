@@ -1162,6 +1162,14 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<(Value, &'static str)>, heap_id
         roots.extend(group.into_iter().map(|root| (root, origin)));
     }
 
+    // R1a: heap-object constants loaded by JIT-compiled leaves through their reloc
+    // vectors — generated code holds only indices, so these must be rooted here.
+    #[cfg(feature = "jit")]
+    collect_group(
+        roots,
+        "jit-reloc-thread-local",
+        super::jit::cache::collect_jit_reloc_gc_roots,
+    );
     collect_group(
         roots,
         "syntax-thread-local",

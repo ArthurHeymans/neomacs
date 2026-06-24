@@ -1340,6 +1340,12 @@ pub struct CompiledLeaf {
     /// INLINE_DEPS reverse map (cache.rs), and the coarse inline_epoch backstop
     /// catches it lazily regardless. Empty unless the leaf inlined something.
     inline_deps: Box<[crate::emacs_core::intern::SymId]>,
+    /// R1a: per-leaf heap-constant relocation vector. Generated code loads each
+    /// heap-object constant from `reloc_data[idx]` through a baked base pointer
+    /// instead of baking the tagged heap pointer as an immediate — so the code
+    /// holds NO heap pointer (GC-traceable here, AOT-portable). Fixnums + non-heap
+    /// immediates (nil/t) stay baked. Traced as a GC root while the leaf is cached.
+    reloc_data: Box<[Value]>,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -1397,6 +1403,13 @@ impl CompiledLeaf {
     /// inlined nothing). The dispatch recompiles when the live epoch differs.
     pub(crate) fn inline_epoch(&self) -> Option<u64> {
         self.inline_epoch
+    }
+
+    /// The heap-object constants this leaf loads through its reloc vector (R1a).
+    /// GC-traced as roots while the leaf is cached so the values stay live
+    /// independent of the source function (mandatory once an AOT leaf outlives it).
+    pub(crate) fn reloc_values(&self) -> &[Value] {
+        &self.reloc_data
     }
 
     /// The SymIds of the callees this leaf inlined (its precise dependency set).
@@ -2692,6 +2705,30 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         handlers: core::cell::Cell::new(0),
     });
 
+    // R1a: per-leaf heap-constant reloc vector — collect the DISTINCT heap-object
+    // constants (deduped by tagged bits) so generated code loads each from
+    // reloc_data[idx] instead of baking its heap pointer as an immediate (untraced
+    // by the GC, unportable to an AOT .so). Fixnums + non-heap immediates (nil/t)
+    // stay baked. Allocated here (before the FunctionBuilder) so reloc_data.as_ptr()
+    // is stable when the loads bake its base address (same pattern as deopt_spill).
+    let mut reloc_vals: Vec<Value> = Vec::new();
+    let mut reloc_index: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    for blk in &m.blocks {
+        for inst in &blk.insts {
+            if let MirOp::Const(v) = &inst.op {
+                let bits = v.bits();
+                if (bits & FIXNUM_CHECK_MASK) != FIXNUM_CHECK_VALUE
+                    && v.is_heap_object()
+                    && !reloc_index.contains_key(&bits)
+                {
+                    reloc_index.insert(bits, reloc_vals.len() as u32);
+                    reloc_vals.push(*v);
+                }
+            }
+        }
+    }
+    let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
+
     // ABI identical to lower_leaf: fn(vmctx, args, out) -> status.
     let mut sig = Signature::new(call_conv);
     sig.params.push(AbiParam::new(ptr_ty)); // vmctx (unused for pure)
@@ -2796,6 +2833,14 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         }
         let args_ptr = fb.block_params(entry)[1];
         let out_ptr = fb.block_params(entry)[2];
+        // R1a: base address of the heap-constant reloc vector, baked once near entry
+        // (the entry block dominates all blocks); each heap-`Const` loads off it by
+        // index. `None` when the body references no heap constants.
+        let reloc_base = if reloc_data.is_empty() {
+            None
+        } else {
+            Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
+        };
         let arg_vals: Vec<BlockArg> = (0..m.arity)
             .map(|i| {
                 let v = fb
@@ -2829,8 +2874,22 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                                     .iconst(types::I64, (v.bits() as i64) >> FIXNUM_SHIFT),
                             );
                             cval_raw[r] = true;
-                        } else {
+                        } else if !v.is_heap_object() {
+                            // Non-fixnum immediate (nil/t/char/...): no heap pointer, so
+                            // bake the tagged bits directly.
                             cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
+                        } else {
+                            // Heap object (string/cons/symbol/vector/...): load from the
+                            // per-leaf reloc vector (R1a) — never bake a heap pointer, so
+                            // the code is GC-pointer-free and AOT-portable.
+                            let idx = reloc_index[&v.bits()];
+                            let base = reloc_base.expect("reloc_base set when reloc nonempty");
+                            cval[r] = Some(fb.ins().load(
+                                types::I64,
+                                MemFlags::trusted(),
+                                base,
+                                (idx * 8) as i32,
+                            ));
                         }
                     }
                     MirOp::Bin(kind, a, b) => {
@@ -3172,6 +3231,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         spec_slots: Box::from([]),
         deopt_spill,
         deopt_meta,
+        reloc_data,
         entry,
         _module: module,
     })
@@ -3745,6 +3805,10 @@ fn lower_simple_op(
     // `lower_leaf_full` from `compute_known_fixnum_slots`); `guard_fixnum` elides
     // guards for members.
     known: &HashSet<ClifValue>,
+    // R1a: heap-constant reloc vector base (baked in entry) + bits->index map, so
+    // `Op::Constant` loads a heap object from reloc_base[idx] instead of baking it.
+    reloc_base: Option<ClifValue>,
+    reloc_index: &std::collections::HashMap<usize, u32>,
 ) -> Result<(), CompileError> {
     // Non-unboxing ops must see only tagged Values: force-tag the whole stack so
     // their gc_push / signal snapshot / shim args never observe a raw slot (closes
@@ -3757,7 +3821,18 @@ fn lower_simple_op(
             let v = constants
                 .get(*idx as usize)
                 .ok_or(CompileError::BadOperand)?;
-            stack.push(fb.ins().iconst(types::I64, v.bits() as i64));
+            let cv = if v.is_heap_object() {
+                // Heap object: load from the per-leaf reloc vector (R1a) — never bake
+                // a heap pointer, so the code is GC-pointer-free + AOT-portable.
+                let i = reloc_index[&v.bits()];
+                let base = reloc_base.expect("reloc_base set when the body has heap consts");
+                fb.ins()
+                    .load(types::I64, MemFlags::trusted(), base, (i * 8) as i32)
+            } else {
+                // Fixnum / nil / t / char (immediate): no heap pointer, bake the bits.
+                fb.ins().iconst(types::I64, v.bits() as i64)
+            };
+            stack.push(cv);
             stack_raw.push(false);
         }
         Op::Nil => {
@@ -5460,6 +5535,24 @@ pub fn lower_leaf_full(
         handlers: core::cell::Cell::new(0),
     });
 
+    // R1a: per-leaf heap-constant reloc vector (see lower_mir_pure). The baseline's
+    // Op::Constant loads from reloc_data[idx] instead of baking a heap pointer, so
+    // the code is GC-pointer-free + AOT-portable. Allocated here (before the
+    // FunctionBuilder) so reloc_data.as_ptr() is stable when the load bakes its base.
+    let mut reloc_vals: Vec<Value> = Vec::new();
+    let mut reloc_index: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    for op in ops {
+        if let Op::Constant(idx) = op {
+            if let Some(v) = constants.get(*idx as usize) {
+                if v.is_heap_object() && !reloc_index.contains_key(&v.bits()) {
+                    reloc_index.insert(v.bits(), reloc_vals.len() as u32);
+                    reloc_vals.push(*v);
+                }
+            }
+        }
+    }
+    let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
+
     // Baseline tier runs Cranelift at the default opt_level="none": its job is
     // FAST compilation (low tier-up latency; the soak compiles every function).
     // Measured opt_level="speed" (2026-06-13): no runtime win on fib (call-
@@ -5687,6 +5780,13 @@ pub fn lower_leaf_full(
         let vmctx_param = fb.block_params(entry)[0];
         let args_ptr = fb.block_params(entry)[1];
         let out_ptr = fb.block_params(entry)[2];
+        // R1a: base address of the heap-constant reloc vector, baked once in entry
+        // (dominates all blocks); the baseline Op::Constant loads off it by index.
+        let reloc_base = if reloc_data.is_empty() {
+            None
+        } else {
+            Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
+        };
         if let Some(rt) = &rt {
             fb.def_var(rt.vmctx_var, vmctx_param);
         }
@@ -6057,6 +6157,8 @@ pub fn lower_leaf_full(
                             spec,
                             other,
                             &known_fixnum,
+                            reloc_base,
+                            &reloc_index,
                         )?;
                         // Re-sync the raw mask after the op: raw-preserving ops keep
                         // it in lockstep (assert); every other op force-tagged the
@@ -6156,6 +6258,7 @@ pub fn lower_leaf_full(
         spec_slots,
         deopt_spill,
         deopt_meta,
+        reloc_data,
         entry,
         _module: module,
     })

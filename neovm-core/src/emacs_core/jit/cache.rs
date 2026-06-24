@@ -49,6 +49,14 @@ thread_local! {
     /// correctness floor regardless — this map is a pure churn-reduction optimization.
     /// Same thread/scope as COMPILED (its values are only meaningful as COMPILED keys).
     static INLINE_DEPS: RefCell<HashMap<SymId, HashSet<u64>>> = RefCell::new(HashMap::new());
+
+    /// The tagged-heap identity the cached leaves were compiled against. The JIT
+    /// cache is thread-local, but every leaf's reloc vector + baked addresses
+    /// reference the heap live at compile time. If the thread's heap is replaced
+    /// (a pdump load / in-process image reload / cache-replay test), the whole
+    /// cache is stale — detected lazily by identity in `sync_cache_to_current_heap`
+    /// and cleared before any stale reloc value is traced or run.
+    static COMPILED_HEAP: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
 }
 
 /// Register a freshly-compiled leaf's inlined-callee deps into the reverse map.
@@ -100,6 +108,54 @@ pub(crate) fn is_compiled_for_test(id: u64) -> bool {
 #[cfg(test)]
 pub(crate) fn inline_dependent_count_for_test(sym: SymId) -> usize {
     INLINE_DEPS.with(|m| m.borrow().get(&sym).map_or(0, |s| s.len()))
+}
+
+/// Collect, as GC roots, the heap-object constants every currently-cached compiled
+/// leaf loads through its reloc vector (R1a). Generated code holds NO heap-pointer
+/// immediate — only an index into the leaf's `reloc_data` — so without this a
+/// constant referenced solely by live native code could be swept. Walking COMPILED
+/// keeps it precise: an evicted leaf drops out automatically (no stale roots).
+/// Clear the cache if the thread's tagged heap was replaced since the cache was
+/// built (a pdump load / in-process image reload / cache-replay test): the cached
+/// leaves' reloc vectors + baked addresses point into the now-gone heap, so they
+/// must neither be traced nor run. Detected by heap identity — one thread-local
+/// load + compare on the common no-change path; clears only on an actual change.
+fn sync_cache_to_current_heap() {
+    let cur = crate::tagged::gc::current_tagged_heap_identity();
+    let changed = COMPILED_HEAP.with(|h| {
+        if h.get() != cur {
+            h.set(cur);
+            true
+        } else {
+            false
+        }
+    });
+    if changed {
+        clear();
+    }
+}
+
+pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
+    sync_cache_to_current_heap();
+    COMPILED.with(|c| {
+        for entry in c.borrow().values() {
+            if let CacheEntry::Compiled(leaf) = entry {
+                roots.extend_from_slice(leaf.reloc_values());
+            }
+        }
+    });
+}
+
+/// Drop all compiled state on this thread. Called when a pdump load replaces the
+/// runtime image (and thus the heap that every cached leaf's reloc vector + baked
+/// addresses reference) — so every cached leaf is now stale and must neither be run
+/// nor GC-traced. No-op at the single startup load (the cache is empty then); it
+/// matters when a process reloads an image in-place (e.g. the pdump round-trip
+/// tests), where leaving stale leaves cached makes R1a's reloc roots trace
+/// freed/reused memory.
+pub(crate) fn clear() {
+    COMPILED.with(|c| c.borrow_mut().clear());
+    INLINE_DEPS.with(|m| m.borrow_mut().clear());
 }
 
 /// Tier-up entry point: run `func`'s body as native code if possible.
