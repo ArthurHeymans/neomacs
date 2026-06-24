@@ -749,6 +749,43 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
 }
 
 #[test]
+fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
+    // First row of a buffer line renders the absolute number with a non-blank
+    // gutter (GNU `maybe_produce_line_number`).
+    let mut state = LineNumberRenderState::new(true, 7, 9);
+    let first = state
+        .margin_render_request(1, false, 0, 0, 4)
+        .expect("first-row line number request");
+    assert!(!first.blank());
+    assert_eq!(first.text(), "7");
+    assert_eq!(first.cols(), 4);
+    state.consume_render_request();
+    assert!(!state.should_render());
+
+    // A wrapped continuation row re-arms the pending render but renders a blank
+    // (no-number), width-reserved gutter so its text aligns with the first row.
+    state.mark_continuation_row();
+    assert!(state.should_render());
+    let continuation = state
+        .margin_render_request(1, false, 0, 0, 4)
+        .expect("continuation-row line number request");
+    assert!(continuation.blank());
+    assert_eq!(continuation.text(), "");
+    assert_eq!(continuation.cols(), 4);
+    assert_eq!(continuation.face().face_name(), first.face().face_name());
+    state.consume_render_request();
+    assert!(!state.should_render());
+
+    // The next buffer line resets back to a non-blank numbered gutter.
+    state.advance_line();
+    let next_line = state
+        .margin_render_request(1, false, 0, 0, 4)
+        .expect("next-line line number request");
+    assert!(!next_line.blank());
+    assert_eq!(next_line.text(), "8");
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(

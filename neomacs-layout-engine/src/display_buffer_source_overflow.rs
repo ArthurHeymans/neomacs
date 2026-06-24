@@ -268,6 +268,11 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                         trailing_whitespace,
                     ),
                 );
+                // GNU `maybe_produce_line_number`: each wrapped continuation row
+                // reserves a blank (no-number) line-number gutter so its text
+                // aligns with the first row's text column. Re-arm the loop's
+                // `line_numbers` so the next `render_row_prelude` emits it.
+                line_numbers.mark_continuation_row();
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
@@ -331,6 +336,11 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     row_geometry,
                     context.row_visibility_limit,
                 );
+                // GNU `maybe_produce_line_number`: each wrapped continuation row
+                // reserves a blank (no-number) line-number gutter so its text
+                // aligns with the first row's text column. Re-arm the loop's
+                // `line_numbers` so the next `render_row_prelude` emits it.
+                line_numbers.mark_continuation_row();
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);

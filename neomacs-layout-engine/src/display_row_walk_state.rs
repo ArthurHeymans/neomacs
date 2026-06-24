@@ -38,6 +38,7 @@ pub(crate) struct LineNumberRenderState {
     current_line: i64,
     point_line: i64,
     render_pending: bool,
+    first_row_of_line: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,11 +63,16 @@ pub(crate) struct LineNumberMarginRenderRequest {
     display_number: i64,
     cols: i32,
     face: LineNumberMarginFace,
+    blank: bool,
 }
 
 impl LineNumberMarginRenderRequest {
     pub(crate) fn text(self) -> String {
-        format!("{}", self.display_number)
+        if self.blank {
+            String::new()
+        } else {
+            format!("{}", self.display_number)
+        }
     }
 
     pub(crate) fn cols(self) -> i32 {
@@ -75,6 +81,11 @@ impl LineNumberMarginRenderRequest {
 
     pub(crate) fn face(self) -> LineNumberMarginFace {
         self.face
+    }
+
+    #[cfg(test)]
+    pub(crate) fn blank(self) -> bool {
+        self.blank
     }
 }
 
@@ -445,6 +456,7 @@ impl LineNumberRenderState {
             current_line,
             point_line,
             render_pending: enabled,
+            first_row_of_line: true,
         }
     }
 
@@ -459,6 +471,15 @@ impl LineNumberRenderState {
     pub(crate) fn advance_line(&mut self) {
         self.current_line += 1;
         self.render_pending = self.enabled;
+        self.first_row_of_line = true;
+    }
+
+    /// GNU `maybe_produce_line_number` renders a blank (width-reserved, no
+    /// number) gutter on each wrapped continuation row. Re-arm the pending
+    /// render and mark the next row as a continuation so the gutter is blank.
+    pub(crate) fn mark_continuation_row(&mut self) {
+        self.render_pending = self.enabled;
+        self.first_row_of_line = false;
     }
 
     pub(crate) fn advance_hidden_line(&mut self) {
@@ -504,6 +525,7 @@ impl LineNumberRenderState {
             return None;
         }
 
+        let blank = !self.first_row_of_line;
         let face = if self.is_current_line() {
             LineNumberMarginFace::CurrentLine
         } else if major_tick > 0 && self.current_line % i64::from(major_tick) == 0 {
@@ -515,6 +537,7 @@ impl LineNumberRenderState {
             display_number: self.display_number(mode, current_absolute, offset),
             cols,
             face,
+            blank,
         })
     }
 }

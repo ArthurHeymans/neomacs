@@ -350,6 +350,62 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     assert!(!line_numbers.should_render());
 }
 
+#[test]
+fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation_row() {
+    // GNU `maybe_produce_line_number` reserves a blank, width-matched gutter on
+    // each wrapped continuation row so its text aligns with the first row.
+    let mut context = RowTransitionTestContext::new("line-number-margin-continuation-row");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut line_numbers = LineNumberRenderState::new(true, 12, 9);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
+
+    // First row consumes the numbered gutter, then the wrap re-arms a blank one.
+    line_numbers.consume_render_request();
+    line_numbers.mark_continuation_row();
+    assert!(line_numbers.should_render());
+
+    {
+        let mut source_render = text_row_source_render_state(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        assert!(
+            BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4)
+                .render_pending_with_source_state(
+                    &mut line_numbers,
+                    &mut source_render,
+                    &mut face_ids,
+                    &context.geometry,
+                    &mut face_scan,
+                    8.0,
+                )
+        );
+    }
+
+    context.builder.end_row();
+    context.builder.end_window();
+    let state = context.builder.finish(20, 1, 8.0, 16.0);
+    let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
+
+    // No number glyphs: a leading padding stretch of (cols-1) and a trailing
+    // stretch of 1 — same total width (4 cols) as the numbered first row.
+    assert_eq!(margin.len(), 2);
+    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 3 });
+    assert_eq!(margin[1].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert!(
+        margin
+            .iter()
+            .all(|glyph| glyph.face_id == BasicFaceId::SENTINEL)
+    );
+    assert!(!line_numbers.should_render());
+}
+
 impl DisplayHost for RecordingAppendImageHost {
     fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
         Ok(())
