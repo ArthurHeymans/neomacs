@@ -3532,3 +3532,30 @@ fn div_core_divergence_surface_unicode_normalization_decomposition() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_call_process_region_eol_encoding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 13 10 98) (97 13 10 98) (97 13 98) (97 10 98))
+    // Neomacs:   OK ((97 10 98) (97 10 98) (97 10 98) (97 10 98))
+    // call-process-region should honor coding-system-for-write when sending
+    // region text to the program. GNU applies CRLF/CR/LF for utf-8-dos,
+    // bare dos, mac, and unix respectively. Neomacs sends plain LF for all.
+    assert_oracle_parity(
+        r##"
+(let ((run
+       (lambda (write-coding)
+         (with-temp-buffer
+           (insert "a\nb")
+           (let ((coding-system-for-write write-coding)
+                 (coding-system-for-read 'binary))
+             (call-process-region (point-min) (point-max) "cat" t t nil)
+             (append (buffer-string) nil))))))
+  (list (funcall run 'utf-8-dos)
+        (funcall run 'dos)
+        (funcall run 'mac)
+        (funcall run 'unix)))
+"##,
+    );
+}
