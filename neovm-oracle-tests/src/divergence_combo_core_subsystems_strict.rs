@@ -2162,3 +2162,98 @@ fn div_core_divergence_surface_help_key_description_escape_meta() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_escape_meta_key_description_canonicalization() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("M-a" "M-a" "C-M-a" "C-M-a" "M-a" "C-M-a" (meta) 97)
+    // Neomacs:   OK ("M-a" "ESC a" "C-M-a" "ESC C-a" "M-a" "C-M-a" (meta) 97)
+    assert_oracle_parity(
+        r##"
+(list (key-description (kbd "M-a"))
+      (key-description (kbd "ESC a"))
+      (key-description (kbd "C-M-a"))
+      (key-description (kbd "ESC C-a"))
+      (single-key-description ?\M-a)
+      (single-key-description ?\C-\M-a)
+      (event-modifiers ?\M-a)
+      (event-basic-type ?\M-a))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_meta_command_lookup_vector() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ([134217825] [27 97] [134217729] [27 1] [134217848] "M-x")
+    // Neomacs:   OK ([134217825] [27 97] [134217729] [27 1] [27 120] "ESC x")
+    assert_oracle_parity(
+        r##"
+(list (read-kbd-macro "M-a" nil)
+      (read-kbd-macro "ESC a" nil)
+      (read-kbd-macro "C-M-a" nil)
+      (read-kbd-macro "ESC C-a" nil)
+      (where-is-internal 'execute-extended-command nil t)
+      (key-description (where-is-internal 'execute-extended-command nil t)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_manual_escape_vector_key_description() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ("M-x" "M-x" "ESC ESC" "M-ESC" "M-[ A" "M-x" (meta) 120)
+    // Neomacs:   OK ("ESC x" "M-x" "ESC ESC" "M-ESC" "ESC [ A" "M-x" (meta) 120)
+    assert_oracle_parity(
+        r##"
+(list (key-description [27 120])
+      (key-description [134217848])
+      (key-description [27 27])
+      (key-description [134217755])
+      (key-description [27 91 65])
+      (single-key-description 134217848)
+      (event-modifiers 134217848)
+      (event-basic-type 134217848))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_sparse_keymap_meta_where_is() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (mx mx [134217848] "M-x" [134217849] "M-y")
+    // Neomacs:   OK (mx mx [27 120] "ESC x" [27 121] "ESC y")
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map (kbd "M-x") 'mx)
+  (define-key map (kbd "ESC y") 'escy)
+  (list (lookup-key map (kbd "M-x"))
+        (lookup-key map (kbd "ESC x"))
+        (where-is-internal 'mx map t)
+        (key-description (where-is-internal 'mx map t))
+        (where-is-internal 'escy map t)
+        (key-description (where-is-internal 'escy map t))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_substitute_command_keys_escape_meta() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("M-x" ...) #("M-ESC ESC" ...) [134217755 27] "M-ESC ESC")
+    // Neomacs:   OK (#("ESC x" ...) #("ESC ESC ESC" ...) [27 27 27] "ESC ESC ESC")
+    assert_oracle_parity(
+        r##"
+(list (substitute-command-keys "\\[execute-extended-command]")
+      (substitute-command-keys "\\[keyboard-escape-quit]")
+      (where-is-internal 'keyboard-escape-quit nil t)
+      (key-description (where-is-internal 'keyboard-escape-quit nil t)))
+"##,
+    );
+}
