@@ -3097,3 +3097,73 @@ fn div_core_divergence_surface_replace_region_contents_function_arg() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_write_region_bare_eol_aliases() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 10 98) (97 13 10 98) (97 13 98) (97 13 10 98))
+    // Neomacs:   OK (nil nil nil (97 13 10 98))
+    // write-region with bare unix/dos/mac EOL aliases writes empty output in
+    // Neomacs. GNU writes the expected LF/CRLF/CR bytes. Fully-qualified
+    // utf-8-dos works in both, isolating the bare EOL alias path.
+    assert_oracle_parity(
+        r##"
+(let ((write-with-coding
+       (lambda (coding text)
+         (let ((file (make-temp-file "neo-write-eol" nil ".txt")))
+           (unwind-protect
+               (progn
+                 (let ((coding-system-for-write coding))
+                   (with-temp-buffer
+                     (insert text)
+                     (write-region (point-min) (point-max) file nil 'silent)))
+                 (with-temp-buffer
+                   (set-buffer-multibyte nil)
+                   (let ((coding-system-for-read 'binary))
+                     (insert-file-contents file))
+                   (append (buffer-string) nil)))
+             (delete-file file))))))
+  (list (funcall write-with-coding 'unix "a\nb")
+        (funcall write-with-coding 'dos "a\nb")
+        (funcall write-with-coding 'mac "a\nb")
+        (funcall write-with-coding 'utf-8-dos "a\nb")))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_insert_char_inherit_property_plist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((#("AXB" 0 3 (face bold rear-nonsticky nil))
+    //                 (face bold rear-nonsticky nil) 3)
+    //                (#("AXB" 0 3 (face bold rear-nonsticky nil))
+    //                 (face bold rear-nonsticky nil)))
+    // Neomacs:   OK ((#("AXB" 0 1 ... 1 2 (face bold) 2 3 ...)
+    //                 (face bold) 3)
+    //                (#("AXB" 0 1 ... 1 2 (face bold) 2 3 ...)
+    //                 (face bold)))
+    // GNU's insert-before-markers-and-inherit and insert-char INHERIT both
+    // inherit the full text-property plist and coalesce intervals; Neomacs
+    // inherits only `face`, leaving fragmented partial-property spans.
+    assert_oracle_parity(
+        r##"
+(list
+ (with-temp-buffer
+   (insert (propertize "AB" 'face 'bold 'rear-nonsticky nil))
+   (let ((m (copy-marker 2)))
+     (goto-char 2)
+     (insert-before-markers-and-inherit "X")
+     (list (buffer-string)
+           (text-properties-at 2)
+           (marker-position m))))
+ (with-temp-buffer
+   (insert (propertize "AB" 'face 'bold 'rear-nonsticky nil))
+   (goto-char 2)
+   (insert-char ?X 1 t)
+   (list (buffer-string)
+         (text-properties-at 2))))
+"##,
+    );
+}
