@@ -3327,3 +3327,41 @@ fn div_core_divergence_surface_interpreter_auto_mode_change_hook() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_magic_auto_mode_change_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((text-mode (change text)) (text-mode (change text)))
+    // Neomacs:   OK ((text-mode (text)) (text-mode (text)))
+    // set-auto-mode through magic-mode-alist and magic-fallback-mode-alist
+    // should run change-major-mode-hook before text-mode-hook. Neomacs skips
+    // change-major-mode-hook on both content-based auto-mode paths.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((log nil)
+       (magic-mode-alist '(("\\`PROBE-MAGIC" . text-mode)))
+       (magic-fallback-mode-alist nil)
+       (auto-mode-alist nil))
+   (add-hook 'change-major-mode-hook (lambda () (push 'change log)))
+   (add-hook 'text-mode-hook (lambda () (push 'text log)))
+   (with-temp-buffer
+     (insert "PROBE-MAGIC content here")
+     (setq buffer-file-name "x.unknown")
+     (set-auto-mode)
+     (list major-mode (nreverse log))))
+ (let ((log nil)
+       (magic-mode-alist nil)
+       (magic-fallback-mode-alist '(("\\`PROBE-FALLBACK" . text-mode)))
+       (auto-mode-alist nil))
+   (add-hook 'change-major-mode-hook (lambda () (push 'change log)))
+   (add-hook 'text-mode-hook (lambda () (push 'text log)))
+   (with-temp-buffer
+     (insert "PROBE-FALLBACK content here")
+     (setq buffer-file-name "x.unknown")
+     (set-auto-mode)
+     (list major-mode (nreverse log)))))
+"##,
+    );
+}
