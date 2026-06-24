@@ -981,7 +981,9 @@ fn seqlock_negative_control_tears_without_protocol() {
 
     let observed = tears.load(Ordering::Acquire);
     if std::env::var_os("SEQLOCK_TEST_DEBUG").is_some() {
-        eprintln!("NEGATIVE CONTROL: observed {observed} torn reads over {SEQLOCK_WRITER_ITERS} flips");
+        eprintln!(
+            "NEGATIVE CONTROL: observed {observed} torn reads over {SEQLOCK_WRITER_ITERS} flips"
+        );
     }
     // The negative control MUST observe at least one tear over the full writer
     // budget; otherwise the test is not exercising the race and the positive

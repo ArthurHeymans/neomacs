@@ -34,9 +34,9 @@ use super::intern::{
 };
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::emacs_core::error::Flow;
-use crate::tagged::header::{load_value_atomic, store_value_atomic};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
+use crate::tagged::header::{load_value_atomic, store_value_atomic};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // ===========================================================================
@@ -161,7 +161,9 @@ impl SymbolFlags {
 
     #[inline]
     pub fn set_trapped_write(&mut self, t: SymbolTrappedWrite) {
-        self.store_byte((self.0 & !Self::TRAPPED_WRITE_MASK) | (t.gnu_code() << Self::TRAPPED_WRITE_SHIFT));
+        self.store_byte(
+            (self.0 & !Self::TRAPPED_WRITE_MASK) | (t.gnu_code() << Self::TRAPPED_WRITE_SHIFT),
+        );
     }
 
     #[inline]

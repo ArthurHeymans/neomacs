@@ -67,7 +67,10 @@ pub(crate) mod vm_profile {
             OP_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect());
         rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let total: u64 = rows.iter().map(|r| r.1).sum();
-        eprintln!("=== OP-MIX [{label}]: {total} ops executed, {} distinct ===", rows.len());
+        eprintln!(
+            "=== OP-MIX [{label}]: {total} ops executed, {} distinct ===",
+            rows.len()
+        );
         for (name, count) in &rows {
             let pct = 100.0 * *count as f64 / total.max(1) as f64;
             eprintln!("  {name:<16} {count:>12}  {pct:5.2}%");

@@ -1903,10 +1903,7 @@ fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
     // Required-only lexical, and no captured lexenv: inlining drops the lexenv
     // install, which is only otherwise safe because lexenv-reading ops lower to
     // Opaque and `callee_inlinable` rejects them — keep the safety local here too.
-    if !bc.lexical
-        || bc.env.is_some()
-        || !bc.params.optional.is_empty()
-        || bc.params.rest.is_some()
+    if !bc.lexical || bc.env.is_some() || !bc.params.optional.is_empty() || bc.params.rest.is_some()
     {
         return None;
     }
@@ -2500,9 +2497,11 @@ fn raw_fixnum_addsub(
         res,
         Value::MOST_NEGATIVE_FIXNUM,
     );
-    let le_hi = fb
-        .ins()
-        .icmp_imm(IntCC::SignedLessThanOrEqual, res, Value::MOST_POSITIVE_FIXNUM);
+    let le_hi = fb.ins().icmp_imm(
+        IntCC::SignedLessThanOrEqual,
+        res,
+        Value::MOST_POSITIVE_FIXNUM,
+    );
     let in_range = fb.ins().band(ge_lo, le_hi);
     emit_guard(fb, deopt, in_range);
     res
@@ -2533,7 +2532,12 @@ fn raw_fixnum_unop(
 /// Raw fixnum `*`: untagged in/out, widen to i128 for the product + the
 /// interpreter's fixnum-range check (deopt on overflow). Unboxed analogue of
 /// [`lower_fixnum_mul`].
-fn raw_fixnum_mul(fb: &mut FunctionBuilder, deopt: Block, av: ClifValue, bv: ClifValue) -> ClifValue {
+fn raw_fixnum_mul(
+    fb: &mut FunctionBuilder,
+    deopt: Block,
+    av: ClifValue,
+    bv: ClifValue,
+) -> ClifValue {
     let a128 = fb.ins().sextend(types::I128, av);
     let b128 = fb.ins().sextend(types::I128, bv);
     let prod = fb.ins().imul(a128, b128);
@@ -2567,12 +2571,16 @@ fn raw_fixnum_divrem(
         fb.ins().srem(av, bv)
     } else {
         let res = fb.ins().sdiv(av, bv);
-        let ge = fb
-            .ins()
-            .icmp_imm(IntCC::SignedGreaterThanOrEqual, res, Value::MOST_NEGATIVE_FIXNUM);
-        let le = fb
-            .ins()
-            .icmp_imm(IntCC::SignedLessThanOrEqual, res, Value::MOST_POSITIVE_FIXNUM);
+        let ge = fb.ins().icmp_imm(
+            IntCC::SignedGreaterThanOrEqual,
+            res,
+            Value::MOST_NEGATIVE_FIXNUM,
+        );
+        let le = fb.ins().icmp_imm(
+            IntCC::SignedLessThanOrEqual,
+            res,
+            Value::MOST_POSITIVE_FIXNUM,
+        );
         let in_range = fb.ins().band(ge, le);
         emit_guard(fb, deopt, in_range);
         res
@@ -2581,7 +2589,12 @@ fn raw_fixnum_divrem(
 
 /// Raw fixnum `max`/`min`: untagged in/out, a branchless `select` of the two
 /// already-range-valid operands (no overflow, no deopt of its own).
-fn raw_fixnum_maxmin(fb: &mut FunctionBuilder, is_min: bool, av: ClifValue, bv: ClifValue) -> ClifValue {
+fn raw_fixnum_maxmin(
+    fb: &mut FunctionBuilder,
+    is_min: bool,
+    av: ClifValue,
+    bv: ClifValue,
+) -> ClifValue {
     let cc = if is_min {
         IntCC::SignedLessThan
     } else {
@@ -2613,9 +2626,15 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
     // per-site STATUS_DEOPT_AT (all-precise — a call-bearing body must never
     // rerun-from-start, which would re-execute the call's side effect).
     let has_call = m.blocks.iter().any(|b| {
-        b.insts
-            .iter()
-            .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::Call(_) | Op::Apply(_), .. }))
+        b.insts.iter().any(|i| {
+            matches!(
+                &i.op,
+                MirOp::Opaque {
+                    op: Op::Call(_) | Op::Apply(_),
+                    ..
+                }
+            )
+        })
     });
 
     // Escape analysis (hoisted — depends only on `m`). A NON-escaping cons is elided
@@ -2630,9 +2649,11 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
     } else {
         mir::cons_scalar_repl_targets(m)
     };
-    let has_escaping_cons = m.blocks.iter().flat_map(|b| b.insts.iter()).any(|i| {
-        matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none()
-    });
+    let has_escaping_cons = m
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter())
+        .any(|i| matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none());
     let needs_rt = has_call || has_escaping_cons;
 
     let mut builder = JITBuilder::new(default_libcall_names())
@@ -2708,7 +2729,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                 .iter()
                 .flat_map(|b| b.insts.iter())
                 .filter_map(|i| match &i.op {
-                    MirOp::Opaque { op: Op::Call(n) | Op::Apply(n), .. } => Some(*n as usize),
+                    MirOp::Opaque {
+                        op: Op::Call(n) | Op::Apply(n),
+                        ..
+                    } => Some(*n as usize),
                     _ => None,
                 })
                 .max()
@@ -2801,8 +2825,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                     MirOp::Const(v) => {
                         if (v.bits() & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE {
                             // Fixnum constant -> keep raw (untagged integer).
-                            cval[r] =
-                                Some(fb.ins().iconst(types::I64, (v.bits() as i64) >> FIXNUM_SHIFT));
+                            cval[r] = Some(
+                                fb.ins()
+                                    .iconst(types::I64, (v.bits() as i64) >> FIXNUM_SHIFT),
+                            );
                             cval_raw[r] = true;
                         } else {
                             cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
@@ -2810,7 +2836,13 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                     }
                     MirOp::Bin(kind, a, b) => {
                         let d = mir_deopt_block(
-                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                            &mut fb,
+                            precise,
+                            inst,
+                            &cval,
+                            &cval_raw,
+                            &mut deopt,
+                            &mut pending,
                         )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
@@ -2833,7 +2865,13 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             MU::Negate => UnaryKind::Negate,
                         };
                         let d = mir_deopt_block(
-                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                            &mut fb,
+                            precise,
+                            inst,
+                            &cval,
+                            &cval_raw,
+                            &mut deopt,
+                            &mut pending,
                         )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         cval[r] = Some(raw_fixnum_unop(&mut fb, d, k, av));
@@ -2848,7 +2886,13 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             CmpKind::Ge => IntCC::SignedGreaterThanOrEqual,
                         };
                         let d = mir_deopt_block(
-                            &mut fb, precise, inst, &cval, &cval_raw, &mut deopt, &mut pending,
+                            &mut fb,
+                            precise,
+                            inst,
+                            &cval,
+                            &cval_raw,
+                            &mut deopt,
+                            &mut pending,
                         )?;
                         let av = mir_as_raw(&mut fb, &cval, &cval_raw, *a, d)?;
                         let bv = mir_as_raw(&mut fb, &cval, &cval_raw, *b, d)?;
@@ -2884,7 +2928,12 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                                 None
                             } else {
                                 Some(mir_deopt_block(
-                                    &mut fb, precise, inst, &cval, &cval_raw, &mut deopt,
+                                    &mut fb,
+                                    precise,
+                                    inst,
+                                    &cval,
+                                    &cval_raw,
+                                    &mut deopt,
                                     &mut pending,
                                 )?)
                             };
@@ -2916,7 +2965,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                             let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *a)?;
                             fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
                         }
-                        let func_val = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, args[0])?;
+                        let func_val =
+                            mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, args[0])?;
                         // Residual = operand-stack values live ACROSS the call (the
                         // pre-op stack below func+args). Root them (force-tagged) so a
                         // GC inside the callee can trace them.
@@ -2937,7 +2987,11 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                         let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
                         let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
                         let n_val = fb.ins().iconst(types::I64, n as i64);
-                        let shim = if is_apply { rt.refs.apply } else { rt.refs.call };
+                        let shim = if is_apply {
+                            rt.refs.apply
+                        } else {
+                            rt.refs.call
+                        };
                         let call = fb
                             .ins()
                             .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
@@ -3022,7 +3076,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                     // Cross-block args are tagged (block params are tagged).
                     let mut a: Vec<BlockArg> = Vec::with_capacity(args.len());
                     for v in args {
-                        a.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                        a.push(BlockArg::Value(mir_as_tagged(
+                            &mut fb, &cval, &cval_raw, *v,
+                        )?));
                     }
                     fb.ins().jump(clif_blocks[target.0 as usize], &a);
                 }
@@ -3039,11 +3095,15 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
                     let is_nil = fb.ins().icmp_imm(IntCC::Equal, c, Value::NIL.bits() as i64);
                     let mut ta: Vec<BlockArg> = Vec::with_capacity(taken_args.len());
                     for v in taken_args {
-                        ta.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                        ta.push(BlockArg::Value(mir_as_tagged(
+                            &mut fb, &cval, &cval_raw, *v,
+                        )?));
                     }
                     let mut fa: Vec<BlockArg> = Vec::with_capacity(fallthrough_args.len());
                     for v in fallthrough_args {
-                        fa.push(BlockArg::Value(mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?));
+                        fa.push(BlockArg::Value(mir_as_tagged(
+                            &mut fb, &cval, &cval_raw, *v,
+                        )?));
                     }
                     let tb = clif_blocks[taken.0 as usize];
                     let fbk = clif_blocks[fallthrough.0 as usize];
@@ -3461,7 +3521,8 @@ fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut 
             } else {
                 v
             };
-            fb.ins().store(MemFlags::trusted(), tagged, base, (j * 8) as i32);
+            fb.ins()
+                .store(MemFlags::trusted(), tagged, base, (j * 8) as i32);
         }
         let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
         let a = fb.ins().iconst(types::I64, refs.meta_pc);
@@ -3607,7 +3668,12 @@ fn stack_as_raw(
 /// fixnum, clearing its raw flag. Used at every boundary where a value escapes the
 /// in-flight arithmetic (returns, predicates, car/cdr, calls/gc roots, cross-block
 /// edges, deopt/signal snapshots).
-fn stack_force_tagged(fb: &mut FunctionBuilder, stack: &mut [ClifValue], stack_raw: &mut [bool], k: usize) {
+fn stack_force_tagged(
+    fb: &mut FunctionBuilder,
+    stack: &mut [ClifValue],
+    stack_raw: &mut [bool],
+    k: usize,
+) {
     if stack_raw[k] {
         stack[k] = retag_fixnum(fb, stack[k]);
         stack_raw[k] = false;
@@ -3632,11 +3698,29 @@ fn retag_all_raw(fb: &mut FunctionBuilder, stack: &mut [ClifValue], stack_raw: &
 fn op_preserves_raw(op: &Op) -> bool {
     matches!(
         op,
-        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem
-            | Op::Add1 | Op::Sub1 | Op::Negate | Op::Max | Op::Min
-            | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq
-            | Op::Constant(_) | Op::Nil | Op::True
-            | Op::Pop | Op::Dup | Op::StackRef(_) | Op::StackSet(_) | Op::DiscardN(_)
+        Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Rem
+            | Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Max
+            | Op::Min
+            | Op::Eqlsign
+            | Op::Lss
+            | Op::Gtr
+            | Op::Leq
+            | Op::Geq
+            | Op::Constant(_)
+            | Op::Nil
+            | Op::True
+            | Op::Pop
+            | Op::Dup
+            | Op::StackRef(_)
+            | Op::StackSet(_)
+            | Op::DiscardN(_)
     )
 }
 
@@ -5643,7 +5727,9 @@ pub fn lower_leaf_full(
                     slots
                         .iter()
                         .enumerate()
-                        .filter_map(|(k, &is_fix)| (is_fix).then(|| stack.get(k).copied()).flatten())
+                        .filter_map(|(k, &is_fix)| {
+                            (is_fix).then(|| stack.get(k).copied()).flatten()
+                        })
                         .collect()
                 })
                 .unwrap_or_default();
@@ -6111,27 +6197,49 @@ mod tests {
         let block = fb.create_block();
         fb.switch_to_block(block);
         fb.seal_block(block);
-        let fixnum = fb.ins().iconst(types::I64, Value::make_int(7).bits() as i64);
+        let fixnum = fb
+            .ins()
+            .iconst(types::I64, Value::make_int(7).bits() as i64);
         let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
         let sum = fb.ins().iadd(fixnum, fixnum);
-        assert!(is_fixnum_const(&fb, fixnum), "a fixnum iconst is a fixnum constant");
-        assert!(!is_fixnum_const(&fb, nil), "nil (symbol tag) is not a fixnum");
-        assert!(!is_fixnum_const(&fb, sum), "an iadd result is not a constant");
+        assert!(
+            is_fixnum_const(&fb, fixnum),
+            "a fixnum iconst is a fixnum constant"
+        );
+        assert!(
+            !is_fixnum_const(&fb, nil),
+            "nil (symbol tag) is not a fixnum"
+        );
+        assert!(
+            !is_fixnum_const(&fb, sum),
+            "an iadd result is not a constant"
+        );
 
         // is_known_fixnum additionally recognizes a retag_fixnum output (a
         // range-checked arithmetic result), eliding the re-guard on chained
         // arithmetic; a bare untagged iadd is not recognized.
         let shifted = fb.ins().ishl_imm(sum, FIXNUM_SHIFT as i64);
         let retagged = fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64);
-        assert!(is_known_fixnum(&fb, retagged), "retag_fixnum output is a known fixnum");
-        assert!(is_known_fixnum(&fb, fixnum), "a fixnum constant is a known fixnum");
-        assert!(!is_known_fixnum(&fb, sum), "a bare iadd is not a known fixnum");
+        assert!(
+            is_known_fixnum(&fb, retagged),
+            "retag_fixnum output is a known fixnum"
+        );
+        assert!(
+            is_known_fixnum(&fb, fixnum),
+            "a fixnum constant is a known fixnum"
+        );
+        assert!(
+            !is_known_fixnum(&fb, sum),
+            "a bare iadd is not a known fixnum"
+        );
         assert!(!is_known_fixnum(&fb, nil), "nil is not a known fixnum");
     }
 
     fn known_fixnum_at(ops: &[Op], constants: &[Value], leader: usize) -> Option<Vec<bool>> {
         let cfg = analyze_cfg(ops, constants, None, 0).unwrap();
-        compute_known_fixnum_slots(ops, constants, &cfg).get(&leader).cloned()
+        compute_known_fixnum_slots(ops, constants, &cfg)
+            .get(&leader)
+            .cloned()
     }
 
     #[test]
@@ -6169,16 +6277,16 @@ mod tests {
         // THE TARGET: a loop induction variable (i=0; while i<10: i=1+i) is
         // proven fixnum at the loop head across the back-edge (the fixpoint).
         let loop_ops = [
-            Op::Constant(0),   // 0: i = 0
-            Op::StackRef(0),   // 1: loop head (back-edge target): push i
-            Op::Constant(1),   // 2: push limit 10
-            Op::Lss,           // 3: i < 10
-            Op::GotoIfNil(9),  // 4: pop; exit -> 9
-            Op::StackRef(0),   // 5: body: push i
-            Op::Add1,          // 6: 1+ i
-            Op::StackSet(1),   // 7: i = 1+ i
-            Op::Goto(1),       // 8: back-edge
-            Op::Return,        // 9: exit
+            Op::Constant(0),  // 0: i = 0
+            Op::StackRef(0),  // 1: loop head (back-edge target): push i
+            Op::Constant(1),  // 2: push limit 10
+            Op::Lss,          // 3: i < 10
+            Op::GotoIfNil(9), // 4: pop; exit -> 9
+            Op::StackRef(0),  // 5: body: push i
+            Op::Add1,         // 6: 1+ i
+            Op::StackSet(1),  // 7: i = 1+ i
+            Op::Goto(1),      // 8: back-edge
+            Op::Return,       // 9: exit
         ];
         let lc = [Value::make_int(0), Value::make_int(10)];
         assert_eq!(
@@ -6583,7 +6691,8 @@ mod tests {
                     let ctx_ptr = &mut eval as *mut Context as *mut u8;
                     if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[arg]) {
                         assert_eq!(
-                            bits, want,
+                            bits,
+                            want,
                             "MIR if-branch mismatch for arg bits {}",
                             arg.bits()
                         );
@@ -6745,7 +6854,8 @@ mod tests {
                     let ctx_ptr = &mut eval as *mut Context as *mut u8;
                     if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[c]) {
                         assert_eq!(
-                            bits, want,
+                            bits,
+                            want,
                             "MIR merge-phi mismatch for cond bits {}",
                             c.bits()
                         );
@@ -6794,7 +6904,8 @@ mod tests {
                     let ctx_ptr = &mut eval as *mut Context as *mut u8;
                     if let NativeRun::Ok(bits) = mleaf.call(ctx_ptr, &[c]) {
                         assert_eq!(
-                            bits, want,
+                            bits,
+                            want,
                             "MIR multi-phi-merge mismatch for cond bits {}",
                             c.bits()
                         );
@@ -6817,7 +6928,10 @@ mod tests {
         let mut m = mir::build_mir(&caller_ops, &caller_consts, 1).expect("caller MIR builds");
         let n = mir::inline_pure_single_block_callees(
             &mut m,
-            &|v| (v.bits() == sq_sym.bits()).then(|| mir::build_mir(&sq_ops, &[], 1).expect("sq builds")),
+            &|v| {
+                (v.bits() == sq_sym.bits())
+                    .then(|| mir::build_mir(&sq_ops, &[], 1).expect("sq builds"))
+            },
             16,
             &mut Vec::new(),
         );
@@ -7004,8 +7118,7 @@ mod tests {
         ];
         f.constants = vec![g_sym, sq_sym];
         f.max_stack = 16;
-        let leaf =
-            compile_bytecode_function_with(&f, Some(&ev.obarray)).expect("F compiles");
+        let leaf = compile_bytecode_function_with(&f, Some(&ev.obarray)).expect("F compiles");
         assert!(
             leaf.inline_epoch().is_some(),
             "F inlined sq -> took the MIR tier (not the baseline)"
@@ -7110,7 +7223,13 @@ mod tests {
         // F = (car (cons a b)) -> a, with the cons ELIDED (escape analysis, pure
         // body -> MIR tier, zero allocation). Previously the cons bailed the whole
         // body to the baseline. Verify it lowers (no bail) and returns the car.
-        let ops = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Car, Op::Return];
+        let ops = [
+            Op::StackRef(1),
+            Op::StackRef(1),
+            Op::Cons,
+            Op::Car,
+            Op::Return,
+        ];
         let m = mir::build_mir(&ops, &[], 2).expect("builds");
         let leaf = lower_mir_pure(&m).expect("scalar-replaced cons lowers (no bail)");
         assert!(

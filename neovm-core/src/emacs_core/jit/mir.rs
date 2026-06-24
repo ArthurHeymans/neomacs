@@ -986,10 +986,7 @@ pub(crate) fn cons_scalar_repl_targets(m: &MirFunction) -> Vec<Option<(MirValue,
                 MirOp::Arg(_) | MirOp::Const(_) => {}
                 // A car/cdr read is the ONLY non-escaping use of a cons.
                 MirOp::CarCdr { .. } => {}
-                MirOp::Bin(_, a, b)
-                | MirOp::Cmp(_, a, b)
-                | MirOp::Eq(a, b)
-                | MirOp::Cons(a, b) => {
+                MirOp::Bin(_, a, b) | MirOp::Cmp(_, a, b) | MirOp::Eq(a, b) | MirOp::Cons(a, b) => {
                     esc(*a, &mut escapes);
                     esc(*b, &mut escapes);
                 }
@@ -1214,7 +1211,9 @@ mod tests {
         let mut m = build_mir(&caller_ops, &constants, 1).expect("caller builds");
         let n = inline_pure_single_block_callees(
             &mut m,
-            &|v| (v.bits() == id_sym.bits()).then(|| build_mir(&id_ops, &[], 1).expect("id builds")),
+            &|v| {
+                (v.bits() == id_sym.bits()).then(|| build_mir(&id_ops, &[], 1).expect("id builds"))
+            },
             8,
             &mut Vec::new(),
         );
@@ -1231,7 +1230,13 @@ mod tests {
     #[test]
     fn cons_scalar_repl_finds_only_non_escaping_conses() {
         // (car (cons a b)) — the cons is consumed only by car -> replaceable.
-        let ops = [Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Car, Op::Return];
+        let ops = [
+            Op::StackRef(1),
+            Op::StackRef(1),
+            Op::Cons,
+            Op::Car,
+            Op::Return,
+        ];
         let m = build_mir(&ops, &[], 2).expect("builds");
         assert!(
             cons_scalar_repl_targets(&m).iter().any(|r| r.is_some()),

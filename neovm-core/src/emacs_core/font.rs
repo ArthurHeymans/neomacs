@@ -27,12 +27,12 @@ use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
-use crate::tagged::header::store_value_atomic;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
     FontWidth, LFACE_ATTRS, LFACE_VECTOR_SIZE, LFaceAttr, UnderlineStyle,
 };
 use crate::heap_types::LispString;
+use crate::tagged::header::store_value_atomic;
 use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, FrameParam, WindowId};
 
 type AlternativeFontFamilyAlist = Vec<(SymId, Vec<SymId>)>;

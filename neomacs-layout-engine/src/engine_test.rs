@@ -1895,8 +1895,8 @@ fn layout_bench_warm() {
         .expect("current buffer")
         .id();
     // ~120 lines of representative code-like ASCII (a real editing buffer).
-    let text =
-        "(defun example-helper (alpha beta) (let ((sum (+ alpha beta))) (* sum sum)))\n".repeat(120);
+    let text = "(defun example-helper (alpha beta) (let ((sum (+ alpha beta))) (* sum sum)))\n"
+        .repeat(120);
     insert_fragmented_current_buffer_text(&mut eval, &text);
     let frame_id = eval
         .frame_manager_mut()
