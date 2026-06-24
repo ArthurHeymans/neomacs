@@ -3394,3 +3394,51 @@ fn div_core_divergence_surface_normal_mode_fundamental_change_hooks() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_frame_terminal_type_shape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (terminal t "initial_terminal" (terminal) 0)
+    // Neomacs:   OK (vector t "initial_terminal" (vector) 0)
+    // GNU terminal objects have type `terminal`; Neomacs represents the frame
+    // terminal object as a vector while otherwise passing terminal-live-p,
+    // terminal-name, terminal-list membership, and terminal parameters.
+    assert_oracle_parity(
+        r##"
+(let ((terminal (frame-terminal (selected-frame))))
+  (list (type-of terminal)
+        (terminal-live-p terminal)
+        (terminal-name terminal)
+        (mapcar #'type-of (terminal-list))
+        (terminal-parameter terminal 'normal-erase-is-backspace)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_standard_display_underline_table_mutation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((char-table [0]) (char-table [1]))
+    // Neomacs:   OK ((err wrong-type-argument arrayp) (char-table nil))
+    // standard-display-underline creates standard-display-table when nil and
+    // mutates existing table entries in GNU; Neomacs errors when nil and leaves
+    // an existing table entry nil.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-underline ?A ?_)
+         (list (type-of standard-display-table)
+               (aref standard-display-table ?A)))
+     (error (list 'err (car err) (cadr err)))))
+ (let ((standard-display-table (make-display-table)))
+   (standard-display-underline ?B ?_)
+   (list (type-of standard-display-table)
+         (aref standard-display-table ?B))))
+"##,
+    );
+}
