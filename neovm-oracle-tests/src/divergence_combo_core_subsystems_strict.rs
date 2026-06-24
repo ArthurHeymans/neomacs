@@ -2944,3 +2944,22 @@ fn div_core_divergence_surface_encode_coding_string_mac_unix_eol() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_decode_coding_string_eol_detection() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 10 98) (97 10 98) undecided-dos undecided-mac)
+    // Neomacs:   OK ((97 13 10 98) (97 13 98) undecided undecided)
+    // decode-coding-string with bare dos/mac aliases does not collapse CRLF/CR
+    // to LF in Neomacs (raw bytes retained), and detect-coding-string fails to
+    // report the dos/mac EOL variant, returning plain `undecided`.
+    assert_oracle_parity(
+        r##"
+(list (append (decode-coding-string "a\r\nb" 'dos) nil)
+      (append (decode-coding-string "a\rb" 'mac) nil)
+      (detect-coding-string "a\r\nb\r\n" t)
+      (detect-coding-string "a\rb\rc" t))
+"##,
+    );
+}
