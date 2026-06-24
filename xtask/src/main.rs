@@ -1559,6 +1559,14 @@ fn semantic_grammar_args(kind: SemanticGrammarKind, output: &Path, source: &Path
         OsString::from("--no-site-lisp"),
         OsString::from("--eval"),
         OsString::from("(setq load-prefer-newer t)"),
+        // Force-load cl-extra so `cl-find-class` is defined. The grammar generator
+        // runs on the BOOTSTRAP neomacs, which predates the loaddefs regen that
+        // provides cl-find-class's autoload — so it would otherwise error
+        // `void-function: cl-find-class`. (GNU's admin/grammars/Makefile sidesteps
+        // this by running the generator with the FULLY-BUILT emacs, whose complete
+        // loaddefs autoload it; the bootstrap lacks those, so we load it directly.)
+        OsString::from("-l"),
+        OsString::from("cl-extra"),
         OsString::from("-l"),
         OsString::from(library),
         OsString::from("-f"),

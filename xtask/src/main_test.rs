@@ -1008,6 +1008,10 @@ fn semantic_grammar_args_match_gnu_wisent_shape() {
             OsString::from("--no-site-lisp"),
             OsString::from("--eval"),
             OsString::from("(setq load-prefer-newer t)"),
+            // cl-extra is loaded first so `cl-find-class` is defined on the
+            // bootstrap neomacs (GNU relies on the fully-built emacs's autoloads).
+            OsString::from("-l"),
+            OsString::from("cl-extra"),
             OsString::from("-l"),
             OsString::from("semantic/wisent/grammar"),
             OsString::from("-f"),
