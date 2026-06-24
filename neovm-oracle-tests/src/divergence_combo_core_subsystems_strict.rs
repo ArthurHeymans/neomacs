@@ -854,3 +854,130 @@ fn div_core_divergence_surface_derived_mode_change_hook_order() {
 "##,
     );
 }
+
+#[test]
+fn div_core_after_change_major_mode_hook_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: after-change-major-mode-hook runs with the new major mode
+    // already installed.
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (add-hook 'after-change-major-mode-hook
+            (lambda () (push (list 'after major-mode) log)))
+  (with-temp-buffer
+    (text-mode)
+    (list major-mode (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_field_boundary_motion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: field-beginning/field-end/field-string and constrain-to-field
+    // across three text-property fields.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "aa bb cc")
+  (put-text-property 1 3 'field 'left)
+  (put-text-property 4 6 'field 'mid)
+  (put-text-property 7 9 'field 'right)
+  (list (field-beginning 5) (field-end 5) (field-string 5)
+        (constrain-to-field 8 5)
+        (constrain-to-field 2 5)))
+"##,
+    );
+}
+
+#[test]
+fn div_core_default_value_buffer_local_symbol_plist_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Parity lock: set-default after per-buffer setq-local, plus symbol plist.
+    assert_oracle_parity(
+        r##"
+(progn
+  (defvar probe--bufvar 'global)
+  (put 'probe--bufvar 'safe-local-variable #'symbolp)
+  (let ((b1 (generate-new-buffer " *probe-var-a*"))
+        (b2 (generate-new-buffer " *probe-var-b*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer b1 (setq-local probe--bufvar 'a))
+          (with-current-buffer b2 (setq-local probe--bufvar 'b))
+          (set-default 'probe--bufvar 'new-global)
+          (list (default-value 'probe--bufvar)
+                (buffer-local-value 'probe--bufvar b1)
+                (buffer-local-value 'probe--bufvar b2)
+                (get 'probe--bufvar 'safe-local-variable)))
+      (kill-buffer b1)
+      (kill-buffer b2))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_text_mode_change_major_mode_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (text-mode (change (after text-mode)))
+    // Neomacs:   OK (text-mode ((after text-mode)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (add-hook 'change-major-mode-hook (lambda () (push 'change log)))
+  (add-hook 'after-change-major-mode-hook
+            (lambda () (push (list 'after major-mode) log)))
+  (with-temp-buffer
+    (text-mode)
+    (list major-mode (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_set_auto_mode_change_hook() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (text-mode (change text-hook))
+    // Neomacs:   OK (text-mode (text-hook))
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (auto-mode-alist '(("\\.probe\\'" . text-mode))))
+  (add-hook 'change-major-mode-hook (lambda () (push 'change log)))
+  (add-hook 'text-mode-hook (lambda () (push 'text-hook log)))
+  (with-temp-buffer
+    (setq buffer-file-name "x.probe")
+    (set-auto-mode)
+    (list major-mode (nreverse log))))
+"##,
+    );
+}
+
+#[test]
+fn div_core_divergence_surface_read_only_before_change_hook_count() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24: a rejected read-only insertion still
+    // double-fires before-change-functions in Neomacs.
+    // GNU Emacs: OK (buffer-read-only ok "abcY" ((before 4 4)))
+    // Neomacs:   OK (buffer-read-only ok "abcY" ((before 4 4) (before 4 4)))
+    assert_oracle_parity(
+        r##"
+(let ((log nil))
+  (with-temp-buffer
+    (insert "abc")
+    (setq buffer-read-only t)
+    (add-hook 'before-change-functions
+              (lambda (&rest args) (push (cons 'before args) log))
+              nil t)
+    (let ((err1 (condition-case err (progn (insert "X") 'ok) (error (car err))))
+          (err2 (let ((inhibit-read-only t))
+                  (goto-char (point-max))
+                  (insert "Y")
+                  'ok)))
+      (list err1 err2 (buffer-string) (nreverse log)))))
+"##,
+    );
+}
