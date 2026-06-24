@@ -172,12 +172,103 @@ fn div_sp_up_list_from_inner() {
 #[test]
 fn div_sp_parse_partial_quoted_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // "\(a\)": every paren is escaped (Sescape quotes the next char), so neither
+    // "(" nor ")" is a delimiter.  The trailing escape skips to EOB and GNU's
+    // scan_sexps_forward reaches `endquoted', which bypasses `symdone' so the
+    // last-complete-sexp slot (element 2) stays nil; element 5 (quoted) is t and
+    // element 10 holds the escape syntax code (Sescape = 9).
+    // GNU: (0 nil nil nil nil t 0 nil nil nil 9)
     assert_oracle_parity(
         r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "\\(a\\)")
   (parse-partial-sexp 1 5))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_parse_partial_escaped_paren_mid_list() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // "(a \( b)": the escaped "(" in the middle is NOT an open paren, so the
+    // outer list stays balanced and closes; element 2 (last complete sexp) is
+    // the outer list start 1, element 5 nil, element 10 nil.
+    // GNU: (0 nil 1 nil nil nil 0 nil nil nil nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "(a \\( b)")
+  (parse-partial-sexp 1 9))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_parse_partial_char_literal_paren() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // "?(": parse-partial-sexp uses the SYNTAX TABLE, not reader semantics, so
+    // "?" is an expression-prefix and "(" still opens a list -> depth 1, with
+    // the open paren at 2 recorded in element 1 and the open-paren stack (2).
+    // GNU: (1 2 nil nil nil nil 0 nil nil (2) nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "?(")
+  (parse-partial-sexp 1 3))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_parse_partial_escaped_paren_in_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Escape inside a string: "\"a\\(b\"" is the 5 chars  " a \ ( b  with no
+    // closing quote scanned, so element 3 reports the string terminator (34 =
+    // ?\") and element 8 the string start (1); the escaped "(" is inert.
+    // GNU: (0 nil nil 34 nil nil 0 nil 1 nil nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "\"a\\(b\"")
+  (parse-partial-sexp 1 6))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_parse_partial_lone_trailing_escape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // "a\": a symbol char then a trailing escape at EOB.  Like \(a\), the
+    // trailing escape forces `endquoted', so the symbol is NOT registered as a
+    // complete sexp (element 2 nil); element 5 (quoted) is t and element 10 = 9.
+    // GNU: (0 nil nil nil nil t 0 nil nil nil 9)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "a\\")
+  (parse-partial-sexp 1 3))
+"##,
+    );
+}
+
+#[test]
+fn div_sp_parse_partial_escaped_symbol_completes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // "a\(b\)c" scanned fully: the escapes are part of one symbol run; a normal
+    // symbol char ends the run via `symdone', so element 2 (last complete sexp)
+    // is the symbol start 1, with no trailing quote (element 5 nil, 10 nil).
+    // GNU: (0 nil 1 nil nil nil 0 nil nil nil nil)
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (emacs-lisp-mode)
+  (insert "a\\(b\\)c")
+  (parse-partial-sexp 1 8))
 "##,
     );
 }

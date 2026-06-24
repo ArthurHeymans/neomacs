@@ -4220,6 +4220,21 @@ enum CommentStopMode {
     SyntaxTable,
 }
 
+/// GNU `Smax` (one past `Sstring_fence`); used as the "no significant syntax"
+/// sentinel for `prev_from_syntax` so element 10 of the parse state is nil.
+const PARSE_PREV_SYNTAX_SMAX: i64 = 16;
+
+/// GNU `SYNTAX_FLAGS_COMSTARTEND_FIRST`: bit 16 (comment-start-first) or bit 18
+/// (comment-end-first) of a `prev_from_syntax` integer.
+const PARSE_PREV_SYNTAX_COMSTARTEND_FIRST: i64 = 0x5_0000;
+
+/// Build GNU's `SYNTAX_WITH_FLAGS` integer for element 10 of `parse-partial-sexp`:
+/// the low byte is the syntax class code and bits 16..=23 hold the flag byte
+/// (matching GNU `src/syntax.h`: comment-start-first at bit 16, etc.).
+fn parse_prev_syntax_int(class: SyntaxClass, flags: SyntaxFlags) -> i64 {
+    class.code() | ((flags.bits() as i64) << 16)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PartialParseState {
     depth: i64,
@@ -4230,6 +4245,10 @@ struct PartialParseState {
     comment_or_string_start: Option<i64>,
     quoted: bool,
     in_string_from_oldstate: bool,
+    /// GNU `prev_from_syntax`: the `SYNTAX_WITH_FLAGS` integer of the most
+    /// recently scanned position, or `PARSE_PREV_SYNTAX_SMAX` when that
+    /// position holds no significant two-char/quote syntax.
+    prev_syntax: i64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -4249,6 +4268,7 @@ impl PartialParseState {
             comment_or_string_start: None,
             quoted: false,
             in_string_from_oldstate: false,
+            prev_syntax: PARSE_PREV_SYNTAX_SMAX,
         }
     }
 
@@ -4319,6 +4339,14 @@ impl PartialParseState {
             }
         }
 
+        // GNU `internalize_parse_state`: element 10 seeds `prev_syntax`
+        // (defaulting to Smax when nil), so a continued parse can detect a
+        // pending escape/two-char construct that straddled the previous TO.
+        state.prev_syntax = match items.get(10).and_then(|v| v.as_fixnum()) {
+            Some(n) => n,
+            None => PARSE_PREV_SYNTAX_SMAX,
+        };
+
         state
     }
 
@@ -4388,6 +4416,25 @@ impl PartialParseState {
             .collect()
     }
 
+    /// GNU `scan_sexps_forward` `done`:
+    ///   state->prev_syntax =
+    ///     (SYNTAX_FLAGS_COMSTARTEND_FIRST (prev_from_syntax) || state->quoted)
+    ///       ? prev_from_syntax : Smax;
+    /// then element 10 is nil when the result is Smax, else the integer.
+    fn prev_syntax_element(&self) -> Value {
+        let effective =
+            if (self.prev_syntax & PARSE_PREV_SYNTAX_COMSTARTEND_FIRST) != 0 || self.quoted {
+                self.prev_syntax
+            } else {
+                PARSE_PREV_SYNTAX_SMAX
+            };
+        if effective == PARSE_PREV_SYNTAX_SMAX {
+            Value::NIL
+        } else {
+            Value::fixnum(effective)
+        }
+    }
+
     fn into_value(self) -> Value {
         let containing_sexp_start = self.containing_sexp_start();
         let completed_sexp_start = self.current_level_completed_sexp_start();
@@ -4436,7 +4483,7 @@ impl PartialParseState {
             self.comment_or_string_start
                 .map_or(Value::NIL, Value::fixnum),
             stack_value,
-            Value::NIL,
+            self.prev_syntax_element(),
         ])
     }
 }
@@ -4516,6 +4563,13 @@ fn parse_state_from_range_with_options(
         let ch = chars.char_at(idx);
         let (class, flags) =
             syntax_class_and_flags(buf, table, ch, abs_char, honor_properties, &prop_cache);
+
+        // GNU INC_FROM records `prev_from_syntax` for every position it steps
+        // over; element 10 of the result reports it when the final position
+        // holds a quote/comment-delimiter-first construct.  Specific arms below
+        // reset it to Smax exactly where GNU does (2-char comment start, string
+        // and comment terminators).
+        state.prev_syntax = parse_prev_syntax_int(class, flags);
 
         if state.quoted {
             state.quoted = false;
@@ -4713,9 +4767,19 @@ fn parse_state_from_range_with_options(
             break;
         }
 
+        // GNU `symstarted` continues a symbol/atom run across word, symbol,
+        // quote AND escape/char-quote constituents; only some other syntax
+        // class triggers `symdone' (which records the completed sexp).  Escape
+        // and char-quote must therefore NOT finish the pending atom here —
+        // doing so wrongly promoted an escaped run to a completed sexp (the
+        // `\(a\)` / `a\(b\)c` divergence).
         if !matches!(
             class,
-            SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Quote
+            SyntaxClass::Word
+                | SyntaxClass::Symbol
+                | SyntaxClass::Quote
+                | SyntaxClass::Escape
+                | SyntaxClass::CharQuote
         ) {
             finish_atom(&mut state, &mut atom_start);
         }
@@ -4738,6 +4802,10 @@ fn parse_state_from_range_with_options(
                 });
                 state.comment_or_string_start = Some(pos1);
                 idx += 2;
+                // GNU sets `prev_from_syntax = Smax` after consuming a two-char
+                // comment opener ("the syntax has already been used up"), so a
+                // commentstop here reports element 10 as nil.
+                state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                 if commentstop != CommentStopMode::None {
                     break;
                 }
@@ -4805,10 +4873,23 @@ fn parse_state_from_range_with_options(
                 continue;
             }
             SyntaxClass::Escape | SyntaxClass::CharQuote => {
+                // GNU `scan_sexps_forward` treats an escape/char-quote like the
+                // start of a symbol run: it records `curlevel->last = prev_from`
+                // (anchoring the atom at the escape) and skips the quoted char,
+                // then continues scanning the symbol.  The atom is only promoted
+                // to a *completed* sexp (`curlevel->prev`, our element 2) when a
+                // non-symbol char ends the run via `symdone'.
+                atom_start.get_or_insert(pos1);
                 if idx + 1 < to_idx {
                     idx += 2;
                     continue;
                 }
+                // Escape with no following char: GNU jumps to `endquoted',
+                // which sets state->quoted but BYPASSES `symdone', so the
+                // pending atom is never recorded as a completed sexp.  Drop it
+                // so element 2 stays nil (matching GNU's `\(a\)`).  prev_syntax
+                // already holds the escape's syntax for element 10.
+                atom_start = None;
                 state.quoted = true;
                 idx += 1;
                 continue;
