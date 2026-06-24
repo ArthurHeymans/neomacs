@@ -3365,3 +3365,32 @@ fn div_core_divergence_surface_magic_auto_mode_change_hook() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_normal_mode_fundamental_change_hooks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (fundamental-mode ((change fundamental-mode) (after fundamental-mode)
+    //                                  (change fundamental-mode) (after fundamental-mode)))
+    // Neomacs:   OK (fundamental-mode ((after fundamental-mode) (after fundamental-mode)))
+    // normal-mode with no auto/magic mode match still calls fundamental-mode twice in GNU,
+    // and each transition runs change-major-mode-hook before after-change-major-mode-hook.
+    // Neomacs runs after-change-major-mode-hook but skips change-major-mode-hook.
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (auto-mode-alist nil)
+      (magic-mode-alist nil)
+      (magic-fallback-mode-alist nil))
+  (add-hook 'change-major-mode-hook
+            (lambda () (push (list 'change major-mode) log)))
+  (add-hook 'after-change-major-mode-hook
+            (lambda () (push (list 'after major-mode) log)))
+  (with-temp-buffer
+    (insert "text")
+    (setq buffer-file-name "x.unknown")
+    (normal-mode t)
+    (list major-mode (nreverse log))))
+"##,
+    );
+}
