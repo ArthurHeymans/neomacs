@@ -3594,3 +3594,37 @@ fn div_core_divergence_surface_file_name_handler_copy_rename_delete_args() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_insert_file_contents_literally_handler_expand() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (("/h:/f" 1) "X" ((expand-file-name ("/h:/f" nil))
+    //                (insert-file-contents ("/h:/f" nil nil nil nil))))
+    // Neomacs:   OK (("/h:/f" 1) "X" ((insert-file-contents ("/h:/f" nil nil nil nil))))
+    // insert-file-contents-literally still dispatches the expand-file-name
+    // handler before insert-file-contents in GNU; Neomacs skips that handler.
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      (file-name-handler-alist nil))
+  (letrec ((handler
+            (lambda (op &rest args)
+              (push (list op args) log)
+              (cond
+               ((eq op 'insert-file-contents)
+                (insert "X")
+                (list (car args) 1))
+               (t
+                (let ((inhibit-file-name-handlers
+                       (cons handler inhibit-file-name-handlers))
+                      (inhibit-file-name-operation op))
+                  (apply op args)))))))
+    (setq file-name-handler-alist `(("\\`/h:" . ,handler)))
+    (with-temp-buffer
+      (list (insert-file-contents-literally "/h:/f")
+            (buffer-string)
+            (nreverse log)))))
+"##,
+    );
+}
