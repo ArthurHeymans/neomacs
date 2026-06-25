@@ -3807,3 +3807,26 @@ fn div_core_divergence_surface_where_is_ignores_overriding_terminal_map() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_substitute_command_keys_terminal_override() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (cmd-x nil #("M-x cmd-x" ...) nil)
+    // Neomacs:   OK (cmd-x ([3 120]) #("C-c x" ...) nil)
+    // substitute-command-keys relies on where-is-internal. GNU ignores
+    // overriding-terminal-local-map for stable command substitution and falls
+    // back to M-x; Neomacs treats the transient terminal override as a real
+    // command binding and substitutes C-c x.
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map (kbd "C-c x") 'cmd-x)
+  (let ((overriding-terminal-local-map map))
+    (list (key-binding (kbd "C-c x"))
+          (where-is-internal 'cmd-x nil)
+          (substitute-command-keys "\\[cmd-x]")
+          (command-remapping 'cmd-x))))
+"##,
+    );
+}
