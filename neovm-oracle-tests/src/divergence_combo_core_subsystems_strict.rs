@@ -3853,3 +3853,23 @@ fn div_core_divergence_surface_global_map_special_event_bindings() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_regexp_unibyte_char_class() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (3 3 nil 0 0)
+    // Neomacs:   OK (3 3 0 0 0)
+    // In GNU, the POSIX regexp class [:unibyte:] does not match a unibyte
+    // string produced from the UTF-8 bytes of é here, while Neomacs reports a
+    // match at offset 0. Other unicode/nonascii/word/category controls match.
+    assert_oracle_parity(
+        r##"
+(list (string-match-p "[[:nonascii:]]" "abcé")
+      (string-match-p "[[:multibyte:]]" "abcé")
+      (string-match-p "[[:unibyte:]]" (string-as-unibyte "é"))
+      (string-match-p "[[:word:]]+" "é")
+      (string-match-p "\\cc" "中"))
+"##,
+    );
+}
