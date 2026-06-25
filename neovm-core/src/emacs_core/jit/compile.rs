@@ -84,7 +84,16 @@ use crate::tagged::value::{
 // ---------------------------------------------------------------------------
 
 /// Snapshot the scratch-root depth so it can be restored after a rooted region.
-extern "C" fn neovm_jit_gc_save() -> i64 {
+///
+/// `#[unsafe(no_mangle)] pub` (audit #3 / R1c call-bearing): an AOT `.so` that
+/// makes a runtime call imports this shim by its BARE name and binds it at
+/// `dlopen` against the host's dynamic symbol table (the host/test binary is
+/// linked `-rdynamic`). The JIT path is unaffected — it binds shims by ADDRESS
+/// via `builder.symbol(...)`, so the only effect of `no_mangle` is an exported
+/// symbol name. The 6 shims the MIR tier can emit ([`MIR_SHIM_NAMES`]) carry it.
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_gc_save() -> i64 {
     save_scratch_gc_roots() as i64
 }
 
@@ -97,7 +106,9 @@ extern "C" fn neovm_jit_gc_save() -> i64 {
 /// them anyway — and avoids the thread-local push for the many symbol/fixnum
 /// operands the JIT roots before calls. `gc_restore` truncates to the saved
 /// depth, so a variable push count is fine.
-extern "C" fn neovm_jit_gc_push(bits: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_gc_push(bits: i64) {
     let v = Value::from_bits(bits as usize);
     if v.is_heap_object() {
         push_scratch_gc_root(v);
@@ -105,13 +116,17 @@ extern "C" fn neovm_jit_gc_push(bits: i64) {
 }
 
 /// Pop the scratch roots back to a saved depth.
-extern "C" fn neovm_jit_gc_restore(saved: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_gc_restore(saved: i64) {
     restore_scratch_gc_roots(saved as usize);
 }
 
 /// Allocate `(cons car cdr)`. Roots car+cdr across the allocation itself; the
 /// caller roots any *other* live values first.
-extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
     let car = Value::from_bits(car as usize);
     let cdr = Value::from_bits(cdr as usize);
     let saved = save_scratch_gc_roots();
@@ -184,7 +199,9 @@ fn stash_pending_flow(flow: Flow) {
 /// - The generated code rooted every *other* live `Value` of its frame before
 ///   this call; the callee + args are rooted here, so a GC inside the callee
 ///   traces everything that survives the call.
-extern "C" fn neovm_jit_call(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_call(
     ctx: *mut u8,
     func_bits: i64,
     args_ptr: *const i64,
@@ -242,7 +259,9 @@ extern "C" fn neovm_jit_call(
 /// semantics (quit poll first, last argument spread as a list, writeback, NO
 /// nesting-depth guard — see `Vm::apply_for_jit`). Same SAFETY contract as
 /// [`neovm_jit_call`].
-extern "C" fn neovm_jit_apply(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_apply(
     ctx: *mut u8,
     func_bits: i64,
     args_ptr: *const i64,
@@ -287,12 +306,70 @@ extern "C" fn neovm_jit_apply(
     status
 }
 
+/// `#[used]` anchor for the AOT shim table (audit #3 / R1c call-bearing). The 6
+/// `#[unsafe(no_mangle)]` shims the MIR tier emits ([`MIR_SHIM_NAMES`](super::aot::MIR_SHIM_NAMES))
+/// are referenced only by ADDRESS through `builder.symbol(...)` in the JIT and by
+/// NAME (undefined import) from an AOT `.so` — neither is a static call the
+/// linker sees, so `--gc-sections` could drop them and `-rdynamic` would then
+/// have nothing to export. This `#[used]` array of their addresses pins all 6 so
+/// they survive DCE and are present for `--export-dynamic-symbol` to promote into
+/// the host's dynamic symbol table (where `dlopen` binds the `.so`'s imports).
+/// Fn-pointer addresses, in a `Sync` newtype so they can live in a `static`
+/// (raw pointers aren't `Sync`). Never read at runtime — the array exists only
+/// to anchor the symbols against DCE.
+#[repr(transparent)]
+struct ShimAddr(*const ());
+// SAFETY: `ShimAddr` holds a code address that is never dereferenced or mutated
+// through this static — it is link-time anchoring metadata only, sound to share.
+unsafe impl Sync for ShimAddr {}
+
+#[used]
+static JIT_SHIM_ANCHOR: [ShimAddr; 35] = [
+    ShimAddr(neovm_jit_apply as *const ()),
+    ShimAddr(neovm_jit_backedge as *const ()),
+    ShimAddr(neovm_jit_builtin1 as *const ()),
+    ShimAddr(neovm_jit_builtin2 as *const ()),
+    ShimAddr(neovm_jit_builtin3 as *const ()),
+    ShimAddr(neovm_jit_builtin_slice as *const ()),
+    ShimAddr(neovm_jit_call as *const ()),
+    ShimAddr(neovm_jit_call_spec as *const ()),
+    ShimAddr(neovm_jit_cons as *const ()),
+    ShimAddr(neovm_jit_eq_slow as *const ()),
+    ShimAddr(neovm_jit_gc_push as *const ()),
+    ShimAddr(neovm_jit_gc_restore as *const ()),
+    ShimAddr(neovm_jit_gc_save as *const ()),
+    ShimAddr(neovm_jit_integerp_slow as *const ()),
+    ShimAddr(neovm_jit_list as *const ()),
+    ShimAddr(neovm_jit_match_handler as *const ()),
+    ShimAddr(neovm_jit_named_builtin as *const ()),
+    ShimAddr(neovm_jit_numberp_slow as *const ()),
+    ShimAddr(neovm_jit_pop_handler as *const ()),
+    ShimAddr(neovm_jit_push_catch as *const ()),
+    ShimAddr(neovm_jit_push_cc as *const ()),
+    ShimAddr(neovm_jit_push_cc_raw as *const ()),
+    ShimAddr(neovm_jit_save_current_buffer as *const ()),
+    ShimAddr(neovm_jit_save_excursion as *const ()),
+    ShimAddr(neovm_jit_save_restriction as *const ()),
+    ShimAddr(neovm_jit_save_window_excursion as *const ()),
+    ShimAddr(neovm_jit_switch as *const ()),
+    ShimAddr(neovm_jit_switch_stale as *const ()),
+    ShimAddr(neovm_jit_symbolp_slow as *const ()),
+    ShimAddr(neovm_jit_throw as *const ()),
+    ShimAddr(neovm_jit_unbind as *const ()),
+    ShimAddr(neovm_jit_unwind_protect as *const ()),
+    ShimAddr(neovm_jit_varbind as *const ()),
+    ShimAddr(neovm_jit_varref as *const ()),
+    ShimAddr(neovm_jit_varset as *const ()),
+];
+
 /// Slow path for `eq` when the raw bits differ: only `symbols-with-pos` can
 /// still make two differing values `eq`. Read-only on the Context; never
 /// allocates, GCs, or signals — a plain value-returning helper.
 ///
 /// SAFETY: same vmctx contract as [`neovm_jit_call`], but only a shared read.
-extern "C" fn neovm_jit_eq_slow(ctx: *mut u8, a: i64, b: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_eq_slow(ctx: *mut u8, a: i64, b: i64) -> i64 {
     let a = Value::from_bits(a as usize);
     let b = Value::from_bits(b as usize);
     // SAFETY: seam-provided dormant Context; read-only access.
@@ -310,7 +387,9 @@ extern "C" fn neovm_jit_eq_slow(ctx: *mut u8, a: i64, b: i64) -> i64 {
 /// `symbols-with-pos-enabled`. Read-only; never allocates, GCs, or signals.
 ///
 /// SAFETY: same read-only vmctx contract as [`neovm_jit_eq_slow`].
-extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
     let v = Value::from_bits(v as usize);
     // SAFETY: seam-provided dormant Context; read-only access.
     let ctx = unsafe { &*(ctx as *const Context) };
@@ -326,7 +405,9 @@ extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
 /// `Vm::varref_for_jit`). Writes the value through `out` and returns
 /// [`STATUS_OK`], or stashes the `Flow` (e.g. `void-variable`) and returns
 /// [`STATUS_SIGNAL`]. SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64 {
     use crate::emacs_core::intern::SymId;
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -348,7 +429,9 @@ extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64 {
 /// `Vm::varset_for_jit`; may run variable watchers — arbitrary lisp). Roots the
 /// value across the assignment. SAFETY: same vmctx contract as
 /// [`neovm_jit_call`].
-extern "C" fn neovm_jit_varset(ctx: *mut u8, sym: i64, val: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_varset(ctx: *mut u8, sym: i64, val: i64) -> i64 {
     use crate::emacs_core::intern::SymId;
     let value = Value::from_bits(val as usize);
     let saved = save_scratch_gc_roots();
@@ -379,7 +462,9 @@ std::thread_local! {
 /// `specbind(sym, POP)` — infallible, like the interpreter arm). Records the
 /// pre-bind specpdl depth for the matching `unbind`.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) {
     use crate::emacs_core::intern::SymId;
     let value = Value::from_bits(val as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
@@ -392,7 +477,9 @@ extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) {
 /// semantics). The static bind-depth analysis guarantees `n` never exceeds this
 /// frame's outstanding binds; the `min` is defensive only.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let target = JIT_BIND_STACK.with(|s| {
@@ -508,7 +595,9 @@ fn direct_builtin_spec(op: &Op) -> Option<(u8, usize)> {
 /// the interpreter arm calls. Roots the argument across the call (builtins may
 /// GC); the generated code rooted the rest of its frame.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) -> i64 {
     let a = Value::from_bits(a as usize);
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(a);
@@ -531,7 +620,9 @@ extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) 
 
 /// Binary variant of [`neovm_jit_builtin1`].
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *mut i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *mut i64) -> i64 {
     let a = Value::from_bits(a as usize);
     let b = Value::from_bits(b as usize);
     let saved = save_scratch_gc_roots();
@@ -556,7 +647,9 @@ extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *m
 
 /// Ternary variant of [`neovm_jit_builtin1`].
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_builtin3(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_builtin3(
     ctx: *mut u8,
     idx: i64,
     a: i64,
@@ -592,7 +685,9 @@ extern "C" fn neovm_jit_builtin3(
 /// `Value::list_from_slice` on the live stack slice). The values are rooted
 /// here across the per-cell allocations; the generated code rooted the rest of
 /// its frame. Infallible, context-free.
-extern "C" fn neovm_jit_list(args_ptr: *const i64, nargs: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_list(args_ptr: *const i64, nargs: i64) -> i64 {
     let nargs = nargs as usize;
     let saved = save_scratch_gc_roots();
     let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
@@ -612,7 +707,9 @@ extern "C" fn neovm_jit_list(args_ptr: *const i64, nargs: i64) -> i64 {
 /// identical function the interpreter arm calls (`nconc`/`concat`/
 /// `substring`). Roots the operands across the call (they may allocate);
 /// context-free like the interpreter's slice calls.
-extern "C" fn neovm_jit_builtin_slice(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_builtin_slice(
     idx: i64,
     args_ptr: *const i64,
     nargs: i64,
@@ -649,7 +746,9 @@ extern "C" fn neovm_jit_builtin_slice(
 /// CallBuiltinSym, mutating-first-arg string writeback, trailing quit poll).
 /// `variant`: 0 = CallBuiltin, 1 = CallBuiltinSym, 2 = Aset.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_named_builtin(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_named_builtin(
     ctx: *mut u8,
     variant: i64,
     sym: i64,
@@ -697,7 +796,9 @@ extern "C" fn neovm_jit_named_builtin(
 /// runs arbitrary lisp: everything live is rooted here, the generated code
 /// rooted the rest of its frame.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
     use crate::emacs_core::window_cmds;
     let body = Value::from_bits(body as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
@@ -760,7 +861,9 @@ extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut
 /// take effect immediately, GNU default-settings parity).
 /// SAFETY: same vmctx contract as [`neovm_jit_call`]; `slot` points into the
 /// owning CompiledLeaf's spec_slots (alive whenever its code runs).
-extern "C" fn neovm_jit_call_spec(
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_call_spec(
     ctx: *mut u8,
     sym: i64,
     expected: i64,
@@ -853,7 +956,9 @@ extern "C" fn neovm_jit_call_spec(
 /// Compiled bodies have no local handlers (handler opcodes bail), so a throw
 /// always propagates out — exactly the interpreter's `resume_nonlocal` once no
 /// local handler matches. Context-free.
-extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
     stash_pending_flow(Flow::Throw {
         tag: Value::from_bits(tag as usize),
         value: Value::from_bits(value as usize),
@@ -863,7 +968,9 @@ extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
 /// Slow path for `integerp` when the value isn't a fixnum: bignums are
 /// veclikes, so delegate to the value layer's own predicate. Context-free,
 /// pure, never allocates or signals.
-extern "C" fn neovm_jit_integerp_slow(v: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_integerp_slow(v: i64) -> i64 {
     let v = Value::from_bits(v as usize);
     (if v.is_integer() {
         Value::T.bits()
@@ -874,7 +981,9 @@ extern "C" fn neovm_jit_integerp_slow(v: i64) -> i64 {
 
 /// Slow path for `numberp` when the value isn't a fixnum (floats, bignums).
 /// Context-free, pure, never allocates or signals.
-extern "C" fn neovm_jit_numberp_slow(v: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_numberp_slow(v: i64) -> i64 {
     let v = Value::from_bits(v as usize);
     (if v.is_number() {
         Value::T.bits()
@@ -886,7 +995,9 @@ extern "C" fn neovm_jit_numberp_slow(v: i64) -> i64 {
 /// `Op::SaveCurrentBuffer`: record the current buffer on the specpdl + the
 /// bind stack, exactly like the interpreter arm (conditional + infallible).
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_save_current_buffer(ctx: *mut u8) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_save_current_buffer(ctx: *mut u8) {
     use crate::emacs_core::eval::SpecBinding;
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -901,7 +1012,9 @@ extern "C" fn neovm_jit_save_current_buffer(ctx: *mut u8) {
 /// the interpreter uses (`record_save_excursion` pushes the specpdl record and
 /// returns the pre-push depth for the bind stack).
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_save_excursion(ctx: *mut u8) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_save_excursion(ctx: *mut u8) {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     if let Some(count) = ctx.record_save_excursion() {
@@ -912,7 +1025,9 @@ extern "C" fn neovm_jit_save_excursion(ctx: *mut u8) {
 /// `Op::SaveRestriction`: record the narrowing state, exactly like the
 /// interpreter arm (conditional + infallible).
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
     use crate::emacs_core::eval::SpecBinding;
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -929,7 +1044,9 @@ extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
 /// it: the matching `Unbind`, or the frame unwind on any exit — shared
 /// machinery with the interpreter, including the signal path.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_unwind_protect(ctx: *mut u8, forms: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_unwind_protect(ctx: *mut u8, forms: i64) {
     use crate::emacs_core::eval::SpecBinding;
     let forms = Value::from_bits(forms as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
@@ -947,7 +1064,9 @@ extern "C" fn neovm_jit_unwind_protect(ctx: *mut u8, forms: i64) {
 /// the current JIT bind-stack length (this frame's analogue of the
 /// interpreter's frame-local `bind_stack`). Infallible.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_push_cc(ctx: *mut u8, target: i64, stack_len: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_push_cc(ctx: *mut u8, target: i64, stack_len: i64) {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let resume_id = ctx.allocate_resume_id();
@@ -969,7 +1088,9 @@ extern "C" fn neovm_jit_push_cc(ctx: *mut u8, target: i64, stack_len: i64) {
 /// pattern (conditions) was popped from the operand stack by the generated
 /// code and is passed in. Infallible.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_push_cc_raw(ctx: *mut u8, target: i64, stack_len: i64, conditions: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_push_cc_raw(ctx: *mut u8, target: i64, stack_len: i64, conditions: i64) {
     let conditions = Value::from_bits(conditions as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -991,7 +1112,9 @@ extern "C" fn neovm_jit_push_cc_raw(ctx: *mut u8, target: i64, stack_len: i64, c
 /// `Op::PushCatch`: register a `catch` frame (tag popped by the generated
 /// code), mirroring the interpreter arm. Infallible.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_push_catch(ctx: *mut u8, target: i64, stack_len: i64, tag: i64) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_push_catch(ctx: *mut u8, target: i64, stack_len: i64, tag: i64) {
     let tag = Value::from_bits(tag as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -1013,7 +1136,9 @@ extern "C" fn neovm_jit_push_catch(ctx: *mut u8, target: i64, stack_len: i64, ta
 /// `Op::PopHandler`: drop the innermost handler frame (normal exit from a
 /// protected extent). The static handler-depth analysis guarantees balance.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_pop_handler(ctx: *mut u8) {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_pop_handler(ctx: *mut u8) {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     ctx.pop_condition_frame();
@@ -1044,7 +1169,9 @@ extern "C" fn neovm_jit_pop_handler(ctx: *mut u8) {
 /// ordinal back to the statically known handler target.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`]; `out` is the generated
 /// code's result stack slot.
-extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64) -> i64 {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let ours = ours as usize;
@@ -1184,7 +1311,9 @@ const JIT_SWITCH_STALE: i64 = -2;
 /// otherwise); the generated code maps raw addresses onto the statically
 /// resolved target blocks. Pure lookup — no allocation, no lisp.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i64 {
     let table = Value::from_bits(table as usize);
     let dispatch = Value::from_bits(dispatch as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
@@ -1218,7 +1347,9 @@ extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i64 {
 /// compiled target set (the jump table was mutated after compilation — code
 /// the byte-compiler never produces). Stash a loud signal; the generated code
 /// routes to its signal path. Context-free.
-extern "C" fn neovm_jit_switch_stale() {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_switch_stale() {
     stash_pending_flow(signal(
         "error",
         vec![Value::string("jit: switch jump table mutated at runtime")],
@@ -1231,7 +1362,9 @@ extern "C" fn neovm_jit_switch_stale() {
 /// backward jumps (the interpreter's u8 `quitcounter` cadence), with its live
 /// operand-stack values rooted by the caller — the poll may collect.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
-extern "C" fn neovm_jit_backedge(ctx: *mut u8) -> i64 {
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_backedge(ctx: *mut u8) -> i64 {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     match ctx.bytecode_branch_maybe_gc_and_quit() {
@@ -3938,31 +4071,64 @@ fn deopt_site(
     block
 }
 
-/// Raw addresses of the leaf's deopt cells + spill buffer, baked into the
-/// generated code as immediates (the owning Boxes are address-stable and
-/// outlive every execution of the code).
-/// The precise-deopt buffer base addresses, as ENTRY-BLOCK CLIF values (which
-/// dominate every cold deopt block). In JIT mode each is an `iconst` of the
-/// owning Box's address (the Box is address-stable + outlives the code); in AOT
-/// mode each is a `load` from the per-thread `LeafSidecar` (the bases are
-/// session-specific, so they cannot be baked). See [`materialize_deopt_refs`].
+/// How the precise-deopt blocks reach the leaf's deopt cells + spill buffer.
+///
+/// JIT (`Baked`): the four base addresses are stable Box pointers baked as
+/// `iconst` LAZILY inside each cold deopt block (zero hot-path cost — the
+/// pre-sidecar behavior). AOT (`Sidecar`): the bases are session-specific, so
+/// they are LOADED from the per-thread `LeafSidecar` ONCE in the entry block
+/// (which dominates the cold blocks) and shared as CLIF values. Splitting the
+/// two keeps the JIT's CLIF unchanged (audit: hoisting the iconsts to the entry
+/// block was a minor hot-path regression for JIT leaves with deopt sites).
 #[derive(Clone, Copy)]
-struct DeoptRefs {
-    spill_base: ClifValue,
-    meta_pc: ClifValue,
-    meta_depth: ClifValue,
-    meta_handlers: ClifValue,
+enum DeoptRefs {
+    /// JIT: raw Box addresses, iconst'd lazily in each cold deopt block.
+    Baked {
+        spill_base: i64,
+        meta_pc: i64,
+        meta_depth: i64,
+        meta_handlers: i64,
+    },
+    /// AOT: entry-block CLIF values loaded from the sidecar (dominate the cold
+    /// blocks, so reused directly).
+    Sidecar {
+        spill_base: ClifValue,
+        meta_pc: ClifValue,
+        meta_depth: ClifValue,
+        meta_handlers: ClifValue,
+    },
 }
 
 /// Fill the precise-deopt blocks queued within one bytecode block: spill the
 /// captured live stack, record pc/depth/handler-count, and return
-/// [`STATUS_DEOPT_AT`]. The base addresses come from `refs` (entry-block values
-/// that dominate these cold blocks) — no per-block `iconst` of an address.
+/// [`STATUS_DEOPT_AT`]. For `Baked` (JIT) the base addresses are iconst'd HERE in
+/// the cold block (off the hot path); for `Sidecar` (AOT) they are the
+/// entry-block loaded values.
 fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut Vec<PendingDeopt>) {
     for pd in pending.drain(..) {
         fb.switch_to_block(pd.block);
         fb.seal_block(pd.block);
-        let base = refs.spill_base;
+        // Materialize the four bases. For Baked, the iconsts live in THIS cold
+        // block (the original JIT placement); for Sidecar they are entry values.
+        let (spill_base, meta_pc, meta_depth, meta_handlers) = match refs {
+            DeoptRefs::Baked {
+                spill_base,
+                meta_pc,
+                meta_depth,
+                meta_handlers,
+            } => (
+                fb.ins().iconst(types::I64, spill_base),
+                fb.ins().iconst(types::I64, meta_pc),
+                fb.ins().iconst(types::I64, meta_depth),
+                fb.ins().iconst(types::I64, meta_handlers),
+            ),
+            DeoptRefs::Sidecar {
+                spill_base,
+                meta_pc,
+                meta_depth,
+                meta_handlers,
+            } => (spill_base, meta_pc, meta_depth, meta_handlers),
+        };
         for (j, &v) in pd.stack.iter().enumerate() {
             // Retag raw fixnum slots in the COLD deopt block (zero hot-path cost):
             // the framestate is read back as tagged Values by run_resumed_frame.
@@ -3972,30 +4138,31 @@ fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut 
                 v
             };
             fb.ins()
-                .store(MemFlags::trusted(), tagged, base, (j * 8) as i32);
+                .store(MemFlags::trusted(), tagged, spill_base, (j * 8) as i32);
         }
         let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
-        fb.ins().store(MemFlags::trusted(), pc_v, refs.meta_pc, 0);
+        fb.ins().store(MemFlags::trusted(), pc_v, meta_pc, 0);
         let depth_v = fb.ins().iconst(types::I64, pd.stack.len() as i64);
-        fb.ins().store(MemFlags::trusted(), depth_v, refs.meta_depth, 0);
+        fb.ins().store(MemFlags::trusted(), depth_v, meta_depth, 0);
         let h_v = fb.ins().iconst(types::I64, pd.handlers_len as i64);
-        fb.ins().store(MemFlags::trusted(), h_v, refs.meta_handlers, 0);
+        fb.ins().store(MemFlags::trusted(), h_v, meta_handlers, 0);
         let code = fb.ins().iconst(types::I64, STATUS_DEOPT_AT);
         fb.ins().return_(&[code]);
     }
 }
 
-/// Materialize the deopt-buffer bases as entry-block CLIF values. JIT bakes each
-/// Box address as an `iconst`; AOT loads each from the `sidecar` param at its
-/// fixed offset (the per-thread buffers were sized + their addresses written into
-/// the sidecar by the loader). MUST be called with `fb` positioned in the entry
-/// block (so the values dominate the cold deopt blocks).
+/// Build the [`DeoptRefs`] for this leaf.
 ///
-/// `has_precise_deopt` gates the AOT sidecar LOADS: a body with no precise-deopt
-/// site never reaches `emit_pending_deopts`, so the bases are unused — and in AOT
-/// mode the `sidecar` may even be null at the call site (the raw-entry pure-leaf
-/// path passes null). So when there is no precise deopt we emit harmless `iconst`
-/// placeholders (never stored-through) instead of dereferencing the sidecar.
+/// JIT (`aot=false`) → `DeoptRefs::Baked` with the raw Box addresses: NOTHING is
+/// emitted in the entry block; `emit_pending_deopts` iconst's them lazily inside
+/// each cold deopt block (the original placement — no hot-path cost).
+///
+/// AOT (`aot=true`) → `DeoptRefs::Sidecar` with the bases LOADED from the
+/// per-thread `LeafSidecar` in the ENTRY block (so they dominate the cold blocks
+/// and are shared). MUST be called with `fb` in the entry block. Gated on
+/// `has_precise_deopt`: a body with no precise-deopt site never reaches
+/// `emit_pending_deopts`, and the `sidecar` may even be null (the raw-entry
+/// pure-leaf path), so emit nothing/zero placeholders and dereference no sidecar.
 #[allow(clippy::too_many_arguments)]
 fn materialize_deopt_refs(
     fb: &mut FunctionBuilder,
@@ -4008,33 +4175,36 @@ fn materialize_deopt_refs(
     meta_depth_addr: i64,
     meta_handlers_addr: i64,
 ) -> DeoptRefs {
-    if aot && has_precise_deopt {
+    if !aot {
+        // JIT: defer the address iconsts to the cold deopt blocks. No entry-block
+        // codegen here at all — keeps the hot path byte-identical to pre-sidecar.
+        return DeoptRefs::Baked {
+            spill_base: spill_base_addr,
+            meta_pc: meta_pc_addr,
+            meta_depth: meta_depth_addr,
+            meta_handlers: meta_handlers_addr,
+        };
+    }
+    if has_precise_deopt {
         let sc = sidecar.expect("AOT precise-deopt lowering requires the sidecar param");
         let load = |fb: &mut FunctionBuilder, off: i32| {
             fb.ins().load(ptr_ty, MemFlags::trusted(), sc, off)
         };
-        DeoptRefs {
+        DeoptRefs::Sidecar {
             spill_base: load(fb, LeafSidecar::OFF_SPILL_BASE),
             meta_pc: load(fb, LeafSidecar::OFF_META_PC),
             meta_depth: load(fb, LeafSidecar::OFF_META_DEPTH),
             meta_handlers: load(fb, LeafSidecar::OFF_META_HANDLERS),
         }
-    } else if aot {
-        // AOT, no precise deopt: the bases are never used. Emit zero placeholders
-        // rather than touch a possibly-null sidecar.
+    } else {
+        // AOT, no precise deopt: bases unused (pending is empty). Zero
+        // placeholders, never a sidecar deref (sidecar may be null here).
         let z = fb.ins().iconst(ptr_ty, 0);
-        DeoptRefs {
+        DeoptRefs::Sidecar {
             spill_base: z,
             meta_pc: z,
             meta_depth: z,
             meta_handlers: z,
-        }
-    } else {
-        DeoptRefs {
-            spill_base: fb.ins().iconst(ptr_ty, spill_base_addr),
-            meta_pc: fb.ins().iconst(ptr_ty, meta_pc_addr),
-            meta_depth: fb.ins().iconst(ptr_ty, meta_depth_addr),
-            meta_handlers: fb.ins().iconst(ptr_ty, meta_handlers_addr),
         }
     }
 }

@@ -10,6 +10,66 @@ fn main() {
 
     unicode_gen::ensure_generated_unicode_lisp(&manifest_dir, project_root);
     generate_x11_color_table(project_root, &manifest_dir);
+
+    // R1c call-bearing AOT: export the host's `neovm_jit_*` shims
+    // (`#[unsafe(no_mangle)] pub`, anchored by `JIT_SHIM_ANCHOR`) into the TEST
+    // binaries' DYNAMIC symbol table, where a `dlopen`'d call/cons AOT `.so` binds
+    // its undefined imports against them. `-rdynamic` alone is insufficient under
+    // the workspace linker (it doesn't promote these otherwise-unreferenced fns
+    // to the dynamic table), so we additionally name each shim with
+    // `--export-dynamic-symbol`. `rustc-link-arg-tests` applies ONLY to test
+    // binaries — the lib + production binaries are untouched (production export is
+    // R2's job). Gated on the `jit` feature (the only config that emits AOT).
+    //
+    // R2 CARRY-FORWARD (R2-B5): the PRODUCTION binary (neomacs-bin) that loads the
+    // dump-time preload `.so` MUST replicate BOTH the `#[unsafe(no_mangle)] pub`
+    // shims AND this per-shim `--export-dynamic-symbol` export in ITS build.rs —
+    // under the `wild` linker, plain `-rdynamic` does NOT promote these
+    // address-only-referenced fns to the dynamic table, so the preload `.so`'s
+    // `neovm_jit_*` imports would otherwise fail to resolve at dlopen and abort on
+    // first shim call. Do not assume `-rdynamic` alone suffices.
+    if std::env::var_os("CARGO_FEATURE_JIT").is_some() && cfg!(target_os = "linux") {
+        println!("cargo:rustc-link-arg-tests=-rdynamic");
+        for shim in [
+            "neovm_jit_apply",
+            "neovm_jit_backedge",
+            "neovm_jit_builtin1",
+            "neovm_jit_builtin2",
+            "neovm_jit_builtin3",
+            "neovm_jit_builtin_slice",
+            "neovm_jit_call",
+            "neovm_jit_call_spec",
+            "neovm_jit_cons",
+            "neovm_jit_eq_slow",
+            "neovm_jit_gc_push",
+            "neovm_jit_gc_restore",
+            "neovm_jit_gc_save",
+            "neovm_jit_integerp_slow",
+            "neovm_jit_list",
+            "neovm_jit_match_handler",
+            "neovm_jit_named_builtin",
+            "neovm_jit_numberp_slow",
+            "neovm_jit_pop_handler",
+            "neovm_jit_push_catch",
+            "neovm_jit_push_cc",
+            "neovm_jit_push_cc_raw",
+            "neovm_jit_save_current_buffer",
+            "neovm_jit_save_excursion",
+            "neovm_jit_save_restriction",
+            "neovm_jit_save_window_excursion",
+            "neovm_jit_switch",
+            "neovm_jit_switch_stale",
+            "neovm_jit_symbolp_slow",
+            "neovm_jit_throw",
+            "neovm_jit_unbind",
+            "neovm_jit_unwind_protect",
+            "neovm_jit_varbind",
+            "neovm_jit_varref",
+            "neovm_jit_varset",
+        ] {
+            println!("cargo:rustc-link-arg-tests=-Wl,--export-dynamic-symbol={shim}");
+        }
+    }
     println!(
         "cargo:rerun-if-changed={}",
         manifest_dir.join("unicode-data").display()

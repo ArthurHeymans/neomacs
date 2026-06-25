@@ -61,17 +61,50 @@ pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 /// layout, or the shim set — it salts [`ABI_TAG`] so old artifacts stop matching.
 const ABI_TAG_VERSION: u32 = 1;
 
-/// The runtime-shim symbols an AOT `.so` imports (resolved against the host at
-/// `dlopen`). Folded into [`ABI_TAG`] so a shim-ABI change invalidates artifacts.
-/// MUST stay in sync with the `builder.symbol(...)` set in `lower_mir_pure` /
-/// `declare_rt_refs` (the shims the MIR tier can reference).
+/// The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
+/// against the host at `dlopen`). This is the complete `declare_rt_refs` set —
+/// the host exports ALL of them (`#[unsafe(no_mangle)] pub` + the per-shim
+/// `--export-dynamic-symbol` in build.rs) and ALL are salted into [`ABI_TAG`]
+/// (audit #15), so a shim-ABI change invalidates artifacts and a call-bearing
+/// leaf that references any of them resolves at load. MUST stay in sync with the
+/// shim definitions in `compile.rs` (and the build.rs export list + the
+/// `JIT_SHIM_ANCHOR` array, all enumerated identically).
 pub(crate) const MIR_SHIM_NAMES: &[&str] = &[
-    "neovm_jit_gc_save",
+    "neovm_jit_apply",
+    "neovm_jit_backedge",
+    "neovm_jit_builtin1",
+    "neovm_jit_builtin2",
+    "neovm_jit_builtin3",
+    "neovm_jit_builtin_slice",
+    "neovm_jit_call",
+    "neovm_jit_call_spec",
+    "neovm_jit_cons",
+    "neovm_jit_eq_slow",
     "neovm_jit_gc_push",
     "neovm_jit_gc_restore",
-    "neovm_jit_call",
-    "neovm_jit_apply",
-    "neovm_jit_cons",
+    "neovm_jit_gc_save",
+    "neovm_jit_integerp_slow",
+    "neovm_jit_list",
+    "neovm_jit_match_handler",
+    "neovm_jit_named_builtin",
+    "neovm_jit_numberp_slow",
+    "neovm_jit_pop_handler",
+    "neovm_jit_push_catch",
+    "neovm_jit_push_cc",
+    "neovm_jit_push_cc_raw",
+    "neovm_jit_save_current_buffer",
+    "neovm_jit_save_excursion",
+    "neovm_jit_save_restriction",
+    "neovm_jit_save_window_excursion",
+    "neovm_jit_switch",
+    "neovm_jit_switch_stale",
+    "neovm_jit_symbolp_slow",
+    "neovm_jit_throw",
+    "neovm_jit_unbind",
+    "neovm_jit_unwind_protect",
+    "neovm_jit_varbind",
+    "neovm_jit_varref",
+    "neovm_jit_varset",
 ];
 
 /// Compute [`ABI_TAG`] at compile time from the structural invariants. A `const`
@@ -177,17 +210,22 @@ pub(crate) fn write_value_recipe(out: &mut Vec<u8>, v: Value) -> Result<(), Unsu
         return Ok(());
     }
     if let Some(id) = v.as_symbol_id() {
-        // A symbol is rebuilt at load BY NAME (`intern(name)`), so reloc-by-name
-        // is sound ONLY for the CANONICAL interned symbol of that name. An
+        // A symbol is identified across sessions BY NAME, so reloc-by-name is
+        // sound ONLY for the CANONICAL interned symbol of that name. An
         // UNINTERNED / gensym (`make-symbol`, cl-macro/pcase expansion output)
-        // has a non-unique name, so `intern(name)` in the load session would
-        // yield a DIFFERENT (the canonical) symbol → wrong result. Reject it so
-        // the whole leaf falls to the JIT (which bakes the in-session SymId,
-        // correct same-session). (Audit #16 gensym hole — team-lead.)
+        // has a non-unique name, so a different session would resolve a
+        // DIFFERENT symbol → wrong result. Reject it so the whole leaf falls to
+        // the JIT (which bakes the in-session SymId, correct same-session).
+        // (Audit #16 gensym hole.)
         if !crate::emacs_core::intern::is_canonical_id(id) {
             return Err(UnsupportedRecipe(v));
         }
-        let name = crate::emacs_core::intern::resolve_sym(id);
+        // Encode the name BYTE-faithfully (audit #B): elisp symbol names can be
+        // non-UTF-8 (overlong C0/C1 raw bytes from `.elc`). `resolve_sym` would
+        // `panic!` on a non-UTF-8 name — fatal on the runtime cache path. Use the
+        // raw `LispString` bytes so the codec never panics AND round-trips any
+        // name; the rebuild side re-interns from the same bytes.
+        let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
         let nb = name.as_bytes();
         out.push(RECIPE_SYMBOL);
         out.extend_from_slice(&(nb.len() as u64).to_le_bytes());
@@ -234,13 +272,19 @@ pub(crate) fn rebuild_value(bytes: &[u8], depth: usize) -> Option<(Value, usize)
         }
         RECIPE_STRING => {
             let len = u64::from_le_bytes(bytes.get(1..9)?.try_into().ok()?) as usize;
-            let s = std::str::from_utf8(bytes.get(9..9usize.checked_add(len)?)?).ok()?;
-            Some((Value::string(s), 9 + len))
+            // Byte-faithful (audit #B): elisp strings may be raw unibyte / non-
+            // UTF-8, so reconstruct from the exact bytes, not a UTF-8 `&str`.
+            let raw = bytes.get(9..9usize.checked_add(len)?)?.to_vec();
+            let ls = crate::heap_types::LispString::from_emacs_bytes(raw);
+            Some((Value::heap_string(ls), 9 + len))
         }
         RECIPE_SYMBOL => {
             let len = u64::from_le_bytes(bytes.get(1..9)?.try_into().ok()?) as usize;
-            let name = std::str::from_utf8(bytes.get(9..9usize.checked_add(len)?)?).ok()?;
-            let id = crate::emacs_core::intern::intern(name);
+            // Byte-faithful symbol name (audit #B): re-intern from the raw bytes
+            // so a non-UTF-8 symbol name round-trips to the same canonical symbol.
+            let raw = bytes.get(9..9usize.checked_add(len)?)?.to_vec();
+            let ls = crate::heap_types::LispString::from_emacs_bytes(raw);
+            let id = crate::emacs_core::intern::intern_lisp_string(&ls);
             Some((Value::symbol(id), 9 + len))
         }
         RECIPE_CONS => {
@@ -385,7 +429,10 @@ pub(crate) fn decode_descriptor(bytes: &[u8]) -> Option<AotDescriptor> {
     let max_depth = rd_u64(bytes, &mut at)? as usize;
     let reloc_count = rd_u32(bytes, &mut at)?;
     let recipe_len = rd_u64(bytes, &mut at)? as usize;
-    let reloc_recipe = bytes.get(at..at + recipe_len)?.to_vec();
+    // checked_add (audit minor): recipe_len is untrusted; match the file's
+    // all-checked-slicing invariant so a crafted blob fails closed (None), never
+    // debug-panics on overflow, even for a future direct caller of this fn.
+    let reloc_recipe = bytes.get(at..at.checked_add(recipe_len)?)?.to_vec();
     Some(AotDescriptor {
         meta: super::compile::AotLeafMeta {
             arity,
@@ -411,11 +458,16 @@ pub(crate) fn aot_descriptor_symbol(content_hash: u128) -> String {
 /// reloc_count before it drives a huge allocation. Real leaves have a handful.
 const MAX_RELOC_COUNT: u32 = 64 * 1024;
 
-/// Rebuild the reloc-const Vec from a descriptor's recipe (R1c-3 + R1c-8): each
-/// per-slot recipe is decoded against the LIVE heap/obarray, producing fresh
-/// heap objects (allocated black by the alloc path). The caller roots them
-/// (R1c-8). Returns `None` on a malformed/over-long recipe (the loader then
-/// falls through to the JIT — the additive contract). MUST run under a live VM.
+/// Rebuild the reloc-const Vec from a descriptor's recipe — each per-slot recipe
+/// decoded against the LIVE heap/obarray (byte-faithful; `None` on malformed/
+/// over-long). Returns `None` on a malformed/over-long recipe.
+///
+/// NOT used by the in-session load path: audit #A made `load_leaf_from_unit`
+/// source `reloc_data` from the LIVE function's own constants (eq-identical to
+/// interp/JIT), and use the recipe only to VERIFY the `.so` matches. This
+/// rebuild-from-recipe is retained for a future TRUE-cross-session path (a load
+/// with no live source function), where fresh objects are the only option.
+#[allow(dead_code)]
 pub(crate) fn rebuild_reloc_consts(desc: &AotDescriptor) -> Option<Box<[Value]>> {
     if desc.reloc_count > MAX_RELOC_COUNT {
         return None;
@@ -438,57 +490,61 @@ pub(crate) fn rebuild_reloc_consts(desc: &AotDescriptor) -> Option<Box<[Value]>>
 // R1c-2 + R1c-5 (emit side): the full pure-leaf → object pipeline.
 // ---------------------------------------------------------------------------
 
-/// Whether a MIR leaf is AOT-runnable (R1c-sidecar scope), and why not.
+/// Whether a MIR leaf is AOT-runnable, and why not.
 ///
-/// The sidecar increment unblocks RELOC-bearing leaves: the reloc base is now
-/// loaded from the per-thread sidecar (R1c-sidecar) and its consts rebuilt at
-/// load from a recipe (R1c-3), so heap constants are fine. Still EXCLUDED:
-///   * CALL/APPLY (`needs_rt` via has_call) — imports the `neovm_jit_*` shims,
-///     which the host must export (`-rdynamic` + `#[used]`); that host-shim
-///     plumbing is a later increment. A call also means precise deopt, whose
-///     sidecar path IS implemented, but the shim imports block loading.
-///   * ESCAPING CONS — same: imports the cons shim (`needs_rt`).
-///   * non-recipe-able heap constants (float/vector/...) — `write_value_recipe`
-///     bails, so the content hash itself returns None upstream.
+/// The R1c call-bearing increment unblocks Call/Apply (+ escaping cons): the
+/// `neovm_jit_*` shims a runtime-call body imports are now host-EXPORTED
+/// (`#[unsafe(no_mangle)] pub` + the test/prod binary linked `-rdynamic`), so a
+/// call/cons `.so` binds them at `dlopen`. The precise-deopt-across-call path is
+/// already in the lowering (the sidecar `materialize_deopt_refs`), so a
+/// call-bearing leaf that deopts mid-body resumes correctly. Combined with the
+/// sidecar's reloc/symbol support, the AOT subset now matches the MIR pure tier.
+///
+/// Still EXCLUDED:
+///   * `CallBuiltin`/`CallBuiltinSym` — embed a SESSION-SPECIFIC raw `SymId`
+///     (audit #17), so they cannot be content-hashed canonically; also outside
+///     the MIR pure tier (they bail in `build_mir`/lowering anyway).
+///   * non-recipe-able constants (float/vector/uninterned-symbol) — caught
+///     upstream: `write_value_recipe` bails → `leaf_content_hash` is `None`.
 ///
 /// A rejected body stays JIT-only (strictly additive).
 fn mir_is_aot_runnable(m: &mir::MirFunction) -> bool {
     use mir::MirOp;
-    // Reject any op whose IDENTITY embeds a session-specific SymId. CALL/APPLY
-    // need the runtime shims (undefined host imports) AND precise deopt; the
-    // CallBuiltin*/Switch family embed a SymId or are otherwise outside the AOT
-    // subset. Explicitly reject the sym-bearing opaque ops here (audit #17) so
-    // the cache key (leaf_content_hash, which keys ops by Debug — non-canonical
-    // for an embedded raw SymId) is never armed for them, rather than relying on
-    // the downstream lowering Err. A pure required-only AOT body must contain
-    // none of these.
+    // Reject the sym-bearing opaque ops (audit #17): their Debug-keyed hash
+    // embeds a session-specific SymId, so the AOT cache key would be
+    // non-canonical. Call/Apply are now ALLOWED (their shims are host-exported).
     let has_unsupported_opaque = m.blocks.iter().any(|b| {
         b.insts.iter().any(|i| {
             matches!(
                 &i.op,
                 MirOp::Opaque {
-                    op: Op::Call(_)
-                        | Op::Apply(_)
-                        | Op::CallBuiltin(..)
-                        | Op::CallBuiltinSym(..),
+                    op: Op::CallBuiltin(..) | Op::CallBuiltinSym(..),
                     ..
                 }
             )
         })
     });
-    if has_unsupported_opaque {
-        return false;
-    }
-    // An ESCAPING cons calls the cons shim (needs_rt). A scalar-replaced
-    // (non-escaping) cons emits no shim, so only escaping conses block.
-    let cons_repl = mir::cons_scalar_repl_targets(m);
-    let has_escaping_cons = m
-        .blocks
-        .iter()
-        .flat_map(|b| b.insts.iter())
-        .any(|i| matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none());
-    !has_escaping_cons
-    // Heap constants are now ALLOWED (reloc via the sidecar + recipe rebuild).
+    !has_unsupported_opaque
+    // Call/Apply (precise deopt + call/apply/gc shims) and escaping cons (cons
+    // shim) are now AOT-runnable — the shims are host-exported and the sidecar
+    // carries the per-thread reloc + deopt bases.
+}
+
+/// Whether the MIR body makes a runtime CALL/APPLY — the same predicate
+/// `lower_mir_pure` uses for `has_call` (→ all-precise deopt + side effect).
+fn mir_has_call(m: &mir::MirFunction) -> bool {
+    use mir::MirOp;
+    m.blocks.iter().any(|b| {
+        b.insts.iter().any(|i| {
+            matches!(
+                &i.op,
+                MirOp::Opaque {
+                    op: Op::Call(_) | Op::Apply(_),
+                    ..
+                }
+            )
+        })
+    })
 }
 
 /// Collect the reloc constants of a MIR leaf (the DISTINCT heap-object consts, in
@@ -522,10 +578,10 @@ fn collect_reloc_consts(m: &mir::MirFunction) -> Vec<Value> {
 /// `(object_bytes, content_hash)`. Returns `Ok(None)` (NOT an error) when the
 /// body is outside the supported subset — the caller stays JIT-only.
 ///
-/// Currently covers the SHIM-FREE subset (no call/apply, no escaping cons) which
-/// may now bear heap constants (reloc via the per-thread sidecar + recipe). The
-/// remaining widening (call-bearing → precise deopt + host shim export) is a
-/// later increment; the sidecar deopt path is already in the lowering for it.
+/// Covers the full MIR pure-tier subset: reloc-bearing (heap consts + interned
+/// symbols, via the sidecar + recipe) AND call-bearing (Call/Apply/escaping cons,
+/// via the host-exported shims + the sidecar precise-deopt path). Excludes only
+/// CallBuiltin*/non-recipe-able consts (rejected upstream).
 pub(crate) fn compile_leaf_to_object(
     ops: &[Op],
     constants: &[Value],
@@ -553,17 +609,32 @@ pub(crate) fn compile_leaf_to_object(
     }
     let entry_name = aot_entry_symbol(content_hash);
     let desc_name = aot_descriptor_symbol(content_hash);
-    // Shim-free subset: no calls → no precise deopt, no binds/handlers/side
-    // effects. (max_depth=0 / has_precise_deopt=false until call-bearing AOT.)
+    // Frame metadata, computed from the MIR EXACTLY as lower_mir_pure does, so
+    // the loader sizes the per-thread deopt buffers + sets the side-effect flag
+    // identically. A call-bearing body (has_call) is ALL-PRECISE deopt (every
+    // guard is STATUS_DEOPT_AT, resume-at-pc) and has a side effect (the call),
+    // so it must never rerun-from-start; the loader sizes deopt_spill to
+    // max_depth (the deepest pre-op operand stack) and the leaf's sidecar points
+    // at it. Pure bodies keep max_depth=0 / no precise deopt (rerun-from-start).
+    let has_call = mir_has_call(&m);
+    let max_depth = m
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter())
+        .map(|i| i.pre_stack.len())
+        .max()
+        .unwrap_or(0);
+    // The MIR pure tier never lowers binds/handlers (build_mir bails on those),
+    // so an AOT-runnable MIR leaf has neither — matching lower_mir_pure's ctor.
     let meta = super::compile::AotLeafMeta {
         arity: m.arity,
         required: m.arity,
         has_rest: false,
         has_binds: false,
         has_handlers: false,
-        has_side_effects: false,
-        max_depth: 0,
-        has_precise_deopt: false,
+        has_side_effects: has_call,
+        max_depth: if has_call { max_depth } else { 0 },
+        has_precise_deopt: has_call,
     };
     let desc_bytes = encode_descriptor(&meta, &recipe, reloc_consts.len() as u32);
     let obj = build_object_for_leaf_inner(&m, &entry_name, Some((&desc_name, &desc_bytes)))?;
@@ -629,6 +700,181 @@ pub(crate) fn link_object_to_so(
     if !status.success() {
         return Err(module_init_err(format!("cc -shared failed: {status}")));
     }
+    Ok(())
+}
+
+/// Test-only: compile + link a leaf and place its `.so` into `dir` under the
+/// unit-index naming convention (`{hash:032x}_{tag:08x}.so`), so an INTEGRATION
+/// test can exercise the real `NEOVM_AOT=force` + `NEOVM_AOT_DIR` production path
+/// (the lib's `test_support` seam is unavailable to integration tests, and the
+/// `-rdynamic` shim export only applies to test binaries — see build.rs).
+/// Returns the content hash on success, `None` if the body is outside the AOT
+/// subset. `#[doc(hidden)]`: composes the already-`pub`/`pub(crate)` emit fns;
+/// not a stable API.
+#[doc(hidden)]
+pub fn testkit_emit_and_place_so(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    dir: &std::path::Path,
+) -> Option<u128> {
+    let (obj, content_hash) = compile_leaf_to_object(ops, constants, arity).ok()??;
+    let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+    link_object_to_so(&obj, &so_path).ok()?;
+    Some(content_hash)
+}
+
+/// Crate-internal self-test for CALL-BEARING AOT, invoked from the
+/// `tests/aot_call_bearing.rs` integration test (which runs in a shim-exporting
+/// `-rdynamic` binary; see build.rs). It needs crate-private types (obarray, Vm,
+/// ByteCodeFunction internals), so the logic lives here and the integration test
+/// is a thin env-setting wrapper. Returns `Err(reason)` on any check failure.
+///
+/// Proves, end-to-end through the PUBLIC `try_run_compiled` under
+/// `NEOVM_AOT=force` + `NEOVM_AOT_DIR` = `dir`:
+///  1. a call-bearing leaf serves FROM AOT and matches the expected result;
+///  2. SIDE-EFFECT-EXACTLY-ONCE across a forced precise-deopt: the call's
+///     observable side effect runs once (resume-at-pc, NOT rerun-from-start);
+///  3. AOT == interp for both the result and the side-effect count;
+///  4. (#A) a heap constant the leaf returns is EQ-identical to the source const.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::{LambdaParams, ValueKind};
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled (env must be set before any AOT call)".into());
+    }
+
+    let mk_fn = |ops: Vec<Op>, constants: Vec<Value>, required: usize| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (0..required).map(|i| SymId(1 + i as u32)).collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = constants;
+        f.max_stack = 32;
+        f
+    };
+    let sym = |name: &str| -> (Value, SymId) {
+        let s = Value::symbol(name);
+        let ValueKind::Symbol(id) = s.kind() else {
+            unreachable!("symbol");
+        };
+        (s, id)
+    };
+
+    let mut ev = Context::new();
+
+    // Callee `bump`: (setcar cell (1+ (car cell))) ; arg.  The car of `cell`
+    // counts how many times bump actually ran — the observable side effect.
+    let cell = Value::cons(Value::make_int(0), Value::NIL);
+    let (bump_sym, bump_id) = sym("aot-cb-bump");
+    let bump = mk_fn(
+        vec![
+            Op::StackRef(0), // arg
+            Op::Constant(0), // cell
+            Op::Dup,         // cell cell
+            Op::Car,         // cell (car cell)
+            Op::Add1,        // cell (1+ (car cell))
+            Op::Setcar,      // -> result (car set); stack: arg result
+            Op::DiscardN(1), // arg
+            Op::Return,
+        ],
+        vec![cell],
+        1,
+    );
+    ev.obarray
+        .set_symbol_function_id(bump_id, Value::make_bytecode(bump));
+
+    // Caller `F`: (1+ (bump x)).  bump returns x; the post-call `1+` deopts when
+    // x is NOT a fixnum (resume mid-body AFTER the call ran).
+    let f_ops = vec![
+        Op::Constant(0), // bump
+        Op::StackRef(1), // x
+        Op::Call(1),     // (bump x)
+        Op::Add1,        // (1+ ...)
+        Op::Return,
+    ];
+    let f_consts = vec![bump_sym];
+    let f = mk_fn(f_ops.clone(), f_consts.clone(), 1);
+
+    // Emit + place F's AOT `.so` (call-bearing → precise deopt).
+    let hash = testkit_emit_and_place_so(&f_ops, &f_consts, 1, dir)
+        .ok_or("F not AOT-runnable (expected call-bearing → Some)")?;
+    let ctx = &mut ev as *mut Context;
+    let count = |cell: Value| cell.cons_car().as_fixnum().unwrap_or(-1);
+
+    // (1) NON-deopt path: F(5) = 1+(bump 5) = 6; bump ran once. Served from AOT.
+    cell.set_car(Value::make_int(0));
+    let got = super::cache::try_run_compiled(ctx, &f, Value::NIL, &[Value::make_int(5)])
+        .map_err(|_| "F(5) unexpectedly signalled")?;
+    if got != Some(Value::make_int(6).bits()) {
+        return Err(format!("F(5) = 1+(bump 5) expected 6, got {got:?}"));
+    }
+    if count(cell) != 1 {
+        return Err(format!("F(5): bump must run once, ran {}", count(cell)));
+    }
+    // Confirm it was served FROM AOT (not JIT) — the leaf is cached AOT-backed.
+    if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+        return Err("F(5) was not served from AOT".into());
+    }
+
+    // (2) DEOPT-ACROSS-CALL: F('not-a-number). bump returns the symbol → `1+`
+    // guard fails → precise deopt → interp resumes at the `1+` pc (NOT from
+    // start) → 1+ of a non-number signals. CRITICAL: bump ran EXACTLY ONCE.
+    let arg = Value::symbol("aot-cb-not-a-number");
+    cell.set_car(Value::make_int(0));
+    let aot_res = super::cache::try_run_compiled(ctx, &f, Value::NIL, &[arg]);
+    let aot_count = count(cell);
+    if aot_count != 1 {
+        return Err(format!(
+            "SIDE-EFFECT-EXACTLY-ONCE violated: bump ran {aot_count} times across the \
+             deopt (must be 1 — resume-at-pc, not rerun-from-start)"
+        ));
+    }
+
+    // Cross-check vs the interpreter: same input, fresh counter.
+    cell.set_car(Value::make_int(0));
+    let interp_res = {
+        let mut vm = Vm::from_context(&mut ev);
+        vm.execute(&f, vec![arg])
+    };
+    let interp_count = count(cell);
+    if interp_count != 1 {
+        return Err(format!("interp: bump ran {interp_count} times (expected 1)"));
+    }
+    if aot_res.is_err() != interp_res.is_err() {
+        return Err(format!(
+            "AOT deopt outcome != interp: aot_err={}, interp_err={}",
+            aot_res.is_err(),
+            interp_res.is_err()
+        ));
+    }
+
+    // (3) #A eq-identity: a leaf that RETURNS a heap-string constant returns the
+    // SAME object as the source const (eq), exactly as interp/JIT — proven via a
+    // separate reloc-returning leaf served from AOT.
+    let lit = Value::string("aot-cb-literal");
+    let g_ops = vec![Op::Constant(0), Op::Return];
+    let g_consts = vec![lit];
+    let g = mk_fn(g_ops.clone(), g_consts.clone(), 1);
+    testkit_emit_and_place_so(&g_ops, &g_consts, 1, dir)
+        .ok_or("G (reloc-returning) not AOT-runnable")?;
+    let g_got = super::cache::try_run_compiled(ctx, &g, Value::NIL, &[Value::make_int(0)])
+        .map_err(|_| "G signalled")?;
+    if g_got != Some(lit.bits()) {
+        return Err(format!(
+            "#A eq-identity: G must return the SOURCE const object (bits {:#x}), got {g_got:?}",
+            lit.bits()
+        ));
+    }
+
     Ok(())
 }
 
@@ -753,18 +999,34 @@ pub(crate) fn try_load_leaf(
         return None;
     }
     let content_hash = leaf_content_hash(ops, constants, arity)?;
+    // Audit #A: the leaf's reloc constants are the LIVE function's own constant
+    // objects (re-collected here in the SAME order the emitter assigned reloc
+    // indices), NOT fresh copies rebuilt from the recipe. This makes an AOT leaf
+    // `eq`-IDENTICAL to the interpreter/JIT for every constant slot (one shared
+    // object), so a reloc const observed across a deopt or returned from the leaf
+    // compares equal exactly as under interp/JIT. Building the MIR re-derives the
+    // reloc set from `ops`/`constants` identically to the emit side.
+    let m = mir::build_mir(ops, constants, arity).ok()?;
+    let live_reloc = collect_reloc_consts(&m);
     let unit = load_unit(content_hash)?;
-    load_leaf_from_unit(&unit, content_hash, arity)
+    load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
 }
 
-/// The dlsym + descriptor-decode + reloc-rebuild + construct core, factored out
-/// of [`try_load_leaf`] so a test can drive it with a directly-loaded unit
-/// (bypassing the env/index resolution). Returns `None` on any symbol miss /
-/// descriptor mismatch / arity mismatch — the caller falls back to JIT.
+/// The dlsym + descriptor-decode + verify + construct core, factored out of
+/// [`try_load_leaf`] so a test can drive it with a directly-loaded unit
+/// (bypassing the env/index resolution). `live_reloc` is the LIVE function's
+/// reloc-constant set (its OWN objects), in the emit-time reloc-index order — it
+/// becomes the leaf's `reloc_data` (audit #A: shared identity with interp/JIT).
+/// The `.so`'s recipe is used only to VERIFY that this `.so` matches the function
+/// (re-encode `live_reloc` and compare to the descriptor's recipe by bytes);
+/// a mismatch → `None` (bail to JIT) — closing the truncated-hash-collision gap.
+/// Returns `None` on any symbol miss / descriptor mismatch / arity mismatch /
+/// recipe mismatch — the caller falls back to JIT.
 pub(crate) fn load_leaf_from_unit(
     unit: &std::sync::Arc<super::compile::LoadedUnit>,
     content_hash: u128,
     arity: usize,
+    live_reloc: &[Value],
 ) -> Option<super::compile::CompiledLeaf> {
     let entry_name = aot_entry_symbol(content_hash);
     let desc_name = aot_descriptor_symbol(content_hash);
@@ -821,9 +1083,39 @@ pub(crate) fn load_leaf_from_unit(
     if desc.meta.arity != arity {
         return None;
     }
-    // R1c-8: rebuild the live reloc consts (allocate-black via the heap path).
-    // `None` on a malformed/over-long recipe → fall through to JIT (additive).
-    let reloc_data = rebuild_reloc_consts(&desc)?;
+    // Cap the untrusted max_depth (audit minor): from_aot sizes deopt_spill to
+    // max_depth*8 bytes when has_precise_deopt, so a crafted/corrupt descriptor
+    // with a giant max_depth would drive an OOM-abort instead of the documented
+    // fail-closed None. The bytecode operand stack is a u16 (max_stack), so any
+    // real leaf is far under this; a larger value is a corrupt/foreign artifact.
+    const MAX_DEOPT_DEPTH: usize = u16::MAX as usize;
+    if desc.meta.has_precise_deopt && desc.meta.max_depth > MAX_DEOPT_DEPTH {
+        return None;
+    }
+    // VERIFY this `.so` matches THIS function: re-encode the live reloc set into a
+    // recipe and require it to equal the descriptor's recipe + count (by bytes).
+    // The content hash already names the `.so`, but it is a 128-bit truncation;
+    // this is the exact const-vec check the descriptor was built to enable
+    // (audit #11) — a hash collision or a stale/foreign `.so` whose recipe differs
+    // is rejected → JIT. (Symbols/strings are byte-faithful, so equal source →
+    // equal recipe bytes.)
+    if desc.reloc_count as usize != live_reloc.len() {
+        return None;
+    }
+    let mut want_recipe = Vec::new();
+    for &c in live_reloc {
+        // A non-recipe-able const can't have produced this `.so` — bail.
+        write_value_recipe(&mut want_recipe, c).ok()?;
+    }
+    if want_recipe != desc.reloc_recipe {
+        return None;
+    }
+    // Audit #A: the leaf's reloc_data is the LIVE function's own constant objects
+    // (already heap-live + GC-rooted via their source function), NOT fresh
+    // recipe-rebuilt copies — so the AOT leaf shares one object per constant with
+    // interp/JIT (eq-identical). Also dissolves the white-object rooting fragility
+    // (these are already-rooted live objects, not freshly-allocated ones).
+    let reloc_data: Box<[Value]> = live_reloc.to_vec().into_boxed_slice();
     // SAFETY: `entry_ptr` is the real native entry inside `unit`'s loaded `.so`;
     // `unit` is held by the returned leaf for its whole life (kept mapped).
     let leaf = unsafe {
@@ -842,18 +1134,16 @@ pub(crate) fn load_leaf_from_unit(
 ///
 /// Mirrors [`compile::lower_mir_pure`]'s analysis prologue (the same `has_call`
 /// / `cons_repl` / `needs_rt` derivation, the same reloc-constant collection and
-/// deopt-buffer sizing) and then drives the SAME module-generic build seam
-/// (`build_mir_leaf_fn`) with `M = ObjectModule` — so the emitted CLIF is
-/// byte-identical to the JIT's, including the R1a reloc loads. The only
-/// differences from the JIT path are the three seams above: no `builder.symbol`,
-/// `Linkage::Export` (vs `Local`) for the entry, and `finish().emit()` (vs
-/// `finalize_definitions`/`get_finalized_function`).
-///
-/// NOTE (R1c-1 scope): the buffer base addresses (`reloc_data`/`deopt_spill`/
-/// `deopt_meta`) are still baked as immediates by `build_mir_leaf_fn`, pointing
-/// at *this session's* throwaway buffers. That makes the `.o` parseable and its
-/// symbol table correct (the R1c-1 gate) but NOT yet runnable across sessions;
-/// load-time rebuild/relocation of those bases is R1c-3/5.
+/// deopt-buffer sizing) and drives the SAME module-generic build seam
+/// (`build_mir_leaf_fn`) with `M = ObjectModule` and `aot=true`. The result is
+/// SEMANTICALLY equivalent to the JIT (same RESULTS), but the CLIF is NOT
+/// byte-identical: under `aot=true` the session-specific bases (reloc + the
+/// precise-deopt buffers) are LOADED from the per-thread `LeafSidecar` (4th entry
+/// arg) instead of baked as `iconst`, and session-specific symbol constants join
+/// the reloc set (audit #16). The other differences from the JIT path are the
+/// three module seams: no `builder.symbol` (shims are `Linkage::Import`, host-
+/// exported), `Linkage::Export` (vs `Local`) for the entry, and `finish().emit()`
+/// (vs `finalize_definitions`/`get_finalized_function`).
 pub fn build_object_for_leaf(
     m: &mir::MirFunction,
     entry_name: &str,
@@ -953,10 +1243,12 @@ fn build_object_for_leaf_inner(
         .collect();
     let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
 
-    // ----- Drive the SHARED build seam with M = ObjectModule. ------------------
-    // Same CLIF as the JIT (byte-identical incl R1a reloc loads); only the entry
-    // declaration differs: Linkage::Export under `entry_name` so the loader can
-    // dlsym it. The `neovm_jit_*` shims stay undefined Linkage::Import imports.
+    // ----- Drive the SHARED build seam with M = ObjectModule, aot=true. --------
+    // SEMANTICALLY the JIT lowering (same results), but `aot=true` makes the
+    // session-specific bases (reloc + deopt) load from the sidecar (4th arg) and
+    // pulls symbol consts into the reloc set — so NOT byte-identical CLIF. The
+    // entry is Linkage::Export under `entry_name` for the loader to dlsym; the
+    // `neovm_jit_*` shims stay undefined Linkage::Import (host-exported) imports.
     super::compile::build_mir_leaf_fn(
         &mut module,
         m,
@@ -1245,6 +1537,14 @@ mod tests {
         assert!(sym.contains(&format!("{h1:032x}")));
     }
 
+    /// The LIVE reloc set a test must pass to `load_leaf_from_unit` (audit #A):
+    /// the function's own constant objects, re-collected in emit-time order.
+    #[cfg(target_os = "linux")]
+    fn live_reloc_for(ops: &[Op], constants: &[Value], arity: usize) -> Vec<Value> {
+        let m = mir::build_mir(ops, constants, arity).expect("mir for live reloc");
+        collect_reloc_consts(&m)
+    }
+
     /// Shared R1c-5/R1c-9 harness: for one pure body, build → link → load the
     /// AOT leaf and assert interp == JIT == AOT (bit-for-bit) over `args`.
     #[cfg(target_os = "linux")]
@@ -1269,7 +1569,8 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, nargs).expect("load leaf from unit");
+            load_leaf_from_unit(&unit, content_hash, nargs, &live_reloc_for(ops, constants, nargs))
+                .expect("load leaf from unit");
 
         // Reference: JIT leaf for the same MIR.
         let m = mir::build_mir(ops, constants, nargs).expect("mir");
@@ -1429,10 +1730,13 @@ mod tests {
 
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf = load_leaf_from_unit(&unit, content_hash, arity).expect("load");
+        let aot_leaf =
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+                .expect("load");
 
-        // PROOF OF #16 FIX: both symbols are in the reloc set (rebuilt by name),
-        // NOT baked. A baked symbol would NOT appear in reloc_values().
+        // PROOF OF #16 FIX: both symbols are in the reloc set (the func's own
+        // canonical symbol objects), NOT baked. A baked symbol would NOT appear
+        // in reloc_values().
         let relocs = aot_leaf.reloc_values();
         assert_eq!(relocs.len(), 2, "two symbol reloc consts (not baked)");
         let names: std::collections::HashSet<&str> = relocs
@@ -1540,31 +1844,34 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity).expect("load reloc leaf");
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+                .expect("load reloc leaf");
 
-        // The rebuilt reloc Vec must hold ONE string == "hello" (fresh alloc).
+        // The reloc Vec holds the FUNCTION'S OWN "hello" object (audit #A:
+        // eq-identical to the source constant, not a fresh copy).
         let relocs = aot_leaf.reloc_values();
         assert_eq!(relocs.len(), 1, "one reloc const");
         assert_eq!(relocs[0].as_lisp_string().unwrap().as_bytes(), b"hello");
+        assert_eq!(
+            relocs[0].bits(),
+            constants[0].bits(),
+            "reloc const IS the function's own object (eq-identical), not a copy"
+        );
 
-        // Calling the AOT leaf returns a string equal-by-content to "hello".
+        // Calling the AOT leaf returns that exact "hello" object.
         let ctx_ptr = &mut eval as *mut crate::emacs_core::eval::Context as *mut u8;
         let bits = match aot_leaf.call(ctx_ptr, &[Value::make_int(0)]) {
             crate::emacs_core::jit::compile::NativeRun::Ok(b) => b,
             other => panic!("AOT reloc leaf not Ok: {other:?}"),
         };
         let result = Value::from_bits(bits);
+        // Audit #A: the AOT result is EQ-IDENTICAL to the source constant (same
+        // object) — exactly what interp/JIT return, so `eq` against the literal
+        // would agree. (Before #A this was a fresh recipe-rebuilt copy → eq nil.)
         assert_eq!(
-            result.as_lisp_string().expect("string result").as_bytes(),
-            b"hello",
-            "AOT reloc leaf returns the rebuilt heap string by content"
-        );
-        // And it is a DIFFERENT allocation from the source const (rebuilt, not
-        // the baked pointer) — the whole point of the reloc recipe.
-        assert_ne!(
             result.bits(),
             constants[0].bits(),
-            "AOT result is a freshly-rebuilt string, not the original const pointer"
+            "AOT result is the function's own constant object (eq-identical)"
         );
     }
 
@@ -1602,7 +1909,9 @@ mod tests {
         link_object_to_so(&obj, &so_path).expect("link");
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf = load_leaf_from_unit(&unit, content_hash, arity).expect("load");
+        let aot_leaf =
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+                .expect("load");
 
         // reloc_values must be ["first","second"] in that order.
         let relocs = aot_leaf.reloc_values();
@@ -1728,16 +2037,16 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
 
-        // Right hash, WRONG arity → entry symbol embeds the hash only, but the
-        // descriptor arity check rejects... actually arity != desc.arity bails.
+        let live = live_reloc_for(&ops, &constants, arity); // empty (fixnum body)
+        // Right hash, WRONG arity → the descriptor arity check bails.
         assert!(
-            load_leaf_from_unit(&unit, content_hash, /*arity=*/ 2).is_none(),
+            load_leaf_from_unit(&unit, content_hash, /*arity=*/ 2, &live).is_none(),
             "arity mismatch must miss"
         );
         // A foreign content hash → the entry/descriptor symbols don't exist →
         // dlsym miss → None.
         assert!(
-            load_leaf_from_unit(&unit, content_hash ^ 0xdead_beef, arity).is_none(),
+            load_leaf_from_unit(&unit, content_hash ^ 0xdead_beef, arity, &live).is_none(),
             "foreign hash must miss"
         );
     }

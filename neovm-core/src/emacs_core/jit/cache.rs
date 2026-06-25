@@ -114,6 +114,18 @@ pub(crate) fn cached_leaf_is_aot_for_test(id: u64) -> Option<bool> {
     })
 }
 
+/// Whether the cached leaf for `func` is AOT-backed. Used by the call-bearing AOT
+/// integration self-test (`aot::testkit_call_bearing_selftest`), which runs in
+/// the lib (not `cfg(test)`), so this is a non-test accessor. `None` if `func`
+/// has no cached `Compiled` leaf.
+pub(crate) fn cached_leaf_is_aot_for_func(func: &ByteCodeFunction) -> Option<bool> {
+    let id = func.runtime.compiled_id_or_assign();
+    COMPILED.with(|c| match c.borrow().get(&id) {
+        Some(CacheEntry::Compiled(leaf)) => Some(leaf.is_aot_backed()),
+        _ => None,
+    })
+}
+
 /// Test-only: how many callers are recorded as inlining `sym`.
 #[cfg(test)]
 pub(crate) fn inline_dependent_count_for_test(sym: SymId) -> usize {
