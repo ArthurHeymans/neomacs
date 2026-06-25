@@ -3733,3 +3733,52 @@ fn div_core_divergence_surface_unibyte_search_replace_raw_byte() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_network_filter_multibyte_string_shape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((server "é" t 2))
+    // Neomacs:   OK ((server "\303\251" nil 2))
+    // With :filter-multibyte nil and raw UTF-8 bytes sent over a local network
+    // process, GNU delivers a multibyte string to the server filter, while
+    // Neomacs delivers a unibyte string with the same bytes.
+    assert_oracle_parity(
+        r##"
+(let ((log nil)
+      server
+      client)
+  (unwind-protect
+      (progn
+        (setq server
+              (make-network-process
+               :name "probe-net-mb-server"
+               :server t
+               :host 'local
+               :service t
+               :noquery t
+               :filter-multibyte nil
+               :filter (lambda (_ s)
+                         (push (list 'server
+                                     s
+                                     (multibyte-string-p s)
+                                     (string-bytes s))
+                               log))))
+        (setq client
+              (make-network-process
+               :name "probe-net-mb-client"
+               :host 'local
+               :service (process-contact server :service)
+               :noquery t
+               :filter-multibyte nil))
+        (process-send-string client (string-as-unibyte "é"))
+        (let ((i 0))
+          (while (and (< i 20) (null log))
+            (accept-process-output nil 0.05)
+            (setq i (1+ i))))
+        (nreverse log))
+    (when (processp client) (delete-process client))
+    (when (processp server) (delete-process server))))
+"##,
+    );
+}
