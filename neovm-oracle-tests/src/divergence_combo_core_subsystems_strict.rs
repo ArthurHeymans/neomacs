@@ -3708,3 +3708,28 @@ fn div_core_divergence_surface_replace_buffer_contents_text_properties() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_unibyte_search_replace_raw_byte() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (3 (195 90 65 169 66))
+    // Neomacs:   OK (5 (195 169 65 90 66))
+    // In a unibyte buffer containing bytes C3 A9 41 A9 42, search-forward for
+    // raw byte A9 should find the byte embedded in the C3 A9 sequence first.
+    // GNU replaces that embedded byte; Neomacs skips it and replaces only the
+    // standalone trailing A9 byte.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert (unibyte-string 195 169 65 169 66))
+  (let ((pat (unibyte-string 169)))
+    (goto-char (point-min))
+    (let ((match-end (search-forward pat nil t)))
+      (replace-match "Z")
+      (list match-end
+            (append (buffer-string) nil)))))
+"##,
+    );
+}
