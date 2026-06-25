@@ -7728,7 +7728,19 @@ pub(crate) fn builtin_frame_parameters(
     if frame.effective_window_system().is_none() {
         pairs.push(Value::cons(FrameParam::Font.symbol(), Value::string("tty")));
     }
-    // GNU frame.c:4117-4118 — buffer-list and buried-buffer-list are
+    // GNU `Fframe_parameters` (frame.c:4150) stores `modeline' =
+    // FRAME_WANTS_MODELINE_P (f).  A normal (non-tooltip, non-minibuffer-only)
+    // frame wants a mode line, so this is t.
+    pairs.push(Value::cons(Value::symbol("modeline"), Value::T));
+    // GNU stores `no-accept-focus' = FRAME_NO_ACCEPT_FOCUS (f) in the tty
+    // branch (frame.c:4165).  It defaults to nil.
+    if frame.effective_window_system().is_none() {
+        pairs.push(Value::cons(
+            Value::symbol("no-accept-focus"),
+            Value::bool_val(frame.no_accept_focus),
+        ));
+    }
+    // GNU frame.c:4152-4153 — buffer-list and buried-buffer-list are
     // stored as frame parameters.
     {
         let blist: Vec<Value> = frame
@@ -7759,6 +7771,12 @@ pub(crate) fn builtin_frame_parameters(
                 .and_then(FrameParam::from_symbol_id)
                 .is_some_and(|param| param == FrameParam::Font)
         {
+            continue;
+        }
+        // `font-parameter' is a neomacs-internal frame slot used by the font
+        // resolution machinery (font.rs); GNU has no such frame parameter and
+        // never reports it from `frame-parameters'.  Skip it.
+        if k.as_symbol_name().as_deref() == Some("font-parameter") {
             continue;
         }
         let value = k

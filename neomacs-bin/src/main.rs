@@ -2913,6 +2913,22 @@ fn bootstrap_buffers(
     };
     let _ = eval.frame_manager_mut().select_frame(frame_id);
 
+    // GNU's startup selects `*scratch*' in the initial window and
+    // `record_buffer' (src/buffer.c) puts it at the front of the frame's
+    // `buffer_list', so `(frame-parameter nil 'buffer-list)' returns
+    // `("*scratch*")' immediately after startup.  The frame's `buffer_list' is
+    // not serialized in the pdump, so seed it here -- the runtime point where
+    // the initial frame is established showing `*scratch*' -- mirroring GNU's
+    // early `record_buffer'.  No `buffer-list-update-hook' runs (it predates
+    // any user hook registration, as in GNU).
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        if !frame.buffer_list.contains(&scratch_id) {
+            frame.buffer_list.retain(|bid| *bid != scratch_id);
+            frame.buffer_list.insert(0, scratch_id);
+        }
+        frame.buried_buffer_list.retain(|bid| *bid != scratch_id);
+    }
+
     // Seed frame parameters so GNU Lisp startup sees the correct host surface.
     //
     // Use the authoritative `startup.noninteractive` flag, NOT the obarray
