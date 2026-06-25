@@ -1666,11 +1666,14 @@ pub(crate) fn load_leaf_from_unit(
 /// Stats from a prepopulate pass (logged so a degraded preload is visible).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PrepopulateStats {
-    /// Loadup AOT-candidate functions enumerated.
+    /// Required-only fns enumerated + probed (hash + build_mir succeeded).
     pub candidates: usize,
-    /// CompiledLeaves loaded from the preload `.so` + inserted into COMPILED.
+    /// CompiledLeaves successfully loaded from the preload `.so`.
+    pub loaded: usize,
+    /// COLD slots actually filled in COMPILED (insert-if-absent — a slot already
+    /// holding a hook-compiled JIT leaf is KEPT, so `inserted` ≤ `loaded`).
     pub inserted: usize,
-    /// Candidates whose entry was not in the preload / failed to load (→ JIT).
+    /// Probed fns whose entry was not in the preload / failed to load (→ JIT).
     pub missed: usize,
 }
 
@@ -1700,7 +1703,18 @@ pub fn prepopulate_aot_from_preload(
         return stats;
     }
     let Some(unit) = load_preload() else {
-        tracing::debug!("aot-preload: no usable preload; all functions will JIT");
+        // Loud on NEOVM_AOT=force (audit w0guiyma9 minor): a benchmark/gate must be
+        // able to tell "no win because the preload didn't load (missing/stale/
+        // fingerprint-mismatch)" apart from "no win because AOT doesn't help here".
+        // Quiet otherwise (a missing preload is the expected default — pure JIT).
+        if matches!(std::env::var("NEOVM_AOT").as_deref(), Ok("force")) {
+            tracing::warn!(
+                "aot-preload: NEOVM_AOT=force but NO usable preload loaded \
+                 (missing/stale/fingerprint-mismatch) — all functions will JIT"
+            );
+        } else {
+            tracing::debug!("aot-preload: no usable preload; all functions will JIT");
+        }
         return stats;
     };
 
@@ -1764,13 +1778,15 @@ pub fn prepopulate_aot_from_preload(
             None => stats.missed += 1,
         }
     }
-    stats.inserted = leaves.len();
-    super::cache::prepopulate_aot_leaves(leaves);
+    stats.loaded = leaves.len();
+    stats.inserted = super::cache::prepopulate_aot_leaves(leaves);
     tracing::debug!(
-        "aot-preload: prepopulated {} / {} candidates ({} missed)",
+        "aot-preload: prepopulated {} inserted / {} loaded / {} candidates ({} missed, {} slots already warm)",
         stats.inserted,
+        stats.loaded,
         stats.candidates,
-        stats.missed
+        stats.missed,
+        stats.loaded - stats.inserted,
     );
     stats
 }
@@ -2977,7 +2993,11 @@ mod tests {
         // establish COMPILED_HEAP itself for the survive-a-GC half to pass.
         let stats = prepopulate_aot_from_preload(&ev);
         assert!(stats.candidates >= 1, "at least one candidate; got {stats:?}");
-        assert_eq!(stats.inserted, stats.candidates, "all candidates inserted");
+        assert_eq!(stats.loaded, stats.candidates, "all candidates loaded from .so");
+        assert_eq!(
+            stats.inserted, stats.loaded,
+            "empty cache → every loaded leaf fills a cold slot; got {stats:?}"
+        );
         assert_eq!(stats.missed, 0, "no preload misses; got {stats:?}");
 
         // NATIVE FROM CALL 1: compiled at heat=0 (no warmup) AND AOT-backed.
@@ -3051,6 +3071,120 @@ mod tests {
         assert!(
             !super::super::cache::is_compiled_for_test(id),
             "a preload miss must leave the fn uncompiled (it will JIT normally)"
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
+    }
+
+    /// R2-C audit (w0guiyma9) GATE: prepopulate must NEVER overwrite a pre-existing
+    /// COMPILED entry. The `after-pdump-load-hook` runs arbitrary elisp right
+    /// before prepopulate; if it dispatches a loadup fn the JIT compiles it into
+    /// the slot prepopulate would fill. That JIT leaf may be spec-slot-referenced
+    /// (Rc::as_ptr) and/or INLINE_DEPS-registered, so overwriting it with the AOT
+    /// leaf → use-after-free + a later-redefine `evict_inline_dependents`
+    /// spec-slot-safety panic. INSERT-IF-ABSENT keeps the warm slot → root guard.
+    ///
+    /// This uses a PURE leaf (so its `.so` dlopens in the lib unit-test binary,
+    /// which does NOT export the `neovm_jit_*` shims a call-bearing `.so` would
+    /// need — that's why call-bearing AOT lives in `tests/aot_call_bearing.rs`).
+    /// The KEEP assertion is the necessary+sufficient guard: insert-if-absent
+    /// never overwrites ANY slot, so the inline-deps/UAF consequences (which only
+    /// fire on an overwrite) cannot arise. The eviction machinery itself is covered
+    /// by `compile::tests::precise_eviction_only_evicts_inlined_dependents`; and an
+    /// AOT leaf (inline_epoch=None) is never in any INLINE_DEPS set, so eviction
+    /// never targets one (see `prepopulate_aot_leaves`' REDEFINITION note).
+    #[test]
+    fn r2_prepopulate_never_overwrites_existing_jit_leaf() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let mut a = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        a.lexical = true;
+        a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        a.constants = vec![Value::make_int(5)];
+        a.max_stack = 16;
+        let sym = crate::emacs_core::intern::intern("r2-prepop-nooverwrite-add5");
+        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+        let id = ev
+            .obarray
+            .symbol_function_id(sym)
+            .and_then(|v| v.get_bytecode_data())
+            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .expect("candidate fn id");
+
+        // (1) Simulate the hook: with AOT OFF, JIT-compile the fn into COMPILED via
+        // the real cache path (or_insert_with → compile_bytecode_function_with).
+        test_support::set_forced_enabled(false);
+        let f = ev
+            .obarray
+            .symbol_function_id(sym)
+            .and_then(|v| v.get_bytecode_data())
+            .expect("bc");
+        let got = super::super::cache::try_run_compiled(
+            std::ptr::null_mut(),
+            f,
+            Value::NIL,
+            &[Value::make_int(37)],
+        )
+        .unwrap();
+        assert_eq!(got, Some(Value::make_int(42).bits()), "JIT result (+ 37 5)");
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(false),
+            "precondition: a JIT (non-AOT) leaf is cached for this fn"
+        );
+
+        // (2) Now enable AOT + inject a real preload that DOES contain this fn,
+        // then prepopulate. The slot is already warm (JIT) → must be KEPT.
+        let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
+        let (obj, _) = build_preload_object(&leaves).expect("build preload object");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join(PRELOAD_SO_NAME);
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+        test_support::set_forced_enabled(true);
+        test_support::inject_preload(unit);
+
+        let stats = prepopulate_aot_from_preload(&ev);
+        // The fn WAS loadable from the preload (loaded>=1) but its slot was already
+        // occupied by the JIT leaf, so inserted=0 for it (insert-if-absent).
+        assert!(stats.loaded >= 1, "the fn is loadable from the preload; got {stats:?}");
+        assert_eq!(
+            stats.inserted, 0,
+            "the already-warm JIT slot must NOT be filled (insert-if-absent); got {stats:?}"
+        );
+
+        // (3) THE GUARD: the slot still holds the ORIGINAL JIT leaf, not the AOT one.
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(false),
+            "prepopulate must NOT overwrite the pre-existing JIT leaf (UAF + inline-dep panic risk)"
+        );
+
+        // (4) Sanity: a GC + a redefinition must not panic (the JIT leaf is intact).
+        ev.gc_collect_exact();
+        ev.obarray.set_symbol_function_id(
+            sym,
+            Value::make_bytecode({
+                let mut b = ByteCodeFunction::new(LambdaParams {
+                    required: vec![SymId(1)],
+                    optional: Vec::new(),
+                    rest: None,
+                });
+                b.lexical = true;
+                b.ops = vec![Op::Constant(0), Op::Sub, Op::Return];
+                b.constants = vec![Value::make_int(1)];
+                b.max_stack = 16;
+                b
+            }),
         );
 
         super::super::cache::clear();

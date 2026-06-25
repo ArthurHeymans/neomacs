@@ -170,28 +170,66 @@ pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
 
 /// R2-C3: insert AOT-prepopulated leaves into `COMPILED` so the loadup set serves
 /// native FROM CALL 1. `leaves` is `(compiled_id, CompiledLeaf)` built by
-/// `aot::prepopulate_aot_from_preload` from the preload `.so`.
+/// `aot::prepopulate_aot_from_preload` from the preload `.so`. Returns how many
+/// were actually inserted (cold slots filled — see INSERT-IF-ABSENT below).
 ///
-/// ORDERING IS LOAD-BEARING (R1a heap-identity guard): we call
-/// [`sync_cache_to_current_heap`] FIRST. At prepopulate time (right after the
-/// pdump load, before any eval/GC) `COMPILED_HEAP` is still `None`, so this first
-/// sync sets `COMPILED_HEAP = current` and clears the then-EMPTY cache. We insert
-/// AFTER that. The next GC's `collect_jit_reloc_gc_roots` → `sync_cache_to_current_heap`
-/// then sees `current == current` (no change → no clear), so the prepopulated
-/// leaves SURVIVE. Inserting BEFORE the sync would let that first GC observe
-/// `None != current` and wipe all of them (native for call 1, then silently gone).
-pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) {
-    // Establish COMPILED_HEAP == current heap while the cache is still empty, so
-    // the first post-prepopulate GC does not clear what we are about to insert.
-    sync_cache_to_current_heap();
+/// TWO load-bearing invariants:
+///
+/// 1. ESTABLISH `COMPILED_HEAP` WITHOUT CLEARING (R1a + audit w0guiyma9). We set
+///    `COMPILED_HEAP = current` directly (NOT via `sync_cache_to_current_heap`,
+///    which would CLEAR on the first None→current transition). This stops the
+///    first post-prepopulate GC's `sync_cache_to_current_heap` from wiping our
+///    inserts (it will see current==current). Crucially it ALSO preserves any
+///    VALID same-heap JIT leaf the after-pdump-load-hook compiled before us — a
+///    plain sync-first would destroy it (and any spec-slot pointer into it) on
+///    that None→current clear. The cache here was built against the current heap,
+///    so it is valid; a genuine heap CHANGE still clears via the GC-root path.
+///
+/// 2. INSERT-IF-ABSENT, NEVER OVERWRITE (audit w0guiyma9). The
+///    `after-pdump-load-hook` runs arbitrary elisp on this thread IMMEDIATELY
+///    before prepopulate; it can JIT-compile (and GC) a loadup fn, leaving a
+///    VALID JIT leaf in `COMPILED` whose `Rc` may already be pointed at by another
+///    leaf's speculation slot (`Rc::as_ptr`) and whose `INLINE_DEPS` are
+///    registered. Overwriting it with `cache.insert` would (a) drop that `Rc` →
+///    free it → leave the spec slot dangling (USE-AFTER-FREE), and (b) replace a
+///    JIT leaf without unregistering its inline deps → a later redefinition's
+///    `evict_inline_dependents` trips the spec-slot-safety assert. So we only fill
+///    COLD (absent) slots; an existing entry (JIT or AOT, Compiled or
+///    NotCompilable) is kept untouched. The prewarm is purely additive.
+///
+/// REDEFINITION (occupancy note): a prepopulated AOT leaf is keyed by the loadup
+/// fn's `compiled_id`. If that fn is later REDEFINED, the redefinition is a NEW
+/// `ByteCodeFunction` with a NEW `compiled_id`, so the stale AOT leaf for the old
+/// id is simply never looked up again (same staleness story as a JIT leaf — see
+/// this module's header). And an AOT leaf (inline_epoch=None, no inline deps) is
+/// never in any `INLINE_DEPS` set, so `evict_inline_dependents` never targets it —
+/// the spec-slot-safety assert above only ever fires on genuinely-inlined leaves,
+/// which AOT leaves are not.
+pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize {
+    // Establish COMPILED_HEAP == current WITHOUT clearing (audit w0guiyma9): a
+    // plain `sync_cache_to_current_heap` would, on the very first None→current
+    // transition, CLEAR the cache — destroying any VALID same-heap JIT leaf the
+    // after-pdump-load-hook just compiled (and any spec-slot Rc::as_ptr pointing
+    // at it). The cache, if non-empty here, was built against the CURRENT heap
+    // (the hook ran on this thread after the pdump load), so it is valid and must
+    // be kept. Only a genuine heap CHANGE (a later pdump reload) should clear, and
+    // that path still goes through `sync_cache_to_current_heap` from the GC roots.
+    COMPILED_HEAP.with(|h| h.set(crate::tagged::gc::current_tagged_heap_identity()));
+    let mut inserted = 0usize;
     COMPILED.with(|c| {
         let mut cache = c.borrow_mut();
         for (id, leaf) in leaves {
-            // AOT leaves never inline (no inline deps to register); their reloc
+            // INSERT-IF-ABSENT: never clobber a pre-existing entry (a JIT leaf the
+            // hook compiled may be spec-slot-referenced + INLINE_DEPS-registered).
+            // AOT leaves never inline → no inline deps to register; their reloc
             // consts are rooted via the COMPILED walk in collect_jit_reloc_gc_roots.
-            cache.insert(id, CacheEntry::Compiled(Rc::new(leaf)));
+            if let std::collections::hash_map::Entry::Vacant(slot) = cache.entry(id) {
+                slot.insert(CacheEntry::Compiled(Rc::new(leaf)));
+                inserted += 1;
+            }
         }
     });
+    inserted
 }
 
 /// Drop all compiled state on this thread. Called when a pdump load replaces the

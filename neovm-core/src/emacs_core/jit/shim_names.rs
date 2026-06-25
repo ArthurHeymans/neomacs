@@ -3,8 +3,8 @@
 // This list is the one authoritative enumeration of every runtime shim an AOT
 // `.so` may import. It is consumed THREE ways, all via `include!` of THIS file
 // so they can never drift:
-//   1. `jit/aot.rs` — `MIR_SHIM_NAMES` (salted into `ABI_TAG`, checked at emit by
-//      `debug_assert_aot_imports_salted`, and the emit-time import-subset guard).
+//   1. `jit/aot.rs` — `MIR_SHIM_NAMES` (salted into `ABI_TAG`, and the hard
+//      emit-time import-subset guard `assert_aot_imports_exported`).
 //   2. `neovm-core/build.rs` — exports each shim into the lib's dynamic symbol
 //      table (`-rdynamic` + per-shim `--export-dynamic-symbol`) for integration
 //      tests' `.so` imports to resolve.
