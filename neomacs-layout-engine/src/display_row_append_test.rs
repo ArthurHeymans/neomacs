@@ -1653,13 +1653,78 @@ fn buffer_invisible_text_scan_context_advances_multibyte_source_position() {
     assert_eq!(hidden.start_charpos(), 1);
     assert_eq!(hidden.skip_to(), 2);
     assert_eq!(position, DisplaySourceTextPosition::new("a中".len(), 2));
+    // No newline inside this fold.
+    assert_eq!(hidden.hidden_newline_count(), 0);
+}
+
+#[test]
+fn buffer_invisible_text_skip_counts_hidden_newlines() {
+    // A fold that hides whole buffer lines must report the newlines it crossed,
+    // so display-line-numbers advance past them (GNU counts every buffer newline,
+    // visible or not — folding lines 2..4 makes the next visible row read 5).
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "L1\nL2\nL3\nL4\nL5\n";
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert(text);
+        // Hide "L2\nL3\nL4\n" (3 interior newlines) — the contiguous fold from
+        // after "L1\n" up to the start of "L5".
+        let start = text.find("L2").expect("L2");
+        let end = text.find("L5").expect("L5");
+        let _ = eval
+            .buffer_manager_mut()
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                EmacsByteRange::from_usize(start, end),
+                Value::symbol("invisible"),
+                Value::T,
+            );
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let start = text.find("L2").expect("L2");
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(start as i64);
+    let mut position = DisplaySourceTextPosition::new(start, start as i64);
+
+    let action =
+        BufferSourceInvisibleTextScanContext::new(text.as_bytes(), text.len() as i64, 0, true)
+            .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
+
+    let BufferSourceInvisibleTextScanAction::Hidden(hidden) = action else {
+        panic!("expected hidden region");
+    };
+    // "L2\nL3\nL4\n" contains exactly three '\n'.
+    assert_eq!(
+        hidden.hidden_newline_count(),
+        3,
+        "fold over L2..L5 hides 3 buffer newlines"
+    );
+}
+
+#[test]
+fn invisible_text_skip_advances_line_numbers_by_hidden_newlines() {
+    // The hidden-newline count advances display-line-numbers so the next visible
+    // row shows its true buffer line (GNU counts folded lines).
+    let mut line_numbers = crate::display_row_walk_state::LineNumberRenderState::new(true, 3, 5);
+    // Only the trailing `hidden_newline_count` (4) matters here.
+    let hidden = BufferSourceInvisibleTextSkip::new(0, 3, 30, 30, false, true, 4);
+    hidden.apply_to_line_numbers(&mut line_numbers);
+    assert_eq!(
+        line_numbers.current_line(),
+        7,
+        "line 3 + 4 hidden newlines = 7"
+    );
 }
 
 #[test]
 fn buffer_invisible_text_skip_captures_cursor_at_hidden_span_start() {
     let active_face = test_active_face_state(9, 8.0);
     let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
-    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, true, false);
+    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, true, false, 0);
     let mut cursor = CursorCaptureState::new();
 
     hidden.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 40.0, 5);
@@ -1677,7 +1742,7 @@ fn buffer_invisible_text_skip_captures_cursor_at_hidden_span_start() {
 fn buffer_invisible_text_skip_keeps_cursor_missing_when_point_is_visible() {
     let active_face = test_active_face_state(9, 8.0);
     let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
-    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, false);
+    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, false, 0);
     let mut cursor = CursorCaptureState::new();
 
     hidden.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 40.0, 5);
@@ -1687,7 +1752,7 @@ fn buffer_invisible_text_skip_keeps_cursor_missing_when_point_is_visible() {
 
 #[test]
 fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
-    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, true);
+    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, true, 0);
     let position = DisplayRowPosition::new(16.0, 2);
 
     let request = hidden
@@ -1703,7 +1768,7 @@ fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
 
 #[test]
 fn buffer_invisible_text_skip_omits_ellipsis_request_without_policy() {
-    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, false);
+    let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, false, 0);
 
     assert!(
         hidden

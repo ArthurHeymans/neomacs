@@ -888,9 +888,11 @@ pub(crate) struct BufferSourceInvisibleTextSkip {
     next_visible: i64,
     point_in_hidden_region: bool,
     ellipsis: bool,
+    hidden_newline_count: usize,
 }
 
 impl BufferSourceInvisibleTextSkip {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         start_byte_idx: usize,
         start_charpos: i64,
@@ -898,6 +900,7 @@ impl BufferSourceInvisibleTextSkip {
         next_visible: i64,
         point_in_hidden_region: bool,
         ellipsis: bool,
+        hidden_newline_count: usize,
     ) -> Self {
         Self {
             start_byte_idx,
@@ -906,6 +909,7 @@ impl BufferSourceInvisibleTextSkip {
             next_visible,
             point_in_hidden_region,
             ellipsis,
+            hidden_newline_count,
         }
     }
 
@@ -937,6 +941,24 @@ impl BufferSourceInvisibleTextSkip {
     #[cfg(test)]
     pub(crate) fn ellipsis(self) -> bool {
         self.ellipsis
+    }
+
+    #[cfg(test)]
+    pub(crate) fn hidden_newline_count(self) -> usize {
+        self.hidden_newline_count
+    }
+
+    /// GNU `maybe_produce_line_number` derives the displayed line number from a
+    /// raw BUFFER newline count, so newlines inside an invisible (folded) region
+    /// are still counted. Advance the line number by the newlines this skip
+    /// crossed so the next visible row shows its true buffer line — folding
+    /// buffer lines 2..12 makes the next row's gutter read 13, not 4. No render
+    /// is re-armed: the hidden span produces no row, only a line-number offset
+    /// (mirrors the selective-display hidden-line path).
+    pub(crate) fn apply_to_line_numbers(self, line_numbers: &mut LineNumberRenderState) {
+        for _ in 0..self.hidden_newline_count {
+            line_numbers.advance_hidden_line();
+        }
     }
 
     pub(crate) fn capture_cursor_if_point(
@@ -1025,6 +1047,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            line_numbers,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1046,6 +1069,11 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         let BufferSourceInvisibleTextScanAction::Hidden(hidden_text) = action else {
             return BufferSourceInvisibleTextRenderOutcome::Visible;
         };
+
+        // Advance display-line-numbers past the buffer lines this fold hid, so
+        // the next visible row's gutter shows its true buffer line number (GNU
+        // counts every buffer newline, including ones inside invisible text).
+        hidden_text.apply_to_line_numbers(line_numbers);
 
         let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
         let mut row_progress = progress.row_progress_mut().reborrow();
@@ -1130,6 +1158,19 @@ impl<'a> BufferSourceInvisibleTextScanContext<'a> {
             && self.point_charpos < skip_to;
         position.skip_chars_until(self.text, skip_to);
 
+        // Count the buffer newlines crossed by this fold so display-line-numbers
+        // advance past the hidden lines (GNU counts every buffer '\n', visible or
+        // not). Half-open range [start_byte_idx, end): the '\n' that begins the
+        // first visible line after the fold sits at `skip_to` and is NOT in the
+        // range — it is counted by the following real line-break transition, so
+        // the count is exact (no off-by-one). Counting 0x0A in a UTF-8 slice is
+        // safe: 0x0A never appears as a continuation byte.
+        let end_byte_idx = position.byte_idx();
+        let hidden_newline_count = self
+            .text
+            .get(start_byte_idx..end_byte_idx)
+            .map_or(0, |slice| slice.iter().filter(|&&b| b == b'\n').count());
+
         BufferSourceInvisibleTextScanAction::Hidden(BufferSourceInvisibleTextSkip::new(
             start_byte_idx,
             start_charpos,
@@ -1137,6 +1178,7 @@ impl<'a> BufferSourceInvisibleTextScanContext<'a> {
             next_visible,
             point_in_hidden_region,
             invisible.ellipsis,
+            hidden_newline_count,
         ))
     }
 }
