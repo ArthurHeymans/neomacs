@@ -2,6 +2,7 @@
 
 use super::RenderApp;
 use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
+use crate::core::types::DisplayFrameId;
 use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
@@ -133,7 +134,7 @@ impl RenderApp {
                         (cursor.x, cursor.y, cursor.width, cursor.height),
                     );
                     active_cursor = Some(CursorTarget {
-                        window_id: cursor.window_id,
+                        window_id: cursor.window_id.get(),
                         x,
                         y,
                         width,
@@ -368,7 +369,7 @@ impl RenderApp {
                     tracing::info!(
                         "active_cursor: window_id={} slot=(window_id={},row={},col={}) \
                          rect=({:.2},{:.2}) {:.2}x{:.2} ascent={:.2} style={:?} color={:?} cursor_fg={:?}",
-                        cursor.window_id,
+                        cursor.window_id.get(),
                         cursor.slot_id.window_id,
                         cursor.slot_id.row,
                         cursor.slot_id.col,
@@ -408,7 +409,7 @@ impl RenderApp {
                                 "  window_cursor[{}]: window_id={} slot=(window_id={},row={},col={}) \
                                  rect=({:.2},{:.2}) {:.2}x{:.2} style={:?} color={:?}\n",
                                 i,
-                                cursor.window_id,
+                                cursor.window_id.get(),
                                 cursor.slot_id.window_id,
                                 cursor.slot_id.row,
                                 cursor.slot_id.col,
@@ -440,9 +441,10 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
-            if parent_id == 0 {
-                let routed_to_managed = self.frame_windows.get(frame_id).is_some();
-                let routed_to_primary_fallback = self.frame_windows.is_primary_frame_id(frame_id);
+            if parent_id == DisplayFrameId::new(0) {
+                let routed_to_managed = self.frame_windows.get(frame_id.get()).is_some();
+                let routed_to_primary_fallback =
+                    self.frame_windows.is_primary_frame_id(frame_id.get());
                 if routed_to_managed {
                     self.sync_gui_toolbar_assets(gui_tool_bar.as_ref());
                     self.sync_gui_compact_bar_assets(gui_compact_bar.as_ref());
@@ -452,7 +454,7 @@ impl RenderApp {
                 let typing_ripple_enabled = self.effects.typing_ripple.enabled;
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
-                if let Some(window_state) = self.frame_windows.get_mut(frame_id) {
+                if let Some(window_state) = self.frame_windows.get_mut(frame_id.get()) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     let cursor_sync = Self::ingest_frame_window_root_frame(
                         window_state,
@@ -478,12 +480,13 @@ impl RenderApp {
                 }
             }
 
-            if parent_id != 0 {
-                let update_transient_effects = self.frame_windows.is_primary_frame_id(parent_id);
+            if parent_id != DisplayFrameId::new(0) {
+                let update_transient_effects =
+                    self.frame_windows.is_primary_frame_id(parent_id.get());
                 let typing_ripple_enabled = self.effects.typing_ripple.enabled;
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
-                if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
+                if let Some(window_state) = self.frame_windows.get_mut(parent_id.get()) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     window_state
                         .render
@@ -506,11 +509,15 @@ impl RenderApp {
                 }
             }
 
-            if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
+            if parent_id != DisplayFrameId::new(0)
+                && self.frame_windows.is_primary_frame_id(parent_id.get())
+            {
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.update_child_frame(frame)
                 };
-            } else if parent_id == 0 && self.frame_windows.is_primary_frame_id(frame_id) {
+            } else if parent_id == DisplayFrameId::new(0)
+                && self.frame_windows.is_primary_frame_id(frame_id.get())
+            {
                 if gui_menu_bar.is_none() {
                     if let Some(ws) = self.frame_windows.primary_window_mut() {
                         ws.render

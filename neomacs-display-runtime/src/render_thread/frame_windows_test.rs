@@ -41,8 +41,8 @@ fn gui_text_input_policy_enables_native_ime_on_window_creation() {
 
 fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(800.0, 600.0);
-    buf.frame_id = frame_id;
-    buf.parent_id = parent_id;
+    buf.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(frame_id);
+    buf.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(parent_id);
     buf
 }
 
@@ -68,12 +68,12 @@ fn make_test_device() -> Option<wgpu::Device> {
 fn secondary_frame_cursor_target_uses_top_level_frame_identity() {
     let mut frame = make_frame(0x42, 0);
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 7,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: crate::core::frame_glyphs::DisplaySlotId {
-            window_id: 7,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
             row: 0,
             col: 0,
         },
@@ -161,7 +161,7 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut frame = make_frame(0x42, 0);
     frame.window_cursors.push(WindowCursor {
-        window_id: -7,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(-7),
         slot_id: DisplaySlotId::ZERO,
         x: 1.0,
         y: 2.0,
@@ -205,14 +205,14 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
 fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
     let mut frame = make_frame(0x42, 0);
     frame.add_transition_hint(WindowTransitionHint {
-        window_id: 7,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
         kind: WindowTransitionKind::Crossfade,
         effect: Some(ScrollEffect::Crossfade),
         easing: Some(ScrollEasing::Linear),
     });
     frame.add_effect_hint(WindowEffectHint::WindowSwitchFade {
-        window_id: 7,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
     });
 

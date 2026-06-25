@@ -3457,7 +3457,9 @@ fn publish_gui_frame(
         let Some(mut display_state) = display_state else {
             continue;
         };
-        display_state.parent_id = node.parent_id.map(|id| id.0).unwrap_or(0);
+        display_state.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(
+            node.parent_id.map_or(0, |id| id.0),
+        );
         display_state.parent_x = node.origin_in_root_x;
         display_state.parent_y = node.origin_in_root_y;
         display_state.z_order = node.z_order;

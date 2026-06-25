@@ -28,7 +28,7 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
         } = glyph
         {
             if x >= *wx && x < *wx + *width && y >= *wy && y < *wy + *height {
-                return Some((*xwidget_id, (x - *wx) as i32, (y - *wy) as i32));
+                return Some((xwidget_id.get(), (x - *wx) as i32, (y - *wy) as i32));
             }
         }
     }

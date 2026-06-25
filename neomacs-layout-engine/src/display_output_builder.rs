@@ -39,7 +39,7 @@ use neomacs_display_protocol::frame_glyphs::{
     PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 #[cfg(test)]
 use std::collections::HashMap;
 
@@ -317,8 +317,8 @@ impl DisplayOutputBuilder {
     ) {
         self.install_output_frame_state(OutputFrameStateInstallRequest::Identity(
             OutputFrameIdentityInstallRequest {
-                frame_id,
-                parent_id,
+                frame_id: DisplayFrameId::new(frame_id),
+                parent_id: DisplayFrameId::new(parent_id),
                 parent_x,
                 parent_y,
                 z_order,
@@ -375,7 +375,7 @@ impl DisplayOutputBuilder {
         color: Color,
     ) {
         self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::Border {
-            window_id,
+            window_id: DisplayWindowId::new(window_id),
             x,
             y,
             width,
@@ -413,7 +413,14 @@ impl DisplayOutputBuilder {
         color: Color,
     ) {
         self.install_output_cursor(OutputCursorInstallRequest::new(
-            window_id, slot_id, x, y, width, height, style, color,
+            DisplayWindowId::new(window_id),
+            slot_id,
+            x,
+            y,
+            width,
+            height,
+            style,
+            color,
         ));
     }
 

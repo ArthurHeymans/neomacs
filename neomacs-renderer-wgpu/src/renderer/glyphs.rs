@@ -17,7 +17,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowCursor,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
-use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
+use neomacs_display_protocol::types::{AnimatedCursor, Color, DisplayWindowId, Rect};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{
     OnceLock,
@@ -739,7 +739,7 @@ impl WgpuRenderer {
 
     fn emit_cursor_visual(
         &mut self,
-        window_id: i64,
+        window_id: DisplayWindowId,
         static_rect: (f32, f32, f32, f32),
         style: CursorStyle,
         color: &Color,
@@ -2287,7 +2287,7 @@ impl WgpuRenderer {
                                 let glyph_right = glyph_x + glyph_w;
                                 rendered_char_bounds.push(RenderedCharBounds {
                                     glyph_index,
-                                    window_id: *window_id,
+                                    window_id: window_id.get(),
                                     row_role: *row_role,
                                     slot_id: *slot_id,
                                     label: composed
@@ -2531,12 +2531,12 @@ impl WgpuRenderer {
                 }
 
                 log_rendered_char_overlaps(
-                    frame_glyphs.frame_id,
+                    frame_glyphs.frame_id.get(),
                     if want_overlay { "overlay" } else { "text" },
                     &rendered_char_bounds,
                 );
                 log_cursor_glyph_alignment(
-                    frame_glyphs.frame_id,
+                    frame_glyphs.frame_id.get(),
                     if want_overlay { "overlay" } else { "text" },
                     frame_glyphs,
                     &rendered_char_bounds,
@@ -3363,7 +3363,7 @@ impl WgpuRenderer {
                         clipped_height
                     );
                     // Check if image texture is ready
-                    if let Some(cached) = self.image_cache.get(*image_id) {
+                    if let Some(cached) = self.image_cache.get(image_id.get()) {
                         // Create vertices for image quad (white color = no tinting)
                         let vertices = [
                             GlyphVertex {
@@ -3424,16 +3424,16 @@ impl WgpuRenderer {
                 } = glyph
                 {
                     if *loop_count != 0 {
-                        self.video_cache.set_loop(*video_id, *loop_count);
+                        self.video_cache.set_loop(video_id.get(), *loop_count);
                     }
                     if *autoplay {
-                        let state = self.video_cache.get_state(*video_id);
+                        let state = self.video_cache.get_state(video_id.get());
                         if matches!(
                             state,
                             Some(super::super::VideoState::Stopped)
                                 | Some(super::super::VideoState::Loading)
                         ) {
-                            self.video_cache.play(*video_id);
+                            self.video_cache.play(video_id.get());
                         }
                     }
                 }
@@ -3492,7 +3492,7 @@ impl WgpuRenderer {
                     }
 
                     // Check if video texture is ready
-                    if let Some(cached) = self.video_cache.get(*video_id) {
+                    if let Some(cached) = self.video_cache.get(video_id.get()) {
                         tracing::trace!(
                             "Rendering video {} at ({}, {}) size {}x{} (clipped to {}), frame_count={}",
                             video_id,
@@ -3799,14 +3799,16 @@ impl WgpuRenderer {
                 }
             }
             let hash = hasher.finish();
-            let prev = self.prev_mode_line_hashes.insert(info.window_id, hash);
+            let prev = self
+                .prev_mode_line_hashes
+                .insert(info.window_id.get(), hash);
             if let Some(prev_hash) = prev
                 && prev_hash != hash
             {
                 self.active_mode_line_fades
-                    .retain(|e| e.window_id != info.window_id);
+                    .retain(|e| e.window_id != info.window_id.get());
                 self.active_mode_line_fades.push(ModeLineFadeEntry {
-                    window_id: info.window_id,
+                    window_id: info.window_id.get(),
                     mode_line_y: ml_y,
                     mode_line_h: info.mode_line_height,
                     bounds_x: info.bounds.x,

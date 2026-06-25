@@ -2,8 +2,8 @@
 
 use crate::core::frame_glyphs::CursorStyle;
 use crate::core::types::{
-    AnimatedCursor, Color, CursorAnimStyle, ease_in_out_cubic, ease_linear, ease_out_cubic,
-    ease_out_expo, ease_out_quad,
+    AnimatedCursor, Color, CursorAnimStyle, DisplayFrameId, DisplayWindowId, ease_in_out_cubic,
+    ease_linear, ease_out_cubic, ease_out_expo, ease_out_quad,
 };
 
 /// Target position/style for cursor animation
@@ -297,13 +297,13 @@ impl CursorState {
                 None
             };
         Some(AnimatedCursor {
-            window_id: target.window_id,
+            window_id: DisplayWindowId::new(target.window_id),
             x: self.current_x,
             y: self.current_y,
             width: self.current_w,
             height: self.current_h,
             corners,
-            frame_id: target.frame_id,
+            frame_id: DisplayFrameId::new(target.frame_id),
         })
     }
 

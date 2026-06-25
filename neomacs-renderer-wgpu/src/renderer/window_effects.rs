@@ -982,7 +982,7 @@ pub(super) fn emit_border_transition(
     let mut new_selected: Option<i64> = None;
     for info in &ctx.frame_glyphs.window_infos {
         if info.selected && !info.is_minibuffer {
-            new_selected = Some(info.window_id);
+            new_selected = Some(info.window_id.get());
             break;
         }
     }
@@ -1015,7 +1015,7 @@ pub(super) fn emit_border_transition(
 
         let alpha = if let Some(&(_, becoming_active, start)) = border_transitions
             .iter()
-            .find(|&&(wid, _, _)| wid == info.window_id)
+            .find(|&&(wid, _, _)| wid == info.window_id.get())
         {
             let t = (now.duration_since(start).as_secs_f32() / duration.as_secs_f32()).min(1.0);
             let eased = t * (2.0 - t);
@@ -1329,7 +1329,7 @@ pub(super) fn emit_inactive_window_dimming(
             ctx.effects.inactive_dim.opacity
         };
         let current = per_window_dim
-            .get(&info.window_id)
+            .get(&info.window_id.get())
             .copied()
             .unwrap_or(target);
         let new_opacity = current + (target - current) * (1.0 - (-fade_speed * dt).exp());
@@ -1338,7 +1338,7 @@ pub(super) fn emit_inactive_window_dimming(
         } else {
             new_opacity
         };
-        per_window_dim.insert(info.window_id, new_opacity);
+        per_window_dim.insert(info.window_id.get(), new_opacity);
         if (new_opacity - target).abs() > 0.0005 {
             any_transitioning = true;
         }
@@ -1353,7 +1353,7 @@ pub(super) fn emit_inactive_window_dimming(
         .frame_glyphs
         .window_infos
         .iter()
-        .map(|i| i.window_id)
+        .map(|i| i.window_id.get())
         .collect();
     per_window_dim.retain(|k, _| valid_ids.contains(k));
 

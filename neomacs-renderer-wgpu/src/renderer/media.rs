@@ -276,7 +276,7 @@ impl WgpuRenderer {
                     fv.height
                 );
 
-                if let Some(cached) = self.video_cache.get(fv.video_id) {
+                if let Some(cached) = self.video_cache.get(fv.video_id.get()) {
                     if let Some(ref bind_group) = cached.bind_group {
                         let vertices = [
                             GlyphVertex {

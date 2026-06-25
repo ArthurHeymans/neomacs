@@ -14,7 +14,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowTransitionKind, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, FrameDisplayState, ScrollBarItem};
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::{HashMap, HashSet};
 
@@ -121,6 +121,7 @@ impl FrameOutputOwner {
     }
 
     pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
+        let window_id = DisplayWindowId::new(window_id);
         self.builder
             .window_infos()
             .iter()
@@ -144,7 +145,7 @@ impl FrameOutputOwner {
     pub(crate) fn render_latest_window_info_effects(
         &mut self,
         request: WindowFrameInfoEffectsRenderRequest<'_>,
-        curr_window_infos: &mut HashMap<i64, WindowInfo>,
+        curr_window_infos: &mut HashMap<DisplayWindowId, WindowInfo>,
     ) {
         request.render_latest_and_apply(self.frame_output_target(), curr_window_infos);
     }
@@ -440,7 +441,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
             Color::from_pixel(self.params.default_bg),
         );
         state.add_window_info(WindowInfo {
-            window_id: self.params.window_id,
+            window_id: DisplayWindowId::new(self.params.window_id),
             buffer_id: self.params.buffer_id,
             window_start: self.params.window_start,
             window_end: 0,
@@ -464,18 +465,18 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
 }
 
 pub(crate) struct WindowFrameInfoEffectsRenderRequest<'a> {
-    prev_window_infos: &'a HashMap<i64, WindowInfo>,
+    prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
 }
 
 impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
-    pub(crate) fn new(prev_window_infos: &'a HashMap<i64, WindowInfo>) -> Self {
+    pub(crate) fn new(prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>) -> Self {
         Self { prev_window_infos }
     }
 
     pub(crate) fn render_latest_and_apply(
         self,
         mut state: FrameOutputTarget<'_>,
-        curr_window_infos: &mut HashMap<i64, WindowInfo>,
+        curr_window_infos: &mut HashMap<DisplayWindowId, WindowInfo>,
     ) {
         let Some(curr) = state.latest_window_info() else {
             return;
@@ -547,14 +548,14 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
 }
 
 pub(crate) struct FrameLineAnimationHintsRenderRequest<'a> {
-    prev_window_infos: &'a HashMap<i64, WindowInfo>,
-    curr_window_infos: &'a HashMap<i64, WindowInfo>,
+    prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+    curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
 }
 
 impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
     pub(crate) fn new(
-        prev_window_infos: &'a HashMap<i64, WindowInfo>,
-        curr_window_infos: &'a HashMap<i64, WindowInfo>,
+        prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+        curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
     ) -> Self {
         Self {
             prev_window_infos,
@@ -598,11 +599,11 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
 }
 
 pub(crate) struct FrameWindowSwitchHintRenderRequest<'a> {
-    prev_selected_window_id: &'a mut i64,
+    prev_selected_window_id: &'a mut DisplayWindowId,
 }
 
 impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
-    pub(crate) fn new(prev_selected_window_id: &'a mut i64) -> Self {
+    pub(crate) fn new(prev_selected_window_id: &'a mut DisplayWindowId) -> Self {
         Self {
             prev_selected_window_id,
         }
@@ -615,7 +616,9 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
             .find(|info| info.selected && !info.is_minibuffer)
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
-            if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
+            if *self.prev_selected_window_id != DisplayWindowId::new(0)
+                && *self.prev_selected_window_id != window_id
+            {
                 state.add_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
             }
             *self.prev_selected_window_id = window_id;
@@ -658,16 +661,16 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
 }
 
 pub(crate) struct FrameTopologyTransitionHintRenderRequest<'a> {
-    prev_window_infos: &'a HashMap<i64, WindowInfo>,
-    curr_window_infos: &'a HashMap<i64, WindowInfo>,
+    prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+    curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
     frame_width: f32,
     frame_height: f32,
 }
 
 impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
     pub(crate) fn new(
-        prev_window_infos: &'a HashMap<i64, WindowInfo>,
-        curr_window_infos: &'a HashMap<i64, WindowInfo>,
+        prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+        curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
         frame_width: f32,
         frame_height: f32,
     ) -> Self {
@@ -691,7 +694,8 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
             || curr_non_mini.is_empty()
             || prev_non_mini == curr_non_mini
             || state.transition_hints().iter().any(|hint| {
-                hint.window_id == 0 && matches!(hint.kind, WindowTransitionKind::Crossfade)
+                hint.window_id == DisplayWindowId::new(0)
+                    && matches!(hint.kind, WindowTransitionKind::Crossfade)
             })
         {
             return;
@@ -699,7 +703,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
 
         let full_h = state.content_height_before_minibuffer(self.frame_height);
         state.add_transition_hint(WindowTransitionHint {
-            window_id: 0,
+            window_id: DisplayWindowId::new(0),
             bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
             kind: WindowTransitionKind::Crossfade,
             effect: None,
@@ -717,7 +721,9 @@ fn color_changed_for_theme_transition(
         || (new_bg.2 - old_bg.2).abs() > 0.02
 }
 
-fn non_minibuffer_window_ids(window_infos: &HashMap<i64, WindowInfo>) -> HashSet<i64> {
+fn non_minibuffer_window_ids(
+    window_infos: &HashMap<DisplayWindowId, WindowInfo>,
+) -> HashSet<DisplayWindowId> {
     window_infos
         .iter()
         .filter(|(_, info)| !info.is_minibuffer)
@@ -988,7 +994,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
             );
 
             state.add_scroll_bar(ScrollBarItem {
-                window_id: self.params.window_id,
+                window_id: DisplayWindowId::new(self.params.window_id),
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
                 horizontal: false,
@@ -1029,7 +1035,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
             };
 
             state.add_scroll_bar(ScrollBarItem {
-                window_id: self.params.window_id,
+                window_id: DisplayWindowId::new(self.params.window_id),
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
                 horizontal: true,

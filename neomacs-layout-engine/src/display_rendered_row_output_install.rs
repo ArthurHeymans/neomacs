@@ -11,7 +11,7 @@ use crate::display_row_render_state::{
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::FrameChromeRow;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 
 pub(crate) fn install_measured_window_display_row(
     builder: &mut DisplayOutputBuilder,
@@ -197,7 +197,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
             RenderedDisplayRowMediaKind::Image { image_id } => {
                 builder.install_output_media(OutputMediaInstallRequest::image(
                     target,
-                    image_id,
+                    ImageId::new(image_id),
                     medium.x,
                     medium.y,
                     medium.width,
@@ -211,7 +211,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
             } => {
                 builder.install_output_media(OutputMediaInstallRequest::video(
                     target,
-                    video_id,
+                    VideoId::new(video_id),
                     loop_count,
                     autoplay,
                     medium.x,
@@ -223,7 +223,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
                 builder.install_output_media(OutputMediaInstallRequest::xwidget(
                     target,
-                    xwidget_id,
+                    XwidgetId::new(xwidget_id),
                     medium.x,
                     medium.y,
                     medium.width,
@@ -236,7 +236,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct DisplayRowMediaInstallTarget {
-    window_id: i64,
+    window_id: DisplayWindowId,
     clip: Option<Rect>,
     slot_id: DisplaySlotId,
 }
@@ -249,7 +249,7 @@ impl DisplayRowMediaInstallTarget {
     ) -> Self {
         match target {
             RenderedDisplayRowAssetInstallTarget::CurrentWindowRow(display_row_index) => {
-                let window_id = builder.current_window_id_i64();
+                let window_id = DisplayWindowId::new(builder.current_window_id_i64());
                 let clip = builder.current_window_text_pixel_bounds();
                 let row = display_row_index.min(u32::MAX as usize) as u32;
                 Self {
@@ -263,7 +263,7 @@ impl DisplayRowMediaInstallTarget {
                 }
             }
             RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
-                let window_id = builder.current_window_id_i64();
+                let window_id = DisplayWindowId::new(builder.current_window_id_i64());
                 Self {
                     window_id,
                     clip: Some(bounds),
@@ -275,10 +275,10 @@ impl DisplayRowMediaInstallTarget {
                 }
             }
             RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => Self {
-                window_id: FRAME_CHROME_WINDOW_ID,
+                window_id: DisplayWindowId::new(FRAME_CHROME_WINDOW_ID),
                 clip: Some(bounds),
                 slot_id: DisplaySlotId {
-                    window_id: FRAME_CHROME_WINDOW_ID,
+                    window_id: DisplayWindowId::new(FRAME_CHROME_WINDOW_ID),
                     row: row_index,
                     col,
                 },

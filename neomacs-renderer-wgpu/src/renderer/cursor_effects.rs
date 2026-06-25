@@ -491,7 +491,7 @@ pub(super) fn emit_frost_border(ctx: &EffectCtx) -> Vec<RectVertex> {
             let x = b.x + frac * b.width;
             let h_seed = ((s as u64)
                 .wrapping_mul(2654435761)
-                .wrapping_add(info.window_id as u64))
+                .wrapping_add(info.window_id.get() as u64))
                 & 0xFF;
             let h = bw * (0.3 + (h_seed as f32 / 255.0) * 0.7);
             let a = base_alpha * (0.4 + (h_seed as f32 / 255.0) * 0.6);
@@ -505,7 +505,7 @@ pub(super) fn emit_frost_border(ctx: &EffectCtx) -> Vec<RectVertex> {
             let x = b.x + frac * b.width;
             let h_seed = ((s as u64)
                 .wrapping_mul(6364136223846793005)
-                .wrapping_add(info.window_id as u64))
+                .wrapping_add(info.window_id.get() as u64))
                 & 0xFF;
             let h = bw * (0.3 + (h_seed as f32 / 255.0) * 0.7);
             let a = base_alpha * (0.4 + (h_seed as f32 / 255.0) * 0.6);
@@ -520,7 +520,7 @@ pub(super) fn emit_frost_border(ctx: &EffectCtx) -> Vec<RectVertex> {
             let y = b.y + frac * b.height;
             let w_seed = ((s as u64)
                 .wrapping_mul(1442695040888963407)
-                .wrapping_add(info.window_id as u64))
+                .wrapping_add(info.window_id.get() as u64))
                 & 0xFF;
             let w = bw * (0.3 + (w_seed as f32 / 255.0) * 0.7);
             let a = base_alpha * (0.4 + (w_seed as f32 / 255.0) * 0.6);
@@ -534,7 +534,7 @@ pub(super) fn emit_frost_border(ctx: &EffectCtx) -> Vec<RectVertex> {
             let y = b.y + frac * b.height;
             let w_seed = ((s as u64)
                 .wrapping_mul(3141592653589793238)
-                .wrapping_add(info.window_id as u64))
+                .wrapping_add(info.window_id.get() as u64))
                 & 0xFF;
             let w = bw * (0.3 + (w_seed as f32 / 255.0) * 0.7);
             let a = base_alpha * (0.4 + (w_seed as f32 / 255.0) * 0.6);

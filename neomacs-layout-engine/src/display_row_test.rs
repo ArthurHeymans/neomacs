@@ -3294,18 +3294,18 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
 
     let state = builder.finish(10, 1, 8.0, 16.0);
     let xwidget = state.xwidgets.first().expect("xwidget side item");
-    assert_eq!(xwidget.window_id, 77);
+    assert_eq!(xwidget.window_id.get(), 77);
     assert_eq!(xwidget.row_role, GlyphRowRole::TabLine);
     assert_eq!(xwidget.clip_rect, Some(row_bounds));
     assert_eq!(
         xwidget.slot_id,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
-            window_id: 77,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 1,
         })
     );
-    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.xwidget_id.get(), 1234);
     assert_eq!(xwidget.x, 8.0);
     assert_eq!(xwidget.y, 4.0);
     assert_eq!(xwidget.width, 96.0);

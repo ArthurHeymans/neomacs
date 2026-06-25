@@ -47,7 +47,7 @@ use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
@@ -310,7 +310,7 @@ pub(crate) fn record_text_window_display_range(
     output
         .builder()
         .install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
-            range.window_id as i64,
+            DisplayWindowId::new(range.window_id as i64),
             range.window_start.as_i64(),
             range.window_end.as_i64(),
         ));
@@ -641,7 +641,7 @@ impl TextWindowCursor {
 
     fn phys_cursor(self) -> PhysCursor {
         PhysCursor {
-            window_id: self.window_id,
+            window_id: DisplayWindowId::new(self.window_id),
             charpos: self.charpos,
             row: self.row(),
             col: self.col(),
@@ -744,7 +744,7 @@ pub(crate) fn install_text_window_cursor_effects(
     output
         .builder()
         .install_output_frame_state(OutputFrameStateInstallRequest::cursor_effects(
-            request.window_id,
+            DisplayWindowId::new(request.window_id),
             request.effects,
         ));
 }
@@ -782,7 +782,7 @@ fn install_text_window_cursor_artifact(
     cursor: TextWindowCursorArtifact,
 ) {
     output_builder.install_output_cursor(OutputCursorInstallRequest::new(
-        cursor.window_id,
+        DisplayWindowId::new(cursor.window_id),
         cursor.slot_id,
         cursor.x,
         cursor.y,

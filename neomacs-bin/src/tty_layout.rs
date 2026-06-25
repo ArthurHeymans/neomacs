@@ -6,6 +6,7 @@
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::tty_rif::TtyRif;
+use neomacs_display_protocol::types::DisplayFrameId;
 use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::emacs_core::value::Value;
@@ -66,7 +67,7 @@ pub fn run_tty_layout_tree(
         .frames_in_reverse_z_order(root_id, true);
 
     let mut root_state = layout_frame_display_state(evaluator, root_id)?;
-    root_state.parent_id = 0;
+    root_state.parent_id = DisplayFrameId::new(0);
     root_state.parent_x = 0.0;
     root_state.parent_y = 0.0;
 

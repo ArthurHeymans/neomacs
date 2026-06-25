@@ -427,7 +427,7 @@ fn materialize_includes_backgrounds() {
 fn materialize_includes_borders() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.borders.push(BorderItem {
-        window_id: 42,
+        window_id: DisplayWindowId::new(42),
         x: 100.0,
         y: 0.0,
         width: 1.0,
@@ -444,7 +444,7 @@ fn materialize_includes_borders() {
             color,
             ..
         } => {
-            assert_eq!(*window_id, 42);
+            assert_eq!(window_id.get(), 42);
             assert_eq!(*x, 100.0);
             assert_eq!(*width, 1.0);
             assert_eq!(*color, Color::WHITE);
@@ -457,8 +457,8 @@ fn materialize_includes_borders() {
 fn materialize_includes_cursors() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.cursors.push(CursorItem {
-        window_id: 7,
-        slot_id: DisplaySlotId::from_pixels(7, 40.0, 0.0, 8.0, 16.0),
+        window_id: DisplayWindowId::new(7),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(7), 40.0, 0.0, 8.0, 16.0),
         x: 40.0,
         y: 0.0,
         width: 8.0,
@@ -471,7 +471,7 @@ fn materialize_includes_cursors() {
     assert_eq!(buf.window_cursors.len(), 1);
     assert!(buf.active_cursor().is_none());
     let cursor = &buf.window_cursors[0];
-    assert_eq!(cursor.window_id, 7);
+    assert_eq!(cursor.window_id.get(), 7);
     assert_eq!(cursor.x, 40.0);
     assert_eq!(cursor.style, CursorStyle::FilledBox);
     assert_eq!(cursor.color, Color::GREEN);
@@ -481,7 +481,7 @@ fn materialize_includes_cursors() {
 fn materialize_preserves_phys_cursor() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.phys_cursor = Some(PhysCursor {
-        window_id: 11,
+        window_id: DisplayWindowId::new(11),
         charpos: 42,
         row: 3,
         col: 5,
@@ -493,7 +493,7 @@ fn materialize_preserves_phys_cursor() {
         style: CursorStyle::Hollow,
         color: Color::BLUE,
         slot_id: DisplaySlotId {
-            window_id: 11,
+            window_id: DisplayWindowId::new(11),
             row: 3,
             col: 5,
         },
@@ -502,7 +502,7 @@ fn materialize_preserves_phys_cursor() {
 
     let buf = state.materialize();
     let phys = buf.active_cursor().expect("preserved active cursor");
-    assert_eq!(phys.window_id, 11);
+    assert_eq!(phys.window_id.get(), 11);
     assert_eq!(phys.slot_id.row, 3);
     assert_eq!(phys.slot_id.col, 5);
     assert!(phys.active);
@@ -513,7 +513,7 @@ fn materialize_preserves_phys_cursor() {
 fn materialize_includes_scroll_bars() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.scroll_bars.push(ScrollBarItem {
-        window_id: 42,
+        window_id: DisplayWindowId::new(42),
         row_role: GlyphRowRole::Text,
         clip_rect: Some(Rect::new(0.0, 0.0, 640.0, 384.0)),
         horizontal: false,
@@ -570,7 +570,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
 
     // One scroll bar (emits FrameGlyph::ScrollBar).
     state.scroll_bars.push(ScrollBarItem {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         row_role: GlyphRowRole::Text,
         clip_rect: Some(Rect::new(0.0, 0.0, cols as f32 * char_w, char_h)),
         horizontal: false,
@@ -830,8 +830,8 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
 #[test]
 fn materialize_copies_metadata() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
-    state.frame_id = 123;
-    state.parent_id = 456;
+    state.frame_id = DisplayFrameId::new(123);
+    state.parent_id = DisplayFrameId::new(456);
     state.parent_x = 10.0;
     state.parent_y = 20.0;
     state.z_order = 5;
@@ -842,8 +842,8 @@ fn materialize_copies_metadata() {
     state.faces.insert(1, face);
 
     let buf = state.materialize();
-    assert_eq!(buf.frame_id, 123);
-    assert_eq!(buf.parent_id, 456);
+    assert_eq!(buf.frame_id.get(), 123);
+    assert_eq!(buf.parent_id.get(), 456);
     assert_eq!(buf.parent_x, 10.0);
     assert_eq!(buf.parent_y, 20.0);
     assert_eq!(buf.z_order, 5);
@@ -1154,8 +1154,8 @@ fn materialize_mixed_grid_and_nongrid_items() {
         color: Color::BLACK,
     });
     state.cursors.push(CursorItem {
-        window_id: 1,
-        slot_id: DisplaySlotId::from_pixels(1, 0.0, 0.0, 8.0, 16.0),
+        window_id: DisplayWindowId::new(1),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(1), 0.0, 0.0, 8.0, 16.0),
         x: 0.0,
         y: 0.0,
         width: 8.0,

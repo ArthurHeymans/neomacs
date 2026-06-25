@@ -13,8 +13,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
 };
-use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
 #[derive(Clone, Copy, Debug)]
@@ -153,7 +152,7 @@ impl CursorVisualColumnResolutionRequest {
     }
 
     pub(crate) fn from_cursor(cursor: &neomacs_display_protocol::frame_glyphs::PhysCursor) -> Self {
-        Self::new(cursor.window_id, cursor.row, cursor.charpos)
+        Self::new(cursor.window_id.get(), cursor.row, cursor.charpos)
     }
 
     /// Resolve the materialize-grid column the cursor at `charpos` on `row`
@@ -475,7 +474,7 @@ impl CursorGeometrySource {
     ) -> Self {
         Self {
             slot_id: DisplaySlotId {
-                window_id: context.window_id,
+                window_id: DisplayWindowId::new(context.window_id),
                 row: row_metric.row() as u32,
                 col: cursor.col as u16,
             },
@@ -500,7 +499,7 @@ impl CursorGeometrySource {
         let point_h = (point.height as f32).max(1.0);
         Self {
             slot_id: DisplaySlotId {
-                window_id: context.window_id,
+                window_id: DisplayWindowId::new(context.window_id),
                 row: point.row.max(0) as u32,
                 col: point.col.max(0) as u16,
             },
@@ -521,7 +520,7 @@ impl CursorGeometrySource {
 
 impl ResolvedCursorGeometry {
     pub(crate) fn window_id(&self) -> i64 {
-        self.slot_id.window_id
+        self.slot_id.window_id.get()
     }
 }
 

@@ -29,7 +29,8 @@ impl GlyphRowFinalizationContext {
     }
 
     fn cursor_matches(self, cursor: &PhysCursor) -> bool {
-        cursor_window_matches_current(cursor.window_id, self.window_id) && cursor.row == self.row
+        cursor_window_matches_current(cursor.window_id.get(), self.window_id)
+            && cursor.row == self.row
     }
 }
 

@@ -17,7 +17,7 @@ fn assert_color_eq(actual: &Color, expected: &Color) {
 
 fn make_window_info(window_id: i64, buffer_id: u64, window_start: i64, bounds: Rect) -> WindowInfo {
     WindowInfo {
-        window_id,
+        window_id: DisplayWindowId::new(window_id),
         buffer_id,
         window_start,
         window_end: window_start + 200,
@@ -57,8 +57,8 @@ fn new_has_correct_defaults() {
     assert_eq!(buf.char_height, 16.0);
     assert_eq!(buf.font_pixel_size, 14.0);
     assert_color_eq(&buf.background, &Color::BLACK);
-    assert_eq!(buf.frame_id, 0);
-    assert_eq!(buf.parent_id, 0);
+    assert_eq!(buf.frame_id.get(), 0);
+    assert_eq!(buf.parent_id.get(), 0);
     assert_eq!(buf.background_alpha, 1.0);
     assert!(!buf.no_accept_focus);
 }
@@ -96,7 +96,7 @@ fn clear_all_resets_glyphs_and_metadata() {
     buf.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     buf.add_stretch(0.0, 0.0, 100.0, 16.0, Color::RED, 0, false);
     buf.add_cursor(
-        1,
+        DisplayWindowId::new(1),
         10.0,
         20.0,
         2.0,
@@ -105,7 +105,7 @@ fn clear_all_resets_glyphs_and_metadata() {
         Color::WHITE,
     );
     buf.add_window_info(
-        1,
+        DisplayWindowId::new(1),
         100,
         0,
         500,
@@ -124,11 +124,17 @@ fn clear_all_resets_glyphs_and_metadata() {
         false,
     );
     buf.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 10,
         row: 1,
         col: 2,
-        slot_id: DisplaySlotId::from_pixels(1, 10.0, 20.0, buf.char_width, buf.char_height),
+        slot_id: DisplaySlotId::from_pixels(
+            DisplayWindowId::new(1),
+            10.0,
+            20.0,
+            buf.char_width,
+            buf.char_height,
+        ),
         x: 10.0,
         y: 20.0,
         width: 8.0,
@@ -179,14 +185,14 @@ fn clear_all_preserves_frame_dimensions() {
 fn take_runtime_hints_drains_transition_and_effect_hints() {
     let mut buf = FrameGlyphBuffer::new();
     buf.add_transition_hint(WindowTransitionHint {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
         kind: WindowTransitionKind::Crossfade,
         effect: None,
         easing: None,
     });
     buf.add_effect_hint(WindowEffectHint::TextFadeIn {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
     });
 
@@ -291,7 +297,7 @@ fn add_char_appends_char_glyph() {
 #[test]
 fn cell_rect_returns_glyph_cell_and_none_for_non_cells() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
     assert_eq!(buf.glyphs[0].cell_rect(), Some((30.0, 40.0, 18.0, 33.0)));
     assert_eq!(buf.glyphs[0].cell_x(), Some(30.0));
@@ -306,7 +312,7 @@ fn cell_rect_returns_glyph_cell_and_none_for_non_cells() {
 #[test]
 fn cursor_cell_rect_resolves_slot_glyph_else_fallback() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
     let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
 
@@ -318,7 +324,7 @@ fn cursor_cell_rect_resolves_slot_glyph_else_fallback() {
 
     // No glyph on the slot -> the layout-supplied fallback rect.
     let empty_slot = DisplaySlotId {
-        window_id: 7,
+        window_id: DisplayWindowId::new(7),
         row: 9,
         col: 9,
     };
@@ -331,7 +337,7 @@ fn cursor_cell_rect_resolves_slot_glyph_else_fallback() {
 #[test]
 fn cursor_draw_rect_box_adopts_cell_while_bar_keeps_width() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
     let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
 
@@ -354,7 +360,7 @@ fn cursor_draw_rect_box_adopts_cell_while_bar_keeps_width() {
 #[test]
 fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_image(9, 24.0, 48.0, 128.0, 96.0);
+    buf.add_image(ImageId::new(9), 24.0, 48.0, 128.0, 96.0);
     let slot = buf.glyphs[0].slot_id().expect("image glyph has a slot");
 
     // A cursor over an image covers the whole image rect, ignoring the
@@ -366,7 +372,7 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
 
     // An unoccupied slot falls back to the layout's grid geometry unchanged.
     let empty = DisplaySlotId {
-        window_id: 7,
+        window_id: DisplayWindowId::new(7),
         row: 9,
         col: 9,
     };
@@ -379,7 +385,7 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
 #[test]
 fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('\u{0627}', 30.0, 40.0, 18.0, 33.0, 26.0, false);
     // Mark the glyph right-to-left (odd bidi level); add_char defaults to 0.
     if let FrameGlyph::Char { bidi_level, .. } = &mut buf.glyphs[0] {
@@ -397,7 +403,7 @@ fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
 #[test]
 fn cursor_draw_rect_empty_slot_snaps_to_preceding_glyph_right_edge() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     // A line-number gutter glyph; the cursor targets the empty text cell that
     // begins where this glyph ends (a blank line has no glyph of its own there).
     buf.add_char('2', 40.0, 10.0, 18.0, 33.0, 26.0, false); // right edge x = 58
@@ -417,7 +423,7 @@ fn cursor_draw_rect_empty_slot_snaps_to_preceding_glyph_right_edge() {
 
     // A slot with nothing before it (no gutter) keeps the layout fallback x.
     let lonely = DisplaySlotId {
-        window_id: 9,
+        window_id: DisplayWindowId::new(9),
         row: 9,
         col: 3,
     };
@@ -444,7 +450,7 @@ fn add_char_uses_current_face_attributes() {
         1,
         Some(Color::BLUE), // overline
     );
-    buf.set_draw_context(1, GlyphRowRole::ModeLine, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
     buf.add_char('X', 0.0, 0.0, 8.0, 16.0, 12.0, true);
 
     match &buf.glyphs[0] {
@@ -490,11 +496,11 @@ fn add_char_multiple_appends_in_order() {
 #[test]
 fn add_char_overlay_flag() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::ModeLine, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
     buf.add_char('M', 0.0, 0.0, 8.0, 16.0, 12.0, true);
     assert!(buf.glyphs[0].is_overlay());
 
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('N', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     assert!(!buf.glyphs[1].is_overlay());
 }
@@ -565,7 +571,7 @@ fn add_cursor_appends_window_cursor_visual() {
     let mut buf = FrameGlyphBuffer::new();
     let cursor_color = Color::rgb(0.0, 1.0, 0.0);
     buf.add_cursor(
-        42,
+        DisplayWindowId::new(42),
         100.0,
         200.0,
         2.0,
@@ -577,10 +583,10 @@ fn add_cursor_appends_window_cursor_visual() {
     assert!(buf.glyphs.is_empty());
     assert_eq!(buf.window_cursors.len(), 1);
     let cursor = &buf.window_cursors[0];
-    assert_eq!(cursor.window_id, 42);
+    assert_eq!(cursor.window_id.get(), 42);
     assert_eq!(
         cursor.slot_id,
-        DisplaySlotId::from_pixels(42, 100.0, 200.0, 8.0, 16.0)
+        DisplaySlotId::from_pixels(DisplayWindowId::new(42), 100.0, 200.0, 8.0, 16.0)
     );
     assert_eq!(cursor.x, 100.0);
     assert_eq!(cursor.y, 200.0);
@@ -594,10 +600,42 @@ fn add_cursor_appends_window_cursor_visual() {
 fn add_cursor_all_styles() {
     let mut buf = FrameGlyphBuffer::new();
     let c = Color::WHITE;
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::FilledBox, c);
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::Bar(2.0), c);
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::Hbar(2.0), c);
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::Hollow, c);
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        c,
+    );
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Bar(2.0),
+        c,
+    );
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Hbar(2.0),
+        c,
+    );
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Hollow,
+        c,
+    );
 
     assert!(buf.glyphs.is_empty());
     assert_eq!(buf.window_cursors.len(), 4);
@@ -619,7 +657,15 @@ fn add_cursor_all_styles() {
 #[test]
 fn cursor_visual_is_not_counted_as_overlay_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::FilledBox, Color::WHITE);
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        Color::WHITE,
+    );
     assert!(buf.glyphs.is_empty());
     assert_eq!(buf.window_cursors.len(), 1);
 }
@@ -664,7 +710,7 @@ fn add_stretch_appends_stretch_glyph() {
 #[test]
 fn add_stretch_overlay() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::ModeLine, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
     buf.add_stretch(0.0, 0.0, 800.0, 20.0, Color::BLUE, 0, true);
     assert!(buf.glyphs[0].is_overlay());
 }
@@ -693,7 +739,7 @@ fn add_stretch_stipple_stores_pattern_info() {
 #[test]
 fn slot_glyph_returns_matching_stretch() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(3, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(3), GlyphRowRole::Text, None);
     buf.add_stretch(8.0, 16.0, 24.0, 16.0, Color::BLACK, 7, false);
 
     let slot_id = buf.glyphs[0].slot_id().expect("stretch slot id");
@@ -723,7 +769,7 @@ fn slot_glyph_returns_matching_stretch() {
 fn add_window_info_appends_metadata() {
     let mut buf = FrameGlyphBuffer::new();
     buf.add_window_info(
-        0x1234,
+        DisplayWindowId::new(0x1234),
         0xABCD,
         1,
         500,
@@ -744,7 +790,7 @@ fn add_window_info_appends_metadata() {
 
     assert_eq!(buf.window_infos.len(), 1);
     let info = &buf.window_infos[0];
-    assert_eq!(info.window_id, 0x1234);
+    assert_eq!(info.window_id.get(), 0x1234);
     assert_eq!(info.buffer_id, 0xABCD);
     assert_eq!(info.window_start, 1);
     assert_eq!(info.window_end, 500);
@@ -764,7 +810,7 @@ fn add_window_info_multiple_windows() {
 
     // Two side-by-side windows
     buf.add_window_info(
-        1,
+        DisplayWindowId::new(1),
         100,
         0,
         200,
@@ -783,7 +829,7 @@ fn add_window_info_multiple_windows() {
         false,
     );
     buf.add_window_info(
-        2,
+        DisplayWindowId::new(2),
         200,
         0,
         300,
@@ -803,9 +849,9 @@ fn add_window_info_multiple_windows() {
     );
 
     assert_eq!(buf.window_infos.len(), 2);
-    assert_eq!(buf.window_infos[0].window_id, 1);
+    assert_eq!(buf.window_infos[0].window_id.get(), 1);
     assert!(buf.window_infos[0].selected);
-    assert_eq!(buf.window_infos[1].window_id, 2);
+    assert_eq!(buf.window_infos[1].window_id.get(), 2);
     assert!(!buf.window_infos[1].selected);
 }
 
@@ -813,7 +859,7 @@ fn add_window_info_multiple_windows() {
 fn add_window_info_minibuffer() {
     let mut buf = FrameGlyphBuffer::new();
     buf.add_window_info(
-        99,
+        DisplayWindowId::new(99),
         50,
         0,
         0,
@@ -844,7 +890,7 @@ fn derive_transition_hint_buffer_switch_crossfade() {
     let curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
 
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
-    assert_eq!(hint.window_id, 1);
+    assert_eq!(hint.window_id.get(), 1);
     assert_eq!(hint.bounds, curr.bounds);
     assert!(matches!(hint.kind, WindowTransitionKind::Crossfade));
 }
@@ -855,7 +901,7 @@ fn derive_transition_hint_scroll_slide() {
     let curr = make_window_info(1, 100, 42, Rect::new(0.0, 0.0, 800.0, 600.0));
 
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
-    assert_eq!(hint.window_id, 1);
+    assert_eq!(hint.window_id.get(), 1);
     match hint.kind {
         WindowTransitionKind::ScrollSlide {
             direction,
@@ -1059,8 +1105,8 @@ fn set_frame_identity_stores_all_fields() {
     let mut buf = FrameGlyphBuffer::new();
     let border_color = Color::rgb(0.5, 0.5, 0.5);
     buf.set_frame_identity(
-        0x100,
-        0x200,
+        DisplayFrameId::new(0x100),
+        DisplayFrameId::new(0x200),
         50.0,
         75.0,
         5,
@@ -1071,8 +1117,8 @@ fn set_frame_identity_stores_all_fields() {
         0.85,
     );
 
-    assert_eq!(buf.frame_id, 0x100);
-    assert_eq!(buf.parent_id, 0x200);
+    assert_eq!(buf.frame_id.get(), 0x100);
+    assert_eq!(buf.parent_id.get(), 0x200);
     assert_eq!(buf.parent_x, 50.0);
     assert_eq!(buf.parent_y, 75.0);
     assert_eq!(buf.z_order, 5);
@@ -1087,8 +1133,8 @@ fn set_frame_identity_stores_all_fields() {
 fn set_frame_identity_root_frame() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_frame_identity(
-        0x100,
-        0, // parent_id 0 = root frame
+        DisplayFrameId::new(0x100),
+        DisplayFrameId::new(0), // parent_id 0 = root frame
         0.0,
         0.0,
         0,
@@ -1099,8 +1145,8 @@ fn set_frame_identity_root_frame() {
         1.0,
     );
 
-    assert_eq!(buf.frame_id, 0x100);
-    assert_eq!(buf.parent_id, 0);
+    assert_eq!(buf.frame_id.get(), 0x100);
+    assert_eq!(buf.parent_id.get(), 0);
     assert!(!buf.undecorated);
     assert!(!buf.no_accept_focus);
     assert_eq!(buf.background_alpha, 1.0);
@@ -1113,14 +1159,14 @@ fn set_frame_identity_root_frame() {
 #[test]
 fn set_phys_cursor_normalizes_text_slot_geometry() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('2', 8.0, 70.0, 8.108109, 18.0, 14.0, false);
     buf.add_stretch(16.108109, 70.0, 8.108109, 18.0, Color::WHITE, 0, false);
     buf.add_char('d', 24.216217, 70.0, 8.0, 18.0, 14.0, false);
     let text_slot = buf.glyphs[2].slot_id().expect("text slot");
 
     buf.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 5,
         row: text_slot.row as usize,
         col: text_slot.col,
@@ -1146,11 +1192,17 @@ fn set_phys_cursor_stores_info() {
     let mut buf = FrameGlyphBuffer::new();
     let cursor_fg = Color::rgb(0.0, 0.0, 0.0);
     let cursor = PhysCursor {
-        window_id: 2,
+        window_id: DisplayWindowId::new(2),
         charpos: 99,
         row: 3,
         col: 4,
-        slot_id: DisplaySlotId::from_pixels(2, 50.0, 100.0, buf.char_width, buf.char_height),
+        slot_id: DisplaySlotId::from_pixels(
+            DisplayWindowId::new(2),
+            50.0,
+            100.0,
+            buf.char_width,
+            buf.char_height,
+        ),
         x: 50.0,
         y: 100.0,
         width: 8.0,
@@ -1265,7 +1317,7 @@ fn border_glyph_is_not_overlay() {
 #[test]
 fn add_image_appends_image_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_image(42, 100.0, 200.0, 320.0, 240.0);
+    buf.add_image(ImageId::new(42), 100.0, 200.0, 320.0, 240.0);
 
     assert_eq!(buf.len(), 1);
     match &buf.glyphs[0] {
@@ -1281,14 +1333,14 @@ fn add_image_appends_image_glyph() {
             assert_eq!(
                 *slot_id,
                 Some(DisplaySlotId::from_pixels(
-                    0,
+                    DisplayWindowId::new(0),
                     100.0,
                     200.0,
                     buf.char_width,
                     buf.char_height
                 ))
             );
-            assert_eq!(*image_id, 42);
+            assert_eq!(image_id.get(), 42);
             assert_eq!(*x, 100.0);
             assert_eq!(*y, 200.0);
             assert_eq!(*width, 320.0);
@@ -1301,10 +1353,10 @@ fn add_image_appends_image_glyph() {
 #[test]
 fn add_video_appends_video_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_video(7, 0.0, 0.0, 640.0, 480.0, 0, false);
+    buf.add_video(VideoId::new(7), 0.0, 0.0, 640.0, 480.0, 0, false);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Video { video_id, .. } => assert_eq!(*video_id, 7),
+        FrameGlyph::Video { video_id, .. } => assert_eq!(video_id.get(), 7),
         other => panic!("Expected Video glyph, got {:?}", other),
     }
 }
@@ -1312,10 +1364,10 @@ fn add_video_appends_video_glyph() {
 #[test]
 fn add_xwidget_appends_xwidget_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_xwidget(99, 0.0, 0.0, 800.0, 600.0);
+    buf.add_xwidget(XwidgetId::new(99), 0.0, 0.0, 800.0, 600.0);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Xwidget { xwidget_id, .. } => assert_eq!(*xwidget_id, 99),
+        FrameGlyph::Xwidget { xwidget_id, .. } => assert_eq!(xwidget_id.get(), 99),
         other => panic!("Expected Xwidget glyph, got {:?}", other),
     }
 }
@@ -1323,21 +1375,21 @@ fn add_xwidget_appends_xwidget_glyph() {
 #[test]
 fn slot_glyph_matches_media_slots() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_image(42, 16.0, 32.0, 320.0, 240.0);
+    buf.add_image(ImageId::new(42), 16.0, 32.0, 320.0, 240.0);
 
     let slot_id = buf.glyphs[0].slot_id().expect("media slot id");
     let slot = buf.slot_glyph(slot_id).expect("slot glyph");
-    assert!(matches!(slot, FrameGlyph::Image { image_id: 42, .. }));
+    assert!(matches!(slot, FrameGlyph::Image { image_id, .. } if image_id.get() == 42));
 }
 
 #[test]
 fn set_phys_cursor_normalizes_media_slots_to_hollow() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_image(9, 24.0, 48.0, 128.0, 96.0);
+    buf.add_image(ImageId::new(9), 24.0, 48.0, 128.0, 96.0);
     let slot_id = buf.glyphs[0].slot_id().expect("image slot id");
 
     buf.set_phys_cursor(PhysCursor {
-        window_id: 0,
+        window_id: DisplayWindowId::new(0),
         charpos: 0,
         row: slot_id.row as usize,
         col: slot_id.col,
@@ -1392,7 +1444,7 @@ fn add_scroll_bar_appends_scrollbar_glyph() {
             track_color,
             thumb_color,
         } => {
-            assert_eq!(*window_id, 0);
+            assert_eq!(window_id.get(), 0);
             assert_eq!(*row_role, GlyphRowRole::Text);
             assert_eq!(*clip_rect, None);
             assert!(!*horizontal);
@@ -1420,8 +1472,16 @@ fn add_scroll_bar_appends_scrollbar_glyph() {
 fn is_overlay_returns_false_for_non_char_stretch_types() {
     let mut buf = FrameGlyphBuffer::new();
     buf.add_border(0.0, 0.0, 1.0, 100.0, Color::WHITE);
-    buf.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::FilledBox, Color::WHITE);
-    buf.add_image(1, 0.0, 0.0, 100.0, 100.0);
+    buf.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        Color::WHITE,
+    );
+    buf.add_image(ImageId::new(1), 0.0, 0.0, 100.0, 100.0);
 
     for glyph in &buf.glyphs {
         assert!(!glyph.is_overlay());
@@ -1437,7 +1497,18 @@ fn full_frame_simulation() {
     let frame_bg = Color::rgb(0.12, 0.12, 0.12);
     let mut buf = FrameGlyphBuffer::with_size(1920.0, 1080.0);
     buf.background = frame_bg;
-    buf.set_frame_identity(0x1, 0, 0.0, 0.0, 0, false, 0.0, Color::BLACK, false, 1.0);
+    buf.set_frame_identity(
+        DisplayFrameId::new(0x1),
+        DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        Color::BLACK,
+        false,
+        1.0,
+    );
 
     // Window 1: left pane background
     let win_bg = Color::rgb(0.13, 0.13, 0.13);
@@ -1454,7 +1525,7 @@ fn full_frame_simulation() {
 
     // Window 1: cursor
     buf.add_cursor(
-        1,
+        DisplayWindowId::new(1),
         15.0 * 8.0,
         0.0,
         2.0,
@@ -1463,11 +1534,17 @@ fn full_frame_simulation() {
         Color::WHITE,
     );
     buf.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 15,
         row: 0,
         col: 15,
-        slot_id: DisplaySlotId::from_pixels(1, 15.0 * 8.0, 0.0, buf.char_width, buf.char_height),
+        slot_id: DisplaySlotId::from_pixels(
+            DisplayWindowId::new(1),
+            15.0 * 8.0,
+            0.0,
+            buf.char_width,
+            buf.char_height,
+        ),
         x: 15.0 * 8.0,
         y: 0.0,
         width: 2.0,
@@ -1499,12 +1576,12 @@ fn full_frame_simulation() {
         0,
         None,
     );
-    buf.set_draw_context(1, GlyphRowRole::ModeLine, None);
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
     buf.add_stretch(0.0, 1060.0, 1920.0, 20.0, ml_bg, 10, true);
 
     // Window infos
     buf.add_window_info(
-        1,
+        DisplayWindowId::new(1),
         100,
         0,
         500,
@@ -1523,7 +1600,7 @@ fn full_frame_simulation() {
         false,
     );
     buf.add_window_info(
-        2,
+        DisplayWindowId::new(2),
         200,
         0,
         300,
@@ -1550,7 +1627,7 @@ fn full_frame_simulation() {
     assert_eq!(buf.window_cursors.len(), 2);
     assert_eq!(buf.window_infos.len(), 2);
     assert!(buf.active_cursor().is_some());
-    assert_eq!(buf.frame_id, 0x1);
+    assert_eq!(buf.frame_id.get(), 0x1);
     assert_eq!(buf.width, 1920.0);
     assert_eq!(buf.height, 1080.0);
 

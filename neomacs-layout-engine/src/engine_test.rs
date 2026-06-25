@@ -1067,7 +1067,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
     assert_eq!(
         source.slot_id,
         DisplaySlotId {
-            window_id: 7,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
             row: 9,
             col: 3,
         }
@@ -1109,7 +1109,7 @@ fn cursor_geometry_source_builds_from_display_point_snapshot() {
     assert_eq!(
         source.slot_id,
         DisplaySlotId {
-            window_id: -10,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(-10),
             row: 3,
             col: 5,
         }
@@ -1269,7 +1269,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
     assert_eq!(
         phys.slot_id,
         DisplaySlotId {
-            window_id: window_id.0 as i64,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id.0 as i64),
             row: 0,
             col: 0,
         }
@@ -1327,11 +1327,11 @@ fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_di
     let state = builder.finish(10, 1, 8.0, 16.0);
     assert_eq!(state.cursors.len(), 1);
     let cursor = &state.cursors[0];
-    assert_eq!(cursor.window_id, -42);
+    assert_eq!(cursor.window_id.get(), -42);
     assert_eq!(
         cursor.slot_id,
         DisplaySlotId {
-            window_id: -42,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(-42),
             row: 2,
             col: 4,
         }
@@ -3058,13 +3058,15 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
         .iter()
         .find(|info| info.is_minibuffer)
         .expect("minibuffer window info")
-        .window_id as u64;
+        .window_id
+        .get() as u64;
     let root_window_id = state
         .window_infos
         .iter()
         .find(|info| !info.is_minibuffer)
         .expect("root window info")
-        .window_id as u64;
+        .window_id
+        .get() as u64;
 
     let minibuffer_entry = state
         .window_matrices
@@ -3145,7 +3147,8 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
         .iter()
         .find(|info| info.is_minibuffer)
         .expect("minibuffer window info")
-        .window_id as u64;
+        .window_id
+        .get() as u64;
     let minibuffer_entry = state
         .window_matrices
         .iter()
@@ -3215,7 +3218,8 @@ fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) 
         .iter()
         .find(|info| info.is_minibuffer)
         .expect("minibuffer window info")
-        .window_id as u64;
+        .window_id
+        .get() as u64;
     let minibuffer_entry = state
         .window_matrices
         .iter()
@@ -4515,9 +4519,9 @@ fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
     let visual = state
         .cursors
         .iter()
-        .find(|cursor| cursor.window_id < 0)
+        .find(|cursor| cursor.window_id.get() < 0)
         .expect("visual cursor");
-    assert_eq!(visual.window_id, -1_000_000);
+    assert_eq!(visual.window_id.get(), -1_000_000);
     assert_eq!(visual.width, 6.0);
     assert_eq!(visual.color, Color::from_pixel(0xff0000));
 
@@ -4626,7 +4630,7 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
         .expect("display state")
         .cursors
         .iter()
-        .find(|cursor| cursor.window_id < 0)
+        .find(|cursor| cursor.window_id.get() < 0)
         .expect("visual cursor");
 
     assert_eq!(
@@ -4697,7 +4701,7 @@ fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
         .expect("display state")
         .cursors
         .iter()
-        .find(|cursor| cursor.window_id < 0)
+        .find(|cursor| cursor.window_id.get() < 0)
         .expect("visual cursor");
 
     assert_eq!(visual.width.round() as i64, b_point.width);
@@ -5607,7 +5611,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         .as_ref()
         .expect("frame display state");
     let image = state.images.first().expect("inline image glyph");
-    assert_eq!(image.image_id, 77);
+    assert_eq!(image.image_id.get(), 77);
     assert_eq!(image.width, 32.0);
     assert_eq!(image.height, 24.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 32);
@@ -5736,7 +5740,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         .as_ref()
         .expect("frame display state");
     let video = state.videos.first().expect("inline video glyph");
-    assert_eq!(video.video_id, 88);
+    assert_eq!(video.video_id.get(), 88);
     assert_eq!(video.width, 80.0);
     assert_eq!(video.height, 45.0);
     assert_eq!(video.loop_count, -1);
@@ -5797,7 +5801,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         .as_ref()
         .expect("frame display state");
     let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
-    assert_eq!(xwidget.xwidget_id, 99);
+    assert_eq!(xwidget.xwidget_id.get(), 99);
     assert_eq!(xwidget.width, 80.0);
     assert_eq!(xwidget.height, 45.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
@@ -5860,7 +5864,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         .as_ref()
         .expect("frame display state");
     let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
-    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.xwidget_id.get(), 1234);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 96);
@@ -6379,7 +6383,7 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
         .borders
         .iter()
         .filter(|border| {
-            border.window_id == selected_window.0 as i64
+            border.window_id.get() == selected_window.0 as i64
                 && (border.x - (left_bounds.x + left_bounds.width - 6.0)).abs() <= 6.0
         })
         .collect();
@@ -6461,7 +6465,7 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
         .expect("display state");
     assert!(
         state.borders.iter().any(|border| {
-            border.window_id == selected_window.0 as i64
+            border.window_id.get() == selected_window.0 as i64
                 && (border.x - (left_bounds.x + left_bounds.width - 1.0)).abs() < 0.01
                 && border.width == 1.0
         }),
@@ -6513,10 +6517,9 @@ fn layout_frame_rust_bottom_divider_does_not_separate_root_from_minibuffer() {
         .as_ref()
         .expect("display state");
     assert!(
-        state
-            .borders
-            .iter()
-            .all(|border| border.window_id != selected_window.0 as i64 || border.height != 6.0),
+        state.borders.iter().all(
+            |border| border.window_id.get() != selected_window.0 as i64 || border.height != 6.0
+        ),
         "GNU does not draw a bottom window divider between a bottommost root window and the minibuffer"
     );
 }
@@ -10917,8 +10920,8 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
         .find(|image| image.row_role == GlyphRowRole::TabBar)
         .expect("frame tab-bar image side item");
 
-    assert_eq!(image.window_id, 0);
-    assert_eq!(image.image_id, 77);
+    assert_eq!(image.window_id.get(), 0);
+    assert_eq!(image.image_id.get(), 77);
     assert_eq!(image.width, 32.0);
     assert_eq!(image.height, 24.0);
     assert_eq!(tab_bar_row.row.height_px, 24.0);
@@ -11257,8 +11260,8 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
     let child = &states[1];
 
     // The child carries its OWN identity, not the parent's.
-    assert_eq!(child.frame_id, 100);
-    assert_eq!(child.parent_id, content.frame_id);
+    assert_eq!(child.frame_id.get(), 100);
+    assert_eq!(child.parent_id.get(), content.frame_id);
     assert_eq!(child.parent_x, 120.0);
     assert_eq!(child.parent_y, 48.0);
     assert_eq!(child.z_order, 1);

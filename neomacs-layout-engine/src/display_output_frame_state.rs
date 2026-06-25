@@ -13,7 +13,7 @@ use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FrameDisplayState, ImageItem, ScrollBarItem, VideoItem,
     XwidgetItem,
 };
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
 use std::collections::HashMap;
 
 pub(crate) struct OutputFrameBuildState {
@@ -25,15 +25,15 @@ pub(crate) struct OutputFrameBuildState {
     xwidgets: Vec<XwidgetItem>,
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
-    cursor_effects_by_window: HashMap<i64, EffectsConfig>,
+    cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
     faces: HashMap<u32, Face>,
     window_infos: Vec<WindowInfo>,
     transition_hints: Vec<WindowTransitionHint>,
     effect_hints: Vec<WindowEffectHint>,
     background_color: Color,
     font_pixel_size: f32,
-    frame_id: u64,
-    parent_id: u64,
+    frame_id: DisplayFrameId,
+    parent_id: DisplayFrameId,
     parent_x: f32,
     parent_y: f32,
     z_order: i32,
@@ -67,8 +67,8 @@ impl OutputFrameBuildState {
                 a: 1.0,
             },
             font_pixel_size: 0.0,
-            frame_id: 0,
-            parent_id: 0,
+            frame_id: DisplayFrameId::new(0),
+            parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
             parent_y: 0.0,
             z_order: 0,
@@ -106,8 +106,8 @@ impl OutputFrameBuildState {
             a: 1.0,
         };
         self.font_pixel_size = 0.0;
-        self.frame_id = 0;
-        self.parent_id = 0;
+        self.frame_id = DisplayFrameId::new(0);
+        self.parent_id = DisplayFrameId::new(0);
         self.parent_x = 0.0;
         self.parent_y = 0.0;
         self.z_order = 0;

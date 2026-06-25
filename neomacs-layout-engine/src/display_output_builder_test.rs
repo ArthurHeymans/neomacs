@@ -467,12 +467,12 @@ fn builder_preserves_phys_cursor() {
     write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 0,
         },
@@ -489,7 +489,7 @@ fn builder_preserves_phys_cursor() {
 
     let state = builder.finish(80, 3, 8.0, 16.0);
     let cursor = state.phys_cursor.as_ref().expect("phys cursor");
-    assert_eq!(cursor.window_id, 1);
+    assert_eq!(cursor.window_id.get(), 1);
     assert_eq!(cursor.charpos, 0);
     assert_eq!(cursor.col, 0);
 }
@@ -509,12 +509,12 @@ fn builder_preserves_high_window_id_phys_cursor() {
     write_char_to_current_row(&mut builder, 'M', 0, 0);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
-        window_id: high_window_id as i64,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(high_window_id as i64),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: DisplaySlotId {
-            window_id: high_window_id as i64,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(high_window_id as i64),
             row: 0,
             col: 0,
         },
@@ -531,8 +531,8 @@ fn builder_preserves_high_window_id_phys_cursor() {
 
     let state = builder.finish(80, 3, 8.0, 16.0);
     let cursor = state.phys_cursor.as_ref().expect("phys cursor");
-    assert_eq!(cursor.window_id, high_window_id as i64);
-    assert_eq!(cursor.slot_id.window_id, high_window_id as i64);
+    assert_eq!(cursor.window_id.get(), high_window_id as i64);
+    assert_eq!(cursor.slot_id.window_id.get(), high_window_id as i64);
     assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(0));
 }
 
@@ -633,12 +633,12 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
     write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 0,
         },
@@ -698,12 +698,12 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     // Text-area index (2) for both `col` and `slot_id.col`, never counting the
     // gutter -- exactly the input that triggered the bug.
     builder.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 102,
         row: 0,
         col: 2,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 2,
         },
@@ -762,12 +762,12 @@ fn glyph_row_resolved_phys_cursor_preserves_display_string_cursor_slot() {
     builder.end_row();
 
     builder.set_glyph_row_resolved_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 5,
         row: 0,
         col: 12,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 12,
         },
@@ -818,12 +818,12 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
 
     // Point at the hidden line start (charpos 0); the capture passes column 0.
     builder.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 0,
         },
@@ -883,7 +883,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
 
     // The captured (pre-resolution) slot is the Text-area index, column 2.
     let captured_slot = DisplaySlotId {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         row: 0,
         col: 2,
     };
@@ -898,7 +898,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
         neomacs_display_protocol::types::Color::WHITE,
     );
     builder.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 102,
         row: 0,
         col: 2,
@@ -922,7 +922,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
     let wc = state
         .cursors
         .iter()
-        .find(|c| c.window_id == 1)
+        .find(|c| c.window_id.get() == 1)
         .expect("the manually pushed window cursor");
     assert_eq!(
         wc.slot_id, captured_slot,

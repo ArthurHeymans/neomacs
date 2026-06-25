@@ -13,6 +13,7 @@ use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
 use super::{RenderApp, surface_readback};
+use crate::core::types::DisplayFrameId;
 use crate::thread_comm::{MenuBarItem, ToolBarItem};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRenderer};
 
@@ -404,8 +405,8 @@ impl RenderApp {
             );
         }
         let animated_cursor = render.cursor.animated_cursor();
-        let root_animated_cursor =
-            animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
+        let root_animated_cursor = animated_cursor
+            .filter(|cursor| cursor.frame_id == DisplayFrameId::new(render.emacs_frame_id));
         // The slide animation is composed at draw time: emit_cursor_visual reads
         // the interpolated rect from animated_cursor for the active window's
         // cursor. The frame's stored cursor geometry is no longer mutated here,
@@ -839,7 +840,7 @@ impl RenderApp {
                         native.width,
                         native.height,
                         cursor_visible,
-                        animated_cursor.filter(|ac| ac.frame_id == child_id),
+                        animated_cursor.filter(|ac| ac.frame_id == DisplayFrameId::new(child_id)),
                         child_frame_style.corner_radius,
                         child_frame_style.shadow_enabled,
                         child_frame_style.shadow_layers,

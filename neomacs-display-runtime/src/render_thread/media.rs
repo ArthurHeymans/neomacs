@@ -5,6 +5,7 @@ use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 #[cfg(feature = "neo-term")]
 use crate::core::types::Color;
+use crate::core::types::DisplayWindowId;
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
@@ -45,10 +46,16 @@ impl RenderApp {
             };
 
             extra_glyphs.push(FrameGlyph::Stretch {
-                window_id: 0,
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                 row_role: GlyphRowRole::Text,
                 clip_rect: None,
-                slot_id: DisplaySlotId::from_pixels(0, *x, *y, cell_w, cell_h),
+                slot_id: DisplaySlotId::from_pixels(
+                    DisplayWindowId::new(0),
+                    *x,
+                    *y,
+                    cell_w,
+                    cell_h,
+                ),
                 bidi_level: 0,
                 x: *x,
                 y: *y,
@@ -466,10 +473,16 @@ impl RenderApp {
 
                     // Terminal background
                     win_glyphs.push(FrameGlyph::Stretch {
-                        window_id: 0,
+                        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                         row_role: GlyphRowRole::ModeLine,
                         clip_rect: None,
-                        slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
+                        slot_id: DisplaySlotId::from_pixels(
+                            DisplayWindowId::new(0),
+                            x,
+                            y,
+                            cell_w,
+                            cell_h,
+                        ),
                         bidi_level: 0,
                         x,
                         y,
@@ -523,10 +536,16 @@ impl RenderApp {
                     let mut bg = content.default_bg;
                     bg.a = view.float_opacity;
                     float_glyphs.push(FrameGlyph::Stretch {
-                        window_id: 0,
+                        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                         row_role: GlyphRowRole::ModeLine,
                         clip_rect: None,
-                        slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
+                        slot_id: DisplaySlotId::from_pixels(
+                            DisplayWindowId::new(0),
+                            x,
+                            y,
+                            cell_w,
+                            cell_h,
+                        ),
                         bidi_level: 0,
                         x,
                         y,
@@ -603,10 +622,16 @@ impl RenderApp {
                 let mut bg = cell.bg;
                 bg.a *= opacity;
                 out.push(FrameGlyph::Stretch {
-                    window_id: 0,
+                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                     row_role,
                     clip_rect: None,
-                    slot_id: DisplaySlotId::from_pixels(0, cx, cy, cell_w, cell_h),
+                    slot_id: DisplaySlotId::from_pixels(
+                        DisplayWindowId::new(0),
+                        cx,
+                        cy,
+                        cell_w,
+                        cell_h,
+                    ),
                     bidi_level: 0,
                     x: cx,
                     y: cy,
@@ -631,10 +656,16 @@ impl RenderApp {
                     terminal_cell_face(face_id, fg, bold, italic, underline, strikeout, font_size)
                 });
                 out.push(FrameGlyph::Char {
-                    window_id: 0,
+                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                     row_role,
                     clip_rect: None,
-                    slot_id: DisplaySlotId::from_pixels(0, cx, cy, cell_w, cell_h),
+                    slot_id: DisplaySlotId::from_pixels(
+                        DisplayWindowId::new(0),
+                        cx,
+                        cy,
+                        cell_w,
+                        cell_h,
+                    ),
                     bidi_level: 0,
                     char: cell.c,
                     composed: None,
@@ -656,7 +687,7 @@ impl RenderApp {
             let mut fg = content.default_fg;
             fg.a *= opacity;
             out.push(FrameGlyph::Border {
-                window_id: 0,
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
                 row_role,
                 clip_rect: None,
                 x: cx,

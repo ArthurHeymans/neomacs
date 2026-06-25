@@ -10,7 +10,7 @@ fn make_child_buf(
     z_order: i32,
 ) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(width, height);
-    buf.frame_id = frame_id;
+    buf.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(frame_id);
     buf.parent_x = parent_x;
     buf.parent_y = parent_y;
     buf.z_order = z_order;

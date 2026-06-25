@@ -7,7 +7,7 @@
 use crate::effect_config::EffectsConfig;
 use crate::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
-use crate::types::{Color, Rect};
+use crate::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 use crate::ui_types::TabBarItem;
 use std::collections::HashMap;
 
@@ -52,7 +52,7 @@ impl GlyphRowRole {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DisplaySlotId {
     /// Window that owns the slot.
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     /// Visual row within the owning window.
     pub row: u32,
     /// Visual column within that row.
@@ -61,7 +61,7 @@ pub struct DisplaySlotId {
 
 impl DisplaySlotId {
     pub const ZERO: Self = Self {
-        window_id: 0,
+        window_id: DisplayWindowId::new(0),
         row: 0,
         col: 0,
     };
@@ -71,7 +71,13 @@ impl DisplaySlotId {
     /// Matrix-backed layout should populate slot ids from explicit row/column
     /// indices. This helper exists for manual glyph construction in tests and
     /// direct frame-space emission paths that have not been matrix-ified yet.
-    pub fn from_pixels(window_id: i64, x: f32, y: f32, char_width: f32, char_height: f32) -> Self {
+    pub fn from_pixels(
+        window_id: DisplayWindowId,
+        x: f32,
+        y: f32,
+        char_width: f32,
+        char_height: f32,
+    ) -> Self {
         let row = if char_height > 0.0 {
             (y / char_height).round().max(0.0) as u32
         } else {
@@ -127,7 +133,7 @@ pub enum FrameGlyph {
     /// Character glyph with text
     Char {
         /// Window identifier this glyph belongs to.
-        window_id: i64,
+        window_id: DisplayWindowId,
         /// Layout row role for ordering.
         row_role: GlyphRowRole,
         /// Authoritative clip rect in frame coordinates.
@@ -170,7 +176,7 @@ pub enum FrameGlyph {
     /// Stretch (whitespace) glyph
     Stretch {
         /// Window identifier this glyph belongs to.
-        window_id: i64,
+        window_id: DisplayWindowId,
         /// Layout row role for ordering.
         row_role: GlyphRowRole,
         /// Authoritative clip rect in frame coordinates.
@@ -195,11 +201,11 @@ pub enum FrameGlyph {
 
     /// Image glyph
     Image {
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_role: GlyphRowRole,
         clip_rect: Option<Rect>,
         slot_id: Option<DisplaySlotId>,
-        image_id: u32,
+        image_id: ImageId,
         x: f32,
         y: f32,
         width: f32,
@@ -208,11 +214,11 @@ pub enum FrameGlyph {
 
     /// Video glyph (inline in buffer)
     Video {
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_role: GlyphRowRole,
         clip_rect: Option<Rect>,
         slot_id: Option<DisplaySlotId>,
-        video_id: u32,
+        video_id: VideoId,
         x: f32,
         y: f32,
         width: f32,
@@ -223,11 +229,11 @@ pub enum FrameGlyph {
 
     /// Xwidget glyph (inline in buffer).
     Xwidget {
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_role: GlyphRowRole,
         clip_rect: Option<Rect>,
         slot_id: Option<DisplaySlotId>,
-        xwidget_id: u32,
+        xwidget_id: XwidgetId,
         x: f32,
         y: f32,
         width: f32,
@@ -239,7 +245,7 @@ pub enum FrameGlyph {
 
     /// Window border (vertical/horizontal divider)
     Border {
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_role: GlyphRowRole,
         clip_rect: Option<Rect>,
         x: f32,
@@ -252,7 +258,7 @@ pub enum FrameGlyph {
     /// Scroll bar (GPU-rendered)
     ScrollBar {
         /// Window identifier this scroll bar belongs to.
-        window_id: i64,
+        window_id: DisplayWindowId,
         /// Layout row role for ordering.
         row_role: GlyphRowRole,
         /// Authoritative clip rect in frame coordinates.
@@ -388,7 +394,7 @@ impl FrameGlyph {
 
     /// Owning window id for any window-attached glyph. `None` for the
     /// frame-level background and detached terminal glyphs.
-    pub fn window_id(&self) -> Option<i64> {
+    pub fn window_id(&self) -> Option<DisplayWindowId> {
         match self {
             FrameGlyph::Char { window_id, .. }
             | FrameGlyph::Stretch { window_id, .. }
@@ -516,7 +522,7 @@ impl FrameGlyph {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PhysCursor {
     /// Window that owns the cursor.
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     /// Buffer position covered by the cursor slot.
     pub charpos: usize,
     /// Matrix row that owns the cursor.
@@ -550,7 +556,7 @@ pub struct PhysCursor {
 /// adjust every cursor uniformly.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowCursor {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub slot_id: DisplaySlotId,
     pub x: f32,
     pub y: f32,
@@ -595,7 +601,7 @@ pub struct StipplePattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowInfo {
     /// Window pointer as i64 (unique window identifier)
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     /// Buffer pointer as u64 (unique buffer identifier)
     pub buffer_id: u64,
     /// First visible character position (marker_position(w->start))
@@ -642,7 +648,7 @@ pub enum WindowTransitionKind {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WindowTransitionHint {
     /// Target window id.
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     /// Target bounds in frame coordinates.
     pub bounds: Rect,
     /// Transition kind payload.
@@ -657,34 +663,40 @@ pub struct WindowTransitionHint {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowEffectHint {
     /// Fade in newly shown text in a window region.
-    TextFadeIn { window_id: i64, bounds: Rect },
+    TextFadeIn {
+        window_id: DisplayWindowId,
+        bounds: Rect,
+    },
     /// Animate per-line spacing during scroll.
     ScrollLineSpacing {
-        window_id: i64,
+        window_id: DisplayWindowId,
         bounds: Rect,
         direction: i32,
     },
     /// Show scroll momentum glow.
     ScrollMomentum {
-        window_id: i64,
+        window_id: DisplayWindowId,
         bounds: Rect,
         direction: i32,
     },
     /// Velocity-based fade intensity during scroll.
     ScrollVelocityFade {
-        window_id: i64,
+        window_id: DisplayWindowId,
         bounds: Rect,
         delta: f32,
     },
     /// Animate line insertion/deletion below edit point.
     LineAnimation {
-        window_id: i64,
+        window_id: DisplayWindowId,
         bounds: Rect,
         edit_y: f32,
         offset: f32,
     },
     /// Fade highlight when selected window changes.
-    WindowSwitchFade { window_id: i64, bounds: Rect },
+    WindowSwitchFade {
+        window_id: DisplayWindowId,
+        bounds: Rect,
+    },
     /// Theme/background changed; request a full-frame theme crossfade.
     ThemeTransition { bounds: Rect },
 }
@@ -710,9 +722,9 @@ pub struct FrameGlyphBuffer {
 
     // --- Child frame identity (Phase 1) ---
     /// Frame pointer cast to u64 (0 = root/unset)
-    pub frame_id: u64,
+    pub frame_id: DisplayFrameId,
     /// Parent frame pointer (0 = root frame, no parent)
-    pub parent_id: u64,
+    pub parent_id: DisplayFrameId,
     /// Position relative to parent frame (pixels)
     pub parent_x: f32,
     pub parent_y: f32,
@@ -751,7 +763,7 @@ pub struct FrameGlyphBuffer {
     /// `cursor-type` semantics. The key is the owning window id; renderers use
     /// this profile for that window's cursor and fall back to their global
     /// `EffectsConfig` when the window has no profile.
-    pub cursor_effects_by_window: HashMap<i64, EffectsConfig>,
+    pub cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
 
     /// Frame-level tab bar metadata for hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
@@ -769,7 +781,7 @@ pub struct FrameGlyphBuffer {
     current_font_family: String,
     current_font_size: f32,
     current_overstrike: bool,
-    current_window_id: i64,
+    current_window_id: DisplayWindowId,
     current_row_role: GlyphRowRole,
     current_clip_rect: Option<Rect>,
 
@@ -932,8 +944,8 @@ impl FrameGlyphBuffer {
             char_height: 16.0,
             font_pixel_size: 14.0,
             background: Color::BLACK,
-            frame_id: 0,
-            parent_id: 0,
+            frame_id: DisplayFrameId::new(0),
+            parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
             parent_y: 0.0,
             z_order: 0,
@@ -955,7 +967,7 @@ impl FrameGlyphBuffer {
             current_font_family: "monospace".to_string(),
             current_font_size: 14.0,
             current_overstrike: false,
-            current_window_id: 0,
+            current_window_id: DisplayWindowId::new(0),
             current_row_role: GlyphRowRole::Text,
             current_clip_rect: None,
             faces: HashMap::new(),
@@ -983,7 +995,7 @@ impl FrameGlyphBuffer {
         self.tab_bar = None;
         self.stipple_patterns.clear();
         self.faces.clear();
-        self.current_window_id = 0;
+        self.current_window_id = DisplayWindowId::new(0);
         self.current_row_role = GlyphRowRole::Text;
         self.current_clip_rect = None;
     }
@@ -1010,8 +1022,8 @@ impl FrameGlyphBuffer {
     /// Called after begin_frame, before glyphs are added.
     pub fn set_frame_identity(
         &mut self,
-        frame_id: u64,
-        parent_id: u64,
+        frame_id: DisplayFrameId,
+        parent_id: DisplayFrameId,
         parent_x: f32,
         parent_y: f32,
         z_order: i32,
@@ -1127,7 +1139,7 @@ impl FrameGlyphBuffer {
     /// Set authoritative layout draw context for subsequent glyph emissions.
     pub fn set_draw_context(
         &mut self,
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_role: GlyphRowRole,
         clip_rect: Option<Rect>,
     ) {
@@ -1357,7 +1369,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Add an image glyph
-    pub fn add_image(&mut self, image_id: u32, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_image(&mut self, image_id: ImageId, x: f32, y: f32, width: f32, height: f32) {
         self.glyphs.push(FrameGlyph::Image {
             window_id: self.current_window_id,
             row_role: self.current_row_role,
@@ -1374,7 +1386,7 @@ impl FrameGlyphBuffer {
     /// Add a video glyph
     pub fn add_video(
         &mut self,
-        video_id: u32,
+        video_id: VideoId,
         x: f32,
         y: f32,
         width: f32,
@@ -1398,7 +1410,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Add an xwidget glyph.
-    pub fn add_xwidget(&mut self, xwidget_id: u32, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_xwidget(&mut self, xwidget_id: XwidgetId, x: f32, y: f32, width: f32, height: f32) {
         self.glyphs.push(FrameGlyph::Xwidget {
             window_id: self.current_window_id,
             row_role: self.current_row_role,
@@ -1415,7 +1427,7 @@ impl FrameGlyphBuffer {
     /// Add cursor
     pub fn add_cursor(
         &mut self,
-        window_id: i64,
+        window_id: DisplayWindowId,
         x: f32,
         y: f32,
         width: f32,
@@ -1449,12 +1461,16 @@ impl FrameGlyphBuffer {
     }
 
     /// Set the cursor effect profile for one window.
-    pub fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
+    pub fn set_window_cursor_effects(
+        &mut self,
+        window_id: DisplayWindowId,
+        effects: EffectsConfig,
+    ) {
         self.cursor_effects_by_window.insert(window_id, effects);
     }
 
     /// Return the cursor effect profile for one window, if layout supplied one.
-    pub fn window_cursor_effects(&self, window_id: i64) -> Option<&EffectsConfig> {
+    pub fn window_cursor_effects(&self, window_id: DisplayWindowId) -> Option<&EffectsConfig> {
         self.cursor_effects_by_window.get(&window_id)
     }
 
@@ -1467,7 +1483,7 @@ impl FrameGlyphBuffer {
     /// Add per-window metadata for animation detection
     pub fn add_window_info(
         &mut self,
-        window_id: i64,
+        window_id: DisplayWindowId,
         buffer_id: u64,
         window_start: i64,
         window_end: i64,

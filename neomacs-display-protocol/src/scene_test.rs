@@ -134,9 +134,9 @@ fn test_node_text_run() {
 #[test]
 fn test_node_image() {
     let bounds = Rect::new(0.0, 0.0, 64.0, 64.0);
-    let node = Node::image(42, bounds);
+    let node = Node::image(ImageId::new(42), bounds);
     match &node.kind {
-        NodeKind::Image { image_id } => assert_eq!(*image_id, 42),
+        NodeKind::Image { image_id } => assert_eq!(image_id.get(), 42),
         _ => panic!("Expected Image"),
     }
 }
@@ -144,9 +144,9 @@ fn test_node_image() {
 #[test]
 fn test_node_video() {
     let bounds = Rect::new(0.0, 0.0, 320.0, 240.0);
-    let node = Node::video(7, bounds);
+    let node = Node::video(VideoId::new(7), bounds);
     match &node.kind {
-        NodeKind::Video { video_id } => assert_eq!(*video_id, 7),
+        NodeKind::Video { video_id } => assert_eq!(video_id.get(), 7),
         _ => panic!("Expected Video"),
     }
 }
@@ -312,7 +312,7 @@ fn test_mark_region_dirty_disjoint_union() {
 /// Helper to create a basic WindowScene
 fn make_window(id: i32, x: f32, y: f32, w: f32, h: f32) -> WindowScene {
     WindowScene {
-        window_id: id,
+        window_id: DisplayWindowId::new(id as i64),
         bounds: Rect::new(x, y, w, h),
         background: Color::BLACK,
         cursor: None,
@@ -564,13 +564,13 @@ fn test_scene_clear_borders() {
 #[test]
 fn test_floating_video_add_remove_clear() {
     let mut scene = Scene::new(800.0, 600.0);
-    scene.add_floating_video(1, 10.0, 20.0, 320.0, 240.0);
-    scene.add_floating_video(2, 400.0, 20.0, 320.0, 240.0);
+    scene.add_floating_video(VideoId::new(1), 10.0, 20.0, 320.0, 240.0);
+    scene.add_floating_video(VideoId::new(2), 400.0, 20.0, 320.0, 240.0);
     assert_eq!(scene.floating_videos.len(), 2);
 
-    scene.remove_floating_video(1);
+    scene.remove_floating_video(VideoId::new(1));
     assert_eq!(scene.floating_videos.len(), 1);
-    assert_eq!(scene.floating_videos[0].video_id, 2);
+    assert_eq!(scene.floating_videos[0].video_id.get(), 2);
 
     scene.clear_floating_videos();
     assert!(scene.floating_videos.is_empty());
@@ -579,15 +579,15 @@ fn test_floating_video_add_remove_clear() {
 #[test]
 fn test_floating_image_add_remove_clear() {
     let mut scene = Scene::new(800.0, 600.0);
-    scene.add_floating_image(10, 0.0, 0.0, 128.0, 128.0);
+    scene.add_floating_image(ImageId::new(10), 0.0, 0.0, 128.0, 128.0);
     assert_eq!(scene.floating_images.len(), 1);
-    assert_eq!(scene.floating_images[0].image_id, 10);
+    assert_eq!(scene.floating_images[0].image_id.get(), 10);
 
-    scene.remove_floating_image(10);
+    scene.remove_floating_image(ImageId::new(10));
     assert!(scene.floating_images.is_empty());
 
-    scene.add_floating_image(20, 0.0, 0.0, 64.0, 64.0);
-    scene.add_floating_image(21, 64.0, 0.0, 64.0, 64.0);
+    scene.add_floating_image(ImageId::new(20), 0.0, 0.0, 64.0, 64.0);
+    scene.add_floating_image(ImageId::new(21), 64.0, 0.0, 64.0, 64.0);
     scene.clear_floating_images();
     assert!(scene.floating_images.is_empty());
 }
@@ -595,14 +595,14 @@ fn test_floating_image_add_remove_clear() {
 #[test]
 fn test_floating_webkit_add_remove_clear() {
     let mut scene = Scene::new(800.0, 600.0);
-    scene.add_floating_webkit(100, 0.0, 0.0, 800.0, 400.0);
+    scene.add_floating_webkit(WebKitId::new(100), 0.0, 0.0, 800.0, 400.0);
     assert_eq!(scene.floating_webkits.len(), 1);
-    assert_eq!(scene.floating_webkits[0].webkit_id, 100);
+    assert_eq!(scene.floating_webkits[0].webkit_id.get(), 100);
 
-    scene.remove_floating_webkit(100);
+    scene.remove_floating_webkit(WebKitId::new(100));
     assert!(scene.floating_webkits.is_empty());
 
-    scene.add_floating_webkit(200, 0.0, 0.0, 400.0, 300.0);
+    scene.add_floating_webkit(WebKitId::new(200), 0.0, 0.0, 400.0, 300.0);
     scene.clear_floating_webkits();
     assert!(scene.floating_webkits.is_empty());
 }
@@ -610,12 +610,12 @@ fn test_floating_webkit_add_remove_clear() {
 #[test]
 fn test_remove_nonexistent_floating_is_noop() {
     let mut scene = Scene::new(800.0, 600.0);
-    scene.add_floating_video(1, 0.0, 0.0, 100.0, 100.0);
+    scene.add_floating_video(VideoId::new(1), 0.0, 0.0, 100.0, 100.0);
     // Removing a non-existent ID should not panic or change existing entries
-    scene.remove_floating_video(999);
+    scene.remove_floating_video(VideoId::new(999));
     assert_eq!(scene.floating_videos.len(), 1);
-    scene.remove_floating_image(999);
-    scene.remove_floating_webkit(999);
+    scene.remove_floating_image(ImageId::new(999));
+    scene.remove_floating_webkit(WebKitId::new(999));
 }
 
 // ---------------------------------------------------------------
@@ -627,17 +627,17 @@ fn test_mutations_mark_dirty() {
     let mut scene = Scene::new(800.0, 600.0);
 
     // add_floating_video marks dirty
-    scene.add_floating_video(1, 0.0, 0.0, 100.0, 100.0);
+    scene.add_floating_video(VideoId::new(1), 0.0, 0.0, 100.0, 100.0);
     assert!(scene.dirty.is_some());
     scene.clear_dirty();
 
     // remove_floating_video marks dirty
-    scene.remove_floating_video(1);
+    scene.remove_floating_video(VideoId::new(1));
     assert!(scene.dirty.is_some());
     scene.clear_dirty();
 
     // add_floating_image marks dirty
-    scene.add_floating_image(1, 0.0, 0.0, 100.0, 100.0);
+    scene.add_floating_image(ImageId::new(1), 0.0, 0.0, 100.0, 100.0);
     assert!(scene.dirty.is_some());
     scene.clear_dirty();
 

@@ -4,7 +4,7 @@ use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{
     CursorKind, CursorStyle, DisplaySlotId, WindowEffectHint, WindowInfo, WindowTransitionKind,
 };
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 
 fn window_params() -> WindowParams {
     WindowParams {
@@ -92,7 +92,7 @@ fn frame_params() -> FrameParams {
 
 fn window_info(params: &WindowParams) -> WindowInfo {
     WindowInfo {
-        window_id: params.window_id,
+        window_id: DisplayWindowId::new(params.window_id),
         buffer_id: params.buffer_id,
         window_start: 31,
         window_end: 101,
@@ -142,7 +142,7 @@ fn window_frame_info_request_emits_background_and_window_info() {
     assert_eq!(state.backgrounds[0].bounds, params.bounds);
     assert_eq!(state.backgrounds[0].color.r, 0.0);
     assert_eq!(state.window_infos.len(), 1);
-    assert_eq!(state.window_infos[0].window_id, params.window_id);
+    assert_eq!(state.window_infos[0].window_id.get(), params.window_id);
     assert_eq!(state.window_infos[0].buffer_file_name, "notes.org");
     assert!(state.window_infos[0].modified);
 }
@@ -185,7 +185,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     builder.add_output_cursor(
         params.window_id,
         DisplaySlotId {
-            window_id: params.window_id,
+            window_id: DisplayWindowId::new(params.window_id),
             row: 1,
             col: 2,
         },
@@ -205,11 +205,11 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     assert!(matches!(
         state.effect_hints[0],
         WindowEffectHint::LineAnimation {
-            window_id: 41,
+            window_id,
             edit_y,
             offset: -16.0,
             ..
-        } if (edit_y - 64.0).abs() < f32::EPSILON
+        } if window_id.get() == 41 && (edit_y - 64.0).abs() < f32::EPSILON
     ));
 }
 
@@ -217,7 +217,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
 fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let params = window_params();
     let info = window_info(&params);
-    let mut prev_selected = 7;
+    let mut prev_selected = DisplayWindowId::new(7);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(info);
 
@@ -225,10 +225,13 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(prev_selected, 41);
+    assert_eq!(prev_selected.get(), 41);
     assert!(matches!(
         state.effect_hints.as_slice(),
-        [WindowEffectHint::WindowSwitchFade { window_id: 41, .. }]
+        [WindowEffectHint::WindowSwitchFade {
+            window_id,
+            ..
+        }] if window_id.get() == 41
     ));
 }
 
@@ -237,7 +240,7 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     let params = window_params();
     let info = window_info(&params);
     let mut mini = info.clone();
-    mini.window_id = 99;
+    mini.window_id = DisplayWindowId::new(99);
     mini.is_minibuffer = true;
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
@@ -262,7 +265,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     let params = window_params();
     let prev = window_info(&params);
     let mut curr = prev.clone();
-    curr.window_id = 42;
+    curr.window_id = DisplayWindowId::new(42);
     let mut prev_infos = std::collections::HashMap::new();
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
@@ -274,7 +277,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.transition_hints.len(), 1);
-    assert_eq!(state.transition_hints[0].window_id, 0);
+    assert_eq!(state.transition_hints[0].window_id.get(), 0);
     assert_eq!(
         state.transition_hints[0].kind,
         WindowTransitionKind::Crossfade
@@ -332,7 +335,7 @@ fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
         .iter()
         .find(|bar| !bar.horizontal)
         .expect("vertical scroll bar");
-    assert_eq!(vertical.window_id, 41);
+    assert_eq!(vertical.window_id.get(), 41);
     assert_eq!(vertical.x, 118.0);
     assert_eq!(vertical.y, 30.0);
     assert_eq!(vertical.width, 12.0);
@@ -345,7 +348,7 @@ fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
         .iter()
         .find(|bar| bar.horizontal)
         .expect("horizontal scroll bar");
-    assert_eq!(horizontal.window_id, 41);
+    assert_eq!(horizontal.window_id.get(), 41);
     assert_eq!(horizontal.x, 10.0);
     assert_eq!(horizontal.y, 102.0);
     assert_eq!(horizontal.width, 120.0);

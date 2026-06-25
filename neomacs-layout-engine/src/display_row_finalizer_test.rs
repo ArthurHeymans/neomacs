@@ -11,12 +11,12 @@ fn push_text(row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow, text: &
 
 fn phys_cursor(window_id: i64, row: usize, col: u16) -> PhysCursor {
     PhysCursor {
-        window_id,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
         charpos: 0,
         row,
         col,
         slot_id: DisplaySlotId {
-            window_id,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
             row: row as u32,
             col,
         },

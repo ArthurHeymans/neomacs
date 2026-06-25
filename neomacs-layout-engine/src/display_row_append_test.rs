@@ -7333,14 +7333,14 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     assert_eq!(outcome.visual_cursor_summary().published, 1);
     assert_eq!(context.hit_rows.len(), 1);
     let cursor = context.builder.phys_cursor().expect("physical cursor");
-    assert_eq!(cursor.window_id, 1);
+    assert_eq!(cursor.window_id.get(), 1);
     assert_eq!(cursor.row, 0);
     assert_eq!(cursor.col, 0);
     assert_eq!(cursor.x, 0.0);
     assert_eq!(cursor.height, 16.0);
     let cursors = context.builder.cursors();
     assert_eq!(cursors.len(), 1);
-    assert_eq!(cursors[0].window_id, -42);
+    assert_eq!(cursors[0].window_id.get(), -42);
     assert_eq!(cursors[0].slot_id.row, 0);
     assert_eq!(cursors[0].slot_id.col, 4);
 }
@@ -7555,7 +7555,12 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
 
     assert!(installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
-    assert_eq!(state.cursor_effects_by_window.get(&42), Some(&effects));
+    assert_eq!(
+        state
+            .cursor_effects_by_window
+            .get(&neomacs_display_protocol::types::DisplayWindowId::new(42)),
+        Some(&effects)
+    );
 }
 
 #[test]
@@ -7567,7 +7572,11 @@ fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
 
     assert!(!installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
-    assert!(!state.cursor_effects_by_window.contains_key(&42));
+    assert!(
+        !state
+            .cursor_effects_by_window
+            .contains_key(&neomacs_display_protocol::types::DisplayWindowId::new(42))
+    );
 }
 
 #[test]
@@ -9112,10 +9121,10 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
     let image = state.images.first().expect("image side item");
-    assert_eq!(image.window_id, 77);
+    assert_eq!(image.window_id.get(), 77);
     assert_eq!(image.row_role, GlyphRowRole::Text);
     assert_eq!(image.clip_rect, Some(text_bounds));
-    assert_eq!(image.image_id, 42);
+    assert_eq!(image.image_id.get(), 42);
     assert_eq!(image.x, 16.0);
     assert_eq!(image.y, 0.0);
     assert_eq!(image.width, 64.0);
@@ -10680,18 +10689,18 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
     let xwidget = state.xwidgets.first().expect("xwidget side item");
-    assert_eq!(xwidget.window_id, 77);
+    assert_eq!(xwidget.window_id.get(), 77);
     assert_eq!(xwidget.row_role, GlyphRowRole::Text);
     assert_eq!(xwidget.clip_rect, Some(text_bounds));
     assert_eq!(
         xwidget.slot_id,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
-            window_id: 77,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.xwidget_id.get(), 1234);
     assert_eq!(xwidget.x, 16.0);
     assert_eq!(xwidget.y, 4.0);
     assert_eq!(xwidget.width, 96.0);
@@ -10806,18 +10815,18 @@ fn display_replacement_append_context_installs_image_replacements() {
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
     let image = state.images.first().expect("image side item");
-    assert_eq!(image.window_id, 77);
+    assert_eq!(image.window_id.get(), 77);
     assert_eq!(image.row_role, GlyphRowRole::Text);
     assert_eq!(image.clip_rect, Some(text_bounds));
     assert_eq!(
         image.slot_id,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
-            window_id: 77,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(image.image_id, 42);
+    assert_eq!(image.image_id.get(), 42);
     assert_eq!(image.x, 16.0);
     assert_eq!(image.y, 4.0);
     assert_eq!(image.width, 64.0);
@@ -10934,18 +10943,18 @@ fn display_replacement_append_context_installs_video_replacements() {
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
     let video = state.videos.first().expect("video side item");
-    assert_eq!(video.window_id, 77);
+    assert_eq!(video.window_id.get(), 77);
     assert_eq!(video.row_role, GlyphRowRole::Text);
     assert_eq!(video.clip_rect, Some(text_bounds));
     assert_eq!(
         video.slot_id,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
-            window_id: 77,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(video.video_id, 88);
+    assert_eq!(video.video_id.get(), 88);
     assert_eq!(video.x, 16.0);
     assert_eq!(video.y, 4.0);
     assert_eq!(video.width, 80.0);

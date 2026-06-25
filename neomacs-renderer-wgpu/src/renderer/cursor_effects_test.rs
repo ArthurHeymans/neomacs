@@ -31,20 +31,20 @@ fn make_ctx<'a>(
 /// Helper to create a test animated cursor
 fn make_animated_cursor(x: f32, y: f32, w: f32, h: f32, window_id: i64) -> AnimatedCursor {
     AnimatedCursor {
-        window_id,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
         x,
         y,
         width: w,
         height: h,
         corners: None,
-        frame_id: 0,
+        frame_id: neomacs_display_protocol::types::DisplayFrameId::new(0),
     }
 }
 
 /// Helper to create a selected WindowInfo for testing
 fn make_selected_window_info(x: f32, y: f32, w: f32, h: f32) -> WindowInfo {
     WindowInfo {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         buffer_id: 1,
         window_start: 0,
         window_end: 100,

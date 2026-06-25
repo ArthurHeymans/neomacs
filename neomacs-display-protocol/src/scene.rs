@@ -1,7 +1,7 @@
 //! Scene graph for display rendering.
 
 use crate::face::Face;
-use crate::types::{Color, Rect, Transform};
+use crate::types::{Color, DisplayWindowId, ImageId, Rect, Transform, VideoId, WebKitId};
 use std::collections::HashMap;
 
 /// Scene graph node types
@@ -22,13 +22,13 @@ pub enum NodeKind {
     ColorRect { color: Color },
 
     /// Image texture
-    Image { image_id: u32 },
+    Image { image_id: ImageId },
 
     /// Video frame
-    Video { video_id: u32 },
+    Video { video_id: VideoId },
 
     /// WPE WebKit view
-    Wpe { view_id: u32 },
+    Wpe { view_id: WebKitId },
 
     /// Cursor
     Cursor {
@@ -123,7 +123,7 @@ impl Node {
     }
 
     /// Create an image node
-    pub fn image(image_id: u32, bounds: Rect) -> Self {
+    pub fn image(image_id: ImageId, bounds: Rect) -> Self {
         Self {
             kind: NodeKind::Image { image_id },
             bounds,
@@ -134,7 +134,7 @@ impl Node {
     }
 
     /// Create a video node
-    pub fn video(video_id: u32, bounds: Rect) -> Self {
+    pub fn video(video_id: VideoId, bounds: Rect) -> Self {
         Self {
             kind: NodeKind::Video { video_id },
             bounds,
@@ -182,7 +182,7 @@ impl Node {
 #[derive(Debug, Clone)]
 pub struct WindowScene {
     /// Window ID (from Emacs window pointer)
-    pub window_id: i32,
+    pub window_id: DisplayWindowId,
 
     /// Position and size
     pub bounds: Rect,
@@ -269,7 +269,7 @@ pub struct BorderRect {
 /// Floating video layer for rendering video at a specific screen position
 #[derive(Debug, Clone)]
 pub struct FloatingVideo {
-    pub video_id: u32,
+    pub video_id: VideoId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -279,7 +279,7 @@ pub struct FloatingVideo {
 /// Floating image layer for rendering image at a specific screen position
 #[derive(Debug, Clone)]
 pub struct FloatingImage {
-    pub image_id: u32,
+    pub image_id: ImageId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -289,7 +289,7 @@ pub struct FloatingImage {
 /// Floating WebKit view for rendering web content at a specific screen position
 #[derive(Debug, Clone)]
 pub struct FloatingWebKit {
-    pub webkit_id: u32,
+    pub webkit_id: WebKitId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -357,7 +357,14 @@ impl Scene {
     }
 
     /// Add a floating video at screen position
-    pub fn add_floating_video(&mut self, video_id: u32, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_floating_video(
+        &mut self,
+        video_id: VideoId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
         self.floating_videos.push(FloatingVideo {
             video_id,
             x,
@@ -369,7 +376,7 @@ impl Scene {
     }
 
     /// Remove floating video by video ID
-    pub fn remove_floating_video(&mut self, video_id: u32) {
+    pub fn remove_floating_video(&mut self, video_id: VideoId) {
         self.floating_videos.retain(|v| v.video_id != video_id);
         self.mark_dirty();
     }
@@ -381,7 +388,14 @@ impl Scene {
     }
 
     /// Add a floating image at screen position
-    pub fn add_floating_image(&mut self, image_id: u32, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_floating_image(
+        &mut self,
+        image_id: ImageId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
         self.floating_images.push(FloatingImage {
             image_id,
             x,
@@ -393,7 +407,7 @@ impl Scene {
     }
 
     /// Remove floating image by image ID
-    pub fn remove_floating_image(&mut self, image_id: u32) {
+    pub fn remove_floating_image(&mut self, image_id: ImageId) {
         self.floating_images.retain(|i| i.image_id != image_id);
         self.mark_dirty();
     }
@@ -405,7 +419,14 @@ impl Scene {
     }
 
     /// Add a floating WebKit view at screen position
-    pub fn add_floating_webkit(&mut self, webkit_id: u32, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_floating_webkit(
+        &mut self,
+        webkit_id: WebKitId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
         self.floating_webkits.push(FloatingWebKit {
             webkit_id,
             x,
@@ -417,7 +438,7 @@ impl Scene {
     }
 
     /// Remove floating WebKit view by ID
-    pub fn remove_floating_webkit(&mut self, webkit_id: u32) {
+    pub fn remove_floating_webkit(&mut self, webkit_id: WebKitId) {
         self.floating_webkits.retain(|w| w.webkit_id != webkit_id);
         self.mark_dirty();
     }

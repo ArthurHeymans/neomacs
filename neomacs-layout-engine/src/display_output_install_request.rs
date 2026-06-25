@@ -7,20 +7,22 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{CursorItem, ScrollBarItem};
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::{
+    Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum OutputMediaInstallKind {
     Image {
-        image_id: u32,
+        image_id: ImageId,
     },
     Video {
-        video_id: u32,
+        video_id: VideoId,
         loop_count: i32,
         autoplay: bool,
     },
     Xwidget {
-        xwidget_id: u32,
+        xwidget_id: XwidgetId,
     },
 }
 
@@ -36,7 +38,7 @@ pub(crate) struct OutputMediaInstallRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ResolvedOutputMediaInstallTarget {
-    pub(crate) window_id: i64,
+    pub(crate) window_id: DisplayWindowId,
     pub(crate) role: GlyphRowRole,
     pub(crate) clip: Option<Rect>,
     pub(crate) slot_id: DisplaySlotId,
@@ -63,7 +65,7 @@ impl OutputMediaInstallRequest {
 
     pub(crate) fn image(
         target: ResolvedOutputMediaInstallTarget,
-        image_id: u32,
+        image_id: ImageId,
         x: f32,
         y: f32,
         width: f32,
@@ -82,7 +84,7 @@ impl OutputMediaInstallRequest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn video(
         target: ResolvedOutputMediaInstallTarget,
-        video_id: u32,
+        video_id: VideoId,
         loop_count: i32,
         autoplay: bool,
         x: f32,
@@ -106,7 +108,7 @@ impl OutputMediaInstallRequest {
 
     pub(crate) fn xwidget(
         target: ResolvedOutputMediaInstallTarget,
-        xwidget_id: u32,
+        xwidget_id: XwidgetId,
         x: f32,
         y: f32,
         width: f32,
@@ -125,7 +127,7 @@ impl OutputMediaInstallRequest {
 
 impl ResolvedOutputMediaInstallTarget {
     pub(crate) fn new(
-        window_id: i64,
+        window_id: DisplayWindowId,
         role: GlyphRowRole,
         clip: Option<Rect>,
         slot_id: DisplaySlotId,
@@ -141,7 +143,7 @@ impl ResolvedOutputMediaInstallTarget {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OutputCursorInstallRequest {
-    window_id: i64,
+    window_id: DisplayWindowId,
     slot_id: DisplaySlotId,
     x: f32,
     y: f32,
@@ -154,7 +156,7 @@ pub(crate) struct OutputCursorInstallRequest {
 impl OutputCursorInstallRequest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        window_id: i64,
+        window_id: DisplayWindowId,
         slot_id: DisplaySlotId,
         x: f32,
         y: f32,
@@ -196,7 +198,7 @@ pub(crate) enum OutputFrameArtifactInstallRequest {
         color: Color,
     },
     Border {
-        window_id: i64,
+        window_id: DisplayWindowId,
         x: f32,
         y: f32,
         width: f32,
@@ -218,8 +220,8 @@ impl OutputFrameArtifactInstallRequest {
 
 #[derive(Clone, Debug)]
 pub(crate) struct OutputFrameIdentityInstallRequest {
-    pub(crate) frame_id: u64,
-    pub(crate) parent_id: u64,
+    pub(crate) frame_id: DisplayFrameId,
+    pub(crate) parent_id: DisplayFrameId,
     pub(crate) parent_x: f32,
     pub(crate) parent_y: f32,
     pub(crate) z_order: i32,
@@ -240,7 +242,7 @@ pub(crate) enum OutputFrameStateInstallRequest {
         face: Face,
     },
     CursorEffects {
-        window_id: i64,
+        window_id: DisplayWindowId,
         effects: EffectsConfig,
     },
 }
@@ -250,14 +252,14 @@ impl OutputFrameStateInstallRequest {
         Self::Face { id, face }
     }
 
-    pub(crate) fn cursor_effects(window_id: i64, effects: EffectsConfig) -> Self {
+    pub(crate) fn cursor_effects(window_id: DisplayWindowId, effects: EffectsConfig) -> Self {
         Self::CursorEffects { window_id, effects }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct OutputTextWindowDisplayRangeInstallRequest {
-    pub(crate) window_id: i64,
+    pub(crate) window_id: DisplayWindowId,
     pub(crate) window_start: i64,
     pub(crate) window_end: i64,
 }
@@ -275,7 +277,7 @@ pub(crate) enum OutputWindowMetadataInstallRequest {
 }
 
 impl OutputTextWindowDisplayRangeInstallRequest {
-    pub(crate) fn new(window_id: i64, window_start: i64, window_end: i64) -> Self {
+    pub(crate) fn new(window_id: DisplayWindowId, window_start: i64, window_end: i64) -> Self {
         Self {
             window_id,
             window_start,

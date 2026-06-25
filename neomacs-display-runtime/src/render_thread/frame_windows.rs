@@ -749,18 +749,18 @@ impl GuiFrameRenderState {
         };
         let mut live_visual_cursor_ids = HashSet::new();
         for cursor in &current_frame.window_cursors {
-            if cursor.window_id >= 0 {
+            if cursor.window_id.get() >= 0 {
                 continue;
             }
-            live_visual_cursor_ids.insert(cursor.window_id);
+            live_visual_cursor_ids.insert(cursor.window_id.get());
             let state = self
                 .compositor
                 .visual_cursors
-                .entry(cursor.window_id)
+                .entry(cursor.window_id.get())
                 .or_default();
             cursor_config(state);
             let (_, target_moved) = state.set_target(CursorTarget {
-                window_id: cursor.window_id,
+                window_id: cursor.window_id.get(),
                 x: cursor.x,
                 y: cursor.y,
                 width: cursor.width,
@@ -812,7 +812,8 @@ impl GuiFrameRenderState {
             return;
         };
         for cursor in &mut frame.window_cursors {
-            let Some((x, y, width, height)) = visual_cursor_rects.get(&cursor.window_id) else {
+            let Some((x, y, width, height)) = visual_cursor_rects.get(&cursor.window_id.get())
+            else {
                 continue;
             };
             cursor.x = *x;
@@ -1401,7 +1402,7 @@ impl GuiFrameWindowManager {
                 (cursor.x, cursor.y, cursor.width, cursor.height),
             );
             CursorTarget {
-                window_id: cursor.window_id,
+                window_id: cursor.window_id.get(),
                 x,
                 y,
                 width,

@@ -92,7 +92,7 @@ fn write_left_margin_stretch_to_current_row(
 
 fn window_info(window_id: i64) -> WindowInfo {
     WindowInfo {
-        window_id,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
         buffer_id: 9,
         window_start: 1,
         window_end: 1,
@@ -705,7 +705,9 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             window_id: window_id.0 as i64,
             charpos: 100,
             slot_id: DisplaySlotId {
-                window_id: window_id.0 as i64,
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                    window_id.0 as i64,
+                ),
                 row: 0,
                 col: 0,
             },
@@ -754,7 +756,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
-                window_id: 77,
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
                 row: 3,
                 col: 5,
             },
@@ -771,10 +773,15 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let state = builder.finish(10, 1, 8.0, 16.0);
     assert!(state.phys_cursor.is_none());
     assert_eq!(state.cursors.len(), 1);
-    assert_eq!(state.cursors[0].window_id, 77);
+    assert_eq!(state.cursors[0].window_id.get(), 77);
     assert_eq!(state.cursors[0].slot_id.row, 3);
     assert_eq!(state.cursors[0].slot_id.col, 5);
-    assert_eq!(state.cursor_effects_by_window.get(&77), Some(&effects));
+    assert_eq!(
+        state
+            .cursor_effects_by_window
+            .get(&neomacs_display_protocol::types::DisplayWindowId::new(77)),
+        Some(&effects)
+    );
 }
 
 #[test]
@@ -791,7 +798,12 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     );
 
     let state = builder.finish(10, 1, 8.0, 16.0);
-    assert_eq!(state.cursor_effects_by_window.get(&42), Some(&effects));
+    assert_eq!(
+        state
+            .cursor_effects_by_window
+            .get(&neomacs_display_protocol::types::DisplayWindowId::new(42)),
+        Some(&effects)
+    );
     assert!(state.cursors.is_empty());
     assert!(state.phys_cursor.is_none());
 }

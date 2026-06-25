@@ -48,7 +48,7 @@ impl ChildFrameManager {
         let abs_y = buf.parent_y;
 
         tracing::debug!(
-            frame_id,
+            frame_id = frame_id.get(),
             abs_x,
             abs_y,
             width = buf.width,
@@ -58,9 +58,9 @@ impl ChildFrameManager {
         );
 
         self.frames.insert(
-            frame_id,
+            frame_id.get(),
             ChildFrameEntry {
-                frame_id,
+                frame_id: frame_id.get(),
                 frame: buf,
                 abs_x,
                 abs_y,
@@ -98,7 +98,7 @@ impl ChildFrameManager {
     }
 
     /// Hit test: find the topmost child frame at the given point.
-    /// Returns (frame_id, local_x, local_y) if hit, None otherwise.
+    /// Returns (frame_id: frame_id.get(), local_x, local_y) if hit, None otherwise.
     /// Iterates in reverse render order (topmost first).
     pub fn hit_test(&self, x: f32, y: f32) -> Option<(u64, f32, f32)> {
         for &frame_id in self.render_order.iter().rev() {

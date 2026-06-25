@@ -15,7 +15,7 @@ use super::frame_glyphs::{
     MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint, WindowInfo,
     WindowTransitionHint,
 };
-use super::types::{Color, Rect};
+use super::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 use super::ui_types::{MenuBarItem, ToolBarItem};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
@@ -536,7 +536,7 @@ pub struct BackgroundItem {
 /// A window border/divider rectangle.
 #[derive(Clone, Debug)]
 pub struct BorderItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -547,7 +547,7 @@ pub struct BorderItem {
 /// A cursor entry.
 #[derive(Clone, Debug)]
 pub struct CursorItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub slot_id: DisplaySlotId,
     pub x: f32,
     pub y: f32,
@@ -560,11 +560,11 @@ pub struct CursorItem {
 /// An inline image.
 #[derive(Clone, Debug)]
 pub struct ImageItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub slot_id: Option<DisplaySlotId>,
-    pub image_id: u32,
+    pub image_id: ImageId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -574,11 +574,11 @@ pub struct ImageItem {
 /// An inline video.
 #[derive(Clone, Debug)]
 pub struct VideoItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub slot_id: Option<DisplaySlotId>,
-    pub video_id: u32,
+    pub video_id: VideoId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -590,11 +590,11 @@ pub struct VideoItem {
 /// An inline xwidget.
 #[derive(Clone, Debug)]
 pub struct XwidgetItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub slot_id: Option<DisplaySlotId>,
-    pub xwidget_id: u32,
+    pub xwidget_id: XwidgetId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -604,7 +604,7 @@ pub struct XwidgetItem {
 /// A scroll bar.
 #[derive(Clone, Debug)]
 pub struct ScrollBarItem {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub horizontal: bool,
@@ -635,8 +635,8 @@ pub struct FrameDisplayState {
     pub font_pixel_size: f32,
     pub background: Color,
     pub faces: HashMap<u32, Face>,
-    pub frame_id: u64,
-    pub parent_id: u64,
+    pub frame_id: DisplayFrameId,
+    pub parent_id: DisplayFrameId,
     pub parent_x: f32,
     pub parent_y: f32,
     pub z_order: i32,
@@ -654,7 +654,7 @@ pub struct FrameDisplayState {
     /// Cursor entries.
     pub cursors: Vec<CursorItem>,
     /// Per-window cursor effect profiles.
-    pub cursor_effects_by_window: HashMap<i64, EffectsConfig>,
+    pub cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
     /// Inline images (non-grid, pixel-positioned).
     pub images: Vec<ImageItem>,
     /// Inline videos.
@@ -782,8 +782,8 @@ impl FrameDisplayState {
                 a: 1.0,
             },
             faces: HashMap::new(),
-            frame_id: 0,
-            parent_id: 0,
+            frame_id: DisplayFrameId::new(0),
+            parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
             parent_y: 0.0,
             z_order: 0,
@@ -1124,7 +1124,7 @@ impl FrameDisplayState {
         // --- Materialize grid content -> pixel-positioned Char/Stretch glyphs ---
         for frame_row in &self.frame_chrome_rows {
             self.for_each_grid_row_glyph(
-                0,
+                DisplayWindowId::new(0),
                 frame_row.row_index,
                 &frame_row.row,
                 frame_row.pixel_bounds,
@@ -1142,7 +1142,7 @@ impl FrameDisplayState {
                     self.char_width
                 };
                 self.for_each_grid_row_glyph(
-                    entry.window_id as i64,
+                    DisplayWindowId::new(entry.window_id as i64),
                     row_idx as u32,
                     glyph_row,
                     row_bounds,
@@ -1287,7 +1287,7 @@ impl FrameDisplayState {
 
     fn for_each_grid_row_glyph(
         &self,
-        window_id: i64,
+        window_id: DisplayWindowId,
         row_index: u32,
         glyph_row: &GlyphRow,
         pixel_bounds: Rect,
@@ -1486,7 +1486,7 @@ impl FrameDisplayState {
                             row_role,
                             clip_rect,
                             slot_id: Some(slot_id),
-                            image_id: *image_id as u32,
+                            image_id: ImageId::new(*image_id as u32),
                             x,
                             y: y + glyph.vertical_offset_px,
                             width: materialized_width,

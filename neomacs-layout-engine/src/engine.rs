@@ -68,6 +68,7 @@ use neomacs_display_protocol::frame_glyphs::WindowInfo;
 use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{DisplayFrameId, DisplayWindowId};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::WindowDisplaySnapshot;
 
@@ -165,9 +166,9 @@ pub struct LayoutEngine {
     /// Converts Emacs face height units into layout pixels for this display.
     font_sizing: FontSizing,
     /// Previous frame's per-window metadata for transition hint derivation.
-    prev_window_infos: std::collections::HashMap<i64, WindowInfo>,
+    prev_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo>,
     /// Previous selected window id for switch-fade detection.
-    prev_selected_window_id: i64,
+    prev_selected_window_id: DisplayWindowId,
     /// Previous frame background for theme-transition detection.
     prev_background: Option<(f32, f32, f32, f32)>,
     /// Authoritative frame output owner for the current frame layout pass.
@@ -238,7 +239,7 @@ impl LayoutEngine {
 
     fn render_latest_window_output_info_effects(
         &mut self,
-        curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
+        curr_window_infos: &mut std::collections::HashMap<DisplayWindowId, WindowInfo>,
     ) {
         let prev_window_infos = &self.prev_window_infos;
         self.frame_output.render_latest_window_info_effects(
@@ -249,7 +250,7 @@ impl LayoutEngine {
 
     fn render_frame_output_hints(
         &mut self,
-        curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
+        curr_window_infos: &std::collections::HashMap<DisplayWindowId, WindowInfo>,
         frame_params: &FrameParams,
     ) {
         let prev_window_infos = &self.prev_window_infos;
@@ -294,7 +295,7 @@ impl LayoutEngine {
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
-            prev_selected_window_id: 0,
+            prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             last_frame_display_state: None,
@@ -316,7 +317,7 @@ impl LayoutEngine {
             font_metrics: None,
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
-            prev_selected_window_id: 0,
+            prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             last_frame_display_state: None,
@@ -480,7 +481,7 @@ impl LayoutEngine {
             }
 
             self.reset_frame_output_state();
-            let mut curr_window_infos: std::collections::HashMap<i64, WindowInfo> =
+            let mut curr_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo> =
                 std::collections::HashMap::new();
             let default_resolved = face_resolver.default_face();
 
@@ -826,7 +827,7 @@ impl LayoutEngine {
                     inverse: menu_face.terminal_inverse_video,
                 });
         }
-        if frame_display_state.parent_id == 0 {
+        if frame_display_state.parent_id == DisplayFrameId::new(0) {
             let menu_face_resolver = crate::neovm_bridge::FaceResolver::new_with_font_sizing(
                 evaluator.face_table(),
                 0x00FFFFFF,

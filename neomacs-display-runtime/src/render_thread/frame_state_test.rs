@@ -2,7 +2,7 @@ use super::*;
 use crate::core::face::Face;
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole, PhysCursor};
 use crate::thread_comm::ThreadComms;
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::{Color, DisplayWindowId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -50,16 +50,24 @@ fn face(id: u32) -> Face {
 #[test]
 fn apply_extra_spacing_remaps_cursor_by_slot_id() {
     let mut frame = FrameGlyphBuffer::with_size(80.0, 32.0);
-    frame.set_draw_context(1, GlyphRowRole::Text, None);
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     frame.add_char('a', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     frame.add_char('b', 8.0, 0.0, 8.0, 16.0, 12.0, false);
     let target_slot = frame.glyphs[1].slot_id().expect("slot id");
 
-    frame.add_cursor(1, 2.0, 0.0, 2.0, 16.0, CursorStyle::Bar(2.0), Color::WHITE);
+    frame.add_cursor(
+        DisplayWindowId::new(1),
+        2.0,
+        0.0,
+        2.0,
+        16.0,
+        CursorStyle::Bar(2.0),
+        Color::WHITE,
+    );
     frame.window_cursors[0].slot_id = target_slot;
 
     frame.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 1,
         row: 0,
         col: 1,
@@ -113,8 +121,8 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     };
 
     let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);
-    child.frame_id = 0x2000;
-    child.parent_id = 0;
+    child.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(0x2000);
+    child.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(0);
     child.faces.insert(8, face(8));
     app.frame_windows
         .primary_window_mut()

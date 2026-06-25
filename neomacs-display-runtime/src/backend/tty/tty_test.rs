@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::frame_glyphs::DisplaySlotId;
-use crate::core::types::Rect;
+use crate::core::types::{DisplayWindowId, Rect};
 
 // -------------------------------------------------------------------
 // ANSI escape sequence generation
@@ -677,7 +677,7 @@ fn test_rasterize_cursor_box() {
 
     // Then add a box cursor at same position
     frame.add_cursor(
-        1,
+        DisplayWindowId::new(1),
         16.0,
         0.0,
         8.0,
@@ -700,7 +700,15 @@ fn test_rasterize_cursor_underline() {
     frame.char_width = 8.0;
     frame.char_height = 16.0;
 
-    frame.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::Hbar(2.0), Color::WHITE);
+    frame.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Hbar(2.0),
+        Color::WHITE,
+    );
 
     let mut grid = TtyGrid::new(10, 5);
     rasterize_frame_glyphs(&frame, &mut grid, (0, 0, 0));
@@ -1112,14 +1120,22 @@ fn test_rasterize_frame_glyphs_prefers_phys_cursor_visual() {
     );
     frame.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     frame.add_char('B', 8.0, 0.0, 8.0, 16.0, 12.0, false);
-    frame.add_cursor(0, 0.0, 0.0, 8.0, 16.0, CursorStyle::Hollow, Color::GREEN);
+    frame.add_cursor(
+        DisplayWindowId::new(0),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Hollow,
+        Color::GREEN,
+    );
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
         charpos: 1,
         row: 0,
         col: 1,
         slot_id: DisplaySlotId {
-            window_id: 0,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
             row: 0,
             col: 1,
         },
@@ -1163,14 +1179,22 @@ fn test_rasterize_preserves_nonselected_hollow_cursor_visual() {
     );
     frame.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     frame.add_char('B', 8.0, 0.0, 8.0, 16.0, 12.0, false);
-    frame.add_cursor(1, 0.0, 0.0, 8.0, 16.0, CursorStyle::Hollow, Color::GREEN);
+    frame.add_cursor(
+        DisplayWindowId::new(1),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::Hollow,
+        Color::GREEN,
+    );
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 2,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(2),
         charpos: 1,
         row: 0,
         col: 1,
         slot_id: DisplaySlotId {
-            window_id: 2,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(2),
             row: 0,
             col: 1,
         },
@@ -1198,12 +1222,12 @@ fn test_terminal_cursor_state_uses_hardware_bar_shape() {
     frame.char_width = 8.0;
     frame.char_height = 16.0;
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
         charpos: 0,
         row: 1,
         col: 2,
         slot_id: DisplaySlotId {
-            window_id: 0,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
             row: 1,
             col: 2,
         },
@@ -1229,12 +1253,12 @@ fn test_terminal_cursor_state_uses_hardware_underline_shape() {
     frame.char_width = 8.0;
     frame.char_height = 16.0;
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
         charpos: 0,
         row: 0,
         col: 3,
         slot_id: DisplaySlotId {
-            window_id: 0,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
             row: 0,
             col: 3,
         },
@@ -1260,12 +1284,12 @@ fn test_terminal_cursor_state_keeps_filled_box_software_only() {
     frame.char_width = 8.0;
     frame.char_height = 16.0;
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
         charpos: 0,
         row: 0,
         col: 0,
         slot_id: DisplaySlotId {
-            window_id: 0,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
             row: 0,
             col: 0,
         },
@@ -1295,14 +1319,22 @@ fn test_render_prefers_phys_cursor_position() {
     let mut frame = FrameGlyphBuffer::with_size(80.0, 80.0);
     frame.char_width = 8.0;
     frame.char_height = 16.0;
-    frame.add_cursor(0, 0.0, 0.0, 8.0, 16.0, CursorStyle::FilledBox, Color::GREEN);
+    frame.add_cursor(
+        DisplayWindowId::new(0),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        Color::GREEN,
+    );
     frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
         charpos: 0,
         row: 2,
         col: 3,
         slot_id: DisplaySlotId {
-            window_id: 0,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
             row: 2,
             col: 3,
         },
@@ -1338,7 +1370,7 @@ fn test_render_does_not_derive_terminal_cursor_from_cursor_glyphs() {
     frame.char_width = 8.0;
     frame.char_height = 16.0;
     frame.add_cursor(
-        0,
+        DisplayWindowId::new(0),
         24.0,
         32.0,
         8.0,

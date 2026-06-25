@@ -1,5 +1,6 @@
 use super::*;
 use neomacs_display_protocol::CursorStyle;
+use neomacs_display_protocol::types::DisplayWindowId;
 use neomacs_display_protocol::{DisplaySlotId, PhysCursor};
 
 #[test]
@@ -84,13 +85,13 @@ fn test_push_rect_negative_coords() {
 #[test]
 fn test_find_cursor_pos_animated() {
     let animated = Some(AnimatedCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         x: 100.0,
         y: 200.0,
         width: 10.0,
         height: 20.0,
         corners: None,
-        frame_id: 0,
+        frame_id: neomacs_display_protocol::types::DisplayFrameId::new(0),
     });
     let frame_glyphs = FrameGlyphBuffer::new();
 
@@ -105,11 +106,11 @@ fn test_find_cursor_pos_from_phys_cursor() {
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
     frame_glyphs.set_phys_cursor(PhysCursor {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         charpos: 12,
         row: 3,
         col: 5,
-        slot_id: DisplaySlotId::from_pixels(1, 50.0, 60.0, 8.0, 16.0),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(1), 50.0, 60.0, 8.0, 16.0),
         x: 50.0,
         y: 60.0,
         width: 8.0,
@@ -131,11 +132,11 @@ fn test_find_cursor_pos_prefers_phys_cursor() {
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
     frame_glyphs.set_phys_cursor(PhysCursor {
-        window_id: 2,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(2),
         charpos: 20,
         row: 4,
         col: 7,
-        slot_id: DisplaySlotId::from_pixels(2, 30.0, 40.0, 2.0, 16.0),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(2), 30.0, 40.0, 2.0, 16.0),
         x: 30.0,
         y: 40.0,
         width: 2.0,
@@ -157,7 +158,7 @@ fn test_find_cursor_pos_ignores_window_cursor_visuals_without_phys_cursor() {
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
     frame_glyphs.add_cursor(
-        1,
+        DisplayWindowId::new(1),
         100.0,
         200.0,
         8.0,
@@ -166,7 +167,7 @@ fn test_find_cursor_pos_ignores_window_cursor_visuals_without_phys_cursor() {
         Color::new(1.0, 1.0, 1.0, 1.0),
     );
     frame_glyphs.add_cursor(
-        2,
+        DisplayWindowId::new(2),
         300.0,
         400.0,
         8.0,
@@ -186,7 +187,7 @@ fn test_find_cursor_pos_none_found() {
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
     frame_glyphs.add_cursor(
-        1,
+        DisplayWindowId::new(1),
         10.0,
         20.0,
         8.0,

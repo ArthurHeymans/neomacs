@@ -150,8 +150,8 @@ fn apply_transition_hint(
                 return;
             }
 
-            transitions.crossfades.remove(&hint.window_id);
-            transitions.scroll_slides.remove(&hint.window_id);
+            transitions.crossfades.remove(&hint.window_id.get());
+            transitions.scroll_slides.remove(&hint.window_id.get());
 
             if let Some((tex, view, bg)) =
                 snapshot_prev_texture(renderer, transitions, width, height)
@@ -160,12 +160,12 @@ fn apply_transition_hint(
                 let easing = hint.easing.unwrap_or(transitions.policy.crossfade_easing);
                 tracing::debug!(
                     "Starting crossfade for window {} (effect={:?}, easing={:?})",
-                    hint.window_id,
+                    hint.window_id.get(),
                     effect,
                     easing
                 );
                 transitions.crossfades.insert(
-                    hint.window_id,
+                    hint.window_id.get(),
                     CrossfadeTransition {
                         started: now,
                         duration: transitions.policy.crossfade_duration(),
@@ -190,8 +190,8 @@ fn apply_transition_hint(
                 return;
             }
 
-            transitions.crossfades.remove(&hint.window_id);
-            transitions.scroll_slides.remove(&hint.window_id);
+            transitions.crossfades.remove(&hint.window_id.get());
+            transitions.scroll_slides.remove(&hint.window_id.get());
 
             let dir = if direction >= 0 { 1 } else { -1 };
             let scroll_px = scroll_distance.max(0.0).min(hint.bounds.height);
@@ -202,14 +202,14 @@ fn apply_transition_hint(
                 let easing = hint.easing.unwrap_or(transitions.policy.scroll_easing);
                 tracing::debug!(
                     "Starting scroll slide for window {} (dir={}, effect={:?}, easing={:?}, scroll_px={})",
-                    hint.window_id,
+                    hint.window_id.get(),
                     dir,
                     effect,
                     easing,
                     scroll_px
                 );
                 transitions.scroll_slides.insert(
-                    hint.window_id,
+                    hint.window_id.get(),
                     ScrollTransition {
                         started: now,
                         duration: transitions.policy.scroll_duration(),
@@ -241,7 +241,7 @@ fn apply_effect_hint(
     match hint {
         WindowEffectHint::TextFadeIn { window_id, bounds } => {
             if effects.text_fade_in.enabled {
-                renderer.trigger_text_fade_in(*window_id, *bounds, now);
+                renderer.trigger_text_fade_in(window_id.get(), *bounds, now);
             }
         }
         WindowEffectHint::ScrollLineSpacing {
@@ -250,7 +250,7 @@ fn apply_effect_hint(
             direction,
         } => {
             if effects.scroll_line_spacing.enabled {
-                renderer.trigger_scroll_line_spacing(*window_id, *bounds, *direction, now);
+                renderer.trigger_scroll_line_spacing(window_id.get(), *bounds, *direction, now);
             }
         }
         WindowEffectHint::ScrollMomentum {
@@ -259,7 +259,7 @@ fn apply_effect_hint(
             direction,
         } => {
             if effects.scroll_momentum.enabled {
-                renderer.trigger_scroll_momentum(*window_id, *bounds, *direction, now);
+                renderer.trigger_scroll_momentum(window_id.get(), *bounds, *direction, now);
             }
         }
         WindowEffectHint::ScrollVelocityFade {
@@ -268,7 +268,7 @@ fn apply_effect_hint(
             delta,
         } => {
             if effects.scroll_velocity_fade.enabled {
-                renderer.trigger_scroll_velocity_fade(*window_id, *bounds, *delta, now);
+                renderer.trigger_scroll_velocity_fade(window_id.get(), *bounds, *delta, now);
             }
         }
         WindowEffectHint::LineAnimation {
@@ -288,7 +288,7 @@ fn apply_effect_hint(
         }
         WindowEffectHint::WindowSwitchFade { window_id, bounds } => {
             if effects.window_switch_fade.enabled {
-                renderer.start_window_fade(*window_id, *bounds);
+                renderer.start_window_fade(window_id.get(), *bounds);
                 *frame_dirty = true;
             }
         }

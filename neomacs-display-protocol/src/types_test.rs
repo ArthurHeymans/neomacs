@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn display_ids_preserve_raw_values_without_sharing_types() {
+    let frame_id = DisplayFrameId::new(0x1000_0001);
+    let window_id = DisplayWindowId::new(42);
+    let image_id = ImageId::new(7);
+    let video_id = VideoId::new(8);
+    let webkit_id = WebKitId::new(9);
+    let xwidget_id = XwidgetId::new(10);
+
+    assert_eq!(frame_id.get(), 0x1000_0001);
+    assert_eq!(window_id.get(), 42);
+    assert_eq!(image_id.get(), 7);
+    assert_eq!(video_id.get(), 8);
+    assert_eq!(webkit_id.get(), 9);
+    assert_eq!(xwidget_id.get(), 10);
+}
+
+#[test]
 fn test_color_from_pixel() {
     // from_pixel converts sRGB to linear
     let color = Color::from_pixel(0x00FF8040);

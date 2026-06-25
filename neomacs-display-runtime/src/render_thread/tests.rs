@@ -1,6 +1,7 @@
 use super::RenderApp;
 use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::core::types::DisplayWindowId;
 use crate::thread_comm::FrameRef;
 use crate::thread_comm::{
     ThreadComms, ToolBarImageSource, ToolBarItem, ToolBarItemType, UiCommand, WindowCommand,
@@ -670,7 +671,7 @@ fn managed_primary_visual_bell_uses_frame_renderer_effects() {
     };
     let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
     frame.add_window_info(
-        7,
+        DisplayWindowId::new(7),
         1,
         1,
         50,
@@ -764,8 +765,8 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     };
 
     let mut secondary = FrameGlyphBuffer::with_size(320.0, 240.0);
-    secondary.frame_id = 0x2000;
-    secondary.parent_id = 0;
+    secondary.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(0x2000);
+    secondary.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(0);
     emacs
         .frame_tx
         .send(FrameDisplayState::from_frame_glyph_buffer(&secondary))

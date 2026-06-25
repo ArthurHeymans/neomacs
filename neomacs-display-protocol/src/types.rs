@@ -2,6 +2,37 @@
 
 use std::ops::{Add, Sub};
 
+macro_rules! display_id_type {
+    ($name:ident, $raw:ty) => {
+        #[repr(transparent)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        pub struct $name($raw);
+
+        impl $name {
+            pub const fn new(raw: $raw) -> Self {
+                Self(raw)
+            }
+
+            pub const fn get(self) -> $raw {
+                self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+    };
+}
+
+display_id_type!(DisplayFrameId, u64);
+display_id_type!(DisplayWindowId, i64);
+display_id_type!(ImageId, u32);
+display_id_type!(VideoId, u32);
+display_id_type!(WebKitId, u32);
+display_id_type!(XwidgetId, u32);
+
 /// RGBA color with f32 components (0.0 - 1.0)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -218,7 +249,7 @@ impl Rect {
 /// frame glyph coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnimatedCursor {
-    pub window_id: i64,
+    pub window_id: DisplayWindowId,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -227,7 +258,7 @@ pub struct AnimatedCursor {
     /// Order: [top-left, top-right, bottom-right, bottom-left].
     pub corners: Option<[(f32, f32); 4]>,
     /// Which frame owns this cursor (0 = root frame, non-zero = child frame_id)
-    pub frame_id: u64,
+    pub frame_id: DisplayFrameId,
 }
 
 /// Cursor animation style.

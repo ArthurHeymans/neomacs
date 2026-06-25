@@ -1547,7 +1547,7 @@ impl WgpuRenderer {
                 if info.is_minibuffer || info.buffer_file_name.is_empty() {
                     continue;
                 }
-                let wid = info.window_id;
+                let wid = info.window_id.get();
                 let new_text = &info.buffer_file_name;
                 let changed = match self.prev_breadcrumb_text.get(&wid) {
                     Some(old) => old != new_text,
@@ -1599,7 +1599,7 @@ impl WgpuRenderer {
             let active_fade = self
                 .active_title_fades
                 .iter()
-                .find(|f| f.window_id == info.window_id);
+                .find(|f| f.window_id == info.window_id.get());
 
             if let Some(fade) = active_fade {
                 // Crossfade: render old text fading out, new text fading in

@@ -1,7 +1,7 @@
 use super::*;
 use crate::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, WindowInfo};
-use neomacs_display_protocol::types::{AnimatedCursor, Rect};
+use neomacs_display_protocol::types::Rect;
 use std::time::Instant;
 
 /// Helper to create a test EffectCtx
@@ -33,7 +33,7 @@ fn test_window_info(
     mode_line_height: f32,
 ) -> WindowInfo {
     WindowInfo {
-        window_id,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
         buffer_id: 1,
         window_start: 0,
         window_end: 100,

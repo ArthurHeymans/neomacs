@@ -1339,7 +1339,7 @@ fn publish_gui_frame_sends_opening_frame_before_startup_lisp() {
         .try_recv()
         .expect("opening GUI frame should be published");
     assert_eq!(current_layout_frame_id(&eval), Some(frame_id));
-    assert_eq!(display_state.parent_id, 0);
+    assert_eq!(display_state.parent_id.get(), 0);
     assert!(display_state.frame_cols > 0);
     assert!(display_state.frame_rows > 0);
     assert!(

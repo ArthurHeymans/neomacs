@@ -4,7 +4,7 @@ use super::{
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
 fn make_cursor(
     slot_id: DisplaySlotId,
@@ -31,7 +31,7 @@ fn make_cursor(
 #[test]
 fn rtl_bar_cursor_uses_right_edge_of_char_slot() {
     let mut frame = FrameGlyphBuffer::new();
-    frame.set_draw_context(1, GlyphRowRole::Text, None);
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     frame.add_char('א', 10.0, 20.0, 12.0, 16.0, 12.0, false);
     let slot_id = frame.glyphs[0].slot_id().expect("slot id");
     if let FrameGlyph::Char { bidi_level, .. } = &mut frame.glyphs[0] {
@@ -48,7 +48,7 @@ fn rtl_bar_cursor_uses_right_edge_of_char_slot() {
 #[test]
 fn rtl_hbar_cursor_uses_right_edge_of_stretch_slot() {
     let mut frame = FrameGlyphBuffer::new();
-    frame.set_draw_context(2, GlyphRowRole::Text, None);
+    frame.set_draw_context(DisplayWindowId::new(2), GlyphRowRole::Text, None);
     frame.add_stretch(30.0, 40.0, 24.0, 16.0, Color::BLACK, 0, false);
     let slot_id = frame.glyphs[0].slot_id().expect("slot id");
     if let FrameGlyph::Stretch { bidi_level, .. } = &mut frame.glyphs[0] {
@@ -65,7 +65,7 @@ fn rtl_hbar_cursor_uses_right_edge_of_stretch_slot() {
 #[test]
 fn filled_box_cursor_keeps_slot_origin_in_rtl_runs() {
     let mut frame = FrameGlyphBuffer::new();
-    frame.set_draw_context(3, GlyphRowRole::Text, None);
+    frame.set_draw_context(DisplayWindowId::new(3), GlyphRowRole::Text, None);
     frame.add_char('א', 50.0, 60.0, 12.0, 16.0, 12.0, false);
     let slot_id = frame.glyphs[0].slot_id().expect("slot id");
     if let FrameGlyph::Char { bidi_level, .. } = &mut frame.glyphs[0] {
@@ -105,7 +105,7 @@ fn char_bounds(label: &str, x: f32, y: f32, width: f32, height: f32) -> Rendered
         window_id: 1,
         row_role: GlyphRowRole::Text,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
             row: 0,
             col: 0,
         },

@@ -4,7 +4,7 @@ use crate::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
 use crate::glyph_matrix::{
     FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, WindowMatrixEntry,
 };
-use crate::types::{Color, Rect};
+use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -230,8 +230,8 @@ fn make_grid_state(
     text: &str,
 ) -> FrameDisplayState {
     let mut state = FrameDisplayState::new(cols, rows, 1.0, 1.0);
-    state.frame_id = frame_id;
-    state.parent_id = parent_id;
+    state.frame_id = DisplayFrameId::new(frame_id);
+    state.parent_id = DisplayFrameId::new(parent_id);
     state.parent_x = parent_x;
     state.parent_y = parent_y;
     state.background = Color::rgb(0.0, 0.0, 0.0);
@@ -563,7 +563,7 @@ fn rasterize_tracks_phys_cursor_position() {
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 1,
         row: 0,
         col: 1,
@@ -575,7 +575,7 @@ fn rasterize_tracks_phys_cursor_position() {
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: DisplayWindowId::new(1),
             row: 0,
             col: 1,
         },
@@ -615,7 +615,7 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 1,
         row: 1,
         col: 4,
@@ -627,7 +627,7 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: DisplayWindowId::new(1),
             row: 1,
             col: 4,
         },
@@ -718,7 +718,7 @@ fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 1,
         row: 0,
         col: 1,
@@ -730,7 +730,7 @@ fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
         style: CursorStyle::FilledBox,
         color: Color::RED,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: DisplayWindowId::new(1),
             row: 0,
             col: 1,
         },
@@ -798,7 +798,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 0,
         row: 0,
         col: 0,
@@ -810,7 +810,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
         style: CursorStyle::Bar(2.0),
         color: Color::WHITE,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: DisplayWindowId::new(1),
             row: 0,
             col: 0,
         },
@@ -901,7 +901,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
         selected: false,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         charpos: 3,
         row: 0,
         col: 3,
@@ -913,7 +913,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
         slot_id: DisplaySlotId {
-            window_id: 1,
+            window_id: DisplayWindowId::new(1),
             row: 0,
             col: 3,
         },
@@ -987,7 +987,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
         selected: true,
     });
     state.phys_cursor = Some(PhysCursor {
-        window_id: 2,
+        window_id: DisplayWindowId::new(2),
         charpos: 2,
         row: 2,
         col: 2,
@@ -999,7 +999,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
         slot_id: DisplaySlotId {
-            window_id: 2,
+            window_id: DisplayWindowId::new(2),
             row: 2,
             col: 2,
         },

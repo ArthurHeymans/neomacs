@@ -1247,7 +1247,7 @@ impl WgpuRenderer {
                     ..
                 } = glyph
                 {
-                    if let Some(cached) = self.image_cache.get(*image_id) {
+                    if let Some(cached) = self.image_cache.get(image_id.get()) {
                         let ix = *x + offset_x;
                         let iy = *y + offset_y;
                         tracing::debug!(
@@ -1317,7 +1317,7 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if let Some(cached) = self.video_cache.get(*video_id) {
+                        if let Some(cached) = self.video_cache.get(video_id.get()) {
                             if let Some(ref bind_group) = cached.bind_group {
                                 let vx = *x + offset_x;
                                 let vy = *y + offset_y;
