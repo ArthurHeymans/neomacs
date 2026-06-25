@@ -41,6 +41,24 @@ fn explicit_bin_dir_before_release_stays_in_effect() {
 }
 
 #[test]
+fn parse_aot_preload_defaults_off_and_flag_enables() {
+    assert!(!parse_options(&[]).aot_preload);
+    let options = parse_options(&["--aot-preload"]);
+    assert!(options.aot_preload);
+    // The flag is independent of the others (does not perturb defaults).
+    assert!(!options.release);
+    assert!(!options.dry_run);
+    assert!(!options.skip_build);
+}
+
+#[test]
+fn parse_aot_preload_composes_with_dry_run() {
+    let options = parse_options(&["--aot-preload", "--dry-run"]);
+    assert!(options.aot_preload);
+    assert!(options.dry_run);
+}
+
+#[test]
 fn initial_cargo_build_passes_no_features_by_default_on_linux() {
     let options = parse_options(&["--release"]);
     let args = initial_cargo_build_args(&options);
@@ -1313,6 +1331,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         skip_build: false,
         no_byte_compile: false,
         features: Vec::new(),
+        aot_preload: false,
     };
     let paths = PipelinePaths {
         lisp_root: lisp.clone(),

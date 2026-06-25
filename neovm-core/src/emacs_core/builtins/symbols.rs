@@ -5508,6 +5508,19 @@ pub(crate) fn builtin_dump_emacs_portable(
             ],
         )
     })?;
+
+    // R2-B1 (resolution B): dump-time AOT preload. Only on the FINAL production
+    // dump and only when the producer is explicitly enabled by env (so ordinary
+    // dump-emacs-portable calls — tests, plain dumps — pay nothing). Runs IN this
+    // process, which owns the patched pdump fingerprint slot + the live obarray,
+    // so the emitted `.so` matches the runtime by construction. Failures are
+    // logged + swallowed inside the hook (an additive miss → runtime JITs).
+    #[cfg(feature = "jit")]
+    if is_final_dump {
+        let dump_dir = dump_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        crate::emacs_core::jit::aot::run_dump_time_preload(ctx, dump_dir);
+    }
+
     Ok(Value::NIL)
 }
 

@@ -32,6 +32,13 @@ struct FreshBuildOptions {
     skip_build: bool,
     no_byte_compile: bool,
     features: Vec<String>,
+    /// R2-B1: enable the in-neomacs dump-time AOT preload producer. xtask sets
+    /// `NEOVM_AOT_PRELOAD=1` on the `--temacs=pdump` step so the producer (which
+    /// lives in neovm-core, runs inside `dump-emacs-portable`) emits
+    /// `libneomacs-preload.so` + manifest beside the pdump, then xtask verifies
+    /// they landed. With `--dry-run` the producer only LISTS candidates + dedup
+    /// stats (no link/write). xtask itself does not link neovm-core.
+    aot_preload: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -287,6 +294,7 @@ impl FreshBuildOptions {
         let mut skip_build = false;
         let mut no_byte_compile = false;
         let mut features: Vec<String> = Vec::new();
+        let mut aot_preload = false;
 
         while let Some(arg) = args.next() {
             match arg.to_string_lossy().as_ref() {
@@ -308,6 +316,7 @@ impl FreshBuildOptions {
                 "--no-native-comp" => native_comp = false,
                 "--skip-build" => skip_build = true,
                 "--no-byte-compile" => no_byte_compile = true,
+                "--aot-preload" => aot_preload = true,
                 "--features" => {
                     let value = args
                         .next()
@@ -351,6 +360,7 @@ impl FreshBuildOptions {
             skip_build,
             no_byte_compile,
             features,
+            aot_preload,
         })
     }
 }
@@ -587,7 +597,26 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         run_preloaded_lisp_byte_compile(options, &paths, &envs)?;
     }
 
+    // R2-B1 dry-run gate (resolution B): when `--aot-preload --dry-run`, run the
+    // dump FOR REAL with `NEOVM_AOT_PRELOAD_DRY_RUN=1` so the in-neomacs producer
+    // LOGS its candidates + dedup stats (skipping link/write), then stop. This is
+    // the only way to observe the producer enumeration — it needs a live neomacs
+    // process — so this combination intentionally executes the dump even under
+    // `--dry-run` (logged explicitly below so it is not a silent contract break).
+    if options.aot_preload && options.dry_run {
+        run_aot_preload_dry_run_gate(options, &paths, &envs)?;
+        return Ok(());
+    }
+
     print_synthetic_step("dump final Emacs executable (GNU temacs --temacs=pdump)");
+    // R2-B1: dump-time AOT preload (resolution B). The preload `.so` is built
+    // INSIDE the neomacs dump process — `dump-emacs-portable`, after the pdump is
+    // written, gated by `NEOVM_AOT_PRELOAD`. That process owns the patched
+    // fingerprint slot + the live obarray (the #A eq-identity source), so the
+    // emitted `.so`'s content-hashes + the manifest fingerprint match the runtime
+    // by construction (xtask cannot satisfy the pdump fingerprint check itself).
+    // xtask only sets the env here + verifies the artifacts afterward.
+    let pdump_envs = aot_preload_dump_envs(options, &envs);
     run_command(
         options,
         &options.repo_root,
@@ -598,8 +627,13 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
             OsString::from("loadup"),
             OsString::from("--temacs=pdump"),
         ],
-        &envs,
+        &pdump_envs,
     )?;
+
+    // Verify the in-neomacs producer actually emitted the artifacts (real run).
+    if options.aot_preload {
+        verify_aot_preload_artifacts(&paths)?;
+    }
 
     // GNU top-level Makefile.in makes `lisp' depend on `src', so the general
     // lisp/compile-main pass uses the final dumped src/emacs, not
@@ -626,6 +660,124 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         sb = options.skip_build,
         nbc = options.no_byte_compile,
     );
+    Ok(())
+}
+
+// R2-B1: dump-time AOT preload (resolution B). The producer lives ENTIRELY in
+// neovm-core and runs INSIDE the neomacs `dump-emacs-portable` builtin (after the
+// pdump is written), gated by the env vars below. That process owns the patched
+// pdump fingerprint slot + the live obarray, so the emitted `.so` matches the
+// runtime by construction; xtask only sets the env + verifies the artifacts.
+// (xtask deliberately does NOT link neovm-core — it cannot satisfy the pdump
+// fingerprint check, which is why the in-xtask-load approach was abandoned.)
+
+/// Enable the in-neomacs preload producer for the dump process.
+const AOT_PRELOAD_ENV: &str = "NEOVM_AOT_PRELOAD";
+/// Make the in-neomacs producer LOG candidates + stats without linking/writing.
+const AOT_PRELOAD_DRY_RUN_ENV: &str = "NEOVM_AOT_PRELOAD_DRY_RUN";
+/// Artifact names the in-neomacs producer writes beside the pdump (must match
+/// `aot::PRELOAD_SO_NAME` / `aot::PRELOAD_MANIFEST_NAME` in neovm-core).
+const PRELOAD_SO_NAME: &str = "libneomacs-preload.so";
+const PRELOAD_MANIFEST_NAME: &str = "libneomacs-preload.manifest";
+
+/// Build the env for the `--temacs=pdump` step: the base `envs` plus
+/// `NEOVM_AOT_PRELOAD=1` when `--aot-preload` (real run). The dry-run gate uses a
+/// separate path ([`run_aot_preload_dry_run_gate`]), so this only ever sets the
+/// real-build flag.
+fn aot_preload_dump_envs(
+    options: &FreshBuildOptions,
+    base: &[(OsString, OsString)],
+) -> Vec<(OsString, OsString)> {
+    let mut envs = base.to_vec();
+    if options.aot_preload {
+        envs.push((OsString::from(AOT_PRELOAD_ENV), OsString::from("1")));
+    }
+    envs
+}
+
+/// R2-B1 dry-run gate: run the `--temacs=pdump` dump FOR REAL with the preload
+/// producer in DRY-RUN mode, so the in-neomacs builtin logs its AOT candidates +
+/// dedup stats without linking/writing. This intentionally executes the dump even
+/// under `--dry-run` (the only way to observe the producer enumeration needs a
+/// live neomacs process); it is logged explicitly so it is not a silent break of
+/// the global `--dry-run` "print, don't run" contract.
+fn run_aot_preload_dry_run_gate(
+    options: &FreshBuildOptions,
+    paths: &PipelinePaths,
+    base_envs: &[(OsString, OsString)],
+) -> Result<()> {
+    print_synthetic_step(
+        "AOT preload DRY-RUN gate: run --temacs=pdump with the in-neomacs producer in \
+         dry-run mode (logs candidates + dedup stats, no link/write)",
+    );
+    println!(
+        "  NOTE  --aot-preload --dry-run executes the dump for real (with \
+         {AOT_PRELOAD_DRY_RUN_ENV}=1) so the producer can enumerate candidates"
+    );
+    let mut envs = base_envs.to_vec();
+    envs.push((OsString::from(AOT_PRELOAD_ENV), OsString::from("1")));
+    envs.push((OsString::from(AOT_PRELOAD_DRY_RUN_ENV), OsString::from("1")));
+    // Run directly (NOT through run_command, which would skip under --dry-run).
+    print_command(
+        paths.temacs.as_os_str(),
+        &[
+            OsString::from("--batch"),
+            OsString::from("-l"),
+            OsString::from("loadup"),
+            OsString::from("--temacs=pdump"),
+        ],
+    );
+    if !paths.temacs.exists() {
+        return Err(format!(
+            "aot-preload dry-run: missing {} (run a full build first, or drop --skip-build)",
+            paths.temacs.display()
+        )
+        .into());
+    }
+    let status = Command::new(&paths.temacs)
+        .current_dir(&options.repo_root)
+        .args([
+            OsStr::new("--batch"),
+            OsStr::new("-l"),
+            OsStr::new("loadup"),
+            OsStr::new("--temacs=pdump"),
+        ])
+        .envs(envs.iter().map(|(k, v)| (k, v)))
+        .status()?;
+    if !status.success() {
+        return Err(format!(
+            "aot-preload dry-run: --temacs=pdump exited with {}",
+            status.code().map_or_else(|| "signal".to_string(), |c| c.to_string())
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Verify the in-neomacs producer emitted the preload artifacts beside the final
+/// pdump (real `--aot-preload` run). The pdump lives in `bin_dir` next to
+/// `neomacs`, so the `.so` + manifest land there too.
+fn verify_aot_preload_artifacts(paths: &PipelinePaths) -> Result<()> {
+    print_synthetic_step("AOT preload: verify libneomacs-preload.so + manifest");
+    let dir = paths
+        .final_bin
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    let so = dir.join(PRELOAD_SO_NAME);
+    let manifest = dir.join(PRELOAD_MANIFEST_NAME);
+    for artifact in [&so, &manifest] {
+        if !artifact.exists() {
+            return Err(format!(
+                "aot-preload: expected artifact not found: {} (did the in-neomacs producer run? \
+                 it is gated by {AOT_PRELOAD_ENV}=1 on the --temacs=pdump dump)",
+                artifact.display()
+            )
+            .into());
+        }
+    }
+    println!("  OK    {}", so.display());
+    println!("  OK    {}", manifest.display());
     Ok(())
 }
 
@@ -3685,7 +3837,7 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] --release [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile]
+Usage: cargo xtask [fresh-build] --release [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
 
 --release is required: fresh-build produces the runnable runtime binary and is a release-only operation.
 
@@ -3711,6 +3863,12 @@ Options:
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
   --skip-build        Skip the initial cargo build -p neomacs stage
   --no-byte-compile   Skip byte-compilation steps (5, 9, 11); keep existing .elc
+  --aot-preload       Enable the in-neomacs dump-time AOT producer: sets
+                      NEOVM_AOT_PRELOAD=1 on the --temacs=pdump step (10) so it
+                      emits libneomacs-preload.so + manifest beside the pdump,
+                      then verifies they landed. With --dry-run the producer only
+                      lists candidates + dedup stats (no link/write); that combo
+                      runs the dump for real to observe the enumeration.
 
 Environment:
   NEOMACS_NATIVE_COMP=yes

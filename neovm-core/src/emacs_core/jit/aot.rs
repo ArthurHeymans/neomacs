@@ -49,17 +49,21 @@ fn module_init_err(msg: String) -> CompileError {
 /// structural assumption the emitted code + loader share. Any change here MUST
 /// bump `ABI_TAG_VERSION` so a stale `.so` (with a different tag) is refused.
 ///
-/// Encodes: the `STATUS_*` return codes, the entry ABI shape (3 pointer params +
-/// i64 return), the reloc-base + `DeoptCells` layout, and the `neovm_jit_*` shim
-/// name set (the imports the loader binds). Born `u32` in R1c; hardened to a
-/// `u128` ISA+layout hash in R3.4b. **No epoch is ever encoded** (epochs are
-/// re-derived from the live obarray at load — see the spec's cross-session
-/// invariants).
+/// Encodes the `STATUS_*` return codes; the entry ABI shape (the unified
+/// 4-param entry `fn(vmctx, args, out, sidecar) -> i64`); the reloc-base,
+/// `DeoptCells`, and `LeafSidecar` layouts; and the `neovm_jit_*` shim name set
+/// (the imports the loader binds). Born `u32` in R1c; hardened to a `u128`
+/// ISA+layout hash in R3.4b. No epoch is ever encoded (epochs are re-derived
+/// from the live obarray at load — see the spec's cross-session invariants).
 pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 
 /// Bump on ANY change to the entry ABI, `STATUS_*` codes, `DeoptCells`/reloc-base
 /// layout, or the shim set — it salts [`ABI_TAG`] so old artifacts stop matching.
-const ABI_TAG_VERSION: u32 = 1;
+/// v2: #32-audit fix — the entry-ABI-shape code in [`compute_abi_tag`] now
+/// reflects the real 4-param ABI (was a stale 3-param code) and salts the
+/// `LeafSidecar` size; the tag value changes accordingly (harmless — no on-disk
+/// `.so` artifacts predate this).
+const ABI_TAG_VERSION: u32 = 2;
 
 /// The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
 /// against the host at `dlopen`). This is the complete `declare_rt_refs` set —
@@ -131,8 +135,14 @@ const fn compute_abi_tag() -> u32 {
     mix_u64!(super::compile::STATUS_DEOPT as u64);
     mix_u64!(super::compile::STATUS_SIGNAL as u64);
     mix_u64!(super::compile::STATUS_DEOPT_AT as u64);
-    // Entry ABI shape: 3 pointer params + 1 i64 return (encode as a small code).
-    mix_u64!(0x0003_0001);
+    // Entry ABI shape: the unified 4-param entry ABI
+    //   extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64
+    // Encoded as <param_count><return_count> so a future arity/return change
+    // re-tags artifacts (#32-audit minor: the old code claimed 3 params).
+    mix_u64!(0x0004_0001);
+    // LeafSidecar layout (the per-thread base block read through the 4th param):
+    // a layout change (field add/reorder/resize) MUST re-tag stale `.so`s.
+    mix_u64!(core::mem::size_of::<super::compile::LeafSidecar>() as u64);
     // DeoptCells layout: 3 i64 cells (pc, depth, handlers).
     mix_u64!(core::mem::size_of::<DeoptCells>() as u64);
     // Shim name set (count + each byte) — a shim-ABI change re-tags artifacts.
@@ -205,6 +215,12 @@ pub(crate) fn write_value_recipe(out: &mut Vec<u8>, v: Value) -> Result<(), Unsu
     if let Some(s) = v.as_lisp_string() {
         let bytes = s.as_bytes();
         out.push(RECIPE_STRING);
+        // Multibyte flag (#32-audit minor): two strings with identical bytes but
+        // differing multibyte-ness are DISTINCT (`LispString` PartialEq compares
+        // the flag), and `from_emacs_bytes` re-derives the flag from byte content
+        // alone — so an all-ASCII unibyte string would round-trip as multibyte.
+        // Record the flag so the recipe hashes/verifies/rebuilds it faithfully.
+        out.push(u8::from(s.is_multibyte()));
         out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
         out.extend_from_slice(bytes);
         return Ok(());
@@ -228,6 +244,11 @@ pub(crate) fn write_value_recipe(out: &mut Vec<u8>, v: Value) -> Result<(), Unsu
         let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
         let nb = name.as_bytes();
         out.push(RECIPE_SYMBOL);
+        // Multibyte flag (#32-audit minor): include the name string's
+        // multibyte-ness so two symbols whose names share bytes but differ in
+        // the flag hash/verify distinctly (reloc identity itself comes from
+        // func.constants — this only sharpens hash/verify discrimination).
+        out.push(u8::from(name.is_multibyte()));
         out.extend_from_slice(&(nb.len() as u64).to_le_bytes());
         out.extend_from_slice(nb);
         return Ok(());
@@ -271,21 +292,38 @@ pub(crate) fn rebuild_value(bytes: &[u8], depth: usize) -> Option<(Value, usize)
             Some((Value::make_int(n), 9))
         }
         RECIPE_STRING => {
-            let len = u64::from_le_bytes(bytes.get(1..9)?.try_into().ok()?) as usize;
+            // Layout (post-#32-audit): tag, multibyte flag (1B), len (8B), bytes.
+            let multibyte = *bytes.get(1)? != 0;
+            let len = u64::from_le_bytes(bytes.get(2..10)?.try_into().ok()?) as usize;
             // Byte-faithful (audit #B): elisp strings may be raw unibyte / non-
             // UTF-8, so reconstruct from the exact bytes, not a UTF-8 `&str`.
-            let raw = bytes.get(9..9usize.checked_add(len)?)?.to_vec();
-            let ls = crate::heap_types::LispString::from_emacs_bytes(raw);
-            Some((Value::heap_string(ls), 9 + len))
+            let raw = bytes.get(10..10usize.checked_add(len)?)?.to_vec();
+            // Honor the recorded flag (#32-audit minor): an all-ASCII unibyte
+            // string must stay unibyte, not be promoted by `from_emacs_bytes`.
+            let ls = if multibyte {
+                crate::heap_types::LispString::from_emacs_bytes(raw)
+            } else {
+                crate::heap_types::LispString::from_unibyte(raw)
+            };
+            Some((Value::heap_string(ls), 10 + len))
         }
         RECIPE_SYMBOL => {
-            let len = u64::from_le_bytes(bytes.get(1..9)?.try_into().ok()?) as usize;
+            // Layout (post-#32-audit): tag, name multibyte flag (1B), len (8B), bytes.
+            // The flag discriminates the hash/verify; the canonical interned symbol
+            // is identified by its NAME BYTES (intern_lisp_string), so the rebuilt
+            // name string's flag tracks the recorded one for faithful re-intern.
+            let multibyte = *bytes.get(1)? != 0;
+            let len = u64::from_le_bytes(bytes.get(2..10)?.try_into().ok()?) as usize;
             // Byte-faithful symbol name (audit #B): re-intern from the raw bytes
             // so a non-UTF-8 symbol name round-trips to the same canonical symbol.
-            let raw = bytes.get(9..9usize.checked_add(len)?)?.to_vec();
-            let ls = crate::heap_types::LispString::from_emacs_bytes(raw);
+            let raw = bytes.get(10..10usize.checked_add(len)?)?.to_vec();
+            let ls = if multibyte {
+                crate::heap_types::LispString::from_emacs_bytes(raw)
+            } else {
+                crate::heap_types::LispString::from_unibyte(raw)
+            };
             let id = crate::emacs_core::intern::intern_lisp_string(&ls);
-            Some((Value::symbol(id), 9 + len))
+            Some((Value::symbol(id), 10 + len))
         }
         RECIPE_CONS => {
             let (car, n1) = rebuild_value(bytes.get(1..)?, depth + 1)?;
@@ -311,6 +349,114 @@ pub(crate) fn rebuild_value(bytes: &[u8], depth: usize) -> Option<(Value, usize)
 /// surface). NOTE (audit #11): there is NO load-time re-verification that the
 /// rebuilt const vector equals the call-site constants — the hash is the whole
 /// proof. Adding that recheck is a documented defense-in-depth follow-up.
+/// Is `op`'s `Debug` form a CANONICAL (session-independent) identity for the
+/// content hash? `true` → its Debug encodes only pool indices / immediates and
+/// is safe to hash. `false` → its Debug embeds session-specific data (a raw
+/// `SymId` or a heap `Value`) and the leaf must bail to the JIT.
+///
+/// This is deliberately an EXHAUSTIVE `match` with NO wildcard arm (#32-audit
+/// minor): when a new `Op` variant is added, this fails to compile until the
+/// author classifies it. The compiler thus ENFORCES the documented duty — a
+/// future SymId/Value-bearing op cannot slip into the AOT hash unnoticed.
+fn op_debug_is_canonical(op: &Op) -> bool {
+    match op {
+        // The sole session-specific variant today: its Debug embeds a raw,
+        // intern-order-dependent `SymId` (audit #17). Bail.
+        Op::CallBuiltinSym(..) => false,
+
+        // Everything else carries only pool indices (u16) / jump targets (u32)
+        // / immediates (u8) / no payload — all session-independent. Listed
+        // explicitly (no `_`) so a new variant forces a decision here.
+        Op::Constant(..)
+        | Op::Nil
+        | Op::True
+        | Op::Pop
+        | Op::Dup
+        | Op::StackRef(..)
+        | Op::StackSet(..)
+        | Op::DiscardN(..)
+        | Op::VarRef(..)
+        | Op::VarSet(..)
+        | Op::VarBind(..)
+        | Op::Unbind(..)
+        | Op::Call(..)
+        | Op::Apply(..)
+        | Op::Goto(..)
+        | Op::GotoIfNil(..)
+        | Op::GotoIfNotNil(..)
+        | Op::GotoIfNilElsePop(..)
+        | Op::GotoIfNotNilElsePop(..)
+        | Op::Switch
+        | Op::Return
+        | Op::Add
+        | Op::Sub
+        | Op::Mul
+        | Op::Div
+        | Op::Rem
+        | Op::Add1
+        | Op::Sub1
+        | Op::Negate
+        | Op::Eqlsign
+        | Op::Gtr
+        | Op::Lss
+        | Op::Leq
+        | Op::Geq
+        | Op::Max
+        | Op::Min
+        | Op::Car
+        | Op::Cdr
+        | Op::Cons
+        | Op::List(..)
+        | Op::Length
+        | Op::Nth
+        | Op::Nthcdr
+        | Op::Setcar
+        | Op::Setcdr
+        | Op::CarSafe
+        | Op::CdrSafe
+        | Op::Elt
+        | Op::Nconc
+        | Op::Nreverse
+        | Op::Member
+        | Op::Memq
+        | Op::Assq
+        | Op::Symbolp
+        | Op::Consp
+        | Op::Stringp
+        | Op::Listp
+        | Op::Integerp
+        | Op::Numberp
+        | Op::Null
+        | Op::Not
+        | Op::Eq
+        | Op::Equal
+        | Op::Concat(..)
+        | Op::Substring
+        | Op::StringEqual
+        | Op::StringLessp
+        | Op::Aref
+        | Op::Aset
+        | Op::SymbolValue
+        | Op::SymbolFunction
+        | Op::Set
+        | Op::Fset
+        | Op::Get
+        | Op::Put
+        | Op::PushConditionCase(..)
+        | Op::PushConditionCaseRaw(..)
+        | Op::PushCatch(..)
+        | Op::PopHandler
+        | Op::UnwindProtectPop
+        | Op::Throw
+        | Op::SaveCurrentBuffer
+        | Op::SaveExcursion
+        | Op::SaveRestriction
+        | Op::SaveWindowExcursion
+        | Op::MakeClosure(..)
+        | Op::CallBuiltin(..) => true,
+    }
+}
+
 pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -> Option<u128> {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
@@ -319,12 +465,13 @@ pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -
     h.update((ops.len() as u64).to_le_bytes());
     // Ops: their Debug form is deterministic for this enum (Constant(idx)/Add/
     // Goto(t)/...) and pointer-free, so it canonically identifies the body —
-    // EXCEPT `CallBuiltinSym(SymId, _)`, whose Debug embeds a SESSION-SPECIFIC
-    // raw SymId (audit #17). Such a body is not AOT-runnable (mir_is_aot_runnable
-    // rejects it), so bail the hash too — never key the AOT cache on a
-    // non-canonical op. (Any future SymId-bearing op must be added here.)
+    // EXCEPT an op whose Debug embeds SESSION-SPECIFIC data (a raw `SymId` or a
+    // `Value` pointer). `op_debug_is_canonical` is an EXHAUSTIVE match (#32-audit
+    // minor): a future SymId/Value-bearing `Op` variant fails to compile here
+    // until it is explicitly classified as canonical-or-bail, so we can never
+    // silently key the AOT cache on a session-specific op.
     for op in ops {
-        if matches!(op, Op::CallBuiltinSym(..)) {
+        if !op_debug_is_canonical(op) {
             return None;
         }
         let s = format!("{op:?}");
@@ -582,11 +729,26 @@ fn collect_reloc_consts(m: &mir::MirFunction) -> Vec<Value> {
 /// symbols, via the sidecar + recipe) AND call-bearing (Call/Apply/escaping cons,
 /// via the host-exported shims + the sidecar precise-deopt path). Excludes only
 /// CallBuiltin*/non-recipe-able consts (rejected upstream).
-pub(crate) fn compile_leaf_to_object(
+/// Everything needed to define one AOT leaf into a module: the lowered MIR, its
+/// content hash, the entry/descriptor symbol names, and the descriptor bytes.
+struct PreparedLeaf {
+    m: mir::MirFunction,
+    content_hash: u128,
+    entry_name: String,
+    desc_name: String,
+    desc_bytes: Vec<u8>,
+}
+
+/// Prepare a leaf for AOT emit (no codegen): content hash, MIR, AOT-runnable
+/// check, reloc recipe, frame metadata, descriptor bytes. `Ok(None)` if the body
+/// is outside the AOT subset (caller stays JIT-only / skips the candidate).
+/// Shared by [`compile_leaf_to_object`] (single-leaf) and [`build_preload_object`]
+/// (multi-leaf R2-B4), so both compute the SAME hash/recipe/metadata.
+fn prepare_leaf_emit(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
-) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
+) -> Result<Option<PreparedLeaf>, CompileError> {
     let Some(content_hash) = leaf_content_hash(ops, constants, arity) else {
         return Ok(None); // a constant outside the recipe subset.
     };
@@ -598,8 +760,7 @@ pub(crate) fn compile_leaf_to_object(
         return Ok(None);
     }
     // Reloc consts → rebuild recipe (R1c-3), in the SAME order the lowering
-    // assigns reloc indices. If any const is outside the recipe subset, bail
-    // (defensive — leaf_content_hash already gates this).
+    // assigns reloc indices. Bail if any const is outside the recipe subset.
     let reloc_consts = collect_reloc_consts(&m);
     let mut recipe = Vec::new();
     for &c in &reloc_consts {
@@ -607,15 +768,9 @@ pub(crate) fn compile_leaf_to_object(
             return Ok(None);
         }
     }
-    let entry_name = aot_entry_symbol(content_hash);
-    let desc_name = aot_descriptor_symbol(content_hash);
-    // Frame metadata, computed from the MIR EXACTLY as lower_mir_pure does, so
-    // the loader sizes the per-thread deopt buffers + sets the side-effect flag
-    // identically. A call-bearing body (has_call) is ALL-PRECISE deopt (every
-    // guard is STATUS_DEOPT_AT, resume-at-pc) and has a side effect (the call),
-    // so it must never rerun-from-start; the loader sizes deopt_spill to
-    // max_depth (the deepest pre-op operand stack) and the leaf's sidecar points
-    // at it. Pure bodies keep max_depth=0 / no precise deopt (rerun-from-start).
+    // Frame metadata from the MIR EXACTLY as lower_mir_pure does (so the loader
+    // sizes the per-thread deopt buffers + side-effect flag identically). A
+    // call-bearing body is ALL-PRECISE deopt + side-effecting → sized deopt_spill.
     let has_call = mir_has_call(&m);
     let max_depth = m
         .blocks
@@ -624,8 +779,6 @@ pub(crate) fn compile_leaf_to_object(
         .map(|i| i.pre_stack.len())
         .max()
         .unwrap_or(0);
-    // The MIR pure tier never lowers binds/handlers (build_mir bails on those),
-    // so an AOT-runnable MIR leaf has neither — matching lower_mir_pure's ctor.
     let meta = super::compile::AotLeafMeta {
         arity: m.arity,
         required: m.arity,
@@ -637,21 +790,223 @@ pub(crate) fn compile_leaf_to_object(
         has_precise_deopt: has_call,
     };
     let desc_bytes = encode_descriptor(&meta, &recipe, reloc_consts.len() as u32);
-    let obj = build_object_for_leaf_inner(&m, &entry_name, Some((&desc_name, &desc_bytes)))?;
+    Ok(Some(PreparedLeaf {
+        m,
+        content_hash,
+        entry_name: aot_entry_symbol(content_hash),
+        desc_name: aot_descriptor_symbol(content_hash),
+        desc_bytes,
+    }))
+}
 
-    // Audit #15: ABI_TAG salts only the MIR_SHIM_NAMES set; an AOT `.so` that
-    // imports a shim OUTSIDE that set would not be re-tagged when that shim's
-    // ABI changes (a stale-`.so`-runs-against-changed-ABI hazard). The current
-    // subset emits NO shim imports (no call/escaping-cons → needs_rt=false), but
-    // assert it: every UNDEFINED import the object carries must be a salted shim,
-    // so a future widening can't silently ship an unsalted import.
+pub(crate) fn compile_leaf_to_object(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
+    let Some(p) = prepare_leaf_emit(ops, constants, arity)? else {
+        return Ok(None);
+    };
+    // build_object_for_leaf_inner runs the #15 shim-import audit on the bytes.
+    let obj = build_object_for_leaf_inner(&p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
+    Ok(Some((obj, p.content_hash)))
+}
+
+/// Stats from a multi-leaf preload build: how many candidates collapsed to how
+/// many unique objects (logged so dedup is never a silent drop).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PreloadBuildStats {
+    /// Candidates offered to the builder.
+    pub candidates: usize,
+    /// Candidates that prepared successfully (in the AOT subset).
+    pub prepared: usize,
+    /// DISTINCT content hashes actually emitted into the object.
+    pub unique_emitted: usize,
+    /// Candidates dropped because they were outside the AOT subset.
+    pub skipped_unsupported: usize,
+    /// Candidates collapsed onto an already-emitted identical body (dedup).
+    pub deduped: usize,
+}
+
+/// R2-B4: build ONE relocatable object containing ALL the given leaves (the
+/// dump-time `libneomacs-preload.so` payload, pre-link).
+///
+/// DEDUP BY CONTENT-HASH (team-lead): distinct loadup functions can share an
+/// IDENTICAL body (trivial accessors / macro-generated defuns) → identical
+/// content hash → identical entry+descriptor symbol names. Emitting both into one
+/// `ObjectModule` would be a DUPLICATE-SYMBOL collision. So each unique hash is
+/// emitted ONCE; every function with that body binds the same entry at load (the
+/// native code is identical, so it serves all of them). Returns the object bytes
+/// + [`PreloadBuildStats`] (no silent drops — candidates/unique/deduped/skipped).
+pub fn build_preload_object(
+    leaves: &[LoadupLeaf],
+) -> Result<(Vec<u8>, PreloadBuildStats), CompileError> {
+    let mut module = make_aot_object_module()?;
+    let mut seen: std::collections::HashSet<u128> = std::collections::HashSet::new();
+    let mut stats = PreloadBuildStats {
+        candidates: leaves.len(),
+        ..Default::default()
+    };
+    for leaf in leaves {
+        let Some(p) = prepare_leaf_emit(leaf.ops, leaf.constants, leaf.arity)? else {
+            stats.skipped_unsupported += 1;
+            continue;
+        };
+        stats.prepared += 1;
+        if !seen.insert(p.content_hash) {
+            // Identical body already emitted — its entry/descriptor symbols are
+            // shared; re-defining them would collide. Skip (correct: same code).
+            stats.deduped += 1;
+            continue;
+        }
+        define_leaf_into_module(&mut module, &p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
+        stats.unique_emitted += 1;
+    }
+    let obj = module
+        .finish()
+        .emit()
+        .map_err(|e| module_init_err(e.to_string()))?;
+    debug_assert_aot_imports_salted(&obj);
+    Ok((obj, stats))
+}
+
+/// File name of the dump-time AOT preload shared object (beside the pdump).
+pub const PRELOAD_SO_NAME: &str = "libneomacs-preload.so";
+/// File name of the preload manifest (fingerprint interlock + emitted hashes).
+pub const PRELOAD_MANIFEST_NAME: &str = "libneomacs-preload.manifest";
+/// Manifest format version (bump on any manifest schema change).
+const PRELOAD_MANIFEST_VERSION: u32 = 1;
+
+/// R2-B6: enumerate `ctx`'s loadup AOT candidates, build ONE preload object,
+/// link it to `out_dir/libneomacs-preload.so`, and write
+/// `out_dir/libneomacs-preload.manifest`. The manifest carries the running
+/// pdump's `fingerprint_hex` (the STALE INTERLOCK — the loader refuses a `.so`
+/// whose manifest fingerprint ≠ the running pdump, so a foreign/stale preload is
+/// a clean skip→JIT, never a crash), the ABI_TAG, the manifest version, and the
+/// emitted content hashes (one per unique body) for diagnostics. `ctx` is the
+/// final pdump loaded in-process (the loadup closure). Returns the build stats.
+pub fn build_and_link_preload(
+    ctx: &crate::emacs_core::eval::Context,
+    out_dir: &std::path::Path,
+) -> Result<PreloadBuildStats, CompileError> {
+    let leaves = enumerate_loadup_leaves(ctx, /*d0_filter=*/ true);
+    // Re-derive the emitted unique hashes for the manifest (build_preload_object
+    // dedups internally; recompute the unique set here for the manifest listing).
+    let (obj, stats) = build_preload_object(&leaves)?;
+    let so_path = out_dir.join(PRELOAD_SO_NAME);
+    link_object_to_so(&obj, &so_path)?;
+
+    // Collect the unique content hashes that were emitted (same dedup order).
+    let mut seen = std::collections::HashSet::new();
+    let mut hashes = Vec::new();
+    for leaf in &leaves {
+        if let Some(h) = leaf_content_hash(leaf.ops, leaf.constants, leaf.arity)
+            && is_d0_aot_candidate(leaf.ops, leaf.constants, leaf.arity)
+            && seen.insert(h)
+        {
+            hashes.push(h);
+        }
+    }
+    let mut manifest = String::new();
+    manifest.push_str(&format!("version {PRELOAD_MANIFEST_VERSION}\n"));
+    manifest.push_str(&format!("abi_tag {ABI_TAG:08x}\n"));
+    manifest.push_str(&format!(
+        "fingerprint {}\n",
+        crate::emacs_core::pdump::fingerprint_hex()
+    ));
+    manifest.push_str(&format!("leaves {}\n", hashes.len()));
+    for h in &hashes {
+        manifest.push_str(&format!("hash {h:032x}\n"));
+    }
+    let manifest_path = out_dir.join(PRELOAD_MANIFEST_NAME);
+    std::fs::write(&manifest_path, manifest)
+        .map_err(|e| module_init_err(format!("write preload manifest: {e}")))?;
+    Ok(stats)
+}
+
+/// Env var that ENABLES the dump-time preload producer (set by
+/// `cargo xtask fresh-build --aot-preload` on the `--temacs=pdump` invocation).
+pub const PRELOAD_ENABLE_ENV: &str = "NEOVM_AOT_PRELOAD";
+/// Env var that puts the producer in DRY-RUN mode: enumerate + log candidates +
+/// dedup stats, but do NOT link/write the `.so`/manifest.
+pub const PRELOAD_DRY_RUN_ENV: &str = "NEOVM_AOT_PRELOAD_DRY_RUN";
+
+/// R2-B1 (resolution B): the dump-time preload hook, called from
+/// `builtin_dump_emacs_portable` right after the FINAL pdump is written, with
+/// `ctx` = the live loadup closure (the #A eq-identity source) and `dump_dir` =
+/// the directory the pdump landed in. Builds `libneomacs-preload.so` + manifest
+/// beside the pdump so the runtime serves native from call 1.
+///
+/// Runs ONLY when [`PRELOAD_ENABLE_ENV`] is set (so ordinary
+/// `dump-emacs-portable` calls — every test's, every plain dump — pay nothing).
+/// In [`PRELOAD_DRY_RUN_ENV`] mode it only enumerates + logs (no link/write).
+///
+/// Because this runs IN the neomacs dump process, it owns the patched pdump
+/// fingerprint slot + the live obarray, so the emitted `.so`'s content-hashes and
+/// the manifest fingerprint match the runtime BY CONSTRUCTION. Failures are
+/// LOGGED and swallowed (never abort the dump): a missing preload is an additive
+/// miss → the runtime just JITs, honoring the off-by-default contract.
+pub fn run_dump_time_preload(ctx: &crate::emacs_core::eval::Context, dump_dir: &std::path::Path) {
+    if std::env::var_os(PRELOAD_ENABLE_ENV).is_none() {
+        return;
+    }
+    let dry_run = std::env::var_os(PRELOAD_DRY_RUN_ENV).is_some();
+
+    if dry_run {
+        let leaves = enumerate_loadup_leaves(ctx, /*d0_filter=*/ true);
+        match build_preload_object(&leaves) {
+            Ok((_, stats)) => {
+                tracing::info!(
+                    "aot-preload DRY-RUN: candidates={} prepared={} unique_emitted={} \
+                     deduped={} skipped_unsupported={}",
+                    stats.candidates,
+                    stats.prepared,
+                    stats.unique_emitted,
+                    stats.deduped,
+                    stats.skipped_unsupported,
+                );
+                for leaf in leaves.iter().take(40) {
+                    tracing::info!("aot-preload candidate: {} (arity={})", leaf.name, leaf.arity);
+                }
+                if leaves.len() > 40 {
+                    tracing::info!("aot-preload: ... and {} more candidates", leaves.len() - 40);
+                }
+            }
+            Err(e) => tracing::warn!("aot-preload DRY-RUN build_preload_object failed: {e}"),
+        }
+        return;
+    }
+
+    match build_and_link_preload(ctx, dump_dir) {
+        Ok(stats) => tracing::info!(
+            "aot-preload: emitted {}/{} beside pdump in {} (candidates={} prepared={} \
+             unique_emitted={} deduped={} skipped_unsupported={})",
+            PRELOAD_SO_NAME,
+            PRELOAD_MANIFEST_NAME,
+            dump_dir.display(),
+            stats.candidates,
+            stats.prepared,
+            stats.unique_emitted,
+            stats.deduped,
+            stats.skipped_unsupported,
+        ),
+        Err(e) => tracing::warn!(
+            "aot-preload: build_and_link_preload failed ({e}); runtime will JIT (additive miss)"
+        ),
+    }
+}
+
+/// Audit #15 (debug only): assert every UNDEFINED `neovm_jit_*` import in an
+/// emitted AOT object is in [`MIR_SHIM_NAMES`] — the set the host exports AND
+/// salts into `ABI_TAG`. A shim outside it would not re-tag stale `.so`s on an
+/// ABI change (stale-`.so`-runs-against-changed-ABI), and would not resolve at
+/// dlopen. Catches a future lowering that emits an unsalted/unexported import.
+fn debug_assert_aot_imports_salted(obj: &[u8]) {
     #[cfg(debug_assertions)]
     {
         use object::{Object, ObjectSymbol};
-        if let Ok(file) = object::File::parse(&*obj) {
+        if let Ok(file) = object::File::parse(obj) {
             for sym in file.symbols() {
-                // Only the `neovm_jit_*` undefined imports matter (skip the empty
-                // / section symbols object emits).
                 if sym.is_undefined()
                     && let Ok(name) = sym.name()
                     && name.starts_with("neovm_jit_")
@@ -659,14 +1014,14 @@ pub(crate) fn compile_leaf_to_object(
                     debug_assert!(
                         MIR_SHIM_NAMES.contains(&name),
                         "AOT object imports shim {name:?} not in ABI_TAG's salted \
-                         MIR_SHIM_NAMES — salt it (compute_abi_tag) before emitting it"
+                         MIR_SHIM_NAMES — salt it (compute_abi_tag) + export it (build.rs)"
                     );
                 }
             }
         }
     }
-
-    Ok(Some((obj, content_hash)))
+    #[cfg(not(debug_assertions))]
+    let _ = obj;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,6 +1077,78 @@ pub fn testkit_emit_and_place_so(
     let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
     link_object_to_so(&obj, &so_path).ok()?;
     Some(content_hash)
+}
+
+// ---------------------------------------------------------------------------
+// R2: dump-time loadup AOT producer (the v1 deliverable). The loaded final pdump
+// IS the loadup closure, so the candidate set = its obarray's bytecode-bound,
+// required-only, AOT-emittable functions (D0-only: no PGO/spec/inline).
+// ---------------------------------------------------------------------------
+
+/// One loadup function eligible for dump-time AOT: its name (for diagnostics +
+/// the content-hash inputs are ops/constants/arity) and the bytecode source the
+/// emitter needs. Borrowed from the obarray-held `ByteCodeFunction` (`'static`
+/// via the heap), so this carries refs, not copies.
+pub struct LoadupLeaf {
+    pub name: String,
+    pub ops: &'static [Op],
+    pub constants: &'static [Value],
+    /// Required-arg count = the AOT native arity (candidates are required-only).
+    pub arity: usize,
+}
+
+/// R2-B2: enumerate the AOT-candidate leaves of a loaded image (`ctx` = the final
+/// pdump loaded in-process). Walks the obarray for globally-interned symbols
+/// whose function cell holds a bytecode object, keeps the REQUIRED-ONLY ones
+/// (the MIR pure-tier arity shape: no `&optional`/`&rest`), and — when
+/// `d0_filter` — keeps only those the AOT emitter actually accepts (R2-B3:
+/// `compile_leaf_to_object` Some ⇒ MIR-lowerable, AOT-runnable, recipe-able).
+///
+/// D0-only: callers compile with `obarray=None` (no spec/inline), so the emitted
+/// code is the plain Tier-0-equivalent native. Returns the candidates in
+/// obarray order (deterministic for a given image).
+pub fn enumerate_loadup_leaves(
+    ctx: &crate::emacs_core::eval::Context,
+    d0_filter: bool,
+) -> Vec<LoadupLeaf> {
+    let mut out = Vec::new();
+    for name in ctx.obarray.all_symbols() {
+        let id = crate::emacs_core::intern::intern(name);
+        let Some(func_val) = ctx.obarray.symbol_function_id(id) else {
+            continue;
+        };
+        if !func_val.is_bytecode() {
+            continue;
+        }
+        let Some(bc) = func_val.get_bytecode_data() else {
+            continue;
+        };
+        // Required-only: matches the MIR pure tier's native-arity seeding (the AOT
+        // subset). &optional/&rest functions are not AOT candidates here.
+        if !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+            continue;
+        }
+        let arity = bc.params.required.len();
+        if d0_filter && !is_d0_aot_candidate(&bc.ops, &bc.constants, arity) {
+            continue;
+        }
+        out.push(LoadupLeaf {
+            name: name.to_string(),
+            ops: &bc.ops,
+            constants: &bc.constants,
+            arity,
+        });
+    }
+    out
+}
+
+/// R2-B3: whether a required-only leaf is a dump-time D0 AOT candidate — i.e. the
+/// AOT emitter accepts it (`compile_leaf_to_object` returns `Some`, meaning it is
+/// MIR-lowerable, passes `mir_is_aot_runnable`, and every const is recipe-able).
+/// This is the SAME gate the runtime load path uses, so a candidate emitted here
+/// will load there.
+pub fn is_d0_aot_candidate(ops: &[Op], constants: &[Value], arity: usize) -> bool {
+    matches!(compile_leaf_to_object(ops, constants, arity), Ok(Some(_)))
 }
 
 /// Crate-internal self-test for CALL-BEARING AOT, invoked from the
@@ -1154,14 +1581,11 @@ pub fn build_object_for_leaf(
 /// As [`build_object_for_leaf`], but also emits an exported, read-only data
 /// object `descriptor.0` holding `descriptor.1` bytes — the AOT descriptor the
 /// loader dlsym's to recover the leaf's metadata + reloc rebuild recipe (R1c-3).
-fn build_object_for_leaf_inner(
-    m: &mir::MirFunction,
-    entry_name: &str,
-    descriptor: Option<(&str, &[u8])>,
-) -> Result<Vec<u8>, CompileError> {
-    use mir::MirOp;
-
-    // --- Host ISA with PIC (the .o must be position-independent for the .so). ---
+/// Create a fresh PIC `ObjectModule` for AOT emission (the `.o` must be
+/// position-independent so the loader can relocate the linked `.so`). Shared by
+/// the single-leaf [`build_object_for_leaf_inner`] and the multi-leaf
+/// [`build_preload_object`] (R2-B4) — the latter defines N leaves into ONE module.
+fn make_aot_object_module() -> Result<ObjectModule, CompileError> {
     let mut flag_builder = settings::builder();
     // Mirror cranelift-jit's flags, except is_pic=true (a JITModule needs
     // is_pic=false; a shared object needs true so the loader can relocate it).
@@ -1171,15 +1595,27 @@ fn build_object_for_leaf_inner(
     flag_builder
         .set("is_pic", "true")
         .map_err(|e| module_init_err(e.to_string()))?;
-    let isa_builder = cranelift_native::builder()
-        .map_err(|e| module_init_err(e.to_string()))?;
+    let isa_builder = cranelift_native::builder().map_err(|e| module_init_err(e.to_string()))?;
     let isa = isa_builder
         .finish(settings::Flags::new(flag_builder))
         .map_err(|e| module_init_err(e.to_string()))?;
-
     let builder = ObjectBuilder::new(isa, "neovm_aot", default_libcall_names())
         .map_err(|e| module_init_err(e.to_string()))?;
-    let mut module = ObjectModule::new(builder);
+    Ok(ObjectModule::new(builder))
+}
+
+/// Define ONE leaf (entry + optional descriptor) into an existing `module`
+/// (`aot=true` lowering). Factored from [`build_object_for_leaf_inner`] so
+/// multiple leaves can be defined into a single shared module (R2-B4) before one
+/// `finish().emit()`. Does NOT finish the module. The `#[cfg(debug_assertions)]`
+/// shim-import audit (#15) is on the FINISHED bytes, so it stays in the callers.
+fn define_leaf_into_module(
+    module: &mut ObjectModule,
+    m: &mir::MirFunction,
+    entry_name: &str,
+    descriptor: Option<(&str, &[u8])>,
+) -> Result<(), CompileError> {
+    use mir::MirOp;
 
     // ----- Analysis prologue, identical to lower_mir_pure (compile.rs). --------
     // A CALL forces all-precise deopt + the runtime scaffolding; an escaping cons
@@ -1250,7 +1686,7 @@ fn build_object_for_leaf_inner(
     // entry is Linkage::Export under `entry_name` for the loader to dlsym; the
     // `neovm_jit_*` shims stay undefined Linkage::Import (host-exported) imports.
     super::compile::build_mir_leaf_fn(
-        &mut module,
+        module,
         m,
         &deopt_spill,
         &deopt_meta,
@@ -1276,12 +1712,23 @@ fn build_object_for_leaf_inner(
             .define_data(data_id, &desc)
             .map_err(|e| module_init_err(e.to_string()))?;
     }
+    Ok(())
+}
 
-    // No get_finalized_function: emit the relocatable object bytes.
-    module
+/// Build a single-leaf relocatable object: make a module, define the leaf, emit.
+fn build_object_for_leaf_inner(
+    m: &mir::MirFunction,
+    entry_name: &str,
+    descriptor: Option<(&str, &[u8])>,
+) -> Result<Vec<u8>, CompileError> {
+    let mut module = make_aot_object_module()?;
+    define_leaf_into_module(&mut module, m, entry_name, descriptor)?;
+    let obj = module
         .finish()
         .emit()
-        .map_err(|e| module_init_err(e.to_string()))
+        .map_err(|e| module_init_err(e.to_string()))?;
+    debug_assert_aot_imports_salted(&obj);
+    Ok(obj)
 }
 
 /// Test-only seams that let a unit test drive the cache AOT path (`aot_enabled`
@@ -2109,5 +2556,119 @@ mod tests {
 
         super::super::cache::clear();
         test_support::reset();
+    }
+
+    /// R2-B2 gate: `enumerate_loadup_leaves` walks a (tiny) obarray and returns
+    /// the bytecode-bound, required-only, D0-AOT-candidate fns — and EXCLUDES a
+    /// non-candidate (here: an `&optional` fn, rejected by the required-only
+    /// filter). Models the dump-time enumeration over the loaded loadup closure.
+    #[test]
+    fn r2_enumerate_loadup_leaves_finds_d0_candidates() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+
+        // Candidate A: (lambda (a) (+ a 5)) — pure arith, required-only → D0 AOT.
+        let mut a = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        a.lexical = true;
+        a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        a.constants = vec![Value::make_int(5)];
+        a.max_stack = 16;
+        let a_id = crate::emacs_core::intern::intern("r2-cand-add5");
+        ev.obarray.set_symbol_function_id(a_id, Value::make_bytecode(a));
+
+        // Non-candidate B: an &OPTIONAL fn — rejected by the required-only filter
+        // (matches the MIR pure-tier arity shape).
+        let mut b = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: vec![SymId(2)],
+            rest: None,
+        });
+        b.lexical = true;
+        b.ops = vec![Op::StackRef(0), Op::Return];
+        b.max_stack = 16;
+        let b_id = crate::emacs_core::intern::intern("r2-noncand-optional");
+        ev.obarray.set_symbol_function_id(b_id, Value::make_bytecode(b));
+
+        let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
+        let names: std::collections::HashSet<&str> =
+            leaves.iter().map(|l| l.name.as_str()).collect();
+        assert!(
+            names.contains("r2-cand-add5"),
+            "the pure arith required-only defun is a D0 candidate; got {names:?}"
+        );
+        assert!(
+            !names.contains("r2-noncand-optional"),
+            "the &optional defun must NOT be a candidate (required-only filter)"
+        );
+        // The candidate's recorded arity/ops match the source.
+        let cand = leaves.iter().find(|l| l.name == "r2-cand-add5").unwrap();
+        assert_eq!(cand.arity, 1);
+        assert_eq!(cand.ops, &[Op::Constant(0), Op::Add, Op::Return]);
+    }
+
+    /// R2-B4 gate: a multi-leaf preload object DEDUPS by content-hash — two
+    /// loadup fns with IDENTICAL bodies collapse to ONE emitted entry (not a
+    /// duplicate-symbol collision), a distinct body emits its own, and a
+    /// non-AOT-subset body is skipped. The bytes parse + carry exactly the unique
+    /// entries. (Team-lead: dedup, log the collapse, no silent drops.)
+    #[test]
+    fn r2_build_preload_object_dedups_identical_bodies() {
+        use object::{Object, ObjectSymbol};
+
+        let _ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+
+        // Two IDENTICAL bodies (1+ arg) under different names → same content hash.
+        let add5 = (
+            vec![Op::Constant(0), Op::Add, Op::Return],
+            vec![Value::make_int(5)],
+            1usize,
+        );
+        // A DISTINCT body (- arg 1).
+        let sub1 = (
+            vec![Op::Constant(0), Op::Sub, Op::Return],
+            vec![Value::make_int(1)],
+            1usize,
+        );
+        let leaf = |name: &str, t: &(Vec<Op>, Vec<Value>, usize)| LoadupLeaf {
+            name: name.to_string(),
+            // Leak to get 'static refs for the test (LoadupLeaf borrows 'static
+            // from the obarray heap in production; fine to leak in a unit test).
+            ops: Box::leak(t.0.clone().into_boxed_slice()),
+            constants: Box::leak(t.1.clone().into_boxed_slice()),
+            arity: t.2,
+        };
+        let leaves = vec![
+            leaf("dup-a", &add5),
+            leaf("dup-b", &add5), // identical body → dedup
+            leaf("distinct", &sub1),
+        ];
+
+        let (obj, stats) = build_preload_object(&leaves).expect("build preload object");
+        assert_eq!(stats.candidates, 3);
+        assert_eq!(stats.prepared, 3, "all three are AOT-runnable");
+        assert_eq!(stats.unique_emitted, 2, "two DISTINCT bodies emitted");
+        assert_eq!(stats.deduped, 1, "the identical-body pair collapsed once");
+        assert_eq!(stats.skipped_unsupported, 0);
+
+        // Parse: exactly 2 exported entry symbols (`__neovm_aot_{hash}_{tag}`),
+        // NOT the descriptors (`__neovm_aotd_...`) — no duplicate-symbol collision.
+        let file = object::File::parse(&*obj).expect("parse preload object");
+        let entries = file
+            .symbols()
+            .filter(|s| {
+                s.is_definition()
+                    && s.name()
+                        .map(|n| n.starts_with("__neovm_aot_") && !n.starts_with("__neovm_aotd_"))
+                        .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(entries, 2, "two unique entry symbols, no duplicate-symbol collision");
     }
 }
