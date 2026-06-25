@@ -9893,6 +9893,81 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
 }
 
 #[test]
+fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
+    // magit attaches an overlay before-string `#("fringe" 0 6 (display
+    // (left-fringe magit-fringe-bitmapv fringe)))` to every collapsible section
+    // heading. GNU's `(left-fringe BITMAP FACE)` display spec REPLACES the
+    // covered text in the text area (it renders a bitmap in the fringe instead),
+    // so the literal "fringe" string must NOT appear inline. We don't draw the
+    // fringe bitmap yet, but the text area must match GNU: nothing for the spec.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    // Build the propertized before-string out of band so the `display` property
+    // is a real `(left-fringe …)` list, exactly as magit constructs it.
+    let before_string = eval
+        .eval_str("(propertize \"fringe\" 'display '(left-fringe magit-fringe-bitmapv fringe))")
+        .expect("propertize fringe before-string");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Head:");
+        let bob = 0;
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: bob,
+            end: bob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), before_string);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(bob));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-left-fringe-before-string", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    // The buffer's own heading text still renders.
+    assert!(
+        rows.iter().any(|row| row.contains("Head:")),
+        "expected heading text to render, rows={rows:?}"
+    );
+    // The `(left-fringe …)` before-string produces NO inline glyph: the literal
+    // "fringe" must not appear anywhere in the text area.
+    assert!(
+        rows.iter().all(|row| !row.contains("fringe")),
+        "expected (left-fringe …) before-string to render nothing inline, rows={rows:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
     let mut eval = Context::new();
     let buf_id = eval

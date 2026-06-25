@@ -1837,6 +1837,10 @@ impl DisplayReplacementStringSourceItem {
 
 #[derive(Clone)]
 pub(crate) enum DisplayPropertyReplacementSourceItem {
+    /// A replacement that produces no inline glyph and consumes the covered
+    /// text with zero inline width, e.g. a `(left-fringe …)` display spec. GNU
+    /// draws the bitmap in the fringe; the text area shows nothing.
+    Empty,
     String(DisplayReplacementStringSourceItem),
     Stretch(DisplayReplacementStretchSourceItem),
     Media(DisplayReplacementMediaSourceResolution),
@@ -1859,6 +1863,10 @@ pub(crate) enum DisplayPropertyReplacementCursorPolicy {
 impl DisplayPropertyReplacementSourceItem {
     pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
         match self {
+            Self::Empty => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: 0.0,
+                stretch_like: false,
+            },
             Self::String(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
                 width_px: item.cursor_slot_width_px(),
                 stretch_like: false,
@@ -1950,6 +1958,7 @@ impl DisplayPropertyReplacementSourceItem {
                 ),
             )),
             DisplayReplacementProperty::Media(_) => inputs.media.map(Self::Media),
+            DisplayReplacementProperty::Fringe => Some(Self::Empty),
         }
     }
 }
@@ -2049,6 +2058,9 @@ enum LispStringAction {
         base_face: RenderFaceRef,
     },
     Emit(DisplayItem),
+    /// The covered chars were consumed by a no-inline-output display spec
+    /// (e.g. `(left-fringe …)`); produce no glyph and continue.
+    Skip,
 }
 
 pub(crate) struct LispStringSourceStack {
@@ -2112,6 +2124,7 @@ impl LispStringSourceStack {
                         None => item,
                     });
                 }
+                LispStringAction::Skip => {}
             }
         }
     }
@@ -2194,6 +2207,11 @@ impl LispStringSourceFrame {
                 }
                 DisplayPropertySourceCursorAction::Emit(item) => {
                     return LispStringAction::Emit(item);
+                }
+                DisplayPropertySourceCursorAction::Skip => {
+                    // `(left-fringe …)`: the covered chars (char_index already
+                    // advanced to property_end) produce no glyph.
+                    return LispStringAction::Skip;
                 }
                 DisplayPropertySourceCursorAction::FallThrough { layout } => {
                     item_layout = layout;
@@ -2318,6 +2336,8 @@ pub(crate) enum DisplayPropertySourceAction {
         kind: DisplayItemKind,
         layout: DisplayItemLayout,
     },
+    /// Consume the covered text and emit no glyph (e.g. `(left-fringe …)`).
+    Skip,
     Ignore {
         layout: DisplayItemLayout,
     },
@@ -2330,6 +2350,8 @@ pub(crate) enum DisplayPropertySourceCursorAction {
         base_face: RenderFaceRef,
     },
     Emit(DisplayItem),
+    /// Consume the covered text and emit no glyph (e.g. `(left-fringe …)`).
+    Skip,
     FallThrough {
         layout: DisplayItemLayout,
     },
@@ -2378,6 +2400,7 @@ impl DisplayPropertySourcePlan {
                 kind,
                 layout: self.classification.modifiers(),
             },
+            DisplayPropertySourceReplacement::Empty => DisplayPropertySourceAction::Skip,
             DisplayPropertySourceReplacement::Unresolved => DisplayPropertySourceAction::Ignore {
                 layout: self.classification.modifiers(),
             },
@@ -2408,6 +2431,7 @@ impl DisplayPropertySourceAction {
             Self::Emit { kind, layout } => DisplayPropertySourceCursorAction::Emit(
                 DisplayItem::new(span, face, kind).with_layout(layout),
             ),
+            Self::Skip => DisplayPropertySourceCursorAction::Skip,
             Self::Ignore { layout } => DisplayPropertySourceCursorAction::FallThrough { layout },
         }
     }
@@ -2416,6 +2440,10 @@ impl DisplayPropertySourceAction {
 enum DisplayPropertySourceReplacement {
     String(Value),
     Item(DisplayItemKind),
+    /// `(left-fringe …)` and friends: the covered text is replaced by nothing
+    /// inline (GNU draws the bitmap in the fringe). Consume the text, emit no
+    /// glyph.
+    Empty,
     Unresolved,
 }
 
@@ -2431,6 +2459,7 @@ impl DisplayPropertySourceReplacement {
             Some(DisplayReplacementProperty::Stretch(stretch)) => {
                 Self::Item(DisplayItemKind::Stretch(stretch.clone()))
             }
+            Some(DisplayReplacementProperty::Fringe) => Self::Empty,
             Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
                 .map(DisplayItemKind::MediaReplacement)

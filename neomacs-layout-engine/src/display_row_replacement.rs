@@ -832,6 +832,9 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayPropertyReplacementAppendPlanItem {
         match self.item {
+            DisplayPropertyReplacementSourceItem::Empty => {
+                DisplayPropertyReplacementAppendPlanItem::Empty
+            }
             DisplayPropertyReplacementSourceItem::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
                     state.default_display_string_base_face_for_active_row(

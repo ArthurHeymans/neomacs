@@ -360,6 +360,19 @@ pub(crate) fn is_display_space_spec(value: &Value) -> bool {
     value.is_cons() && value.cons_car().is_symbol_named("space")
 }
 
+/// `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)` display spec: a
+/// list whose HEAD symbol is `left-fringe`/`right-fringe`. GNU (`src/xdisp.c`
+/// `handle_display_spec` → `handle_single_display_spec`) treats this as a
+/// fringe-bitmap replacement that shows nothing inline. This is distinct from
+/// the `left-fringe`/`right-fringe` *length units* (`DisplayLengthSymbol`),
+/// which only ever appear as a bare symbol or inside a `space` `:width`/
+/// `:align-to` pixel expression — never as the head of the `display` value.
+pub(crate) fn is_display_fringe_spec(value: &Value) -> bool {
+    value.is_cons()
+        && (value.cons_car().is_symbol_named("left-fringe")
+            || value.cons_car().is_symbol_named("right-fringe"))
+}
+
 pub(crate) fn display_space_positive_number(value: Value) -> Option<f32> {
     value
         .as_float()

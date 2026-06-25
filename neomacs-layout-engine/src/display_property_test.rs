@@ -203,6 +203,62 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
 }
 
 #[test]
+fn classify_display_property_recognizes_left_and_right_fringe_specs() {
+    let _eval = Context::new();
+
+    // `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)` are replacement
+    // specs that produce no inline output (magit's section-heading fold arrows).
+    assert_eq!(
+        classify_display_property(Value::list(vec![
+            Value::symbol("left-fringe"),
+            Value::symbol("magit-fringe-bitmapv"),
+            Value::symbol("fringe"),
+        ]))
+        .replacement()
+        .cloned(),
+        Some(DisplayReplacementProperty::Fringe)
+    );
+    assert_eq!(
+        classify_display_property(Value::list(vec![
+            Value::symbol("right-fringe"),
+            Value::symbol("right-arrow"),
+        ]))
+        .replacement()
+        .cloned(),
+        Some(DisplayReplacementProperty::Fringe)
+    );
+}
+
+#[test]
+fn classify_display_property_keeps_fringe_length_units_in_space_specs() {
+    let _eval = Context::new();
+
+    // The `left-fringe` / `right-fringe` LENGTH UNITS appear inside a `space`
+    // `:align-to` pixel expression and must keep resolving as length symbols,
+    // NOT be mistaken for the `(left-fringe …)` fringe-bitmap replacement spec.
+    assert_eq!(
+        classify_display_property(Value::list(vec![
+            Value::symbol("space"),
+            Value::keyword(":align-to"),
+            Value::symbol("left-fringe"),
+        ]))
+        .replacement()
+        .cloned(),
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Symbol(
+                DisplayLengthSymbol::LeftFringe
+            )),
+            height: None,
+            ascent: None,
+        }))
+    );
+    assert_eq!(
+        parse_display_length_expr(Value::symbol("right-fringe")),
+        Some(DisplayLengthExpr::Symbol(DisplayLengthSymbol::RightFringe))
+    );
+}
+
+#[test]
 fn display_replacement_property_accepts_only_matching_media_replacements() {
     let image = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 1,

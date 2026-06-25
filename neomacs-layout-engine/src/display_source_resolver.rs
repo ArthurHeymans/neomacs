@@ -433,6 +433,10 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                 )?;
                 DisplayPropertyReplacementSourceInputs::empty().with_media(media)
             }
+            // `(left-fringe …)`: no inline output. The covered text is still
+            // consumed (the descriptor's skip range), and the empty source item
+            // emits no glyph.
+            DisplayReplacementProperty::Fringe => DisplayPropertyReplacementSourceInputs::empty(),
         };
         DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,

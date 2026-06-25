@@ -377,6 +377,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     DisplayPropertySourceCursorAction::Emit(item) => {
                         return Some(BufferTextCursorItem::Item(item));
                     }
+                    DisplayPropertySourceCursorAction::Skip => {
+                        // `(left-fringe …)`: covered text already consumed
+                        // (char_pos advanced to property_end); emit no glyph.
+                        continue;
+                    }
                     DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
                 };
                 return self
