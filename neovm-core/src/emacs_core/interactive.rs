@@ -3416,32 +3416,99 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
 
     eval.apply(Value::symbol("barf-if-buffer-read-only"), vec![])?;
 
+    // GNU `internal_self_insert` (cmds.c) implements overwrite-mode by deleting
+    // (and, where a wider char would shift text, padding) the characters that C
+    // overwrites, then inserting C.  Compute how many following characters to
+    // delete and how many trailing spaces to insert, mirroring GNU exactly,
+    // before building the inserted text.
+    let (chars_to_delete, spaces_to_insert) = self_insert_overwrite_plan(eval, ch, repeats)?;
+
     let repeat_count = repeats as usize;
-    let mut text = String::with_capacity(repeat_count * ch.len_utf8());
+    let mut text = String::with_capacity(repeat_count * ch.len_utf8() + spaces_to_insert);
     for _ in 0..repeat_count {
         text.push(ch);
     }
+    for _ in 0..spaces_to_insert {
+        text.push(' ');
+    }
     if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let (insert_pos, target_multibyte) = eval
-            .buffers
-            .get(current_id)
-            .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
-            .unwrap_or((EmacsBytePos::ZERO, true));
-        tracing::info!(
-            "self-insert-command: inserting {:?} at pos {} in buffer {:?}",
-            text,
-            insert_pos.get(),
-            current_id
-        );
-        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-            &eval.buffers,
-            current_id,
-            insert_pos,
-            TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
-        )?;
-        super::editfns::signal_before_text_change(eval, change)?;
-        let _ = eval.buffers.insert_into_buffer(current_id, &text);
-        super::editfns::signal_after_text_change(eval, change)?;
+        if chars_to_delete > 0 {
+            // GNU `replace_range (PT, PT + chars_to_delete, string)` followed by
+            // `Fforward_char (n)`: replace the overwritten run with the inserted
+            // characters (plus any padding spaces), then move point past the
+            // inserted characters so the cursor lands after C.
+            let (point_pos, accessible_end) = eval
+                .buffers
+                .get(current_id)
+                .map(|b| {
+                    (
+                        b.point_emacs_byte_pos(),
+                        b.accessible_emacs_byte_region().end(),
+                    )
+                })
+                .unwrap_or((EmacsBytePos::ZERO, EmacsBytePos::ZERO));
+            let mut del_end = point_pos;
+            for _ in 0..chars_to_delete {
+                if del_end >= accessible_end {
+                    break;
+                }
+                match eval
+                    .buffers
+                    .get(current_id)
+                    .and_then(|b| b.char_after_emacs_byte_len(del_end))
+                {
+                    Some(len) => del_end = del_end.add_len(len),
+                    None => break,
+                }
+            }
+            let start_char = eval
+                .buffers
+                .get(current_id)
+                .map(|b| b.emacs_byte_pos_to_lisp_char_pos(point_pos).as_i64())
+                .unwrap_or(1);
+            let end_char = eval
+                .buffers
+                .get(current_id)
+                .map(|b| b.emacs_byte_pos_to_lisp_char_pos(del_end).as_i64())
+                .unwrap_or(start_char);
+            // delete-region followed by insert reproduces replace_range's net
+            // effect; both route through signal_before/after_change like GNU.
+            // GNU's `replace_range' leaves point at the replacement start and
+            // then `Fforward_char (n)' advances it past the n inserted copies of
+            // C (but not the trailing padding spaces).  neomacs `insert' instead
+            // advances point past the whole inserted string, so set point
+            // explicitly to start + n to match GNU.
+            super::editfns::builtin_delete_region(
+                eval,
+                vec![Value::fixnum(start_char), Value::fixnum(end_char)],
+            )?;
+            eval.apply(Value::symbol("insert"), vec![Value::string(text.clone())])?;
+            eval.apply(
+                Value::symbol("goto-char"),
+                vec![Value::fixnum(start_char + repeats)],
+            )?;
+        } else {
+            let (insert_pos, target_multibyte) = eval
+                .buffers
+                .get(current_id)
+                .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
+                .unwrap_or((EmacsBytePos::ZERO, true));
+            tracing::info!(
+                "self-insert-command: inserting {:?} at pos {} in buffer {:?}",
+                text,
+                insert_pos.get(),
+                current_id
+            );
+            let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+                &eval.buffers,
+                current_id,
+                insert_pos,
+                TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+            )?;
+            super::editfns::signal_before_text_change(eval, change)?;
+            let _ = eval.buffers.insert_into_buffer(current_id, &text);
+            super::editfns::signal_after_text_change(eval, change)?;
+        }
     } else {
         tracing::warn!("self-insert-command: no current buffer");
     }
@@ -3457,6 +3524,135 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         vec![Value::symbol("post-self-insert-hook")],
     )?;
     Ok(Value::NIL)
+}
+
+/// Port of the overwrite-mode block of GNU `internal_self_insert` (cmds.c).
+///
+/// Returns `(chars_to_delete, spaces_to_insert)` describing how many following
+/// characters C overwrites and how many trailing spaces are needed to keep the
+/// remaining text from shifting.  Returns `(0, 0)` when not in overwrite mode,
+/// at end of buffer, or for the special cases (newline) GNU leaves alone, in
+/// which case the caller inserts C normally.
+fn self_insert_overwrite_plan(eval: &mut Context, c: char, n: i64) -> Result<(usize, usize), Flow> {
+    // overwrite = BVAR (current_buffer, overwrite_mode)
+    let overwrite = eval
+        .eval_symbol_by_id(crate::emacs_core::intern::intern("overwrite-mode"))
+        .unwrap_or(Value::NIL);
+    if overwrite.is_nil() {
+        return Ok((0, 0));
+    }
+    let Some(current_id) = eval.buffers.current_buffer_id() else {
+        return Ok((0, 0));
+    };
+    // Require PT < ZV (there must be a character to overwrite).
+    let (point_pos, accessible_end, c2) = {
+        let Some(buf) = eval.buffers.get(current_id) else {
+            return Ok((0, 0));
+        };
+        let pt = buf.point_emacs_byte_pos();
+        let zv = buf.accessible_emacs_byte_region().end();
+        let c2 = buf.char_after_emacs_byte_pos(pt);
+        (pt, zv, c2)
+    };
+    if point_pos >= accessible_end {
+        return Ok((0, 0));
+    }
+    let Some(c2) = c2 else {
+        return Ok((0, 0));
+    };
+
+    let binary = overwrite == Value::symbol("overwrite-mode-binary");
+    if binary {
+        // chars_to_delete = min (n, PTRDIFF_MAX)
+        return Ok((n.max(0) as usize, 0));
+    }
+
+    // Textual overwrite: newlines are inserted in the usual way.
+    if c == '\n' || c2 == '\n' {
+        return Ok((0, 0));
+    }
+
+    // cwidth = char-width (c); a zero-width char is inserted normally.
+    let cwidth = eval
+        .apply(Value::symbol("char-width"), vec![Value::fixnum(c as i64)])?
+        .as_fixnum()
+        .unwrap_or(0);
+    if cwidth == 0 {
+        return Ok((0, 0));
+    }
+
+    // pos = PT; curcol = current_column (); target_clm = curcol + n*cwidth.
+    let curcol = eval
+        .apply(Value::symbol("current-column"), vec![])?
+        .as_fixnum()
+        .unwrap_or(0);
+    let target_clm = curcol + n * cwidth;
+
+    // actual_clm = move-to-column (target_clm); this moves point.
+    let actual_clm = eval
+        .apply(
+            Value::symbol("move-to-column"),
+            vec![Value::fixnum(target_clm)],
+        )?
+        .as_fixnum()
+        .unwrap_or(target_clm);
+
+    // chars_to_delete = PT - pos (characters between the original point and the
+    // column-target point).
+    let (new_point, prev_is_tab) = {
+        let Some(buf) = eval.buffers.get(current_id) else {
+            return Ok((0, 0));
+        };
+        let np = buf.point_emacs_byte_pos();
+        // The character immediately before the new point (used only when we
+        // overshoot the target column, e.g. landing inside a tab).
+        let prev_is_tab = buf
+            .char_before_emacs_byte_len(np)
+            .map(|len| np.saturating_sub_len(len))
+            .and_then(|prev| buf.char_after_emacs_byte_pos(prev))
+            .map(|ch| ch == '\t')
+            .unwrap_or(false);
+        (np, prev_is_tab)
+    };
+    let mut chars_to_delete = byte_pos_char_distance(eval, current_id, point_pos, new_point);
+    let mut spaces_to_insert = 0usize;
+
+    if actual_clm > target_clm {
+        // We will delete too many columns.  Keep a trailing tab whole, else
+        // fill with spaces so the remaining text won't shift.
+        if prev_is_tab {
+            chars_to_delete = chars_to_delete.saturating_sub(1);
+        } else {
+            spaces_to_insert = (actual_clm - target_clm).max(0) as usize;
+        }
+    }
+
+    // SET_PT (pos): restore point to where the cursor was before the trial move.
+    let start_char = eval
+        .buffers
+        .get(current_id)
+        .map(|b| b.emacs_byte_pos_to_lisp_char_pos(point_pos).as_i64())
+        .unwrap_or(1);
+    eval.buffers
+        .goto_buffer_emacs_byte_pos(current_id, point_pos);
+    let _ = start_char;
+
+    Ok((chars_to_delete, spaces_to_insert))
+}
+
+/// Number of characters between two byte positions in BUF (BEG <= END).
+fn byte_pos_char_distance(
+    eval: &Context,
+    buf_id: crate::buffer::BufferId,
+    beg: EmacsBytePos,
+    end: EmacsBytePos,
+) -> usize {
+    let Some(buf) = eval.buffers.get(buf_id) else {
+        return 0;
+    };
+    let beg_char = buf.emacs_byte_pos_to_lisp_char_pos(beg).as_i64();
+    let end_char = buf.emacs_byte_pos_to_lisp_char_pos(end).as_i64();
+    (end_char - beg_char).max(0) as usize
 }
 
 fn self_insert_should_auto_fill(eval: &Context, ch: char) -> bool {

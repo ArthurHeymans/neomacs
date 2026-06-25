@@ -170,6 +170,19 @@ fn tab_width_in_state(
     }
 }
 
+/// Current buffer's `tab-width', used by `char-width' for a TAB character.
+///
+/// GNU `CHARACTER_WIDTH` (buffer.h) returns `SANE_TAB_WIDTH (current_buffer)`
+/// for `\t', i.e. the buffer-local `tab-width' clamped to 1..1000.  This is
+/// the column width `char-width' reports for a tab, and what
+/// `internal_self_insert' uses to decide how much to overwrite.
+pub(crate) fn current_buffer_tab_width(ctx: &crate::emacs_core::eval::Context) -> usize {
+    let buf = ctx.buffers.current_buffer();
+    let width = tab_width_in_state(&ctx.obarray, &[], buf);
+    // GNU SANE_TAB_WIDTH clamps to 1..=1000.
+    width.clamp(1, 1000)
+}
+
 fn indent_tabs_mode_in_state(
     obarray: &Obarray,
     dynamic: &[OrderedRuntimeBindingMap],

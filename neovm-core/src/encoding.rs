@@ -3495,6 +3495,19 @@ pub(crate) fn builtin_char_width_in_context(
     ctx: &crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    // GNU `CHARACTER_WIDTH` (buffer.h) returns `SANE_TAB_WIDTH (current_buffer)'
+    // for a TAB, i.e. the buffer-local `tab-width' (not a hardcoded constant).
+    // `char-width' must reflect this so e.g. overwrite-mode's tab handling and
+    // column math agree with GNU.  Only short-circuit when no display table
+    // remaps TAB; otherwise fall through to the display-table-aware path.
+    if matches!(
+        args.first().map(|v| v.kind()),
+        Some(ValueKind::Fixnum(0x09))
+    ) && active_display_table(ctx).is_none()
+    {
+        let width = crate::emacs_core::indent::current_buffer_tab_width(ctx);
+        return Ok(Value::fixnum(width as i64));
+    }
     builtin_char_width_with_display_table(active_display_table(ctx), args)
 }
 
