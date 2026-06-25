@@ -3658,3 +3658,25 @@ fn div_core_divergence_surface_overwrite_mode_self_insert_replaces_chars() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_overwrite_mode_tab_clears_to_tabstop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs debug: OK ("a\tfgh" 3)
+    // Neomacs debug:   OK ("a\tbcdefgh" 3)
+    // In overwrite-mode, inserting TAB should replace text through the next
+    // tab stop. GNU replaces b/c/d/e with one tab at column 1 (tab-width 4),
+    // leaving fgh. Neomacs inserts the tab without deleting overwritten text.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdefgh")
+  (setq tab-width 4)
+  (goto-char 2)
+  (overwrite-mode 1)
+  (self-insert-command 1 ?\t)
+  (list (buffer-string) (point)))
+"##,
+    );
+}
