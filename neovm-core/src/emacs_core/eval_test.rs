@@ -13777,6 +13777,131 @@ fn jit_bench_loop() {
     );
 }
 
+/// R2-D DECISIVE BENCH (the AOT sweet spot): a COMPUTE-heavy AOT-candidate body
+/// called FEWER than `HOT_THRESHOLD` (10k) times — so the JIT NEVER tiers it up
+/// (it stays interpreted), but AOT serves it NATIVE FROM CALL 1. This is the case
+/// the trivial-accessor batch bench could NOT show: AOT native code == the JIT's
+/// MIR codegen, so AOT can only inherit a win where the JIT HAS one — i.e. on
+/// compute, not on trivial/call-dominated bodies. Measures AOT-native-from-call-1
+/// vs interpreter on the SAME pure-arith loop body.
+///
+/// Methodology mirrors `jit_bench_loop` (warm once, min-of-N, BENCH-panic), but
+/// the "native" side is served through the REAL AOT path (emit → link → inject the
+/// unit → `NEOVM_AOT=force` → `try_run_compiled` serves it AOT-backed at heat=0),
+/// and the "interp" side is a force-COLD copy that never tiers (heat pinned cold).
+/// The body does ~`n` internal arithmetic iterations per call; we use a moderate
+/// `n` and report the single-call min (the per-call native-vs-interp ratio is the
+/// no-warmup throughput the prewarm delivers from call 1).
+#[cfg(all(feature = "jit", target_os = "linux"))]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn aot_bench_compute_loop() {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::jit::aot;
+    use crate::emacs_core::value::LambdaParams;
+
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // The SAME pure-arith countdown-accumulator loop body as `jit_bench_loop_value`
+    // (Constant/StackRef/Gtr/GotoIfNil/Add/Sub1/StackSet/Goto/Return) — AOT-runnable.
+    // Copied VERBATIM from that helper so both sides run identical semantics.
+    let ops = vec![
+        Op::Constant(0),
+        Op::StackRef(1),
+        Op::Constant(0),
+        Op::Gtr,
+        Op::GotoIfNil(13),
+        Op::StackRef(1),
+        Op::StackRef(1),
+        Op::Add,
+        Op::StackSet(1),
+        Op::StackRef(1),
+        Op::Sub1,
+        Op::StackSet(2),
+        Op::Goto(1),
+        Op::StackRef(0),
+        Op::Return,
+    ];
+    let constants = vec![Value::make_int(0)];
+    let arity = 1usize;
+
+    // Emit + link the body's AOT `.so`, dlopen, inject by content hash (the pure
+    // arith body has NO shim imports, so its `.so` dlopens in the unit-test binary).
+    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity)
+        .expect("compile ok")
+        .expect("pure-arith body is AOT-runnable");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let so_path = dir.path().join("aot_bench_compute.so");
+    aot::link_object_to_so(&obj, &so_path).expect("link");
+    let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+    let unit = std::sync::Arc::new(crate::emacs_core::jit::compile::LoadedUnit::new(lib));
+    aot::test_support::set_forced_enabled(true);
+    aot::test_support::inject_unit(content_hash, unit);
+
+    // The AOT-served copy: a FRESH bytecode fn (its own compiled_id), cold heat —
+    // try_run_compiled will consult AOT FIRST (forced) and serve it native from
+    // call 1 (no JIT warmup). Interp copy: force-COLD, never tiers (< HOT_THRESHOLD).
+    let mut aot_fn = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    aot_fn.lexical = true;
+    aot_fn.ops = ops.clone();
+    aot_fn.constants = constants.clone();
+    aot_fn.max_stack = 16;
+    let aot_val = Value::make_bytecode(aot_fn.clone());
+
+    let cold = jit_bench_loop_value(BenchTier::Cold);
+
+    // Confirm the AOT copy is actually served AOT-backed (not JIT'd) at heat=0.
+    let ctx = &mut ev as *mut Context;
+    let n = 2_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    let first = crate::emacs_core::jit::cache::try_run_compiled(
+        ctx,
+        &aot_fn,
+        aot_val,
+        &[Value::make_int(n)],
+    )
+    .expect("aot run ok");
+    assert_eq!(first, Some(want.bits()), "AOT compute result");
+    assert_eq!(
+        crate::emacs_core::jit::cache::cached_leaf_is_aot_for_func(&aot_fn),
+        Some(true),
+        "the compute body must be served AOT-backed (native from call 1), not JIT'd"
+    );
+
+    // min-of-9 single-call wall-clock, each side. AOT = native-from-call-1;
+    // cold = interpreted (never reaches HOT_THRESHOLD).
+    let aot_min = {
+        let mut best = std::time::Duration::MAX;
+        for _ in 0..9 {
+            let t = std::time::Instant::now();
+            let r = crate::emacs_core::jit::cache::try_run_compiled(
+                ctx,
+                &aot_fn,
+                aot_val,
+                &[Value::make_int(n)],
+            )
+            .expect("aot run");
+            best = best.min(t.elapsed());
+            assert_eq!(r, Some(want.bits()));
+        }
+        best
+    };
+    let int_min = jit_bench_min(&mut ev, cold, n, want, 9);
+
+    aot::test_support::reset();
+    crate::emacs_core::jit::cache::clear();
+    panic!(
+        "BENCH aot-compute-loop(n={n}): aot-native {aot_min:?} interp {int_min:?} -> {:.2}x (native-from-call-1, no JIT warmup)",
+        int_min.as_secs_f64() / aot_min.as_secs_f64()
+    );
+}
+
 /// Profiling aid (NOT a pass/fail test): dump the dynamic, execution-weighted
 /// opcode histogram the interpreter runs for a workload — which opcodes actually
 /// dominate execution, the input the deferred tier-0 IC/quickening work needs to

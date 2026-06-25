@@ -180,8 +180,24 @@ B_FORCE="$(best_of force)"
 echo "BATCH AOT=0    : ${B_OFF:-NA} s"
 echo "BATCH AOT=force: ${B_FORCE:-NA} s"
 if [[ -n "${B_OFF:-}" && -n "${B_FORCE:-}" ]]; then
-    awk -v o="$B_OFF" -v f="$B_FORCE" 'BEGIN{printf "BATCH speedup (off/force): %.2fx  [>1 = AOT faster]\n", o/f}'
+    awk -v o="$B_OFF" -v f="$B_FORCE" 'BEGIN{printf "BATCH-trivial speedup (off/force): %.2fx  [>1 = AOT faster]\n", o/f}'
 fi
+echo "  NOTE: ~1x is EXPECTED here — trivial accessors are exactly where our JIT"
+echo "  has no win to inherit (JIT is ~1x on call-dominated/trivial, 12-19x on compute)."
+
+# ---------------------------------------------------------------------------
+# 4. BATCH-COMPUTE (the AOT SWEET SPOT): a compute-heavy AOT-candidate body served
+#    NATIVE FROM CALL 1 vs the interpreter (the body never reaches HOT_THRESHOLD,
+#    so the JIT never tiers it → interp baseline). This is the decisive measurement
+#    — AOT native code == the JIT's MIR codegen, so it inherits the JIT's compute
+#    win FROM CALL 1. Run as the in-tree `aot_bench_compute_loop` (#[ignore] release
+#    bench, BENCH-panic), the same harness as run-jit-bench.sh.
+# ---------------------------------------------------------------------------
+echo
+echo "--- 4. batch-compute (AOT-native-from-call-1 vs interp, the sweet spot) ---"
+cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+    -E 'test(/aot_bench_compute_loop/)' --no-fail-fast --no-capture 2>&1 \
+    | grep -oE 'BENCH aot-compute-loop.*' || echo "  (compute bench did not report — check the build)"
 
 echo
 echo "=== R2-D bench complete ==="
