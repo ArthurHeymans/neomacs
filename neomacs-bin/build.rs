@@ -1,51 +1,18 @@
 use std::env;
 
 /// The full `neovm_jit_*` runtime-shim set an AOT preload `.so` imports
-/// (`#[unsafe(no_mangle)] pub` in neovm-core). MUST stay in sync with neovm-core's
-/// `MIR_SHIM_NAMES` / `JIT_SHIM_ANCHOR` / build.rs (jit/aot.rs + jit/compile.rs).
+/// (`#[unsafe(no_mangle)] pub` in neovm-core). SINGLE SOURCE OF TRUTH (R2-C2):
+/// the list lives in `neovm-core/src/emacs_core/jit/shim_names.rs` and is
+/// `include!`-ed here (as `NEOVM_JIT_SHIM_NAMES`) so this production export set
+/// can never drift from neovm-core's `MIR_SHIM_NAMES` or its lib build.rs export
+/// set. Still MUST match the shim DEFINITIONS in jit/compile.rs + `JIT_SHIM_ANCHOR`.
 /// R2-B5: the PRODUCTION `neomacs` binary exports these into its DYNAMIC symbol
 /// table so the dump-time `libneomacs-preload.so` (R2) binds its undefined shim
 /// imports at `dlopen`. Under the workspace linker `wild`, plain `-rdynamic` does
 /// NOT promote these address-only-referenced fns — each must be named with
 /// `--export-dynamic-symbol` (the R1c carry-forward; without it the preload `.so`
 /// aborts on first shim call).
-const NEOVM_JIT_SHIMS: &[&str] = &[
-    "neovm_jit_apply",
-    "neovm_jit_backedge",
-    "neovm_jit_builtin1",
-    "neovm_jit_builtin2",
-    "neovm_jit_builtin3",
-    "neovm_jit_builtin_slice",
-    "neovm_jit_call",
-    "neovm_jit_call_spec",
-    "neovm_jit_cons",
-    "neovm_jit_eq_slow",
-    "neovm_jit_gc_push",
-    "neovm_jit_gc_restore",
-    "neovm_jit_gc_save",
-    "neovm_jit_integerp_slow",
-    "neovm_jit_list",
-    "neovm_jit_match_handler",
-    "neovm_jit_named_builtin",
-    "neovm_jit_numberp_slow",
-    "neovm_jit_pop_handler",
-    "neovm_jit_push_catch",
-    "neovm_jit_push_cc",
-    "neovm_jit_push_cc_raw",
-    "neovm_jit_save_current_buffer",
-    "neovm_jit_save_excursion",
-    "neovm_jit_save_restriction",
-    "neovm_jit_save_window_excursion",
-    "neovm_jit_switch",
-    "neovm_jit_switch_stale",
-    "neovm_jit_symbolp_slow",
-    "neovm_jit_throw",
-    "neovm_jit_unbind",
-    "neovm_jit_unwind_protect",
-    "neovm_jit_varbind",
-    "neovm_jit_varref",
-    "neovm_jit_varset",
-];
+include!("../neovm-core/src/emacs_core/jit/shim_names.rs");
 
 /// R2-B5: export the `neovm_jit_*` shims into the `neomacs` binary's dynamic
 /// symbol table (Linux + `jit` only) so the AOT preload `.so` resolves them at
@@ -56,13 +23,14 @@ fn export_jit_shims_for_aot(target_os: &str) {
         return;
     }
     println!("cargo:rustc-link-arg-bin=neomacs=-rdynamic");
-    for shim in NEOVM_JIT_SHIMS {
+    for shim in NEOVM_JIT_SHIM_NAMES {
         println!("cargo:rustc-link-arg-bin=neomacs=-Wl,--export-dynamic-symbol={shim}");
     }
 }
 
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    println!("cargo:rerun-if-changed=../neovm-core/src/emacs_core/jit/shim_names.rs");
     export_jit_shims_for_aot(&target_os);
     if target_os == "windows" {
         let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();

@@ -65,51 +65,23 @@ pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 /// `.so` artifacts predate this).
 const ABI_TAG_VERSION: u32 = 2;
 
-/// The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
-/// against the host at `dlopen`). This is the complete `declare_rt_refs` set —
-/// the host exports ALL of them (`#[unsafe(no_mangle)] pub` + the per-shim
-/// `--export-dynamic-symbol` in build.rs) and ALL are salted into [`ABI_TAG`]
-/// (audit #15), so a shim-ABI change invalidates artifacts and a call-bearing
-/// leaf that references any of them resolves at load. MUST stay in sync with the
-/// shim definitions in `compile.rs` (and the build.rs export list + the
-/// `JIT_SHIM_ANCHOR` array, all enumerated identically).
-pub(crate) const MIR_SHIM_NAMES: &[&str] = &[
-    "neovm_jit_apply",
-    "neovm_jit_backedge",
-    "neovm_jit_builtin1",
-    "neovm_jit_builtin2",
-    "neovm_jit_builtin3",
-    "neovm_jit_builtin_slice",
-    "neovm_jit_call",
-    "neovm_jit_call_spec",
-    "neovm_jit_cons",
-    "neovm_jit_eq_slow",
-    "neovm_jit_gc_push",
-    "neovm_jit_gc_restore",
-    "neovm_jit_gc_save",
-    "neovm_jit_integerp_slow",
-    "neovm_jit_list",
-    "neovm_jit_match_handler",
-    "neovm_jit_named_builtin",
-    "neovm_jit_numberp_slow",
-    "neovm_jit_pop_handler",
-    "neovm_jit_push_catch",
-    "neovm_jit_push_cc",
-    "neovm_jit_push_cc_raw",
-    "neovm_jit_save_current_buffer",
-    "neovm_jit_save_excursion",
-    "neovm_jit_save_restriction",
-    "neovm_jit_save_window_excursion",
-    "neovm_jit_switch",
-    "neovm_jit_switch_stale",
-    "neovm_jit_symbolp_slow",
-    "neovm_jit_throw",
-    "neovm_jit_unbind",
-    "neovm_jit_unwind_protect",
-    "neovm_jit_varbind",
-    "neovm_jit_varref",
-    "neovm_jit_varset",
-];
+// The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
+// against the host at `dlopen`). This is the complete `declare_rt_refs` set —
+// the host exports ALL of them (`#[unsafe(no_mangle)] pub` + the per-shim
+// `--export-dynamic-symbol` in build.rs) and ALL are salted into `ABI_TAG`
+// (audit #15), so a shim-ABI change invalidates artifacts and a call-bearing
+// leaf that references any of them resolves at load.
+//
+// SINGLE SOURCE OF TRUTH (R2-C2): the list itself lives in `shim_names.rs` and
+// is `include!`-ed here AND by both `build.rs` files, so the emit/salt set, the
+// neovm-core lib export set, and the neomacs-bin export set can never drift.
+// `MIR_SHIM_NAMES` is an alias for the included `NEOVM_JIT_SHIM_NAMES`. Still
+// MUST match the shim DEFINITIONS in `compile.rs` + the `JIT_SHIM_ANCHOR` array.
+include!("shim_names.rs");
+
+/// The exported `neovm_jit_*` shim name set (alias of the single-source
+/// `NEOVM_JIT_SHIM_NAMES` from `shim_names.rs`).
+pub(crate) const MIR_SHIM_NAMES: &[&str] = NEOVM_JIT_SHIM_NAMES;
 
 /// Compute [`ABI_TAG`] at compile time from the structural invariants. A `const`
 /// FNV-1a over the salient constants + the shim names, so any drift in the ABI
@@ -866,7 +838,7 @@ pub fn build_preload_object(
         .finish()
         .emit()
         .map_err(|e| module_init_err(e.to_string()))?;
-    debug_assert_aot_imports_salted(&obj);
+    assert_aot_imports_exported(&obj)?;
     Ok((obj, stats))
 }
 
@@ -996,32 +968,32 @@ pub fn run_dump_time_preload(ctx: &crate::emacs_core::eval::Context, dump_dir: &
     }
 }
 
-/// Audit #15 (debug only): assert every UNDEFINED `neovm_jit_*` import in an
-/// emitted AOT object is in [`MIR_SHIM_NAMES`] — the set the host exports AND
-/// salts into `ABI_TAG`. A shim outside it would not re-tag stale `.so`s on an
-/// ABI change (stale-`.so`-runs-against-changed-ABI), and would not resolve at
-/// dlopen. Catches a future lowering that emits an unsalted/unexported import.
-fn debug_assert_aot_imports_salted(obj: &[u8]) {
-    #[cfg(debug_assertions)]
-    {
-        use object::{Object, ObjectSymbol};
-        if let Ok(file) = object::File::parse(obj) {
-            for sym in file.symbols() {
-                if sym.is_undefined()
-                    && let Ok(name) = sym.name()
-                    && name.starts_with("neovm_jit_")
-                {
-                    debug_assert!(
-                        MIR_SHIM_NAMES.contains(&name),
-                        "AOT object imports shim {name:?} not in ABI_TAG's salted \
-                         MIR_SHIM_NAMES — salt it (compute_abi_tag) + export it (build.rs)"
-                    );
-                }
-            }
+/// Audit #15 + #32-audit: assert every UNDEFINED `neovm_jit_*` import in an
+/// emitted AOT object is in [`MIR_SHIM_NAMES`] — the SINGLE-SOURCE exported set
+/// (`shim_names.rs`, salted into `ABI_TAG` + exported by both build.rs files). A
+/// shim outside it would not re-tag stale `.so`s on an ABI change AND would not
+/// resolve at dlopen (an unexported import). FAILS CLOSED: this is now a HARD
+/// (non-debug) emit-time check returning `Err` — the #32 audit flagged that the
+/// old debug-only assert wouldn't catch a release-build widening that emits an
+/// unexported shim. So a future lowering that emits an unsalted/unexported import
+/// errors the emit (→ JIT) instead of producing a `.so` that aborts at dlopen.
+fn assert_aot_imports_exported(obj: &[u8]) -> Result<(), CompileError> {
+    use object::{Object, ObjectSymbol};
+    let file = object::File::parse(obj)
+        .map_err(|e| module_init_err(format!("parse emitted AOT object: {e}")))?;
+    for sym in file.symbols() {
+        if sym.is_undefined()
+            && let Ok(name) = sym.name()
+            && name.starts_with("neovm_jit_")
+            && !MIR_SHIM_NAMES.contains(&name)
+        {
+            return Err(module_init_err(format!(
+                "AOT object imports shim {name:?} not in the exported MIR_SHIM_NAMES \
+                 (shim_names.rs) — salt it (compute_abi_tag) + export it (both build.rs)"
+            )));
         }
     }
-    #[cfg(not(debug_assertions))]
-    let _ = obj;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1389,6 +1361,141 @@ fn load_unit(content_hash: u128) -> Option<std::sync::Arc<super::compile::Loaded
     Some(unit)
 }
 
+// ---------------------------------------------------------------------------
+// R2-C1/C2: the dump-time PRELOAD — ONE `.so` (all loadup leaves) beside the
+// running executable, validated by a manifest fingerprint interlock + loaded
+// with RTLD_NOW (fail-closed). Distinct from the per-hash NEOVM_AOT_DIR index
+// above (R1c): the preload is a single unit serving every loadup entry by dlsym.
+// ---------------------------------------------------------------------------
+
+/// Path of the preload `.so` beside `exe` (same dir as the pdump, by
+/// construction — the dump-time producer wrote it next to `neomacs`).
+pub fn preload_so_path_for_executable(exe: &std::path::Path) -> std::path::PathBuf {
+    exe.parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(PRELOAD_SO_NAME)
+}
+
+/// Path of the preload manifest beside `exe`.
+pub fn preload_manifest_path_for_executable(exe: &std::path::Path) -> std::path::PathBuf {
+    exe.parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(PRELOAD_MANIFEST_NAME)
+}
+
+/// Parse + validate the preload manifest at `manifest_path` against THIS image.
+/// Returns `true` only when the manifest is well-formed AND its `version`,
+/// `abi_tag`, and `fingerprint` all match the running build — the STALE
+/// INTERLOCK: a foreign / stale / ABI-incompatible preload fails here so the
+/// loader skips it (→ JIT), never mis-serving native code built for a different
+/// image. Any parse/IO/mismatch → `false` (logged at debug).
+fn preload_manifest_matches(manifest_path: &std::path::Path) -> bool {
+    let text = match std::fs::read_to_string(manifest_path) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::debug!("aot-preload: manifest read failed ({e}); skip→JIT");
+            return false;
+        }
+    };
+    let mut version: Option<u32> = None;
+    let mut abi_tag: Option<u32> = None;
+    let mut fingerprint: Option<String> = None;
+    for line in text.lines() {
+        let mut it = line.split_whitespace();
+        match (it.next(), it.next()) {
+            (Some("version"), Some(v)) => version = v.parse().ok(),
+            (Some("abi_tag"), Some(v)) => abi_tag = u32::from_str_radix(v, 16).ok(),
+            (Some("fingerprint"), Some(v)) => fingerprint = Some(v.to_string()),
+            _ => {} // `leaves`/`hash` lines are diagnostics; ignore here.
+        }
+    }
+    if version != Some(PRELOAD_MANIFEST_VERSION) {
+        tracing::debug!("aot-preload: manifest version mismatch ({version:?}); skip→JIT");
+        return false;
+    }
+    if abi_tag != Some(ABI_TAG) {
+        tracing::debug!("aot-preload: manifest abi_tag mismatch ({abi_tag:?}); skip→JIT");
+        return false;
+    }
+    // The interlock: the manifest fingerprint must equal the RUNNING pdump's.
+    let running = crate::emacs_core::pdump::fingerprint_hex();
+    if fingerprint.as_deref() != Some(running) {
+        tracing::debug!(
+            "aot-preload: manifest fingerprint mismatch (manifest={fingerprint:?} running={running}); skip→JIT"
+        );
+        return false;
+    }
+    true
+}
+
+thread_local! {
+    /// The preload unit (one `.so` serving all loadup entries), `dlopen`'d once
+    /// per thread on first [`load_preload`]. `Some(None)` records a checked miss
+    /// (no/invalid preload) so we do not re-probe the filesystem every call.
+    static PRELOAD_UNIT: std::cell::RefCell<
+        Option<Option<std::sync::Arc<super::compile::LoadedUnit>>>,
+    > = const { std::cell::RefCell::new(None) };
+}
+
+/// R2-C2: load (once per thread) the validated preload `.so` beside the running
+/// executable. Returns the shared unit, or `None` when there is no preload, the
+/// manifest interlock fails, or `dlopen` fails — every case a clean skip→JIT
+/// (strictly additive). `dlopen` uses **RTLD_NOW | RTLD_LOCAL** so all 35
+/// `neovm_jit_*` imports resolve UP FRONT: an unresolvable import fails the
+/// `dlopen` (→ `None` → JIT) instead of aborting the process on the first shim
+/// call (the RTLD_LAZY abort the #32 audit flagged).
+pub(crate) fn load_preload() -> Option<std::sync::Arc<super::compile::LoadedUnit>> {
+    // Test seam: a directly-injected preload unit (+ a fingerprint that must
+    // match the running image) takes precedence, so a test can drive the
+    // prepopulate path — and the fingerprint-MISMATCH path — without a real `.so`
+    // beside the test binary.
+    #[cfg(test)]
+    if let Some(injected) = test_support::injected_preload() {
+        return injected;
+    }
+    if let Some(memo) = PRELOAD_UNIT.with(|m| m.borrow().clone()) {
+        return memo;
+    }
+    let resolved = load_preload_uncached();
+    PRELOAD_UNIT.with(|m| *m.borrow_mut() = Some(resolved.clone()));
+    resolved
+}
+
+/// The uncached resolve + validate + dlopen core of [`load_preload`].
+fn load_preload_uncached() -> Option<std::sync::Arc<super::compile::LoadedUnit>> {
+    let exe = std::env::current_exe().ok()?;
+    let so_path = preload_so_path_for_executable(&exe);
+    let manifest_path = preload_manifest_path_for_executable(&exe);
+    if !so_path.exists() || !manifest_path.exists() {
+        return None; // no preload built for this image — pure JIT.
+    }
+    if !preload_manifest_matches(&manifest_path) {
+        return None; // stale/foreign/ABI-mismatch — skip→JIT (never mis-serve).
+    }
+    // dlopen RTLD_NOW|RTLD_LOCAL (#32-audit fix): resolve all imports up front so
+    // an unresolvable shim fails the open → skip→JIT, not an abort on first call.
+    // SAFETY: a `.so` we emitted; its undefined imports are the `neovm_jit_*`
+    // shims, bound against the -rdynamic host. The Arc keeps it mapped for the
+    // lifetime of every leaf it backs.
+    let lib = unsafe {
+        libloading::os::unix::Library::open(
+            Some(&so_path),
+            libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_LOCAL,
+        )
+    }
+    .map_err(|e| {
+        tracing::warn!(
+            "aot-preload: dlopen {} failed ({e}); skip→JIT",
+            so_path.display()
+        );
+        e
+    })
+    .ok()?;
+    let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib.into()));
+    tracing::debug!("aot-preload: loaded {}", so_path.display());
+    Some(unit)
+}
+
 /// Whether AOT loading is enabled this session. R1c proves the path in-test via
 /// `NEOVM_AOT=force`; R2 wires the real dump-time pre-warm.
 pub(crate) fn aot_enabled() -> bool {
@@ -1554,6 +1661,118 @@ pub(crate) fn load_leaf_from_unit(
         )
     };
     Some(leaf)
+}
+
+/// Stats from a prepopulate pass (logged so a degraded preload is visible).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PrepopulateStats {
+    /// Loadup AOT-candidate functions enumerated.
+    pub candidates: usize,
+    /// CompiledLeaves loaded from the preload `.so` + inserted into COMPILED.
+    pub inserted: usize,
+    /// Candidates whose entry was not in the preload / failed to load (→ JIT).
+    pub missed: usize,
+}
+
+/// R2-C3: PREPOPULATE the per-thread `COMPILED` cache from the preload `.so`, so
+/// every AOT-eligible loadup function serves NATIVE FROM CALL 1 (no JIT warmup).
+///
+/// Walks `ctx`'s obarray for the SAME AOT-candidate set the dump-time producer
+/// emitted (same enumerate + D0 filter + content hash), loads each leaf from the
+/// single preload unit (eq-identical reloc consts from the LIVE function — #A),
+/// and inserts it into `COMPILED` keyed by that function's `compiled_id`. The 13
+/// dedup'd bodies (distinct fns, one shared `.so` entry) each get their OWN
+/// `CompiledLeaf` (own `reloc_data` + `compiled_id`) pointing at the shared entry.
+///
+/// CRITICAL ordering (R1a heap-identity guard): `cache::prepopulate_aot_leaves`
+/// FIRST syncs `COMPILED_HEAP` to the current heap (clearing the then-empty
+/// cache), THEN inserts — otherwise the first GC's `sync_cache_to_current_heap`
+/// would see `None != current` and CLEAR every prepopulated leaf (working for
+/// call 1, then silently gone). See that function.
+///
+/// Runs ONLY when [`aot_enabled`]; a missing/invalid preload is a clean no-op
+/// (every function just JITs — strictly additive). Returns the stats.
+pub fn prepopulate_aot_from_preload(
+    ctx: &crate::emacs_core::eval::Context,
+) -> PrepopulateStats {
+    let mut stats = PrepopulateStats::default();
+    if !aot_enabled() {
+        return stats;
+    }
+    let Some(unit) = load_preload() else {
+        tracing::debug!("aot-preload: no usable preload; all functions will JIT");
+        return stats;
+    };
+
+    // Collect (compiled_id, content_hash, arity, live_reloc) for every AOT
+    // candidate. We re-walk the obarray here (rather than reuse the producer's
+    // `LoadupLeaf`, which omits the runtime id) so we can key COMPILED by the
+    // function's own `compiled_id_or_assign()`.
+    struct Prep {
+        compiled_id: u64,
+        content_hash: u128,
+        arity: usize,
+        live_reloc: Vec<Value>,
+    }
+    let mut preps: Vec<Prep> = Vec::new();
+    for name in ctx.obarray.all_symbols() {
+        let id = crate::emacs_core::intern::intern(name);
+        let Some(func_val) = ctx.obarray.symbol_function_id(id) else {
+            continue;
+        };
+        if !func_val.is_bytecode() {
+            continue;
+        }
+        let Some(bc) = func_val.get_bytecode_data() else {
+            continue;
+        };
+        // Required-only (matches the producer's enumerate + the MIR pure tier).
+        if !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+            continue;
+        }
+        let arity = bc.params.required.len();
+        let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
+            continue;
+        };
+        // Same D0 gate the emitter used (so the candidate set matches the `.so`).
+        // NOTE: we deliberately do NOT call `is_d0_aot_candidate` here — it would
+        // run a FULL Cranelift compile + object emit per loadup fn (~hundreds of
+        // them) at EVERY startup, defeating the whole point of a prewarmed preload.
+        // `load_leaf_from_unit` below IS the real gate: a non-candidate fn has no
+        // entry in the preload `.so` (the producer skipped it), so its dlsym misses
+        // → None → that fn just JITs. We only need the content hash (to name the
+        // entry) + the live reloc consts (#A eq-identity), both cheap.
+        let Ok(m) = mir::build_mir(&bc.ops, &bc.constants, arity) else {
+            continue;
+        };
+        let live_reloc = collect_reloc_consts(&m);
+        preps.push(Prep {
+            compiled_id: bc.runtime.compiled_id_or_assign(),
+            content_hash,
+            arity,
+            live_reloc,
+        });
+    }
+    stats.candidates = preps.len();
+
+    // Build the leaves (each from the shared preload unit) OUTSIDE the COMPILED
+    // borrow, then hand them to the cache for the sync-first-insert-after step.
+    let mut leaves: Vec<(u64, super::compile::CompiledLeaf)> = Vec::new();
+    for p in &preps {
+        match load_leaf_from_unit(&unit, p.content_hash, p.arity, &p.live_reloc) {
+            Some(leaf) => leaves.push((p.compiled_id, leaf)),
+            None => stats.missed += 1,
+        }
+    }
+    stats.inserted = leaves.len();
+    super::cache::prepopulate_aot_leaves(leaves);
+    tracing::debug!(
+        "aot-preload: prepopulated {} / {} candidates ({} missed)",
+        stats.inserted,
+        stats.candidates,
+        stats.missed
+    );
+    stats
 }
 
 /// Build a relocatable object (`.o` bytes) for one pure MIR leaf `m`, exporting
@@ -1727,7 +1946,7 @@ fn build_object_for_leaf_inner(
         .finish()
         .emit()
         .map_err(|e| module_init_err(e.to_string()))?;
-    debug_assert_aot_imports_salted(&obj);
+    assert_aot_imports_exported(&obj)?;
     Ok(obj)
 }
 
@@ -1745,6 +1964,13 @@ pub(crate) mod test_support {
         static FORCE_ENABLED: RefCell<Option<bool>> = const { RefCell::new(None) };
         static INJECTED: RefCell<HashMap<u128, Arc<super::super::compile::LoadedUnit>>> =
             RefCell::new(HashMap::new());
+        /// Injected preload result for `load_preload`: `None` = not injected (fall
+        /// through to the real resolver); `Some(inner)` = `load_preload` returns
+        /// `inner` (so a test can model both a present preload AND a checked miss,
+        /// e.g. a fingerprint-mismatch skip→JIT).
+        static INJECTED_PRELOAD: RefCell<
+            Option<Option<Arc<super::super::compile::LoadedUnit>>>,
+        > = const { RefCell::new(None) };
     }
 
     /// The forced `aot_enabled()` value, if a test set one.
@@ -1761,6 +1987,7 @@ pub(crate) mod test_support {
     pub(crate) fn reset() {
         FORCE_ENABLED.with(|c| *c.borrow_mut() = None);
         INJECTED.with(|m| m.borrow_mut().clear());
+        INJECTED_PRELOAD.with(|c| *c.borrow_mut() = None);
     }
 
     /// Inject a pre-loaded unit for `content_hash` so `load_unit` returns it.
@@ -1775,6 +2002,27 @@ pub(crate) mod test_support {
         content_hash: u128,
     ) -> Option<Arc<super::super::compile::LoadedUnit>> {
         INJECTED.with(|m| m.borrow().get(&content_hash).cloned())
+    }
+
+    /// Inject the result `load_preload` should return (the present-preload path).
+    /// A test builds a unit + injects it to drive prepopulate without a real `.so`
+    /// beside the test binary.
+    pub(crate) fn inject_preload(unit: Arc<super::super::compile::LoadedUnit>) {
+        INJECTED_PRELOAD.with(|c| *c.borrow_mut() = Some(Some(unit)));
+    }
+
+    /// Inject a `load_preload` MISS (the stale-interlock / no-preload path) so a
+    /// test can assert `prepopulate_aot_from_preload` cleanly does nothing → JIT.
+    pub(crate) fn inject_preload_miss() {
+        INJECTED_PRELOAD.with(|c| *c.borrow_mut() = Some(None));
+    }
+
+    /// The injected `load_preload` result, if a test set one. Outer `Some` means
+    /// "injected" (use the inner value); `None` means fall through to the real
+    /// resolver.
+    pub(crate) fn injected_preload()
+    -> Option<Option<Arc<super::super::compile::LoadedUnit>>> {
+        INJECTED_PRELOAD.with(|c| c.borrow().clone())
     }
 }
 
@@ -2670,5 +2918,142 @@ mod tests {
             })
             .count();
         assert_eq!(entries, 2, "two unique entry symbols, no duplicate-symbol collision");
+    }
+
+    /// R2-C3 GATE (native-from-call-1 AND survive-a-GC). Prepopulate the COMPILED
+    /// cache from a preload `.so` and assert the loadup candidate is AOT-backed at
+    /// HEAT=0 (no warmup), then FORCE A GC and assert the leaf SURVIVES. The
+    /// survive-a-GC half is the regression guard for the R1a heap-identity bug:
+    /// `prepopulate_aot_leaves` must sync `COMPILED_HEAP` to current BEFORE
+    /// inserting, else the first GC's `sync_cache_to_current_heap` (COMPILED_HEAP
+    /// still None) would CLEAR every prepopulated leaf — native for call 1, then
+    /// silently gone. We deliberately do NOT pre-prime the heap guard here.
+    #[test]
+    fn r2_prepopulate_native_from_call_1_and_survives_gc() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+
+        // One pure-arith required-only candidate (lambda (a) (+ a 5)) → D0 AOT.
+        let ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        let constants = vec![Value::make_int(5)];
+        let arity = 1usize;
+        let mut a = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        a.lexical = true;
+        a.ops = ops.clone();
+        a.constants = constants.clone();
+        a.max_stack = 16;
+        let sym = crate::emacs_core::intern::intern("r2-prepop-add5");
+        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+
+        // Build the ONE preload `.so` (the producer's multi-leaf object), dlopen,
+        // and inject it as THE preload (so load_preload returns it).
+        let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
+        let (obj, _stats) = build_preload_object(&leaves).expect("build preload object");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join(PRELOAD_SO_NAME);
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+
+        test_support::set_forced_enabled(true);
+        test_support::inject_preload(unit);
+
+        // The candidate's compiled_id (so we can probe the cache without a call).
+        let id = ev
+            .obarray
+            .symbol_function_id(sym)
+            .and_then(|v| v.get_bytecode_data())
+            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .expect("candidate fn id");
+
+        // PREPOPULATE. NOTE: no pre-priming of the heap guard — prepopulate must
+        // establish COMPILED_HEAP itself for the survive-a-GC half to pass.
+        let stats = prepopulate_aot_from_preload(&ev);
+        assert!(stats.candidates >= 1, "at least one candidate; got {stats:?}");
+        assert_eq!(stats.inserted, stats.candidates, "all candidates inserted");
+        assert_eq!(stats.missed, 0, "no preload misses; got {stats:?}");
+
+        // NATIVE FROM CALL 1: compiled at heat=0 (no warmup) AND AOT-backed.
+        assert!(
+            super::super::cache::is_compiled_for_test(id),
+            "loadup leaf must be compiled at heat=0 (native from call 1)"
+        );
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(true),
+            "the prepopulated leaf must be AOT-backed (from the preload .so)"
+        );
+
+        // FORCE A GC — exercises collect_jit_reloc_gc_roots → sync_cache_to_current_heap.
+        ev.gc_collect_exact();
+
+        // SURVIVE-A-GC: the leaf must still be cached + AOT-backed (the sync did
+        // NOT clear it, because prepopulate established COMPILED_HEAP first).
+        assert!(
+            super::super::cache::is_compiled_for_test(id),
+            "prepopulated leaf must SURVIVE a GC (heap-identity sync must not clear it)"
+        );
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(true),
+            "prepopulated leaf must still be AOT-backed after a GC"
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
+    }
+
+    /// R2-C2 GATE (stale interlock): a `load_preload` MISS (e.g. a manifest
+    /// fingerprint mismatch) makes `prepopulate_aot_from_preload` a clean no-op —
+    /// nothing is inserted, the function will JIT normally. The happy-path seam
+    /// can't exercise the interlock, and it is load-bearing for v1 safety (a
+    /// stale/foreign preload must never mis-serve), so test the miss explicitly.
+    #[test]
+    fn r2_prepopulate_skips_on_preload_miss() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let mut a = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        a.lexical = true;
+        a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        a.constants = vec![Value::make_int(5)];
+        a.max_stack = 16;
+        let sym = crate::emacs_core::intern::intern("r2-prepop-miss-add5");
+        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+        let id = ev
+            .obarray
+            .symbol_function_id(sym)
+            .and_then(|v| v.get_bytecode_data())
+            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .expect("candidate fn id");
+
+        // AOT enabled, but the preload resolves to a MISS (the stale-interlock /
+        // no-preload path) → prepopulate must do nothing.
+        test_support::set_forced_enabled(true);
+        test_support::inject_preload_miss();
+
+        let stats = prepopulate_aot_from_preload(&ev);
+        assert_eq!(stats.candidates, 0, "no candidates collected on a preload miss");
+        assert_eq!(stats.inserted, 0, "nothing inserted on a preload miss");
+        assert!(
+            !super::super::cache::is_compiled_for_test(id),
+            "a preload miss must leave the fn uncompiled (it will JIT normally)"
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
     }
 }

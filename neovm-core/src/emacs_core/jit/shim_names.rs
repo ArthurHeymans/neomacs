@@ -1,0 +1,54 @@
+// SINGLE SOURCE OF TRUTH for the `neovm_jit_*` runtime-shim name set (R2-C2).
+//
+// This list is the one authoritative enumeration of every runtime shim an AOT
+// `.so` may import. It is consumed THREE ways, all via `include!` of THIS file
+// so they can never drift:
+//   1. `jit/aot.rs` — `MIR_SHIM_NAMES` (salted into `ABI_TAG`, checked at emit by
+//      `debug_assert_aot_imports_salted`, and the emit-time import-subset guard).
+//   2. `neovm-core/build.rs` — exports each shim into the lib's dynamic symbol
+//      table (`-rdynamic` + per-shim `--export-dynamic-symbol`) for integration
+//      tests' `.so` imports to resolve.
+//   3. `neomacs-bin/build.rs` — the same export for the production `neomacs`
+//      binary, so the dump-time preload `.so`'s imports resolve at runtime.
+//
+// MUST stay in sync with the shim DEFINITIONS in `compile.rs` (`#[no_mangle] pub
+// extern "C" fn neovm_jit_*`) and the `JIT_SHIM_ANCHOR` array. `include!`-ing a
+// bare `const` keeps this usable both as a crate item (aot.rs) and as a local
+// const inside each build.rs `main` (no module/use context required).
+const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
+    "neovm_jit_apply",
+    "neovm_jit_backedge",
+    "neovm_jit_builtin1",
+    "neovm_jit_builtin2",
+    "neovm_jit_builtin3",
+    "neovm_jit_builtin_slice",
+    "neovm_jit_call",
+    "neovm_jit_call_spec",
+    "neovm_jit_cons",
+    "neovm_jit_eq_slow",
+    "neovm_jit_gc_push",
+    "neovm_jit_gc_restore",
+    "neovm_jit_gc_save",
+    "neovm_jit_integerp_slow",
+    "neovm_jit_list",
+    "neovm_jit_match_handler",
+    "neovm_jit_named_builtin",
+    "neovm_jit_numberp_slow",
+    "neovm_jit_pop_handler",
+    "neovm_jit_push_catch",
+    "neovm_jit_push_cc",
+    "neovm_jit_push_cc_raw",
+    "neovm_jit_save_current_buffer",
+    "neovm_jit_save_excursion",
+    "neovm_jit_save_restriction",
+    "neovm_jit_save_window_excursion",
+    "neovm_jit_switch",
+    "neovm_jit_switch_stale",
+    "neovm_jit_symbolp_slow",
+    "neovm_jit_throw",
+    "neovm_jit_unbind",
+    "neovm_jit_unwind_protect",
+    "neovm_jit_varbind",
+    "neovm_jit_varref",
+    "neovm_jit_varset",
+];

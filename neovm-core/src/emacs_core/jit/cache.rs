@@ -168,6 +168,32 @@ pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// R2-C3: insert AOT-prepopulated leaves into `COMPILED` so the loadup set serves
+/// native FROM CALL 1. `leaves` is `(compiled_id, CompiledLeaf)` built by
+/// `aot::prepopulate_aot_from_preload` from the preload `.so`.
+///
+/// ORDERING IS LOAD-BEARING (R1a heap-identity guard): we call
+/// [`sync_cache_to_current_heap`] FIRST. At prepopulate time (right after the
+/// pdump load, before any eval/GC) `COMPILED_HEAP` is still `None`, so this first
+/// sync sets `COMPILED_HEAP = current` and clears the then-EMPTY cache. We insert
+/// AFTER that. The next GC's `collect_jit_reloc_gc_roots` → `sync_cache_to_current_heap`
+/// then sees `current == current` (no change → no clear), so the prepopulated
+/// leaves SURVIVE. Inserting BEFORE the sync would let that first GC observe
+/// `None != current` and wipe all of them (native for call 1, then silently gone).
+pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) {
+    // Establish COMPILED_HEAP == current heap while the cache is still empty, so
+    // the first post-prepopulate GC does not clear what we are about to insert.
+    sync_cache_to_current_heap();
+    COMPILED.with(|c| {
+        let mut cache = c.borrow_mut();
+        for (id, leaf) in leaves {
+            // AOT leaves never inline (no inline deps to register); their reloc
+            // consts are rooted via the COMPILED walk in collect_jit_reloc_gc_roots.
+            cache.insert(id, CacheEntry::Compiled(Rc::new(leaf)));
+        }
+    });
+}
+
 /// Drop all compiled state on this thread. Called when a pdump load replaces the
 /// runtime image (and thus the heap that every cached leaf's reloc vector + baked
 /// addresses reference) — so every cached leaf is now stale and must neither be run
@@ -209,6 +235,11 @@ fn max_compiled_id() -> u64 {
     })
 }
 
+// C-ABI dispatch seam: `ctx` is a raw `*mut Context` from the native-call shim
+// path; the documented dormant-Context contract (see the `unsafe` deref inside)
+// makes the read sound. The lint fires on the `pub` + raw-ptr-deref shape, same
+// as the 35 `neovm_jit_*` shims, which carry the same allow.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn try_run_compiled(
     ctx: *mut Context,
     func: &ByteCodeFunction,

@@ -4,6 +4,11 @@ use std::path::{Path, PathBuf};
 #[path = "build_support/unicode_gen.rs"]
 mod unicode_gen;
 
+// Single source of truth (R2-C2): the `neovm_jit_*` shim names, shared with
+// jit/aot.rs (MIR_SHIM_NAMES) + neomacs-bin/build.rs via `include!` so the
+// emit/salt set and both export sets can never drift.
+include!("src/emacs_core/jit/shim_names.rs");
+
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let project_root = manifest_dir.parent().expect("workspace root");
@@ -30,43 +35,9 @@ fn main() {
     // first shim call. Do not assume `-rdynamic` alone suffices.
     if std::env::var_os("CARGO_FEATURE_JIT").is_some() && cfg!(target_os = "linux") {
         println!("cargo:rustc-link-arg-tests=-rdynamic");
-        for shim in [
-            "neovm_jit_apply",
-            "neovm_jit_backedge",
-            "neovm_jit_builtin1",
-            "neovm_jit_builtin2",
-            "neovm_jit_builtin3",
-            "neovm_jit_builtin_slice",
-            "neovm_jit_call",
-            "neovm_jit_call_spec",
-            "neovm_jit_cons",
-            "neovm_jit_eq_slow",
-            "neovm_jit_gc_push",
-            "neovm_jit_gc_restore",
-            "neovm_jit_gc_save",
-            "neovm_jit_integerp_slow",
-            "neovm_jit_list",
-            "neovm_jit_match_handler",
-            "neovm_jit_named_builtin",
-            "neovm_jit_numberp_slow",
-            "neovm_jit_pop_handler",
-            "neovm_jit_push_catch",
-            "neovm_jit_push_cc",
-            "neovm_jit_push_cc_raw",
-            "neovm_jit_save_current_buffer",
-            "neovm_jit_save_excursion",
-            "neovm_jit_save_restriction",
-            "neovm_jit_save_window_excursion",
-            "neovm_jit_switch",
-            "neovm_jit_switch_stale",
-            "neovm_jit_symbolp_slow",
-            "neovm_jit_throw",
-            "neovm_jit_unbind",
-            "neovm_jit_unwind_protect",
-            "neovm_jit_varbind",
-            "neovm_jit_varref",
-            "neovm_jit_varset",
-        ] {
+        // NEOVM_JIT_SHIM_NAMES is `include!`-ed at module scope (above) from the
+        // single-source shim_names.rs — same set aot.rs salts/exports.
+        for shim in NEOVM_JIT_SHIM_NAMES {
             println!("cargo:rustc-link-arg-tests=-Wl,--export-dynamic-symbol={shim}");
         }
     }
@@ -81,6 +52,12 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         manifest_dir.join("build_support/unicode_gen.rs").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest_dir
+            .join("src/emacs_core/jit/shim_names.rs")
+            .display()
     );
 }
 

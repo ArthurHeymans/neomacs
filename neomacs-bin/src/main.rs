@@ -2188,6 +2188,44 @@ fn spawn_gui_evaluator_worker(
         .expect("Failed to spawn GUI evaluator worker")
 }
 
+/// R2-C3: prepopulate the AOT preload into the JIT cache so the loadup set serves
+/// NATIVE FROM CALL 1, before the first dispatch (recursive-edit). Runs ONLY for
+/// the production `neomacs` image (`RuntimeMode::FinalRun`) on the eval thread
+/// that owns the thread-local `COMPILED` cache. It self-gates internally on
+/// `NEOVM_AOT` (a no-op unless enabled) and on the preload being present + valid
+/// (a missing/stale preload is a clean skip→JIT), so this call is non-fatal and
+/// pays nothing in the default (AOT-off) configuration. Loud on `NEOVM_AOT=force`
+/// (so the bench/gate can confirm it ran), quiet otherwise.
+#[cfg(feature = "jit")]
+fn maybe_prepopulate_aot(mode: RuntimeMode, evaluator: &Context) {
+    if mode != RuntimeMode::FinalRun {
+        return;
+    }
+    let stats = neovm_core::emacs_core::jit::aot::prepopulate_aot_from_preload(evaluator);
+    if stats.candidates > 0 || stats.inserted > 0 {
+        let force = matches!(std::env::var("NEOVM_AOT").as_deref(), Ok("force"));
+        if force {
+            tracing::info!(
+                "AOT preload: prepopulated {} / {} loadup leaves ({} missed) — native from call 1",
+                stats.inserted,
+                stats.candidates,
+                stats.missed
+            );
+        } else {
+            tracing::debug!(
+                "AOT preload: prepopulated {} / {} loadup leaves ({} missed)",
+                stats.inserted,
+                stats.candidates,
+                stats.missed
+            );
+        }
+    }
+}
+
+/// No-op when the `jit` feature is off (no AOT producer/loader compiled in).
+#[cfg(not(feature = "jit"))]
+fn maybe_prepopulate_aot(_mode: RuntimeMode, _evaluator: &Context) {}
+
 fn run_gui_evaluator_worker(
     mode: RuntimeMode,
     startup: StartupOptions,
@@ -2296,6 +2334,8 @@ fn run_gui_evaluator_worker(
     }
 
     neovm_core::emacs_core::load::maybe_run_after_pdump_load_hook(&mut evaluator);
+    // R2-C3: native-from-call-1 — prepopulate the AOT preload before first dispatch.
+    maybe_prepopulate_aot(mode, &evaluator);
     tracing::info!("Entering GNU command loop on GUI evaluator worker...");
     let exit_status = evaluator.recursive_edit();
     if exit_status.is_ok() {
@@ -2604,6 +2644,8 @@ pub fn run(mode: RuntimeMode) {
     //     enters recursive-edit and lets the outer command loop evaluate the
     //     `top-level` startup form before reading interactive input.
     neovm_core::emacs_core::load::maybe_run_after_pdump_load_hook(&mut evaluator);
+    // R2-C3: native-from-call-1 — prepopulate the AOT preload before first dispatch.
+    maybe_prepopulate_aot(mode, &evaluator);
     tracing::info!("Entering GNU command loop (recursive-edit)...");
     let exit_status = evaluator.recursive_edit();
     if exit_status.is_ok() {
