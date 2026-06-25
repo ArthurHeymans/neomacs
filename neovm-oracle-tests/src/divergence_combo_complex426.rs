@@ -251,8 +251,12 @@ fn div_cx426_process_id_name() {
                           :command '("echo" "test")
                           :connection-type 'pipe :buffer nil)))
   (accept-process-output proc 2)
+  ;; Assert the testable invariant (a valid positive PID), not the raw PID:
+  ;; GNU and neomacs spawn distinct OS processes with distinct PIDs, so a raw
+  ;; (process-id) can never match across the two engines (or run-to-run).
   (prog1 (list (process-name proc)
-               (process-id proc))
+               (integerp (process-id proc))
+               (> (process-id proc) 0))
     (delete-process proc)))
 "##,
     );

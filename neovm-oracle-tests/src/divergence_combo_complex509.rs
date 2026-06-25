@@ -41,7 +41,9 @@ fn div_cx509_process_id_return() {
     assert_oracle_parity(
         r##"(let ((p (make-process :name "cx509-pid" :command '("echo" "hi") :connection-type 'pipe :buffer nil)))
   (accept-process-output p 1)
-  (prog1 (process-id p) (delete-process p)))
+  ;; A raw (process-id) is unmatchable across two distinct OS processes; assert
+  ;; the invariant instead: process-id returns a valid positive integer PID.
+  (prog1 (list (integerp (process-id p)) (> (process-id p) 0)) (delete-process p)))
 "##,
     );
 }
