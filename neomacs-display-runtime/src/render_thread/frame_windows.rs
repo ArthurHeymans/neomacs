@@ -1564,6 +1564,7 @@ impl GuiFrameWindowManager {
                 .with_inner_size(window_size_from_emacs_pixels(req.width, req.height))
                 .with_transparent(true)
                 .with_decorations(self.chrome_defaults.decorations_enabled);
+            let attrs = crate::window_identity::apply_platform_window_identity(attrs);
 
             match event_loop.create_window(attrs) {
                 Ok(window) => {

@@ -123,6 +123,7 @@ impl RenderApp {
                 .with_inner_size(window_size_from_emacs_pixels(width, height))
                 .with_decorations(decorations_enabled)
                 .with_transparent(true);
+            let attrs = crate::window_identity::apply_platform_window_identity(attrs);
 
             tracing::info!(
                 "Render thread creating primary window: emacs_pixels={}x{} title={:?}",

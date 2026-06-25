@@ -17,6 +17,7 @@ pub mod text;
 pub mod thread_comm;
 pub mod tty_input;
 mod window_icon;
+mod window_identity;
 
 pub mod render_thread;
 
