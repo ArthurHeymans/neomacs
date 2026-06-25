@@ -2074,8 +2074,31 @@ impl ProcessManager {
         // and is polled under its id, mirroring GNU's create_process which
         // connects the child's stderr fd to the stderr pipe-process's
         // READ_FROM_SUBPROCESS.  Otherwise it stays on the main process record.
+        self.route_child_stderr_to_pipe_process(id, stderr_pipe_id, stderr);
+        Ok(())
+    }
+
+    /// Wire a freshly spawned child's stderr handle into the stderr
+    /// pipe-process record (`make-process :stderr`), mirroring GNU's
+    /// `create_process`: the child's stderr fd (`forkerr`) is taken from the
+    /// stderr pipe-process and that process reads the data into its own buffer,
+    /// independently of the main process's stdout (`callproc.c` `emacs_spawn`
+    /// uses the separate `forkerr` whenever `p->stderrproc` is non-nil, and
+    /// `process.c:2231-2240` takes `forkerr` from the stderr pipe-process).
+    ///
+    /// `stderr_pipe_id` is the id resolved from the main process's `stderrproc`
+    /// slot (None when there is no `:stderr`).  This is shared by both the pipe
+    /// and PTY spawn paths so that stdout may use a PTY while stderr stays on a
+    /// dedicated pipe, exactly as GNU does (the PTY-for-stdout decision is
+    /// independent of the `:stderr` pipe — see `99bd67887`).
+    fn route_child_stderr_to_pipe_process(
+        &mut self,
+        main_id: ProcessId,
+        stderr_pipe_id: Option<ProcessId>,
+        stderr: Option<std::process::ChildStderr>,
+    ) {
         let stderr_target = stderr_pipe_id.filter(|sid| {
-            *sid != id
+            *sid != main_id
                 && matches!(
                     self.processes.get(sid).map(|p| p.kind),
                     Some(ProcessKind::Pipe)
@@ -2101,13 +2124,16 @@ impl ProcessManager {
                 drop(stderr);
             }
         }
-        Ok(())
     }
 
     /// PTY-based child spawn via `portable-pty`.
     ///
     /// The child is attached to a pseudo-terminal. The master side provides
-    /// a single combined I/O stream (PTY merges stdout and stderr).
+    /// a single combined I/O stream (PTY merges stdout and stderr) — UNLESS a
+    /// separate stderr pipe-process is requested (`make-process :stderr`), in
+    /// which case stdout stays on the PTY but stderr is routed to a dedicated
+    /// pipe, exactly as GNU's `create_process` wires `forkin`/`forkout` to the
+    /// pty and `forkerr` to the stderr pipe-process independently.
     #[cfg(unix)]
     fn spawn_child_pty(
         &mut self,
@@ -2122,6 +2148,23 @@ impl ProcessManager {
 
         let rows = proc.window_rows.unwrap_or(24) as u16;
         let cols = proc.window_cols.unwrap_or(80) as u16;
+        let stderrproc = proc.stderrproc;
+        let default_directory = proc.default_directory.clone();
+        let argv = process_spawn_lisp_argv(proc);
+        // Release the `proc` borrow: the rest of this function reads other
+        // process records (the stderr pipe-process) and re-borrows `id`.
+        let _ = proc;
+
+        // A separate stderr pipe-process (make-process :stderr) is wired here as
+        // GNU does: stdout uses the PTY, stderr uses an independent pipe.  When
+        // none is requested the PTY merges stdout and stderr as before.
+        let stderr_pipe_id = process_value_to_id(&stderrproc).filter(|sid| {
+            *sid != id
+                && matches!(
+                    self.processes.get(sid).map(|p| p.kind),
+                    Some(ProcessKind::Pipe)
+                )
+        });
 
         let pty_system = portable_pty::native_pty_system();
         let pty_size = portable_pty::PtySize {
@@ -2134,7 +2177,7 @@ impl ProcessManager {
             .openpty(pty_size)
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
-        let Some(argv) = process_spawn_lisp_argv(proc) else {
+        let Some(argv) = argv else {
             return Ok(());
         };
         if argv.is_empty() {
@@ -2145,51 +2188,153 @@ impl ProcessManager {
             .iter()
             .map(lisp_string_to_os_string)
             .collect::<Vec<OsString>>();
-        let mut cmd = portable_pty::CommandBuilder::from_argv(argv_os);
-        if let Some(dir) = &proc.default_directory {
-            cmd.cwd(dir);
-        }
-        if let Some(entries) = process_environment_entries(process_environment) {
-            cmd.env_clear();
-            for (key, value) in entries {
-                if let Some(value) = value {
-                    cmd.env(&key, &value);
-                } else {
-                    cmd.env_remove(&key);
-                }
-            }
-        }
-        for (key, val) in env_overrides {
-            let key_str = lisp_string_to_os_string(key);
-            match val {
-                Some(v) => {
-                    let v_str = lisp_string_to_os_string(v);
-                    cmd.env(&key_str, &v_str);
-                }
-                None => {
-                    cmd.env_remove(&key_str);
-                }
-            }
-        }
 
         // Obtain the TTY name from the master (which knows the slave path).
-        let tty_name = pty_pair
-            .master
-            .tty_name()
+        let tty_name_path = pty_pair.master.tty_name();
+        let tty_name = tty_name_path
+            .as_ref()
             .map(|p| Value::heap_string(os_str_to_lisp_string(p.as_os_str())))
             .unwrap_or(Value::NIL);
-        if let Some(tty_path) = pty_pair.master.tty_name() {
+        if let Some(tty_path) = tty_name_path.as_ref() {
             configure_child_pty_tty(tty_path.as_os_str())
                 .map_err(|e| format!("Failed to configure PTY child tty: {e}"))?;
         }
 
-        let pty_child = pty_pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
-        // GNU records the child's real OS pid; portable_pty exposes it via
-        // `Child::process_id`.
-        let os_pid = pty_child.process_id();
+        // With a separate stderr pipe-process we cannot use portable_pty's
+        // `spawn_command` (it hardwires the child's stdin/stdout/stderr all to
+        // the PTY slave).  Instead spawn the child ourselves, dup'ing the PTY
+        // slave onto stdin/stdout and leaving stderr on an OS pipe, mirroring
+        // GNU's `emacs_spawn` where `std_err` is the separate `forkerr` fd and
+        // only merges into `std_out` when no stderr pipe-process exists.
+        let stderr_routing = if let Some(stderr_id) = stderr_pipe_id {
+            let tty_path = tty_name_path
+                .clone()
+                .ok_or_else(|| "PTY has no tty name for :stderr split spawn".to_string())?;
+            let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
+            cmd.args(&argv_os[1..]);
+            cmd.stderr(Stdio::piped());
+            if let Some(dir) = &default_directory {
+                cmd.current_dir(dir);
+            }
+            if let Some(entries) = process_environment_entries(process_environment) {
+                cmd.env_clear();
+                for (key, value) in entries {
+                    match value {
+                        Some(value) => {
+                            cmd.env(&key, &value);
+                        }
+                        None => {
+                            cmd.env_remove(&key);
+                        }
+                    }
+                }
+            }
+            for (key, val) in env_overrides {
+                let key_str = lisp_string_to_os_string(key);
+                match val {
+                    Some(v) => {
+                        cmd.env(&key_str, lisp_string_to_os_string(v));
+                    }
+                    None => {
+                        cmd.env_remove(&key_str);
+                    }
+                }
+            }
+            // `new_child_command` already installs a `pre_exec` that calls
+            // `setsid` (own session, no controlling tty).  Chain a second
+            // `pre_exec` that opens the PTY slave by path and makes it the
+            // controlling terminal on fds 0/1, leaving fd 2 (stderr) on the
+            // pipe `Command` set up — exactly GNU's forkin/forkout=pty_tty,
+            // forkerr=stderr-pipe arrangement.
+            let tty_cstr = std::ffi::CString::new(tty_path.as_os_str().as_bytes())
+                .map_err(|_| "PTY tty name contains an interior NUL".to_string())?;
+            unsafe {
+                use std::os::unix::process::CommandExt;
+                cmd.pre_exec(move || {
+                    let slave = libc::open(tty_cstr.as_ptr(), libc::O_RDWR | libc::O_NOCTTY);
+                    if slave < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    // Make the pty our controlling terminal (setsid already ran
+                    // in the first pre_exec, so we are a session leader with no
+                    // controlling tty).
+                    #[allow(clippy::cast_lossless)]
+                    if libc::ioctl(slave, libc::TIOCSCTTY as _, 0) == -1 {
+                        let err = std::io::Error::last_os_error();
+                        libc::close(slave);
+                        return Err(err);
+                    }
+                    if libc::dup2(slave, libc::STDIN_FILENO) == -1
+                        || libc::dup2(slave, libc::STDOUT_FILENO) == -1
+                    {
+                        let err = std::io::Error::last_os_error();
+                        libc::close(slave);
+                        return Err(err);
+                    }
+                    if slave > libc::STDERR_FILENO {
+                        libc::close(slave);
+                    }
+                    Ok(())
+                });
+            }
+
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
+            // GNU records the child's real OS pid (create_process sets p->pid).
+            let os_pid = Some(child.id());
+            let child_stderr = child.stderr.take();
+            if let Some(proc) = self.processes.get_mut(&id) {
+                proc.os_pid = os_pid;
+                proc.child = Some(child);
+            }
+            (Some(stderr_id), child_stderr)
+        } else {
+            let mut cmd = portable_pty::CommandBuilder::from_argv(argv_os);
+            if let Some(dir) = &default_directory {
+                cmd.cwd(dir);
+            }
+            if let Some(entries) = process_environment_entries(process_environment) {
+                cmd.env_clear();
+                for (key, value) in entries {
+                    if let Some(value) = value {
+                        cmd.env(&key, &value);
+                    } else {
+                        cmd.env_remove(&key);
+                    }
+                }
+            }
+            for (key, val) in env_overrides {
+                let key_str = lisp_string_to_os_string(key);
+                match val {
+                    Some(v) => {
+                        let v_str = lisp_string_to_os_string(v);
+                        cmd.env(&key_str, &v_str);
+                    }
+                    None => {
+                        cmd.env_remove(&key_str);
+                    }
+                }
+            }
+
+            let pty_child = pty_pair
+                .slave
+                .spawn_command(cmd)
+                .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
+            // GNU records the child's real OS pid; portable_pty exposes it via
+            // `Child::process_id`.
+            let os_pid = pty_child.process_id();
+            if let Some(proc) = self.processes.get_mut(&id) {
+                proc.os_pid = os_pid;
+                proc.pty_child = Some(pty_child);
+            }
+            (None, None)
+        };
+        let (stderr_pipe_id, child_stderr) = stderr_routing;
+
+        // Drop the slave end now that the child has it; otherwise the master
+        // read never sees EOF after the child exits.
+        drop(pty_pair.slave);
 
         let pty_read = pty_pair
             .master
@@ -2212,16 +2357,23 @@ impl ProcessManager {
             }
         }
 
-        proc.os_pid = os_pid;
-        proc.pty_master = Some(pty_pair.master);
-        proc.pty_child = Some(pty_child);
-        proc.pty_reader = Some(pty_read);
-        proc.pty_writer = Some(Box::new(pty_write));
-        proc.status = process_status_run_value();
-        proc.tty_name = tty_name;
-        proc.tty_stdin = true;
-        proc.tty_stdout = true;
-        proc.tty_stderr = true;
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.pty_master = Some(pty_pair.master);
+            proc.pty_reader = Some(pty_read);
+            proc.pty_writer = Some(Box::new(pty_write));
+            proc.status = process_status_run_value();
+            proc.tty_name = tty_name;
+            proc.tty_stdin = true;
+            proc.tty_stdout = true;
+            // stderr is tty-backed only when it shares the PTY; with a separate
+            // stderr pipe-process it is not (GNU's `Fprocess_tty_name` returns
+            // nil for the stderr stream when `p->stderrproc` is set).
+            proc.tty_stderr = stderr_pipe_id.is_none();
+        }
+
+        // Route the child's stderr to the stderr pipe-process record, shared
+        // with the pipe spawn path (GNU `create_process` forkerr wiring).
+        self.route_child_stderr_to_pipe_process(id, stderr_pipe_id, child_stderr);
         Ok(())
     }
 
@@ -3306,6 +3458,18 @@ impl super::eval::Context {
                         .map(|p| gnu_process_status_message(p.status))
                         .unwrap_or_else(|| "finished\n".to_string());
                     self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
+
+                    // GNU `status_notify`: a terminated process (including the
+                    // implicit stderr pipe-process) is removed from
+                    // `Vprocess_alist' when `delete-exited-processes' is non-nil
+                    // (its default), so `get-process'/`get-buffer-process' no
+                    // longer return it.  Without this the dead "<name> stderr"
+                    // process lingers in the process list, diverging from GNU
+                    // (which returns nil for `get-buffer-process' on the stderr
+                    // buffer once the process has finished).
+                    if self.delete_exited_processes_enabled() {
+                        self.processes.reap_exited_process(pid);
+                    }
                     continue;
                 }
                 ProcessOutputRead::Eof if is_network => {

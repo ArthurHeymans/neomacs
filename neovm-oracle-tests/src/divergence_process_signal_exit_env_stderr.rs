@@ -62,7 +62,6 @@ fn divergence_setenv_not_exported_to_subprocess() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: make-process :stderr separate buffer is ignored - stderr is merged into the main buffer and the separate \"... stderr finished\" sentinel line is missing."]
 fn divergence_make_process_stderr_buffer_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

@@ -913,6 +913,50 @@ fn make_process_stores_pipe_stderr_process_value() {
     assert!(stdout_tty.as_lisp_string().is_some());
 }
 
+/// Full `make-process :stderr SEPARATE-BUFFER` lifecycle, GNU byte-exact.
+///
+/// GNU (`src/process.c`): `:stderr` being a buffer auto-creates an implicit
+/// `"<name> stderr"` pipe-process (`Fmake_pipe_process`), `create_process`
+/// wires the child's stderr fd to that pipe's read end (`forkerr`, independent
+/// of whether stdout uses a PTY), and on child exit the stderr write end closes
+/// → the pipe-process EOFs, goes dead, and its default sentinel inserts
+/// "\nProcess <name> stderr finished\n" into the stderr buffer.  So:
+///   * stdout goes to the main process's buffer (`ob`),
+///   * stderr goes to the stderr pipe-process's buffer (`eb`), NOT `ob`,
+///   * the `"x stderr"` pipe-process reaches a terminal state (no longer live).
+///
+/// This is the exact reproduction form that previously diverged: stderr leaked
+/// into `ob`, `eb` stayed empty, and the stderr pipe-process never died because
+/// the default-PTY spawn path ignored `stderrproc` and merged stderr into the
+/// PTY.  Run under the default connection type (PTY for stdout) so it guards the
+/// PTY-split-stderr path specifically.
+#[test]
+fn make_process_stderr_separate_buffer_lifecycle_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let ((p (make-process :name "x"
+                                  :command '("{sh}" "-c" "echo OUT; echo ERR 1>&2")
+                                  :buffer (get-buffer-create "ob")
+                                  :stderr (get-buffer-create "eb"))))
+             (while (process-live-p p) (accept-process-output p 1))
+             (accept-process-output nil 0.3)
+             (list :stderr-proc-live
+                   (let ((sp (get-buffer-process "eb")))
+                     (and sp (process-live-p sp)))
+                   :ob (with-current-buffer "ob" (buffer-string))
+                   :eb (with-current-buffer "eb" (buffer-string))))"#
+    ));
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:stderr-proc-live nil ",
+            ":ob \"OUT\n\nProcess x finished\n\" ",
+            ":eb \"ERR\n\nProcess x stderr finished\n\")",
+        )
+    );
+}
+
 #[test]
 fn make_process_stderr_pipe_name_preserves_raw_unibyte_owner_bytes() {
     crate::test_utils::init_test_tracing();
