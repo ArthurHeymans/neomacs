@@ -301,6 +301,26 @@ where
     fallback
 }
 
+/// Resolve a char/text property from an interval's plist (in slice form),
+/// resolving through a `category` symbol just like GNU `textget`
+/// (`lookup_char_property` with `textprop = true`).  Used when collecting
+/// `modification-hooks` from text-property intervals so a `category' interval
+/// contributes the category symbol's `modification-hooks' property.
+pub(crate) fn lookup_text_property_from_plist_slice(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    plist: &[(Value, Value)],
+    prop: Value,
+) -> Value {
+    lookup_char_property_from_direct(
+        obarray,
+        buffers,
+        |name| plist_slice_get_value(plist, name),
+        prop,
+        true,
+    )
+}
+
 fn lookup_string_text_property(
     obarray: &Obarray,
     buffers: &BufferManager,
@@ -370,7 +390,7 @@ pub(crate) fn lookup_buffer_text_property_at_emacs_byte_pos(
     )
 }
 
-fn lookup_overlay_property(
+pub(crate) fn lookup_overlay_property(
     obarray: &Obarray,
     buffers: &BufferManager,
     overlay_val: Value,
@@ -1165,7 +1185,9 @@ pub(crate) fn prepare_interval_modification_for_change(
     }
 
     let (lisp_start, lisp_end, hook_lists) = {
-        let Some(buf) = eval.buffers.get(buf_id) else {
+        let obarray = &eval.obarray;
+        let buffers = &eval.buffers;
+        let Some(buf) = buffers.get(buf_id) else {
             return Ok(());
         };
         let byte_range = EmacsByteRange::ordered(byte_start, byte_end);
@@ -1181,7 +1203,9 @@ pub(crate) fn prepare_interval_modification_for_change(
         let _ = buf.text_props_try_for_each_interval_in_emacs_byte_range(
             byte_range,
             |_range, plist| {
-                let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
+                // GNU `verify_interval_modification` reads `modification-hooks'
+                // via `textget`, which resolves through a `category' symbol.
+                let mh = lookup_text_property_from_plist_slice(obarray, buffers, plist, mod_sym);
                 if mh.is_nil() {
                     return Ok::<(), ()>(());
                 }

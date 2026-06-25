@@ -717,12 +717,24 @@ fn collect_overlay_change_hooks(
             None => continue,
         };
 
+        // GNU `report_overlay_modification` reads these hook lists with
+        // `Foverlay_get`, which resolves through `lookup_char_property` -- so a
+        // `category' overlay property whose value is a symbol contributes the
+        // symbol's `insert-in-front-hooks' / `insert-behind-hooks' /
+        // `modification-hooks' property.  Use the same category-resolving
+        // lookup here instead of a plain plist read.
+        let overlay_hook = |prop: &str| -> Option<Value> {
+            let value = crate::emacs_core::textprop::lookup_overlay_property(
+                &ctx.obarray,
+                &ctx.buffers,
+                ov_id,
+                Value::symbol(prop),
+            );
+            (!value.is_nil()).then_some(value)
+        };
+
         if insertion && (beg_pos == ov_start || end_pos == ov_start) {
-            if let Some(hook_val) = buf
-                .overlays
-                .overlay_get_named(ov_id, Value::symbol("insert-in-front-hooks"))
-                .filter(|value| !value.is_nil())
-            {
+            if let Some(hook_val) = overlay_hook("insert-in-front-hooks") {
                 result.push(OverlayModificationHook {
                     hook_list: hook_val,
                     overlay: ov_id,
@@ -730,11 +742,7 @@ fn collect_overlay_change_hooks(
             }
         }
         if insertion && (beg_pos == ov_end || end_pos == ov_end) {
-            if let Some(hook_val) = buf
-                .overlays
-                .overlay_get_named(ov_id, Value::symbol("insert-behind-hooks"))
-                .filter(|value| !value.is_nil())
-            {
+            if let Some(hook_val) = overlay_hook("insert-behind-hooks") {
                 result.push(OverlayModificationHook {
                     hook_list: hook_val,
                     overlay: ov_id,
@@ -744,11 +752,7 @@ fn collect_overlay_change_hooks(
         // GNU intersection test (open interval):
         //   end > obegin && begin < oend
         if end_pos > ov_start && beg_pos < ov_end {
-            if let Some(hook_val) = buf
-                .overlays
-                .overlay_get_named(ov_id, Value::symbol("modification-hooks"))
-                .filter(|value| !value.is_nil())
-            {
+            if let Some(hook_val) = overlay_hook("modification-hooks") {
                 result.push(OverlayModificationHook {
                     hook_list: hook_val,
                     overlay: ov_id,
