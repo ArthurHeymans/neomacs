@@ -4012,3 +4012,23 @@ fn div_core_divergence_surface_standard_display_bulk_helpers_create_table() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_detect_coding_region_eol_type() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (undecided-dos (undecided-dos))
+    // Neomacs:   OK (undecided (undecided))
+    // detect-coding-region reports the CRLF EOL variant (undecided-dos) for a
+    // buffer with CRLF line endings; Neomacs returns plain undecided, missing
+    // EOL detection (both the highest-priority and full-list forms).
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert (unibyte-string ?a 13 10 ?b 13 10))
+  (list (detect-coding-region (point-min) (point-max) t)
+        (detect-coding-region (point-min) (point-max))))
+"##,
+    );
+}
