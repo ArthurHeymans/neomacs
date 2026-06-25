@@ -156,6 +156,11 @@ struct FrameWindowHookPlan {
     frame_size_change: bool,
     frame_selected_window_change: bool,
     frame_state_change: bool,
+    /// GNU `run_window_change_functions` runs
+    /// `run_window_configuration_change_hook' when a frame's configuration
+    /// changed, i.e. `frame_size_change || window_deleted'
+    /// (`src/window.c:4308-4312`).
+    frame_configuration_change: bool,
     local_buffer_windows: Vec<crate::window::WindowId>,
     local_size_windows: Vec<crate::window::WindowId>,
     local_selection_windows: Vec<crate::window::WindowId>,
@@ -393,6 +398,7 @@ fn run_redisplay_window_change_hooks_inner(eval: &mut super::eval::Context) -> E
             frame_size_change,
             frame_selected_window_change,
             frame_state_change,
+            frame_configuration_change: frame_size_change || window_deleted,
             local_buffer_windows,
             local_size_windows,
             local_selection_windows,
@@ -472,6 +478,20 @@ fn run_redisplay_window_change_hooks_inner(eval: &mut super::eval::Context) -> E
             window_state_change_functions,
         )?;
         run_window_state_change_hook |= plan.frame_state_change;
+
+        // GNU `run_window_change_functions` (window.c:4308-4312) runs
+        // `window-configuration-change-hook' (via
+        // `run_window_configuration_change_hook') when the frame's window
+        // configuration changed (a window changed size or was deleted).  This
+        // is the redisplay-driven home of the hook -- so in batch (no
+        // redisplay) it never fires from bare `split-window'/`delete-window',
+        // matching GNU.
+        if plan.frame_configuration_change && eval.frames.get(plan.frame_id).is_some() {
+            let _ = builtin_run_window_configuration_change_hook(
+                eval,
+                vec![Value::make_frame(plan.frame_id.0)],
+            )?;
+        }
     }
 
     if run_window_state_change_hook {

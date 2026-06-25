@@ -1311,7 +1311,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("run-hook-wrapped", builtin_run_hook_wrapped, 2, None);
     ctx.defsubr(
         "run-window-configuration-change-hook",
-        super::window_cmds::builtin_run_window_configuration_change_hook,
+        hooks::builtin_run_window_configuration_change_hook,
         0,
         None,
     );

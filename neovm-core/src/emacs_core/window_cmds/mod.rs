@@ -32,10 +32,9 @@ pub(crate) use super::builtins::symbols::{
 };
 pub(crate) use super::builtins::{
     builtin_coordinates_in_window_p, builtin_current_window_configuration,
-    builtin_run_window_configuration_change_hook, builtin_run_window_scroll_functions,
-    builtin_set_window_configuration, builtin_split_window_internal,
-    builtin_window_configuration_equal_p, builtin_window_configuration_frame,
-    builtin_window_configuration_p,
+    builtin_run_window_scroll_functions, builtin_set_window_configuration,
+    builtin_split_window_internal, builtin_window_configuration_equal_p,
+    builtin_window_configuration_frame, builtin_window_configuration_p,
 };
 pub(crate) use super::builtins::{
     builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel,
@@ -3917,8 +3916,9 @@ pub(crate) fn builtin_delete_window(
         eval.buffers.switch_current(buffer_id);
     }
     note_selected_window_buffer_in_state(&mut eval.frames, &mut eval.buffers, fid);
-    // Run window-configuration-change-hook after successful deletion.
-    let _ = builtin_run_window_configuration_change_hook(eval, vec![]);
+    // GNU defers `window-configuration-change-hook' to the redisplay-driven
+    // `run_window_change_functions' (window.c:4308-4312); neomacs mirrors this
+    // in `run_redisplay_window_change_hooks'.  See `builtin_split_window_internal'.
     Ok(Value::NIL)
 }
 /// `(delete-other-windows &optional WINDOW)` -> nil.
@@ -3953,8 +3953,9 @@ pub(crate) fn builtin_delete_other_windows(
         eval.buffers.switch_current(buffer_id);
     }
     note_selected_window_buffer_in_state(&mut eval.frames, &mut eval.buffers, fid);
-    // Run window-configuration-change-hook after successful deletion.
-    let _ = builtin_run_window_configuration_change_hook(eval, vec![]);
+    // GNU defers `window-configuration-change-hook' to the redisplay-driven
+    // `run_window_change_functions' (window.c:4308-4312); neomacs mirrors this
+    // in `run_redisplay_window_change_hooks'.  See `builtin_split_window_internal'.
     Ok(Value::NIL)
 }
 /// `(delete-window-internal WINDOW)` -> nil.
