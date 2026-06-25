@@ -797,3 +797,63 @@ fn emacs_char_range_and_unibyte_promotion() {
         assert_eq!(decoded, code, "round-trip {code:#x}");
     }
 }
+
+#[test]
+fn str_to_unibyte_narrows_each_char_to_low_byte() {
+    // Mirrors GNU `copy_text` multibyte->unibyte (insdel.c:632-648): each
+    // character collapses to its low byte `c & 0xFF`, one byte per char.
+
+    // ASCII passes through unchanged.
+    assert_eq!(str_to_unibyte(b"abc"), b"abc".to_vec());
+
+    // A regular multibyte char é (U+00E9) is stored as the 2 internal bytes
+    // C3 A9 but narrows to the single byte 0xE9 (= 233), NOT the raw byte
+    // pair. This is the behavior `search_buffer_non_re` relies on so a true
+    // multibyte char fails to match its UTF-8 bytes in a unibyte buffer.
+    let e_acute_internal = {
+        let mut buf = [0u8; 8];
+        let n = char_string(0x00E9, &mut buf);
+        buf[..n].to_vec()
+    };
+    assert_eq!(e_acute_internal, vec![0xC3, 0xA9]);
+    assert_eq!(str_to_unibyte(&e_acute_internal), vec![0xE9]);
+
+    // An eight-bit raw-byte char (byte + 0x3FFF00) narrows back to its byte.
+    let raw = {
+        let mut buf = [0u8; 8];
+        let n = char_string(byte8_to_char(0xA9), &mut buf);
+        buf[..n].to_vec()
+    };
+    assert_eq!(str_to_unibyte(&raw), vec![0xA9]);
+
+    // A 3-byte CJK char 中 (U+4E2D) narrows to its low byte 0x2D.
+    let zhong = {
+        let mut buf = [0u8; 8];
+        let n = char_string(0x4E2D, &mut buf);
+        buf[..n].to_vec()
+    };
+    assert_eq!(str_to_unibyte(&zhong), vec![0x2D]);
+}
+
+#[test]
+fn unibyte_case_fold_match_len_advances_byte_by_byte() {
+    // Unibyte text C3 A9 41 A9: a search for byte 0xA9 must find the byte
+    // EMBEDDED in the would-be C3 A9 multibyte lead (at offset 1), not skip to
+    // the standalone trailing 0xA9 (offset 3). This is GNU `simple_search`'s
+    // unibyte per-byte advance (search.c:1622-1633).
+    let hay = [0xC3u8, 0xA9, 0x41, 0xA9];
+    assert_eq!(unibyte_case_fold_match_len(&hay, 1, &[0xA9]), Some(2));
+    assert_eq!(unibyte_case_fold_match_len(&hay, 0, &[0xA9]), None);
+    assert_eq!(unibyte_case_fold_match_len(&hay, 3, &[0xA9]), Some(4));
+
+    // Latin-1 case folding on raw bytes: É (0xC9) folds to é (0xE9).
+    let hay2 = [0xE9u8];
+    assert_eq!(unibyte_case_fold_match_len(&hay2, 0, &[0xC9]), Some(1));
+    assert_eq!(unibyte_case_fold_match_len(&hay2, 0, &[0xE9]), Some(1));
+    // A byte with no case partner compares verbatim.
+    assert_eq!(unibyte_case_fold_match_len(&[0xA9u8], 0, &[0xA9]), Some(1));
+    assert_eq!(unibyte_case_fold_match_len(&[0xA9u8], 0, &[0xAA]), None);
+
+    // ASCII folding still works.
+    assert_eq!(unibyte_case_fold_match_len(b"ABC", 0, b"abc"), Some(3));
+}

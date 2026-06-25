@@ -891,6 +891,27 @@ pub fn str_to_multibyte(src: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Convert multibyte text to unibyte text, one output byte per character.
+///
+/// Mirrors GNU `copy_text` with `from_multibyte=1, to_multibyte=0`
+/// (insdel.c:632-648): each character is decoded, and if it is not ASCII its
+/// low byte (`c & 0xFF`) is emitted. A regular multibyte char like é
+/// (U+00E9) collapses to the single byte 0xE9, and an eight-bit raw-byte
+/// character (`byte + 0x3FFF00`) collapses to `byte`. This is the narrowing
+/// GNU's plain-string search uses when a multibyte pattern is searched in a
+/// unibyte buffer (search.c:1335-1343 `search_buffer_non_re`); it is NOT
+/// `string-as-unibyte` (which reinterprets the internal bytes).
+pub fn str_to_unibyte(src: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(src.len());
+    let mut p = 0usize;
+    while p < src.len() {
+        let (c, len) = string_char(&src[p..]);
+        out.push((c & 0xFF) as u8);
+        p += len.max(1);
+    }
+    out
+}
+
 /// Parse unibyte text as a multibyte sequence: count characters and
 /// final byte size, treating valid multibyte sequences as already
 /// multibyte and lone high bytes as raw-byte chars (2 bytes each).
@@ -1011,6 +1032,30 @@ pub(crate) fn case_fold_match_len(hay: &[u8], at: usize, needle: &[u8]) -> Optio
         n += nl.max(1);
     }
     Some(h)
+}
+
+/// End offset into `hay` of a case-folded match of `needle` starting at byte
+/// `at`, treating BOTH as UNIBYTE: every byte is one raw character advanced
+/// one byte at a time (never decoded as a multibyte sequence).
+///
+/// Mirrors GNU `simple_search`'s unibyte branch (search.c:1622-1633), which
+/// fetches one byte per position and folds it through the case-canonicalization
+/// table. Each byte 0x00..=0xFF is treated as the Latin-1 character of that
+/// code point for folding (so É 0xC9 folds to é 0xE9 in a unibyte buffer);
+/// bytes with no case partner compare verbatim. Critically the advance is
+/// byte-by-byte, so a raw byte embedded inside what would be a multibyte lead
+/// (e.g. the 0xA9 in a C3 A9 pair) is still found at its own position.
+pub(crate) fn unibyte_case_fold_match_len(hay: &[u8], at: usize, needle: &[u8]) -> Option<usize> {
+    if at + needle.len() > hay.len() {
+        return None;
+    }
+    for (i, &nb) in needle.iter().enumerate() {
+        let hb = hay[at + i];
+        if emacs_downcase_code(hb as u32) != emacs_downcase_code(nb as u32) {
+            return None;
+        }
+    }
+    Some(at + needle.len())
 }
 
 // ---------------------------------------------------------------------------

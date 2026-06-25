@@ -1507,6 +1507,24 @@ fn literal_find_emacs_bytes(
                     .position(|window| bytes_equal_ascii_case_fold(window, literal))
                     .map(|start| MatchGroup::new(start, start + literal.len()));
             }
+            // Unibyte target: GNU `simple_search` (search.c:1622-1633) advances
+            // one BYTE per position and case-folds each byte through the case
+            // table.  We must NOT decode multibyte sequences here, or a raw byte
+            // embedded in what looks like a multibyte lead (e.g. the 0xA9 in a
+            // C3 A9 pair) would be skipped — that was the unibyte search bug.
+            if !multibyte {
+                if text.len() < literal.len() {
+                    return None;
+                }
+                for at in 0..=text.len() - literal.len() {
+                    if let Some(end) = crate::emacs_core::emacs_char::unibyte_case_fold_match_len(
+                        text, at, literal,
+                    ) {
+                        return Some(MatchGroup::new(at, end));
+                    }
+                }
+                return None;
+            }
             if let (Some(text_utf8), Some(literal_utf8)) = (
                 crate::emacs_core::emacs_char::try_as_utf8(text),
                 crate::emacs_core::emacs_char::try_as_utf8(literal),
@@ -1561,6 +1579,21 @@ fn literal_rfind_emacs_bytes(
                     .rev()
                     .find(|(_, window)| bytes_equal_ascii_case_fold(window, literal))
                     .map(|(start, _)| MatchGroup::new(start, start + literal.len()));
+            }
+            // Unibyte target: byte-by-byte rightmost case-fold scan, mirroring
+            // GNU `simple_search` reverse search.  See `literal_find_emacs_bytes`.
+            if !multibyte {
+                if text.len() < literal.len() {
+                    return None;
+                }
+                for at in (0..=text.len() - literal.len()).rev() {
+                    if let Some(end) = crate::emacs_core::emacs_char::unibyte_case_fold_match_len(
+                        text, at, literal,
+                    ) {
+                        return Some(MatchGroup::new(at, end));
+                    }
+                }
+                return None;
             }
             if let (Some(text_utf8), Some(literal_utf8)) = (
                 crate::emacs_core::emacs_char::try_as_utf8(text),
@@ -1728,9 +1761,23 @@ pub fn search_backward(
 
 /// Issue #131: coerce a literal search pattern to the buffer's multibyteness the
 /// way GNU does, producing Emacs internal-encoding bytes directly — no storage
-/// round-trip. A unibyte pattern in a multibyte buffer promotes its raw bytes to
-/// eight-bit characters (string-to-multibyte); the rare multibyte-pattern /
-/// unibyte-buffer case reinterprets the bytes (string-as-unibyte).
+/// round-trip.
+///
+/// This mirrors GNU `search_buffer_non_re` (search.c:1319-1343), which coerces
+/// the *pattern* to the *buffer's* multibyteness via `copy_text` before the
+/// byte/char comparison:
+///   - same multibyteness  → raw bytes as-is;
+///   - unibyte pattern, multibyte buffer → widen via `str_to_multibyte`
+///     (each raw byte becomes an eight-bit character);
+///   - multibyte pattern, unibyte buffer → narrow via `str_to_unibyte`
+///     (each char collapses to its low byte `c & 0xFF`, one byte per char).
+///
+/// The last case is what makes a genuine multibyte sequence fail to match the
+/// equal raw bytes in a unibyte buffer: e.g. searching for the multibyte char
+/// é (internal bytes C3 A9) in a unibyte buffer narrows the pattern to the
+/// single byte 0xE9, so it cannot spuriously match the C3 A9 byte pair. (GNU
+/// uses `copy_text`, NOT `string-as-unibyte`, which would reinterpret the
+/// internal bytes and produce the wrong, raw-byte match.)
 fn coerce_pattern_to_buffer_bytes(
     pattern: &crate::heap_types::LispString,
     buf_multibyte: bool,
@@ -1740,7 +1787,7 @@ fn coerce_pattern_to_buffer_bytes(
     } else if buf_multibyte {
         crate::emacs_core::emacs_char::str_to_multibyte(pattern.as_bytes())
     } else {
-        pattern.as_bytes().to_vec()
+        crate::emacs_core::emacs_char::str_to_unibyte(pattern.as_bytes())
     }
 }
 
