@@ -21,6 +21,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         "combine-after-change-calls",
         "inhibit-read-only",
         "inhibit-modification-hooks",
+        // GNU declares these hook variables with DEFVAR_LISP (buffer.c) or
+        // `defvar' (subr.el/simple.el), which makes them special.  Without the
+        // special mark, a `let'-binding of the hook under lexical-binding (as
+        // the oracle harness uses via `eval FORM t') creates an invisible
+        // lexical binding, so `run-hooks' reads the global value and the hook
+        // never fires.  Marking them special restores GNU's dynamic-binding
+        // semantics for `let'-bound hooks.
+        "kill-buffer-query-functions",
+        "kill-buffer-hook",
+        "buffer-list-update-hook",
+        "change-major-mode-hook",
+        "after-change-major-mode-hook",
     ] {
         obarray.make_special(name);
     }

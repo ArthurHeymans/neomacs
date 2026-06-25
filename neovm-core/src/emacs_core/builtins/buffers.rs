@@ -186,6 +186,13 @@ pub(crate) fn run_buffer_list_update_hook(eval: &mut super::eval::Context) -> Ev
     builtin_run_hooks(eval, vec![Value::symbol("buffer-list-update-hook")])
 }
 
+/// GNU `Fkill_all_local_variables` runs the normal hook
+/// `change-major-mode-hook` via `run_hook` as its first action.  This is the
+/// shared entry point used by every major-mode switch.
+pub(crate) fn run_buffer_change_major_mode_hook(eval: &mut super::eval::Context) -> EvalResult {
+    builtin_run_hooks(eval, vec![Value::symbol("change-major-mode-hook")])
+}
+
 pub(crate) fn builtin_get_buffer_create(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1364,6 +1371,17 @@ pub(crate) fn builtin_kill_all_local_variables(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let kill_permanent = args.first().copied().unwrap_or(Value::NIL).is_truthy();
 
+    // GNU `Fkill_all_local_variables` (buffer.c) runs the normal hook
+    // `change-major-mode-hook` as its very first action, *before* any local
+    // bindings are eliminated.  Because every command that selects a new major
+    // mode (`fundamental-mode', `text-mode', derived modes, `set-auto-mode',
+    // `normal-mode', `set-buffer-major-mode', ...) starts by calling this
+    // function, this is the single shared chokepoint where
+    // `change-major-mode-hook' must fire.  Running it here -- with the current
+    // buffer's local variables and local hook value still in effect, and with
+    // `major-mode' still naming the *previous* mode -- matches GNU exactly.
+    run_buffer_change_major_mode_hook(eval)?;
+
     // GNU buffer.c reset_buffer_local_variables:
     // - preserves most always-local slots
     // - resets only a small fixed reset-on-kill-all subset
@@ -1878,8 +1896,11 @@ pub(crate) fn builtin_split_window_internal(
         args[1],
         args[2],
     )?;
-    // Run window-configuration-change-hook after successful split.
-    let _ = super::hooks::builtin_run_window_configuration_change_hook(eval, vec![]);
+    // GNU does NOT run `window-configuration-change-hook' eagerly from
+    // `split-window-internal'.  It is deferred to `run_window_change_functions'
+    // during redisplay (window.c:4308-4312); neomacs mirrors this in
+    // `run_redisplay_window_change_hooks'.  Firing it here diverged from GNU in
+    // batch (no redisplay), where the hook must not run.
     Ok(result)
 }
 
