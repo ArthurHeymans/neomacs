@@ -3972,3 +3972,43 @@ fn div_core_divergence_surface_coding_region_eol_in_buffer() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_standard_display_bulk_helpers_create_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((char-table nil) (char-table nil)
+    //                (err wrong-type-argument char-table-p))
+    // Neomacs:   OK ((err wrong-type-argument arrayp) (err wrong-type-argument arrayp)
+    //                (err wrong-type-argument arrayp))
+    // standard-display-cyrillic-translit and standard-display-european-internal
+    // create standard-display-table when nil in GNU; Neomacs errors with
+    // wrong-type-argument arrayp. standard-display-unicode-special-glyphs
+    // also errors differently: GNU reports char-table-p, Neomacs arrayp.
+    assert_oracle_parity(
+        r##"
+(list
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-cyrillic-translit)
+         (list (type-of standard-display-table)
+               (aref standard-display-table #x410)))
+     (error (list 'err (car err) (cadr err)))))
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-european-internal)
+         (list (type-of standard-display-table)
+               (aref standard-display-table 160)))
+     (error (list 'err (car err) (cadr err)))))
+ (let ((standard-display-table nil))
+   (condition-case err
+       (progn
+         (standard-display-unicode-special-glyphs)
+         (list (type-of standard-display-table)
+               (aref standard-display-table #x2018)))
+     (error (list 'err (car err) (cadr err))))))
+"##,
+    );
+}
