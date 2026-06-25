@@ -3680,3 +3680,31 @@ fn div_core_divergence_surface_overwrite_mode_tab_clears_to_tabstop() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_replace_buffer_contents_text_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (#("abXdef" 0 2 (face italic) 2 3 (face bold) 3 6 (face italic))
+    //                (face italic) (face bold))
+    // Neomacs:   OK (#("abXdef" 0 6 (face bold)) (face bold) (face bold))
+    // replace-buffer-contents in GNU preserves unchanged destination text
+    // properties and only takes source properties for inserted/replaced spans;
+    // Neomacs replaces the whole result with the source buffer's properties.
+    assert_oracle_parity(
+        r##"
+(let ((src (generate-new-buffer " *probe-rbc-src*")))
+  (unwind-protect
+      (progn
+        (with-current-buffer src
+          (insert (propertize "abXdef" 'face 'bold)))
+        (with-temp-buffer
+          (insert (propertize "abcdef" 'face 'italic))
+          (replace-buffer-contents src)
+          (list (buffer-string)
+                (text-properties-at 1)
+                (text-properties-at 3))))
+    (kill-buffer src)))
+"##,
+    );
+}
