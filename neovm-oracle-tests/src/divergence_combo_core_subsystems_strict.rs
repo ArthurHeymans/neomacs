@@ -3830,3 +3830,26 @@ fn div_core_divergence_surface_substitute_command_keys_terminal_override() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_global_map_special_event_bindings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (t ignore t [XF86WakeUp] "<XF86WakeUp>")
+    // Neomacs:   OK (nil nil nil [tool-bar] "<tool-bar>")
+    // GNU's default global map has [tool-bar] and [C-down-mouse-3] as prefix
+    // keymaps and binds [XF86WakeUp] to ignore. Neomacs binds [tool-bar]
+    // directly to ignore, lacks [XF86WakeUp], and makes where-is-internal for
+    // ignore prefer [tool-bar] instead of GNU's [XF86WakeUp].
+    assert_oracle_parity(
+        r##"
+(let ((global (current-global-map)))
+  (let ((where (where-is-internal 'ignore nil t)))
+    (list (keymapp (lookup-key global [tool-bar]))
+          (lookup-key global [XF86WakeUp])
+          (keymapp (lookup-key global [C-down-mouse-3]))
+          where
+          (key-description where))))
+"##,
+    );
+}
