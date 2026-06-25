@@ -1151,6 +1151,26 @@ impl BufferText {
         next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
 
+    /// Like `text_props_next_change_after_emacs_byte_pos`, but reports only a
+    /// change of the single text property `name` (compared by `eq`), matching
+    /// the text-property half of GNU `next_single_char_property_change`.
+    pub fn text_props_next_single_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
+            .start();
+        let next = {
+            self.storage
+                .borrow()
+                .text_props
+                .next_single_property_change_after_char_pos(char_pos, name)
+        };
+        next.map(|next| self.char_pos_to_emacs_byte_pos(next))
+    }
+
     pub fn text_props_previous_change_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

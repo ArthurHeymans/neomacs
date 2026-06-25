@@ -1691,7 +1691,7 @@ fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
     let position = DisplayRowPosition::new(16.0, 2);
 
     let request = hidden
-        .ellipsis_append_request(position)
+        .ellipsis_append_request(position, None)
         .expect("ellipsis request");
     let (request_position, source, face) = request.into_parts();
 
@@ -1707,7 +1707,7 @@ fn buffer_invisible_text_skip_omits_ellipsis_request_without_policy() {
 
     assert!(
         hidden
-            .ellipsis_append_request(DisplayRowPosition::new(16.0, 2))
+            .ellipsis_append_request(DisplayRowPosition::new(16.0, 2), None)
             .is_none()
     );
 }
@@ -1876,7 +1876,7 @@ fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
     let marker = BufferSourceSelectiveDisplayLineTailMarker;
     let position = DisplayRowPosition::new(24.0, 3);
 
-    let request = marker.ellipsis_append_request(position);
+    let request = marker.ellipsis_append_request(position, None);
     let (request_position, source, face) = request.into_parts();
 
     assert_eq!(request_position, position);

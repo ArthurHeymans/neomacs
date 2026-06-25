@@ -121,6 +121,19 @@ impl SyntheticTextSource {
         }
     }
 
+    /// Build an ellipsis source for `marker` using `text` when present (e.g.
+    /// the buffer display table's selective-display glyphs), falling back to
+    /// the marker's hard-coded default text otherwise.
+    fn marker_with_text(marker: SyntheticTextMarker, text: Option<&str>) -> Self {
+        match text {
+            Some(text) if !text.is_empty() => Self {
+                source_id: marker.source_id(),
+                text: text.into(),
+            },
+            _ => Self::marker(marker),
+        }
+    }
+
     fn into_item_source(self, face_id: u32) -> SyntheticTextItemSource {
         SyntheticTextItemSource::new(self.source_id, self.text, RenderFaceRef::FaceId(face_id), 0)
     }
@@ -136,10 +149,26 @@ impl SyntheticTextAppendRequest {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn active_marker(position: DisplayRowPosition, marker: SyntheticTextMarker) -> Self {
         Self {
             position,
             source: SyntheticTextSource::marker(marker),
+            face: SyntheticTextAppendFace::ActiveFace,
+        }
+    }
+
+    /// Like `active_marker`, but uses `text` (the buffer display table's
+    /// selective-display glyphs) for the ellipsis when present, otherwise the
+    /// marker's default text.
+    pub(crate) fn active_marker_with_text(
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+        text: Option<&str>,
+    ) -> Self {
+        Self {
+            position,
+            source: SyntheticTextSource::marker_with_text(marker, text),
             face: SyntheticTextAppendFace::ActiveFace,
         }
     }

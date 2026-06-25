@@ -109,6 +109,14 @@ pub(crate) trait LayoutBufferView {
         &self,
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos>;
+    /// Next position after `pos` where the single text property `name` changes
+    /// (compared by `eq`), ignoring changes to any other property.  Mirrors the
+    /// text-property half of GNU `next_single_char_property_change`.
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos>;
     fn layout_overlays(&self) -> &OverlayList;
 }
 
@@ -174,6 +182,7 @@ const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[
     "neomacs-cursor-effect",
     "neomacs-visual-cursors",
     "show-trailing-whitespace",
+    "standard-display-table",
     "tab-stop-list",
     "wrap-prefix",
 ];
@@ -259,6 +268,14 @@ impl LayoutBufferView for Buffer {
         self.text_props_next_change_after_emacs_byte_pos(pos)
     }
 
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text_props_next_single_change_after_emacs_byte_pos(pos, name)
+    }
+
     fn layout_overlays(&self) -> &OverlayList {
         self.overlays()
     }
@@ -328,6 +345,15 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     ) -> Option<EmacsBytePos> {
         self.text_snapshot
             .next_text_prop_change_after_emacs_byte_pos(pos)
+    }
+
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text_snapshot
+            .next_single_text_prop_change_after_emacs_byte_pos(pos, name)
     }
 
     fn layout_overlays(&self) -> &OverlayList {
@@ -661,6 +687,53 @@ fn buffer_fill_column_indicator<B: LayoutBufferView>(buffer: &B) -> Option<(i32,
     }
 
     Some((column as i32, character))
+}
+
+/// Index of the selective-display / invisible ellipsis slot in a display
+/// table's extra slots (`DISP_INVIS_VECTOR`, `disptab.h:35` -> `extras[4]`).
+const DISP_INVIS_VECTOR_SLOT: usize = 4;
+
+/// Decode a display-table glyph code to its character.
+///
+/// `make-glyph-code` (`disp-table.el`) encodes a glyph as either a bare
+/// character fixnum, a fixnum packing the face id above the low 22 char bits,
+/// or a `(char . face-id)` cons when the face id needs more than 6 bits.  Here
+/// we only need the character; the face is currently rendered with the active
+/// (preceding text) face, matching GNU's common `setup_for_ellipsis` path
+/// where the glyph carries the default face.
+fn glyph_code_char(glyph: Value) -> Option<char> {
+    let code = if glyph.is_cons() {
+        glyph.cons_car().as_fixnum()?
+    } else {
+        glyph.as_fixnum()?
+    };
+    char::from_u32((code as u64 & 0x3F_FFFF) as u32)
+}
+
+/// Resolve the ellipsis string GNU renders for invisible/selective-display
+/// folds from the active display table's `DISP_INVIS_VECTOR` slot.
+///
+/// GNU `setup_for_ellipsis` (`xdisp.c:5654`) uses the buffer's display table
+/// (`buffer-display-table`, else `standard-display-table`) selective-display
+/// slot when it holds a vector of glyph codes, and otherwise falls back to the
+/// default three `.` glyphs.  We mirror the character selection; returning
+/// `None` lets the caller use the hard-coded `"..."` default.
+pub(crate) fn buffer_invisible_ellipsis_text<B: LayoutBufferView>(buffer: &B) -> Option<String> {
+    let table = buffer_local_value(buffer, "buffer-display-table")
+        .filter(|v| !v.is_nil())
+        .or_else(|| buffer_local_value(buffer, "standard-display-table"))
+        .filter(|v| !v.is_nil())?;
+    let slot = table
+        .as_char_table_obj()?
+        .extras
+        .get(DISP_INVIS_VECTOR_SLOT)
+        .copied()?;
+    let glyphs = slot.as_vector_data()?;
+    if glyphs.is_empty() {
+        return None;
+    }
+    let text: String = glyphs.iter().filter_map(|g| glyph_code_char(*g)).collect();
+    (!text.is_empty()).then_some(text)
 }
 
 pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {
@@ -1758,15 +1831,40 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// `next_visible_pos` is the next char position where visibility might change.
     /// If no change is found, returns `buffer.zv` as the next boundary.
     pub fn check_invisible(&self, charpos: i64) -> (InvisibleStatus, i64) {
+        let status = self.invisible_status_at(charpos);
+        let mut next_change = self.next_invisible_boundary(charpos);
+        if status.hidden {
+            // GNU `handle_invisible_prop` collapses CONSECUTIVE invisible runs
+            // into a single ellipsis even when the `invisible` value changes
+            // within the run.  Example: a folded org subtree (overlay
+            // `invisible` = `org-fold-outline`, shows ellipsis) that contains an
+            // org-link whose URL is separately invisible (`org-link`, no
+            // ellipsis) -> three runs of differing `invisible` value but all
+            // hidden.  Without collapsing, each run emits its own ellipsis
+            // (`... [...]  [...]  [...]`); GNU shows one.  Extend the region over
+            // every consecutive hidden position; the ellipsis flag stays that of
+            // the run that opened the region (`status`, matching GNU which sets
+            // `display_ellipsis` from the entry position).
+            let max = self.buffer.layout_point_max_char_pos().get() as i64;
+            while next_change < max && self.invisible_status_at(next_change).hidden {
+                next_change = self.next_invisible_boundary(next_change);
+            }
+        }
+        (status, next_change)
+    }
+
+    /// Combined `invisible` status at `charpos` from the `invisible` text
+    /// property and the highest-priority overlay (GNU `invisible_p`).
+    fn invisible_status_at(&self, charpos: i64) -> InvisibleStatus {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let text_invis = self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
-        let mut status = InvisibleStatus::VISIBLE;
         let spec = self
             .buffer
             .layout_buffer_local_value("buffer-invisibility-spec")
             .unwrap_or(Value::T);
+        let mut status = InvisibleStatus::VISIBLE;
         if let Some(value) = text_invis {
             status = invisible_prop_status(Some(value), spec);
         }
@@ -1789,11 +1887,22 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                 }
             }
         }
+        status
+    }
 
-        // Find the next position where the invisible property changes
+    /// Next position where the `invisible` property changes, combining the
+    /// `invisible` text-property extent with overlay boundaries (the text-prop
+    /// half of GNU `next_single_char_property_change(pos, Qinvisible, ...)`).
+    /// Scanning only `invisible` (not *any* property) avoids fragmenting a
+    /// contiguous invisible region at every `face` change in a fontified buffer.
+    fn next_invisible_boundary(&self, charpos: i64) -> i64 {
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let next_text_change = self
             .buffer
-            .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
+            .layout_next_single_text_prop_change_after_emacs_byte_pos(
+                bytepos,
+                Value::symbol("invisible"),
+            )
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
         let next_overlay_change = self
@@ -1802,9 +1911,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             .next_boundary_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
-        let next_change = next_text_change.min(next_overlay_change);
-
-        (status, next_change as i64)
+        next_text_change.min(next_overlay_change) as i64
     }
 
     /// Check for line-spacing text property at `charpos`.

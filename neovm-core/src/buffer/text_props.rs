@@ -1979,6 +1979,34 @@ impl TextPropertyTable {
         self.next_property_change_raw(pos)
     }
 
+    /// Like `next_property_change_after_char_pos`, but only reports a change of
+    /// the single property `name` (compared by `eq`), ignoring changes to any
+    /// other property.  Mirrors GNU `next_single_char_property_change`'s
+    /// text-property half: walk interval boundaries and stop when the value of
+    /// `name` differs from its value at `pos`.
+    pub fn next_single_property_change_after_char_pos(
+        &self,
+        pos: CharPos0,
+        name: Value,
+    ) -> Option<CharPos0> {
+        let current = self.get_property_raw(pos, name);
+        let mut cursor = pos;
+        while let Some(next) = self.next_interval_boundary_raw(cursor) {
+            let next_val = self.get_property_raw(next, name);
+            if !eq_value(
+                &current.unwrap_or(Value::NIL),
+                &next_val.unwrap_or(Value::NIL),
+            ) {
+                return Some(next);
+            }
+            if next.get() <= cursor.get() {
+                return None;
+            }
+            cursor = next;
+        }
+        None
+    }
+
     fn next_property_change_raw(&self, pos: CharPos0) -> Option<CharPos0> {
         let current = self.plist_at(pos).unwrap_or_default();
         let mut cursor = pos;

@@ -1516,6 +1516,24 @@ fn enabled_window_row_texts(
         .collect()
 }
 
+/// Concatenated text of every enabled row's text area (`glyphs[1]`) in a
+/// backend layout trace.  Char glyphs contribute their character; composites
+/// their text.  Used to assert on rendered output (e.g. ellipsis runs).
+fn backend_trace_text_area_text(trace: &BackendLayoutTrace) -> String {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.enabled)
+        .flat_map(|row| row.glyph_areas[1].iter())
+        .filter(|glyph| !glyph.padding)
+        .filter_map(|glyph| match &glyph.kind {
+            GlyphKindTrace::Char(ch) | GlyphKindTrace::Glyphless(ch) => Some(ch.to_string()),
+            GlyphKindTrace::Composite(text) => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
     glyphs
         .iter()
@@ -2283,6 +2301,131 @@ fn layout_frame_rust_lays_out_invisible_text() {
     let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
     assert!(!trace.matrix_rows.is_empty());
+}
+
+#[test]
+fn layout_frame_rust_emits_one_ellipsis_for_invisible_region_split_by_face() {
+    // Regression for the org-fold "long dot-fill" bug: ONE contiguous invisible
+    // region that has a DIFFERENT text property (`face`) changing in its middle
+    // must collapse to exactly ONE ellipsis.  The buggy code computed the
+    // invisible region's end via the next change of ANY text property, so the
+    // mid-region `face` boundary fragmented the region into several `...` runs
+    // (a long dot-fill).  The fix scans only the `invisible` property's next
+    // change (GNU `next_single_char_property_change(pos, Qinvisible, ...)`), so
+    // the whole region is skipped once -> one ellipsis.
+    //
+    // Buffer text avoids literal `.` so every `.` glyph comes from an ellipsis.
+    let text = "AAAfooBBBbarCCC\nDDD\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
+        buffer.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![Value::cons(Value::symbol("outline"), Value::T)]),
+        );
+        // One contiguous invisible region covering "fooBBBbar".
+        let invis_start = text.find("foo").expect("foo start");
+        let invis_end = text.find("CCC").expect("CCC start");
+        assert!(buffer.put_text_property(
+            invis_start,
+            invis_end,
+            Value::symbol("invisible"),
+            Value::symbol("outline"),
+        ));
+        // A face change strictly INSIDE the invisible region: this is the
+        // unrelated property whose boundary used to fragment the region.
+        let face_start = text.find("BBB").expect("BBB start");
+        let face_end = face_start + "BBB".len();
+        assert!(buffer.put_text_property(
+            face_start,
+            face_end,
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    let dot_count = rendered.matches('.').count();
+    let ellipsis_runs = rendered.matches("...").count();
+
+    // Exactly one ellipsis (the default `...` = 3 dots) for the whole region.
+    assert_eq!(
+        dot_count, 3,
+        "expected exactly one 3-dot ellipsis for the folded region, got {dot_count} dots; rendered={rendered:?}"
+    );
+    assert_eq!(
+        ellipsis_runs, 1,
+        "expected exactly one `...` ellipsis run, got {ellipsis_runs}; rendered={rendered:?}"
+    );
+    // Visible text on both sides of the fold survives.
+    assert!(
+        rendered.contains("AAA") && rendered.contains("CCC"),
+        "visible text around the fold must render, rendered={rendered:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_collapses_consecutive_invisible_runs_to_one_ellipsis() {
+    // Regression for org folding over a link: a CONTIGUOUS hidden region whose
+    // `invisible` VALUE changes mid-region must collapse to ONE ellipsis. A
+    // folded org subtree (`outline`, shows ellipsis) containing a link whose URL
+    // is separately invisible (`org-link`, no ellipsis) is three runs of
+    // differing `invisible` value but all hidden. GNU `handle_invisible_prop`
+    // advances over the consecutive invisible runs showing a single ellipsis;
+    // stopping at each value change emitted one per ellipsis-bearing run.
+    let text = "AAAfooBBBbarCCC\nDDD\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
+        buffer.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![
+                Value::cons(Value::symbol("outline"), Value::T),
+                Value::list(vec![Value::symbol("org-link")]),
+            ]),
+        );
+        let foo = text.find("foo").expect("foo start");
+        let bbb = text.find("BBB").expect("BBB start");
+        let bbb_end = bbb + "BBB".len();
+        let ccc = text.find("CCC").expect("CCC start");
+        // `outline` (ellipsis) around an `org-link` (no ellipsis) middle: the
+        // `invisible` value changes twice inside one contiguous hidden region.
+        assert!(buffer.put_text_property(
+            foo,
+            bbb,
+            Value::symbol("invisible"),
+            Value::symbol("outline"),
+        ));
+        assert!(buffer.put_text_property(
+            bbb,
+            bbb_end,
+            Value::symbol("invisible"),
+            Value::symbol("org-link"),
+        ));
+        assert!(buffer.put_text_property(
+            bbb_end,
+            ccc,
+            Value::symbol("invisible"),
+            Value::symbol("outline"),
+        ));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    let dot_count = rendered.matches('.').count();
+    let ellipsis_runs = rendered.matches("...").count();
+
+    // One ellipsis for the whole collapsed region (the opening `outline` run's
+    // ellipsis). Without collapsing this is two (`outline` foo + `outline` bar).
+    assert_eq!(
+        dot_count, 3,
+        "expected ONE 3-dot ellipsis for the collapsed region, got {dot_count} dots; rendered={rendered:?}"
+    );
+    assert_eq!(
+        ellipsis_runs, 1,
+        "expected ONE `...` run, got {ellipsis_runs}; rendered={rendered:?}"
+    );
+    assert!(
+        rendered.contains("AAA") && rendered.contains("CCC"),
+        "visible text around the fold must render, rendered={rendered:?}"
+    );
 }
 
 #[test]

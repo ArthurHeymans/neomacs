@@ -74,6 +74,16 @@ fn next_change_after_char(table: &TextPropertyTable, pos: usize) -> Option<usize
         .map(CharPos0::get)
 }
 
+fn next_single_change_after_char(
+    table: &TextPropertyTable,
+    pos: usize,
+    name: Value,
+) -> Option<usize> {
+    table
+        .next_single_property_change_after_char_pos(char_pos(pos), name)
+        .map(CharPos0::get)
+}
+
 fn previous_change_before_char(table: &TextPropertyTable, pos: usize) -> Option<usize> {
     table
         .previous_property_change_before_char_pos(char_pos(pos))
@@ -550,6 +560,46 @@ fn next_property_change_at_boundary() {
 
     // At start of interval
     assert_eq!(next_change_after_char(&table, 5), Some(10));
+}
+
+#[test]
+fn next_single_property_change_ignores_other_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    // One contiguous `invisible` run over [0, 30) ...
+    put_chars(
+        &mut table,
+        0,
+        30,
+        Value::symbol("invisible"),
+        Value::symbol("outline"),
+    );
+    // ... with a `face` change in the MIDDLE of it, at [10, 20).
+    put_chars(
+        &mut table,
+        10,
+        20,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
+
+    // The any-property scan fragments at the face boundaries (10, 20).
+    assert_eq!(next_change_after_char(&table, 0), Some(10));
+    // The single-`invisible` scan ignores the face change and reports the end
+    // of the whole invisible run (the next interval boundary at 30).
+    assert_eq!(
+        next_single_change_after_char(&table, 0, Value::symbol("invisible")),
+        Some(30)
+    );
+    assert_eq!(
+        next_single_change_after_char(&table, 12, Value::symbol("invisible")),
+        Some(30)
+    );
+    // A `face` scan still sees the face boundary at 20.
+    assert_eq!(
+        next_single_change_after_char(&table, 12, Value::symbol("face")),
+        Some(20)
+    );
 }
 
 #[test]

@@ -793,6 +793,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             ..
         } = state;
         let mut source_render = source_render;
+        let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
 
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
@@ -804,6 +805,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             row_geometry,
             &mut source_render.reborrow(),
             progress.row_progress_mut().reborrow(),
+            ellipsis_text.as_deref(),
         );
 
         let tail_action = source_walk
@@ -964,11 +966,13 @@ impl BufferSourceInvisibleTextSkip {
     pub(crate) fn ellipsis_append_request(
         self,
         position: DisplayRowPosition,
+        ellipsis_text: Option<&str>,
     ) -> Option<SyntheticTextAppendRequest> {
         self.ellipsis.then(|| {
-            SyntheticTextAppendRequest::active_marker(
+            SyntheticTextAppendRequest::active_marker_with_text(
                 position,
                 SyntheticTextMarker::InvisibleEllipsis,
+                ellipsis_text,
             )
         })
     }
@@ -980,6 +984,7 @@ impl BufferSourceInvisibleTextSkip {
         cursor_info: &mut CursorCaptureState,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_progress: &mut DisplaySourceRowProgressState<'_>,
+        ellipsis_text: Option<&str>,
     ) {
         let position = row_progress.row_position();
         self.capture_cursor_if_point(
@@ -990,7 +995,7 @@ impl BufferSourceInvisibleTextSkip {
             position.col(),
         );
 
-        let Some(request) = self.ellipsis_append_request(position) else {
+        let Some(request) = self.ellipsis_append_request(position, ellipsis_text) else {
             return;
         };
         append_synthetic_request_to_text_row(
@@ -1042,6 +1047,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             return BufferSourceInvisibleTextRenderOutcome::Visible;
         };
 
+        let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
         let mut row_progress = progress.row_progress_mut().reborrow();
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
@@ -1054,6 +1060,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             cursor_info,
             &mut source_render.reborrow(),
             &mut row_progress,
+            ellipsis_text.as_deref(),
         );
 
         let overlay_charpos = progress.charpos();
@@ -1147,8 +1154,13 @@ impl BufferSourceSelectiveDisplayLineTailMarker {
     pub(crate) fn ellipsis_append_request(
         self,
         position: DisplayRowPosition,
+        ellipsis_text: Option<&str>,
     ) -> SyntheticTextAppendRequest {
-        SyntheticTextAppendRequest::active_marker(position, SyntheticTextMarker::SelectiveEllipsis)
+        SyntheticTextAppendRequest::active_marker_with_text(
+            position,
+            SyntheticTextMarker::SelectiveEllipsis,
+            ellipsis_text,
+        )
     }
 
     pub(crate) fn append_to_text_row_and_apply<'ctx>(
@@ -1157,8 +1169,9 @@ impl BufferSourceSelectiveDisplayLineTailMarker {
         row_geometry: &'ctx DisplayRowGeometryState,
         source_render: &mut TextRowSourceRenderState<'_>,
         mut row_progress: DisplaySourceRowProgressState<'_>,
+        ellipsis_text: Option<&str>,
     ) {
-        let request = self.ellipsis_append_request(row_progress.row_position());
+        let request = self.ellipsis_append_request(row_progress.row_position(), ellipsis_text);
         append_synthetic_request_to_text_row(
             render_context,
             row_geometry,

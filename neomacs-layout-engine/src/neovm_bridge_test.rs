@@ -1348,6 +1348,63 @@ fn overlay_invisible_respects_buffer_invisibility_spec() {
 }
 
 #[test]
+fn buffer_invisible_ellipsis_text_reads_display_table_slot() {
+    // Bug #2: the ellipsis glyphs come from the buffer display table's
+    // selective-display / invisible slot (`DISP_INVIS_VECTOR` = extras[4]),
+    // not the hard-coded "...".  Build a display-table char-table whose slot
+    // holds the org/GNU ` [...] ` glyphs (a mix of bare-fixnum glyph codes and
+    // a `(char . face-id)` cons, both produced by `make-glyph-code`) and assert
+    // the helper decodes the characters.
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*disp-table*");
+
+    // A display table is a char-table with 6 extra slots; slot 4 holds the
+    // invisible/selective-display glyph vector.
+    let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+    // ` [...] ` : space, '[', '.', '.', '.', ']', space.
+    // Use a `(char . face-id)` cons for one glyph (face-id >= 64 path) and bare
+    // fixnums for the rest to cover both decode branches.
+    let glyphs = Value::vector(vec![
+        Value::fixnum(' ' as i64),
+        Value::cons(Value::fixnum('[' as i64), Value::fixnum(285)),
+        Value::fixnum('.' as i64),
+        Value::fixnum('.' as i64),
+        Value::fixnum('.' as i64),
+        Value::fixnum(']' as i64),
+        Value::fixnum(' ' as i64),
+    ]);
+    table
+        .with_char_table_mut(|obj| obj.extras.ensure_owned()[4] = glyphs)
+        .expect("char-table");
+
+    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
+        set_buffer_text(buf, "folded");
+        buf.set_buffer_local("buffer-display-table", table);
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    assert_eq!(
+        buffer_invisible_ellipsis_text(buf).as_deref(),
+        Some(" [...] "),
+    );
+}
+
+#[test]
+fn buffer_invisible_ellipsis_text_absent_when_no_display_table() {
+    // With no buffer/standard display table the helper returns None so callers
+    // fall back to GNU's default three-dot ellipsis.
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*no-disp-table*");
+    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
+        set_buffer_text(buf, "folded");
+    }
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    assert_eq!(buffer_invisible_ellipsis_text(buf), None);
+}
+
+#[test]
 fn test_text_prop_line_spacing() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");
