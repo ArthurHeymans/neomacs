@@ -272,6 +272,19 @@ pub(crate) fn signal_before_change(
     ctx: &mut crate::emacs_core::eval::Context,
     byte_range: EmacsByteRange,
 ) -> Result<(), Flow> {
+    // GNU `prepare_to_modify_buffer_1` (insdel.c): the *first* action is
+    // `Fbarf_if_buffer_read_only`, which signals `buffer-read-only` when the
+    // buffer's `read-only' flag is set (and `inhibit-read-only' is nil) BEFORE
+    // running `verify_interval_modification' or `signal_before_change' (and
+    // hence before `before-change-functions').  Performing the buffer-wide
+    // read-only barf here -- the central modification chokepoint -- means a
+    // rejected modification of a read-only buffer never fires
+    // `before-change-functions', matching GNU.  Previously each insert/delete
+    // primitive ran this function (and thus `before-change-functions') first
+    // and only barfed afterwards, so a rejected insert double-counted the
+    // hook.
+    ensure_current_buffer_writable_in_state(&ctx.obarray, &[], &ctx.buffers)?;
+
     // GNU `prepare_to_modify_buffer` -> `verify_interval_modification`: enforce
     // the `read-only` text property before any modification. This is the central
     // modification chokepoint (every insert/delete/replace/case/abbrev/indent
