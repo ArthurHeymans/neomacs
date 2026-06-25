@@ -56,9 +56,9 @@ fn test_write_sgr_default_attrs() {
     let s = String::from_utf8(buf).unwrap();
     // Should contain reset
     assert!(s.starts_with("\x1b[0m"));
-    // Should contain fg and bg color sequences
-    assert!(s.contains("\x1b[38;2;255;255;255m")); // white fg
-    assert!(s.contains("\x1b[48;2;0;0;0m")); // black bg
+    // Default TTY colors are terminal defaults, not concrete RGB values.
+    assert!(!s.contains("\x1b[38;2;"));
+    assert!(!s.contains("\x1b[48;2;"));
     // Should NOT contain bold/italic/underline
     assert!(!s.contains("\x1b[1m"));
     assert!(!s.contains("\x1b[3m"));
@@ -581,10 +581,10 @@ fn test_rasterize_empty_frame() {
     let mut grid = TtyGrid::new(10, 5);
     rasterize_frame_glyphs(&frame, &mut grid, (0, 0, 0));
 
-    // All cells should be spaces with black bg
+    // All cells should be spaces using the terminal default background.
     for cell in &grid.cells {
         assert_eq!(cell.text, " ");
-        assert_eq!(cell.attrs.bg, Some((0, 0, 0)));
+        assert_eq!(cell.attrs.bg, None);
     }
 }
 
@@ -628,8 +628,8 @@ fn test_rasterize_stretch_glyph() {
     for col in 0..10 {
         assert_eq!(grid.get(col, 1).unwrap().attrs.bg, Some((0, 0, 255)));
     }
-    // Row 0 should still be black
-    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, Some((0, 0, 0)));
+    // Row 0 should still use the terminal default background.
+    assert_eq!(grid.get(0, 0).unwrap().attrs.bg, None);
 }
 
 #[test]
@@ -952,8 +952,8 @@ fn test_cell_attrs_equality() {
 #[test]
 fn test_cell_attrs_default_values() {
     let attrs = ansi::CellAttrs::default();
-    assert_eq!(attrs.fg, Some((255, 255, 255)));
-    assert_eq!(attrs.bg, Some((0, 0, 0)));
+    assert_eq!(attrs.fg, None);
+    assert_eq!(attrs.bg, None);
     assert!(!attrs.bold);
     assert!(!attrs.italic);
     assert_eq!(attrs.underline, 0);
