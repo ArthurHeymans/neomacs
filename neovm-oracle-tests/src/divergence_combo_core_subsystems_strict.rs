@@ -3894,3 +3894,30 @@ fn div_core_divergence_surface_regexp_nonascii_unibyte_bytes() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_replace_match_case_table_capitalization() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK "Xy def"
+    // Neomacs:   OK "xy def"
+    // With a custom case table making `{` an uppercase letter (pair {/}), the
+    // matched text "{bc" reads as capitalized, so case-replace capitalizes the
+    // lowercase replacement "xy" to "Xy" in GNU. Neomacs ignores the case
+    // table and leaves "xy".
+    assert_oracle_parity(
+        r##"
+(let ((table (copy-case-table (standard-case-table))))
+  (set-case-syntax-pair ?\{ ?\} table)
+  (with-temp-buffer
+    (set-case-table table)
+    (insert "{bc def")
+    (goto-char 1)
+    (let ((case-replace t)
+          (case-fold-search t))
+      (re-search-forward "{bc")
+      (replace-match "xy")
+      (buffer-string))))
+"##,
+    );
+}
