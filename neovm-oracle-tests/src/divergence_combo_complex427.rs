@@ -99,7 +99,12 @@ fn div_cx427_process_live_dead() {
 (let ((proc (make-process :name "neo-cx427-dp"
                           :command '("echo" "done")
                           :connection-type 'pipe :buffer nil)))
-  (accept-process-output proc 2)
+  ;; Drain to completion (no-op the incidental sentinel) so `before` observes a
+  ;; settled (exited, not-yet-deleted) process rather than racing the child's
+  ;; exit; `process-live-p` is then deterministic before and after delete.
+  (set-process-sentinel proc #'ignore)
+  (while (process-live-p proc) (accept-process-output proc 1))
+  (while (accept-process-output proc 0))
   (let ((before (process-live-p proc)))
     (delete-process proc)
     (list before (process-live-p proc))))
@@ -234,7 +239,11 @@ fn div_cx427_process_connection_pty() {
 (let ((proc (make-process :name "neo-cx427-pct"
                           :command '("echo" "test")
                           :connection-type 'pty :buffer nil)))
-  (accept-process-output proc 2)
+  ;; Drain to completion (no-op the incidental sentinel) so the status read
+  ;; reflects the settled 'exit state rather than racing the child's exit.
+  (set-process-sentinel proc #'ignore)
+  (while (process-live-p proc) (accept-process-output proc 1))
+  (while (accept-process-output proc 0))
   (prog1 (process-status proc)
     (delete-process proc)))
 "##,

@@ -241,8 +241,13 @@ fn div_cx9_process_mark_relocation() {
   (insert "before")
   (let ((p (make-process :name "neo-cx9-pm" :command '("echo" "mark")
                          :buffer (current-buffer))))
+    ;; Silence the default sentinel (its "Process ... finished" buffer message
+    ;; is incidental noise) and drain to completion before reading, so the
+    ;; process-mark position and buffer text are deterministic on both engines.
+    (set-process-sentinel p #'ignore)
     (let ((m (process-mark p)))
-      (accept-process-output p 1)
+      (while (process-live-p p) (accept-process-output p 1))
+      (while (accept-process-output p 0))
       (list (markerp m) (marker-position m) (buffer-string)))))
 "##,
     );

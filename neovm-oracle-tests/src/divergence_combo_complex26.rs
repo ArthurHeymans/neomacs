@@ -123,7 +123,11 @@ fn div_cx26_process_thread_combo() {
         r##"
 (let ((p (make-process :name "neo-cx26-pt" :command '("echo" "x")))
       (t1 (make-thread (lambda () (sleep-for 0.01)))))
-  (accept-process-output p 0.5)
+  ;; Drain the process to completion (no-op the incidental sentinel) so the
+  ;; status read does not race the child's exit on either engine.
+  (set-process-sentinel p #'ignore)
+  (while (process-live-p p) (accept-process-output p 1))
+  (while (accept-process-output p 0))
   (let ((p-status (process-status p)))
     (thread-join t1)
     (list p-status (eq (process-status p) 'exit)

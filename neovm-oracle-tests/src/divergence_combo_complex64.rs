@@ -156,11 +156,19 @@ fn div_cx64_two_processes_interleaved_buffer_appends() {
     assert_oracle_parity(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-i*")))
-  (let ((p1 (make-process :name "neo-cx64-i1" :command '("printf" "%s" "AAA") :buffer buf))
-        (p2 (make-process :name "neo-cx64-i2" :command '("printf" "%s" "BBB") :buffer buf)))
-    (accept-process-output p1 1)
-    (accept-process-output p2 1)
-    (sit-for 0.05))
+  ;; Both processes append to the same buffer; the OS interleaving of their two
+  ;; outputs is nondeterministic, as is the "Process ... finished" sentinel
+  ;; noise.  Drain p1 fully (no-op its incidental sentinel) before starting and
+  ;; draining p2, so the appends land in a fixed order on both engines while
+  ;; still exercising two processes writing to one shared buffer.
+  (let ((p1 (make-process :name "neo-cx64-i1" :command '("printf" "%s" "AAA") :buffer buf)))
+    (set-process-sentinel p1 #'ignore)
+    (while (process-live-p p1) (accept-process-output p1 1))
+    (while (accept-process-output p1 0))
+    (let ((p2 (make-process :name "neo-cx64-i2" :command '("printf" "%s" "BBB") :buffer buf)))
+      (set-process-sentinel p2 #'ignore)
+      (while (process-live-p p2) (accept-process-output p2 1))
+      (while (accept-process-output p2 0))))
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))
 "##,

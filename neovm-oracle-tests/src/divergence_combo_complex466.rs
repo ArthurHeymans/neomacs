@@ -147,7 +147,12 @@ fn div_cx466_large_process_output() {
   (let ((proc (make-process :name "cx466-large"
                             :command '("sh" "-c" "printf '%%s' {1..1000}")
                             :connection-type 'pipe :buffer buf)))
-    (accept-process-output proc 2)
+    ;; Drain to completion (no-op the incidental sentinel) so buffer-size is
+    ;; read after all output has arrived and the process has exited, instead of
+    ;; racing a fixed 2s window where the process may still be live.
+    (set-process-sentinel proc #'ignore)
+    (while (process-live-p proc) (accept-process-output proc 1))
+    (while (accept-process-output proc 0))
     (prog1 (with-current-buffer buf (buffer-size))
       (kill-buffer buf))))"##,
     );

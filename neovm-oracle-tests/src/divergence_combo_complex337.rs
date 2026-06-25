@@ -37,9 +37,17 @@ fn div_cx337_process_sentinel_exit_and_signal_events() {
         (p2 (make-process :name "neo-cx337-sig"
                           :command '("sh" "-c" "kill -TERM $$")
                           :sentinel (lambda (proc ev) (push (cons :sig ev) events)))))
-    (accept-process-output p1 2)
-    (accept-process-output p2 2)
-    (sit-for 0.05)
+    ;; The sentinel IS the subject here, so we keep both sentinels.  We only
+    ;; remove the timing race: drain p1 to death and wait for its sentinel to
+    ;; fire, THEN drain p2 to death and wait for its sentinel.  That pins a
+    ;; canonical (:exit ... :sig ...) event order independent of OS scheduling,
+    ;; instead of reading after a fixed 2s+0.05s window where the two async
+    ;; sentinels could fire in either order.
+    (while (process-live-p p1) (accept-process-output p1 1))
+    (while (= (length events) 0) (accept-process-output p1 1))
+    (while (process-live-p p2) (accept-process-output p2 1))
+    (while (< (length events) 2) (accept-process-output p2 1))
+    (while (accept-process-output nil 0))
     (list (nreverse events)
           (process-exit-status p1)
           (process-status p1)

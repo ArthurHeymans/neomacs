@@ -247,14 +247,21 @@ fn div_cx10_set_process_filter_to_nil() {
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx10-nf" :command '("echo" "data")
                          :buffer (current-buffer))))
+    ;; Silence the default sentinel (its "Process ... finished" buffer message
+    ;; is incidental noise here) and drain to completion before reading, so the
+    ;; filter-vs-buffer observable is deterministic on both engines.
+    (set-process-sentinel p #'ignore)
     (set-process-filter p (lambda (proc msg) (insert "FILTER:" msg)))
-    (accept-process-output p 1)
+    (while (process-live-p p) (accept-process-output p 1))
+    (while (accept-process-output p 0))
     (let ((with-filter (buffer-string)))
       (erase-buffer)
       (set-process-filter p nil)
       (let ((p2 (make-process :name "neo-cx10-nf2" :command '("echo" "nofilter")
                               :buffer (current-buffer))))
-        (accept-process-output p2 1))
+        (set-process-sentinel p2 #'ignore)
+        (while (process-live-p p2) (accept-process-output p2 1))
+        (while (accept-process-output p2 0)))
       (list with-filter (buffer-string)))))
 "##,
     );
