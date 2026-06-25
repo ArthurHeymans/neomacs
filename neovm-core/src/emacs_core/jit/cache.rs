@@ -291,11 +291,20 @@ pub fn try_run_compiled(
 }
 
 /// A stable raw pointer to the compiled leaf for `func` (compiling it on first
-/// use), or `None` if the body is `NotCompilable`. The pointer stays valid for
-/// the thread's lifetime: the per-thread `COMPILED` cache never evicts, so the
-/// owning `Rc<CompiledLeaf>` (and the heap box it points at) outlive every use.
-/// Used by the V3 speculated-call fast path to cache a callee leaf handle in a
-/// spec slot, skipping the cache hash lookup on subsequent calls.
+/// use), or `None` if the body is `NotCompilable`. Used by the V3 speculated-call
+/// fast path to cache a callee leaf handle in a spec slot, skipping the cache
+/// hash lookup on subsequent calls.
+///
+/// POINTER VALIDITY (audit #1 — corrected): the pointer is sound NOT because the
+/// cache "never evicts" (it CAN — `clear()` drops every leaf on a tagged-heap
+/// identity change, reached from `sync_cache_to_current_heap` during GC root
+/// collection). It is sound because the heap identity is STABLE during native
+/// leaf execution: every `set_tagged_heap` caller is a top-level entry point
+/// (Context build / eval entry / pdump load), never nested inside a running
+/// native leaf, so `sync_cache_to_current_heap` never observes a change — hence
+/// `clear()` never fires — while a spec-slot pointer is live on the native stack.
+/// The spec slots are owned by the executing caller leaf, so a `clear()` would
+/// drop the caller and its slots together; no stale slot can outlive it.
 pub(crate) fn resolve_compiled_leaf_ptr(
     ctx: *mut Context,
     func: &ByteCodeFunction,
@@ -323,7 +332,9 @@ pub(crate) fn resolve_compiled_leaf_ptr(
             // validity depends on an inlined callee's epoch, which the caller's
             // spec guard doesn't check. Force them through try_run_compiled (which
             // re-JITs on a stale epoch). Non-inlined leaves keep the stable-pointer
-            // fast path (they are never epoch-stale, so the cache never evicts them).
+            // fast path (they are never epoch-stale, so the per-entry eviction
+            // never drops them — only a wholesale clear() can, and that cannot
+            // fire mid-native-execution; see resolve_compiled_leaf_ptr).
             CacheEntry::Compiled(leaf) if leaf.inline_epoch().is_none() => Some(Rc::as_ptr(leaf)),
             _ => None,
         }

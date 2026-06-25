@@ -1284,6 +1284,66 @@ impl core::fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+/// Per-(thread,leaf) base-pointer block an AOT leaf's code reads to reach its
+/// session-specific buffers (R1c-sidecar). Passed as the 4th entry argument.
+///
+/// ## Why a per-leaf sidecar
+/// AOT code lives in a process-shared `.so`, but the buffers it addresses are
+/// per-(thread,leaf): each thread rebuilds its OWN reloc `Vec` (against its OWN
+/// thread-local heap) and allocates its OWN deopt buffers, all pointing at the
+/// SAME code. The JIT bakes those addresses as `iconst` immediates — impossible
+/// across sessions/threads in a shared `.so`. Instead AOT code loads each base
+/// from THIS struct, whose pointer arrives as a call argument. Because the
+/// pointer is a per-frame argument (passed by [`CompiledLeaf::invoke_native`]
+/// from `&self`), reentrancy is automatic: leaf A's frame carries A's sidecar,
+/// and A calling B does not perturb it.
+///
+/// ## Move-stability (load-bearing invariant)
+/// The pointers address the leaf's SIBLING `Box` fields (`reloc_data`,
+/// `deopt_spill`, `deopt_meta`). A `Box`'s heap pointee is move-stable, so they
+/// stay valid when the owning `CompiledLeaf` moves into `Rc::new`. They MUST be
+/// captured from the FINAL boxes (after the buffers are in place) and NOTHING
+/// may reallocate those boxes after the sidecar is filled — the boxes are
+/// immutable for the leaf's life (the `Cell`s inside are mutated in place, which
+/// does not move the allocation). The sidecar is itself a `Box` (address-stable)
+/// so the baked GlobalValue/arg sees one fixed `*const LeafSidecar`.
+#[repr(C)]
+pub(crate) struct LeafSidecar {
+    /// Base of the per-thread reloc `Vec` (`reloc_data.as_ptr()`); heap-`Const`
+    /// loads index off it. Null/unused when the leaf has no heap constants.
+    reloc_base: *const Value,
+    /// Base of the per-thread precise-deopt spill buffer (`deopt_spill.as_ptr()`).
+    spill_base: *const core::cell::Cell<i64>,
+    /// Address of the `pc` deopt cell (`&deopt_meta.pc`).
+    meta_pc: *const core::cell::Cell<i64>,
+    /// Address of the `depth` deopt cell.
+    meta_depth: *const core::cell::Cell<i64>,
+    /// Address of the `handlers` deopt cell.
+    meta_handlers: *const core::cell::Cell<i64>,
+}
+
+impl LeafSidecar {
+    /// Byte offsets of each field, for the AOT lowering's `load(sidecar, off)`.
+    /// `#[repr(C)]` fixes the layout so these match the generated loads exactly.
+    pub(crate) const OFF_RELOC_BASE: i32 = 0;
+    pub(crate) const OFF_SPILL_BASE: i32 = 8;
+    pub(crate) const OFF_META_PC: i32 = 16;
+    pub(crate) const OFF_META_DEPTH: i32 = 24;
+    pub(crate) const OFF_META_HANDLERS: i32 = 32;
+}
+
+// Compile-time assertion that the hand-written offsets match the actual layout.
+const _: () = {
+    assert!(core::mem::size_of::<LeafSidecar>() == 40);
+    assert!(core::mem::offset_of!(LeafSidecar, reloc_base) == LeafSidecar::OFF_RELOC_BASE as usize);
+    assert!(core::mem::offset_of!(LeafSidecar, spill_base) == LeafSidecar::OFF_SPILL_BASE as usize);
+    assert!(core::mem::offset_of!(LeafSidecar, meta_pc) == LeafSidecar::OFF_META_PC as usize);
+    assert!(core::mem::offset_of!(LeafSidecar, meta_depth) == LeafSidecar::OFF_META_DEPTH as usize);
+    assert!(
+        core::mem::offset_of!(LeafSidecar, meta_handlers) == LeafSidecar::OFF_META_HANDLERS as usize
+    );
+};
+
 /// A loaded AOT shared object (`.so`), owning its `libloading::Library`.
 ///
 /// The dynamic library is kept mapped (`r-x` by the OS loader) for as long as any
@@ -1434,6 +1494,13 @@ pub struct CompiledLeaf {
     /// holds NO heap pointer (GC-traceable here, AOT-portable). Fixnums + non-heap
     /// immediates (nil/t) stay baked. Traced as a GC root while the leaf is cached.
     reloc_data: Box<[Value]>,
+    /// R1c-sidecar: per-(thread,leaf) base-pointer block the AOT code reads to
+    /// reach `reloc_data`/`deopt_spill`/`deopt_meta` (its pointer is passed as the
+    /// 4th entry arg). `Some` for AOT leaves (built by [`from_aot`]); `None` for
+    /// JIT leaves (their code bakes the bases as `iconst`, ignoring the 4th arg).
+    /// A `Box` so its address is stable and its raw-pointer fields stay valid
+    /// after the `CompiledLeaf` moves into the cache `Rc` (see [`LeafSidecar`]).
+    sidecar: Option<Box<LeafSidecar>>,
     // Field order matters for drop: `entry` points into `_backing`'s memory (the
     // JITModule's executable pages or the loaded `.so`'s code); keep `_backing`
     // alive — and dropped AFTER `entry` — as long as the handle exists.
@@ -1532,6 +1599,24 @@ impl CompiledLeaf {
             depth: core::cell::Cell::new(0),
             handlers: core::cell::Cell::new(0),
         });
+        // Build the sidecar from the FINAL boxes (move-stability: a Box's heap
+        // pointee does not move when the owning CompiledLeaf moves into Rc::new,
+        // and these boxes are never reallocated for the leaf's life — only the
+        // Cells inside are mutated in place). The AOT code reads its bases from
+        // here via the 4th entry arg. `reloc_base` is null when there are no heap
+        // consts (empty box); the lowering only emits a reloc load when the body
+        // has a heap Const, so a null base is never dereferenced.
+        let sidecar = Box::new(LeafSidecar {
+            reloc_base: if reloc_data.is_empty() {
+                core::ptr::null()
+            } else {
+                reloc_data.as_ptr()
+            },
+            spill_base: deopt_spill.as_ptr(),
+            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64>,
+            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64>,
+            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64>,
+        });
         CompiledLeaf {
             arity: meta.arity,
             required: meta.required,
@@ -1546,6 +1631,7 @@ impl CompiledLeaf {
             deopt_spill,
             deopt_meta,
             reloc_data,
+            sidecar: Some(sidecar),
             entry,
             _backing: LeafBacking::Aot(backing),
         }
@@ -1668,10 +1754,20 @@ impl CompiledLeaf {
         } else {
             None
         };
+        // R1c-sidecar: the unified 4-param entry ABI. AOT code reads its
+        // per-thread bases from `sidecar`; JIT code declares the param but never
+        // reads it (its bases are baked `iconst`s), so `null` is safe for JIT.
+        // Passing the leaf's OWN sidecar from `&self` makes the base resolution
+        // per-frame → reentrancy-safe (a nested call carries the callee's sidecar,
+        // not this one).
+        let sidecar = match &self.sidecar {
+            Some(b) => &**b as *const LeafSidecar,
+            None => core::ptr::null(),
+        };
         let status = unsafe {
-            let f: extern "C" fn(*mut u8, *const i64, *mut i64) -> i64 =
+            let f: extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64 =
                 core::mem::transmute(self.entry);
-            f(vmctx, args_ptr, &mut out as *mut i64)
+            f(vmctx, args_ptr, &mut out as *mut i64, sidecar)
         };
         if status == STATUS_DEOPT_AT {
             // Precise deopt: NO frame unwind — the resumed interpreter frame
@@ -2894,6 +2990,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         needs_rt,
         "__neovm_mir_leaf",
         Linkage::Local,
+        /*aot=*/ false,
     )?;
 
     // --- JIT-only module epilogue (the wrapper). ----------------------------
@@ -2920,9 +3017,33 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         deopt_spill,
         deopt_meta,
         reloc_data,
+        // JIT bakes its bases as iconst; the 4th entry arg is ignored.
+        sidecar: None,
         entry,
         _backing: LeafBacking::Jit(module),
     })
+}
+
+/// Whether a constant `Value` must be routed through the per-leaf reloc vector
+/// when lowering for **AOT** (`true`) instead of being baked as an `iconst`.
+///
+/// A baked immediate is only valid in the SESSION that emitted it. Two kinds of
+/// constant carry session-specific bits and so cannot be baked into a
+/// cross-session `.so`:
+///   * HEAP OBJECTS (string/cons/vector/float) — the bits are a heap pointer
+///     (already routed through reloc by R1a, via `is_heap_object()`).
+///   * SYMBOLS other than `nil`/`t` — the bits encode a `SymId`, which is
+///     INTERN-ORDER dependent (`intern.rs`: `SymId(symbols.len())`), so the same
+///     name interns to a different id in a different session. `nil`/`t` are
+///     pre-seeded at fixed ids 0/1, so they ARE session-stable and stay baked.
+///
+/// Everything else — fixnums (chars are fixnums in `[0, MAX_CHAR]`), `nil`, `t`
+/// — is a universal immediate with session-stable bits and is baked in both
+/// tiers. For the JIT (`aot=false`) only heap objects reloc (symbols bake, which
+/// is correct same-session and keeps the JIT byte-identical); the broader symbol
+/// reloc applies ONLY to AOT. (Audit #16.)
+pub(crate) fn const_relocs_for_aot(v: Value) -> bool {
+    v.is_heap_object() || (v.is_symbol() && v != Value::NIL && v != Value::T)
 }
 
 /// Module-generic build seam for [`lower_mir_pure`]: sets up the leaf ABI
@@ -2962,17 +3083,26 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
     needs_rt: bool,
     entry_name: &str,
     entry_linkage: Linkage,
+    // R1c-sidecar: false → JIT (bases baked as `iconst` from the passed-in buffer
+    // addresses, unchanged/fast); true → AOT (bases loaded from the 4th entry arg,
+    // the per-thread `LeafSidecar`, since the addresses are session-specific). The
+    // CLIF body is otherwise identical — same RESULTS either way.
+    aot: bool,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
 
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
 
-    // ABI identical to lower_leaf: fn(vmctx, args, out) -> status.
+    // Unified 4-param entry ABI: fn(vmctx, args, out, sidecar) -> status. The
+    // `sidecar` param is the per-(thread,leaf) base block (LeafSidecar). AOT code
+    // reads its bases from it (`aot=true`); JIT code declares it but never reads
+    // it (`aot=false`, bases stay `iconst`), so the dispatch passes null.
     let mut sig = Signature::new(call_conv);
     sig.params.push(AbiParam::new(ptr_ty)); // vmctx (unused for pure)
     sig.params.push(AbiParam::new(ptr_ty)); // args
     sig.params.push(AbiParam::new(ptr_ty)); // out
+    sig.params.push(AbiParam::new(ptr_ty)); // sidecar (*const LeafSidecar)
     sig.returns.push(AbiParam::new(types::I64));
 
     let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
@@ -3030,14 +3160,13 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         } else {
             None
         };
-        // Baked addresses of the deopt buffers for the per-site STATUS_DEOPT_AT
-        // blocks (inert unless `precise`).
-        let deopt_refs = DeoptRefs {
-            spill_base: deopt_spill.as_ptr() as i64,
-            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64> as i64,
-            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64> as i64,
-            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64> as i64,
-        };
+        // The deopt-buffer base addresses (for the JIT `iconst` path). The CLIF
+        // `DeoptRefs` (iconst or sidecar-load) is materialized in the entry block
+        // below, once it is populated and the sidecar param is available.
+        let spill_base_addr = deopt_spill.as_ptr() as i64;
+        let meta_pc_addr = &deopt_meta.pc as *const core::cell::Cell<i64> as i64;
+        let meta_depth_addr = &deopt_meta.depth as *const core::cell::Cell<i64> as i64;
+        let meta_handlers_addr = &deopt_meta.handlers as *const core::cell::Cell<i64> as i64;
         // ALL-PRECISE deopt for call-bearing bodies (see mir_deopt_block): never
         // rerun-from-start after a call. Pure bodies keep the shared rerun block.
         let precise = has_call;
@@ -3073,14 +3202,38 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         }
         let args_ptr = fb.block_params(entry)[1];
         let out_ptr = fb.block_params(entry)[2];
-        // R1a: base address of the heap-constant reloc vector, baked once near entry
-        // (the entry block dominates all blocks); each heap-`Const` loads off it by
-        // index. `None` when the body references no heap constants.
+        // R1c-sidecar: the 4th entry param (the per-thread `*const LeafSidecar`).
+        // Read only in AOT mode; JIT ignores it. The entry block dominates every
+        // block, so a base materialized here is valid in any (incl. cold) block.
+        let sidecar_param = aot.then(|| fb.block_params(entry)[3]);
+        // R1a: base address of the heap-constant reloc vector, materialized once
+        // near entry. JIT bakes the Box address as `iconst`; AOT loads it from the
+        // sidecar (session-specific). `None` when the body references no heap
+        // constants (then nothing loads off it).
         let reloc_base = if reloc_data.is_empty() {
             None
+        } else if aot {
+            let sc = sidecar_param.expect("AOT sets sidecar_param");
+            Some(
+                fb.ins()
+                    .load(ptr_ty, MemFlags::trusted(), sc, LeafSidecar::OFF_RELOC_BASE),
+            )
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
         };
+        // The deopt-buffer bases (iconst or sidecar-load), materialized in the
+        // entry block so they dominate the cold precise-deopt blocks.
+        let deopt_refs = materialize_deopt_refs(
+            &mut fb,
+            ptr_ty,
+            aot,
+            /*has_precise_deopt=*/ precise,
+            sidecar_param,
+            spill_base_addr,
+            meta_pc_addr,
+            meta_depth_addr,
+            meta_handlers_addr,
+        );
         let arg_vals: Vec<BlockArg> = (0..m.arity)
             .map(|i| {
                 let v = fb
@@ -3107,21 +3260,32 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // The param already holds the argument (bound above).
                     }
                     MirOp::Const(v) => {
+                        // Which non-fixnum consts route through the reloc vector vs
+                        // bake: JIT relocs heap objects only (symbols bake — valid
+                        // same-session, keeps the JIT byte-identical); AOT also
+                        // relocs non-nil/t symbols, whose baked SymId would be
+                        // session-specific in a cross-session `.so` (audit #16).
+                        let needs_reloc = if aot {
+                            const_relocs_for_aot(*v)
+                        } else {
+                            v.is_heap_object()
+                        };
                         if (v.bits() & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE {
-                            // Fixnum constant -> keep raw (untagged integer).
+                            // Fixnum constant (incl chars) -> keep raw (untagged integer).
                             cval[r] = Some(
                                 fb.ins()
                                     .iconst(types::I64, (v.bits() as i64) >> FIXNUM_SHIFT),
                             );
                             cval_raw[r] = true;
-                        } else if !v.is_heap_object() {
-                            // Non-fixnum immediate (nil/t/char/...): no heap pointer, so
-                            // bake the tagged bits directly.
+                        } else if !needs_reloc {
+                            // Session-stable immediate (nil/t/char/...): no
+                            // session-specific bits, so bake the tagged bits directly.
                             cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
                         } else {
-                            // Heap object (string/cons/symbol/vector/...): load from the
-                            // per-leaf reloc vector (R1a) — never bake a heap pointer, so
-                            // the code is GC-pointer-free and AOT-portable.
+                            // Session-specific const (heap object always; under AOT
+                            // also a non-nil/t symbol): load from the per-leaf reloc
+                            // vector (R1a) — never bake session-specific bits, so the
+                            // code is GC-pointer-free AND cross-session AOT-portable.
                             let idx = reloc_index[&v.bits()];
                             let base = reloc_base.expect("reloc_base set when reloc nonempty");
                             cval[r] = Some(fb.ins().load(
@@ -3777,22 +3941,28 @@ fn deopt_site(
 /// Raw addresses of the leaf's deopt cells + spill buffer, baked into the
 /// generated code as immediates (the owning Boxes are address-stable and
 /// outlive every execution of the code).
+/// The precise-deopt buffer base addresses, as ENTRY-BLOCK CLIF values (which
+/// dominate every cold deopt block). In JIT mode each is an `iconst` of the
+/// owning Box's address (the Box is address-stable + outlives the code); in AOT
+/// mode each is a `load` from the per-thread `LeafSidecar` (the bases are
+/// session-specific, so they cannot be baked). See [`materialize_deopt_refs`].
 #[derive(Clone, Copy)]
 struct DeoptRefs {
-    spill_base: i64,
-    meta_pc: i64,
-    meta_depth: i64,
-    meta_handlers: i64,
+    spill_base: ClifValue,
+    meta_pc: ClifValue,
+    meta_depth: ClifValue,
+    meta_handlers: ClifValue,
 }
 
 /// Fill the precise-deopt blocks queued within one bytecode block: spill the
 /// captured live stack, record pc/depth/handler-count, and return
-/// [`STATUS_DEOPT_AT`].
+/// [`STATUS_DEOPT_AT`]. The base addresses come from `refs` (entry-block values
+/// that dominate these cold blocks) — no per-block `iconst` of an address.
 fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut Vec<PendingDeopt>) {
     for pd in pending.drain(..) {
         fb.switch_to_block(pd.block);
         fb.seal_block(pd.block);
-        let base = fb.ins().iconst(types::I64, refs.spill_base);
+        let base = refs.spill_base;
         for (j, &v) in pd.stack.iter().enumerate() {
             // Retag raw fixnum slots in the COLD deopt block (zero hot-path cost):
             // the framestate is read back as tagged Values by run_resumed_frame.
@@ -3805,16 +3975,67 @@ fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut 
                 .store(MemFlags::trusted(), tagged, base, (j * 8) as i32);
         }
         let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
-        let a = fb.ins().iconst(types::I64, refs.meta_pc);
-        fb.ins().store(MemFlags::trusted(), pc_v, a, 0);
+        fb.ins().store(MemFlags::trusted(), pc_v, refs.meta_pc, 0);
         let depth_v = fb.ins().iconst(types::I64, pd.stack.len() as i64);
-        let a = fb.ins().iconst(types::I64, refs.meta_depth);
-        fb.ins().store(MemFlags::trusted(), depth_v, a, 0);
+        fb.ins().store(MemFlags::trusted(), depth_v, refs.meta_depth, 0);
         let h_v = fb.ins().iconst(types::I64, pd.handlers_len as i64);
-        let a = fb.ins().iconst(types::I64, refs.meta_handlers);
-        fb.ins().store(MemFlags::trusted(), h_v, a, 0);
+        fb.ins().store(MemFlags::trusted(), h_v, refs.meta_handlers, 0);
         let code = fb.ins().iconst(types::I64, STATUS_DEOPT_AT);
         fb.ins().return_(&[code]);
+    }
+}
+
+/// Materialize the deopt-buffer bases as entry-block CLIF values. JIT bakes each
+/// Box address as an `iconst`; AOT loads each from the `sidecar` param at its
+/// fixed offset (the per-thread buffers were sized + their addresses written into
+/// the sidecar by the loader). MUST be called with `fb` positioned in the entry
+/// block (so the values dominate the cold deopt blocks).
+///
+/// `has_precise_deopt` gates the AOT sidecar LOADS: a body with no precise-deopt
+/// site never reaches `emit_pending_deopts`, so the bases are unused — and in AOT
+/// mode the `sidecar` may even be null at the call site (the raw-entry pure-leaf
+/// path passes null). So when there is no precise deopt we emit harmless `iconst`
+/// placeholders (never stored-through) instead of dereferencing the sidecar.
+#[allow(clippy::too_many_arguments)]
+fn materialize_deopt_refs(
+    fb: &mut FunctionBuilder,
+    ptr_ty: Type,
+    aot: bool,
+    has_precise_deopt: bool,
+    sidecar: Option<ClifValue>,
+    spill_base_addr: i64,
+    meta_pc_addr: i64,
+    meta_depth_addr: i64,
+    meta_handlers_addr: i64,
+) -> DeoptRefs {
+    if aot && has_precise_deopt {
+        let sc = sidecar.expect("AOT precise-deopt lowering requires the sidecar param");
+        let load = |fb: &mut FunctionBuilder, off: i32| {
+            fb.ins().load(ptr_ty, MemFlags::trusted(), sc, off)
+        };
+        DeoptRefs {
+            spill_base: load(fb, LeafSidecar::OFF_SPILL_BASE),
+            meta_pc: load(fb, LeafSidecar::OFF_META_PC),
+            meta_depth: load(fb, LeafSidecar::OFF_META_DEPTH),
+            meta_handlers: load(fb, LeafSidecar::OFF_META_HANDLERS),
+        }
+    } else if aot {
+        // AOT, no precise deopt: the bases are never used. Emit zero placeholders
+        // rather than touch a possibly-null sidecar.
+        let z = fb.ins().iconst(ptr_ty, 0);
+        DeoptRefs {
+            spill_base: z,
+            meta_pc: z,
+            meta_depth: z,
+            meta_handlers: z,
+        }
+    } else {
+        DeoptRefs {
+            spill_base: fb.ins().iconst(ptr_ty, spill_base_addr),
+            meta_pc: fb.ins().iconst(ptr_ty, meta_pc_addr),
+            meta_depth: fb.ins().iconst(ptr_ty, meta_depth_addr),
+            meta_handlers: fb.ins().iconst(ptr_ty, meta_handlers_addr),
+        }
     }
 }
 
@@ -4876,7 +5097,9 @@ struct SpecSite {
 /// `*const CompiledLeaf` (as `usize` bits; 0 = none) for the armed callee, so
 /// repeat calls skip the compiled-cache hash lookup (the V3 fast path). The
 /// leaf pointer is cleared whenever revalidation fails (the binding changed),
-/// and is sound while set because the per-thread `COMPILED` cache never evicts.
+/// and is sound while set because the tagged-heap identity is stable during
+/// native execution (so `cache::clear()` cannot fire mid-call to free the leaf —
+/// see `resolve_compiled_leaf_ptr`; NOT "the cache never evicts", audit #1).
 /// `repr(C)` pins the field order the baked pointer arithmetic relies on.
 #[repr(C)]
 pub(crate) struct SpecSlot {
@@ -5973,6 +6196,8 @@ pub fn lower_leaf_full(
         deopt_spill,
         deopt_meta,
         reloc_data,
+        // JIT bakes its bases as iconst; the 4th entry arg is ignored.
+        sidecar: None,
         entry,
         _backing: LeafBacking::Jit(module),
     })
@@ -6020,10 +6245,15 @@ fn build_leaf_fn<M: Module>(
     // result bits via `out` on success, STATUS_DEOPT on a failed guard, or
     // STATUS_SIGNAL when a runtime call raised a Flow (stashed for
     // `take_pending_flow`). `vmctx` is only used by runtime-call shims.
+    // Unified 4-param entry ABI: fn(vmctx, args, out, sidecar) -> status (see
+    // build_mir_leaf_fn). The baseline never reads `sidecar` yet (AOT lowering of
+    // the baseline tier is a later increment) — it is declared for ABI uniformity
+    // so every CompiledLeaf entry has one signature.
     let mut sig = Signature::new(call_conv);
     sig.params.push(AbiParam::new(ptr_ty)); // vmctx
     sig.params.push(AbiParam::new(ptr_ty)); // args
     sig.params.push(AbiParam::new(ptr_ty)); // out
+    sig.params.push(AbiParam::new(ptr_ty)); // sidecar (*const LeafSidecar)
     sig.returns.push(AbiParam::new(types::I64));
 
     let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
@@ -6080,13 +6310,13 @@ fn build_leaf_fn<M: Module>(
             .iter()
             .map(|&l| (l, fb.create_block()))
             .collect();
-        // Shared deopt landing block, created lazily on the first guard.
-        let deopt_refs = DeoptRefs {
-            spill_base: deopt_spill.as_ptr() as i64,
-            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64> as i64,
-            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64> as i64,
-            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64> as i64,
-        };
+        // Deopt-buffer base addresses (for the JIT `iconst` path). The CLIF
+        // `DeoptRefs` is materialized in the entry block below (the baseline tier
+        // has no AOT path yet, so always the `iconst` form).
+        let spill_base_addr = deopt_spill.as_ptr() as i64;
+        let meta_pc_addr = &deopt_meta.pc as *const core::cell::Cell<i64> as i64;
+        let meta_depth_addr = &deopt_meta.depth as *const core::cell::Cell<i64> as i64;
+        let meta_handlers_addr = &deopt_meta.handlers as *const core::cell::Cell<i64> as i64;
         // Shared signal-propagation block (returns STATUS_SIGNAL), created
         // lazily by the first `Call` lowering.
         let mut signal_exit: Option<Block> = None;
@@ -6111,6 +6341,19 @@ fn build_leaf_fn<M: Module>(
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
         };
+        // Deopt-buffer bases as entry-block values (baseline tier = JIT-only, so
+        // always the `iconst` form — no sidecar).
+        let deopt_refs = materialize_deopt_refs(
+            &mut fb,
+            ptr_ty,
+            /*aot=*/ false,
+            /*has_precise_deopt=*/ true,
+            None,
+            spill_base_addr,
+            meta_pc_addr,
+            meta_depth_addr,
+            meta_handlers_addr,
+        );
         if let Some(rt) = &rt {
             fb.def_var(rt.vmctx_var, vmctx_param);
         }

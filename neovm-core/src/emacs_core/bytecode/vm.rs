@@ -4555,8 +4555,13 @@ impl<'a> Vm<'a> {
             ptr = crate::emacs_core::jit::cache::resolve_compiled_leaf_ptr(ctx_ptr, bc)?;
             leaf_slot.store(ptr as usize as u64, Ordering::Relaxed);
         }
-        // SAFETY: the COMPILED cache never evicts; `ptr` names a cache-held
-        // leaf, valid for this thread's lifetime.
+        // SAFETY: `ptr` names a cache-held leaf, valid here because the tagged-heap
+        // identity is STABLE during native execution (the only thing that drops
+        // cache leaves is `cache::clear()` on a heap-identity change, and the heap
+        // is only swapped by top-level entry points, never nested inside a running
+        // native leaf — so no `clear()` fires while this spec-slot pointer is live
+        // on the native stack). See `resolve_compiled_leaf_ptr` for the full
+        // invariant. (NOT "the cache never evicts" — it can; audit #1.)
         let leaf = unsafe { &*ptr };
         if !leaf.accepts(nargs) {
             // Wrong arg count: defer to the strict path, which signals
