@@ -12,6 +12,7 @@ members = [
     "neovm-oracle-tests",
     "neovm-worker",
     "neomacs-tui-tests",
+    "neomacs-gui-tests",
     "neomacs-melpa-tests",
     "xtask",
 ]

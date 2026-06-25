@@ -3108,6 +3108,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "neomacs-gui-tests"
+version = "0.0.7"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "neomacs-layout-engine"
 version = "0.0.7"
 dependencies = [
