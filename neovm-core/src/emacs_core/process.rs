@@ -1429,21 +1429,66 @@ fn process_status_code_value(status: Value) -> i64 {
         .unwrap_or(0)
 }
 
-fn network_process_coding_pair(coding: Value) -> (Value, Value) {
+/// Resolve the (decode . encode) coding pair for a network process, mirroring
+/// GNU `set_network_socket_coding_system` (src/process.c:3291-3367).
+///
+/// * An explicit `:coding` value supplies both directions (its car/cdr if a
+///   cons, else the whole symbol for both).
+/// * When `:coding` is nil GNU does NOT fall back to `binary`.  Instead it
+///   consults `coding-system-for-read/write` and, failing those, the buffer's
+///   multibyteness:
+///     - DECODE: if the process buffer (or, when absent, the default buffer)
+///       is UNIBYTE, decode is left nil/raw so libraries receive bare CR LF;
+///       otherwise decode comes from `find-operation-coding-system`, which for
+///       a plain local socket has no alist entry and falls through to the car
+///       of `default-process-coding-system` (`utf-8-unix`).
+///     - ENCODE: comes from the cdr of `default-process-coding-system`.
+///
+/// `default_coding` is the runtime value of `default-process-coding-system`
+/// (a cons `(decode . encode)`, normally `(utf-8-unix . utf-8-unix)`); a nil
+/// or malformed value falls back to `binary`.  `buffer_multibyte` is the
+/// multibyteness of the process buffer (true when there is no buffer, since
+/// the default buffer is multibyte), matching GNU's `p->buffer` /
+/// `buffer_defaults` test.
+fn network_process_coding_pair(
+    coding: Value,
+    default_coding: Value,
+    buffer_multibyte: bool,
+) -> (Value, Value) {
     if coding.is_cons() {
-        let decode = coding.cons_car();
-        let encode = coding.cons_cdr();
-        (decode, encode)
-    } else if coding.is_nil() {
-        let binary = Value::symbol("binary");
-        (binary, binary)
-    } else {
-        (coding, coding)
+        return (coding.cons_car(), coding.cons_cdr());
     }
+    if !coding.is_nil() {
+        return (coding, coding);
+    }
+    // `:coding` unspecified: derive from `default-process-coding-system`.
+    // GNU `set_network_socket_coding_system` (process.c:3331-3336, 3361-3366)
+    // uses the car/cdr of `Vdefault_process_coding_system` when it is a cons,
+    // and otherwise falls back to `Qnil` (NOT `binary`) — so an unset default
+    // yields a nil decode/encode, matching `(process-coding-system)` of `(nil)`.
+    let (default_decode, default_encode) = if default_coding.is_cons() {
+        (default_coding.cons_car(), default_coding.cons_cdr())
+    } else {
+        (Value::NIL, Value::NIL)
+    };
+    // GNU leaves the decode side as nil (raw) for a unibyte buffer so the
+    // process receives bare bytes; a multibyte (or absent) buffer decodes via
+    // the default process coding system.
+    let decode = if buffer_multibyte {
+        default_decode
+    } else {
+        Value::NIL
+    };
+    (decode, default_encode)
 }
 
-fn set_network_process_coding(proc: &mut Process, coding: Value) {
-    let (decode, encode) = network_process_coding_pair(coding);
+fn set_network_process_coding(
+    proc: &mut Process,
+    coding: Value,
+    default_coding: Value,
+    buffer_multibyte: bool,
+) {
+    let (decode, encode) = network_process_coding_pair(coding, default_coding, buffer_multibyte);
     proc.coding_decode = decode;
     proc.coding_encode = encode;
 }
@@ -6343,6 +6388,24 @@ pub(crate) fn builtin_make_network_process(
         Value::NIL
     };
 
+    // Default coding resolution for `:coding nil`, mirroring GNU
+    // `set_network_socket_coding_system` (src/process.c:3291-3367): the decode
+    // side depends on the process buffer's multibyteness (raw for a unibyte
+    // buffer, `default-process-coding-system` otherwise) and a missing buffer
+    // uses the default buffer's multibyteness (multibyte by default).
+    let default_process_coding =
+        eval.visible_variable_value_or_nil("default-process-coding-system");
+    let network_buffer_multibyte =
+        match resolve_buffer_for_process_lookup_in_state(&eval.frames, &eval.buffers, &buffer) {
+            Ok(Some(bid)) => eval
+                .buffers
+                .get(bid)
+                .map(|b| b.get_multibyte())
+                .unwrap_or(true),
+            // No buffer (or unresolved) -> default buffer is multibyte in GNU.
+            _ => true,
+        };
+
     let explicit_address = if server {
         local_address_value
     } else {
@@ -6395,7 +6458,12 @@ pub(crate) fn builtin_make_network_process(
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
-                        set_network_process_coding(proc, coding_val);
+                        set_network_process_coding(
+                            proc,
+                            coding_val,
+                            default_process_coding,
+                            network_buffer_multibyte,
+                        );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.network_socket = Some(NetworkSocket::TcpListener(listener));
                         if !filter_val.is_nil() {
@@ -6481,7 +6549,12 @@ pub(crate) fn builtin_make_network_process(
                     proc.network_socket = Some(NetworkSocket::TcpStream(stream));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
-                    set_network_process_coding(proc, coding_val);
+                    set_network_process_coding(
+                        proc,
+                        coding_val,
+                        default_process_coding,
+                        network_buffer_multibyte,
+                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -6564,7 +6637,12 @@ pub(crate) fn builtin_make_network_process(
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
-                        set_network_process_coding(proc, coding_val);
+                        set_network_process_coding(
+                            proc,
+                            coding_val,
+                            default_process_coding,
+                            network_buffer_multibyte,
+                        );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.network_socket = Some(NetworkSocket::UnixListener(listener));
                         if !filter_val.is_nil() {
@@ -6647,7 +6725,12 @@ pub(crate) fn builtin_make_network_process(
                     proc.network_socket = Some(NetworkSocket::UnixStream(stream));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
-                    set_network_process_coding(proc, coding_val);
+                    set_network_process_coding(
+                        proc,
+                        coding_val,
+                        default_process_coding,
+                        network_buffer_multibyte,
+                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -6755,7 +6838,12 @@ pub(crate) fn builtin_make_network_process(
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
-                    set_network_process_coding(proc, coding_val);
+                    set_network_process_coding(
+                        proc,
+                        coding_val,
+                        default_process_coding,
+                        network_buffer_multibyte,
+                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.network_socket = Some(NetworkSocket::UnixListener(listener));
                     if !filter_val.is_nil() {
@@ -6849,7 +6937,12 @@ pub(crate) fn builtin_make_network_process(
                 proc.network_socket = Some(NetworkSocket::UnixStream(stream));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
-                set_network_process_coding(proc, coding_val);
+                set_network_process_coding(
+                    proc,
+                    coding_val,
+                    default_process_coding,
+                    network_buffer_multibyte,
+                );
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -6934,7 +7027,12 @@ pub(crate) fn builtin_make_network_process(
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.childp = contact;
-            set_network_process_coding(proc, coding_val);
+            set_network_process_coding(
+                proc,
+                coding_val,
+                default_process_coding,
+                network_buffer_multibyte,
+            );
             proc.thread = current_thread_handle(&eval.threads);
             proc.network_socket = Some(NetworkSocket::TcpListener(listener));
             if !filter_val.is_nil() {
@@ -7020,7 +7118,12 @@ pub(crate) fn builtin_make_network_process(
         proc.network_socket = Some(NetworkSocket::TcpStream(stream));
         proc.status = process_status_run_value();
         proc.childp = contact;
-        set_network_process_coding(proc, coding_val);
+        set_network_process_coding(
+            proc,
+            coding_val,
+            default_process_coding,
+            network_buffer_multibyte,
+        );
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;

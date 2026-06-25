@@ -3532,7 +3532,13 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");
     let results = eval_all(&format!(
-        r#"(let ((p (start-process "proc-coding-tty-query" nil "{cat}")))
+        // Bind `default-process-coding-system` to its real-startup value
+        // (mule-cmds.el sets it to (utf-8-unix . utf-8-unix); the minimal unit
+        // bootstrap leaves the C default nil). A buffer-less network process
+        // with no :coding derives its coding from this variable, exactly like
+        // GNU `set_network_socket_coding_system`.
+        r#"(let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                 (p (start-process "proc-coding-tty-query" nil "{cat}")))
              (unwind-protect
                  (list
                   (equal (process-coding-system p) '(utf-8-unix . utf-8-unix))
@@ -3556,7 +3562,12 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
                   (let ((np (make-network-process :name "proc-coding-tty-query-network" :server t :service 0)))
                     (unwind-protect
                         (list
-                         (equal (process-coding-system np) '(binary . binary))
+                         ;; GNU `set_network_socket_coding_system` defaults a
+                         ;; buffer-less network process (with no :coding and a
+                         ;; multibyte default buffer) to the car/cdr of
+                         ;; `default-process-coding-system` (utf-8-unix), NOT
+                         ;; binary; verified against the real GNU 31 binary.
+                         (equal (process-coding-system np) '(utf-8-unix . utf-8-unix))
                          (null (process-tty-name np))
                          (null (process-tty-name np nil))
                          (null (process-tty-name np 'stdin))
