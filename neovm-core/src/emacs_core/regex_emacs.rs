@@ -2005,10 +2005,19 @@ fn apply_posix_class(
     *class_bits |= posix_class_bit(name)?;
     // --- ASCII bitmap bits ------------------------------------------------
     //
-    // Each class enumerates which bytes in 0x00..=0xFF should be
-    // marked in the ASCII-extended bitmap. For multibyte classes
-    // (`nonascii`, `multibyte`) the non-ASCII portion is added to
-    // `mb_ranges` so the matcher's multibyte dispatch path catches it.
+    // GNU `regex_compile` (regex-emacs.c:2081-2092) sets bitmap (list) bits
+    // ONLY for ASCII characters `c < 0x80` where `re_iswctype(c, cc)` is true;
+    // the non-ASCII / multibyte side is recorded SOLELY as a range-table bit
+    // (`re_wctype_to_bit`) and consulted later by `execute_charset` for chars
+    // `c >= 256` (our `class_bits` / `mb_ranges`, the multibyte dispatch path).
+    //
+    // Therefore the bitmap NEVER contains bits for bytes 0x80..=0xFF.  A raw
+    // high byte 0x80..=0xFF in a UNIBYTE target hits the bitmap-only branch of
+    // `execute_charset` (`unibyte && c < 256`, regex-emacs.c:3773), where these
+    // bits are absent, so it matches NO POSIX class — exactly GNU's behavior
+    // (e.g. `[[:nonascii:]]`, `[[:print:]]`, even `[[:unibyte:]]` do NOT match
+    // a raw high byte in a unibyte string).  Each arm below enumerates only the
+    // ASCII bytes for which `re_iswctype` is true.
     let ascii_bytes: Vec<u8> = match name {
         "alpha" => (b'A'..=b'Z').chain(b'a'..=b'z').collect(),
         "digit" => (b'0'..=b'9').collect(),
@@ -2025,12 +2034,14 @@ fn apply_posix_class(
         "upper" => (b'A'..=b'Z').collect(),
         "lower" => (b'a'..=b'z').collect(),
         "punct" => b"!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".to_vec(),
-        // GNU ISPRINT single-byte: c >= ' ' and not in [0x7F..=0x9F].
-        // That's 0x20..=0x7E and 0xA0..=0xFF.
-        "print" => (0x20u8..=0x7E).chain(0xA0u8..=0xFF).collect(),
-        // GNU ISGRAPH single-byte: c > ' ' and not in [0x7F..=0xA0].
-        // That's 0x21..=0x7E and 0xA1..=0xFF.
-        "graph" => (0x21u8..=0x7E).chain(0xA1u8..=0xFF).collect(),
+        // GNU ISPRINT for ASCII (c < 0x80): c >= ' ' and not 0x7F, i.e.
+        // 0x20..=0x7E.  The high-byte printable range (0xA0..=0xFF) is NOT a
+        // bitmap bit; multibyte printable chars match via `class_bits` in the
+        // multibyte path of `execute_charset`.
+        "print" => (0x20u8..=0x7E).collect(),
+        // GNU ISGRAPH for ASCII (c < 0x80): c > ' ' and not 0x7F, i.e.
+        // 0x21..=0x7E.  High bytes go through the multibyte path only.
+        "graph" => (0x21u8..=0x7E).collect(),
         "cntrl" => (0x00u8..=0x1F).chain(std::iter::once(0x7F)).collect(),
         "xdigit" => (b'0'..=b'9')
             .chain(b'A'..=b'F')
@@ -2044,13 +2055,16 @@ fn apply_posix_class(
             .chain(b'a'..=b'z')
             .chain(b'0'..=b'9')
             .collect(),
-        // IS_REAL_ASCII(c) is c < 0x80, so nonascii matches 0x80..=0xFF
-        // in the bitmap plus all non-ASCII multibyte characters.
-        "nonascii" => (0x80u8..=0xFF).collect(),
-        // ISUNIBYTE(c) = SINGLE_BYTE_CHAR_P(c); every byte 0..=0xFF
-        // qualifies. No multibyte range (multibyte chars are NOT
-        // unibyte by definition).
-        "unibyte" => (0x00u8..=0xFF).collect(),
+        // `re_iswctype(c, RECC_NONASCII)` = `!IS_REAL_ASCII(c)` is FALSE for
+        // every ASCII byte, so nonascii sets NO bitmap bits; non-ASCII chars
+        // match via the `BIT_MULTIBYTE` range-table bit (the multibyte path).
+        "nonascii" => Vec::new(),
+        // `re_iswctype(c, RECC_UNIBYTE)` = `ISUNIBYTE(c)` is true for all ASCII
+        // bytes (c < 0x80) only at compile time (the loop runs c < 0x80); high
+        // bytes 0x80..=0xFF are NOT set, so `[[:unibyte:]]` matches an ASCII
+        // byte but NOT a raw high byte in a unibyte string (matching GNU).
+        // RECC_UNIBYTE has no range-table bit (`re_wctype_to_bit` returns 0).
+        "unibyte" => (0x00u8..=0x7F).collect(),
         // !ISUNIBYTE(c): only multibyte (non-ASCII) characters.
         // Nothing in the bitmap; everything in the multibyte range.
         "multibyte" => Vec::new(),
@@ -3026,32 +3040,70 @@ pub(crate) fn re_match(
                     }
                 }
 
+                // GNU `execute_charset` (regex-emacs.c:3756-3815) has two
+                // MUTUALLY EXCLUSIVE branches keyed on `unibyte_char`:
+                //   * `unibyte && c < 256`  -> consult the BITMAP ONLY
+                //     (regex-emacs.c:3773-3779).  The range-table class bits
+                //     (`BIT_MULTIBYTE`, `BIT_ALPHA`, ...) are NOT tested, so a
+                //     raw high byte in a unibyte target matches no POSIX class.
+                //   * otherwise (a true multibyte char) -> consult the
+                //     range-table CLASS BITS and explicit ranges
+                //     (regex-emacs.c:3781-3811).  The bitmap is NOT consulted.
+                // Replicating this split is what makes `[[:nonascii:]]` etc.
+                // match a multibyte char but NOT a unibyte raw byte.
+                //
+                // Caveat for the bitmap branch: GNU builds the bitmap at
+                // COMPILE time with `re_iswctype(c, cc)` over `c < 0x80`, which
+                // for the syntax-sensitive classes `[:word:]`/`[:space:]`
+                // reflects the buffer's syntax table (regex-emacs.c:2081-2101,
+                // `used_syntax`).  Neomacs uses a fixed standard-syntax ASCII
+                // bitmap, so it re-derives those syntax-sensitive ASCII bits at
+                // match time via `posix_class_matches`.  That union is applied
+                // ONLY for ASCII chars (`ch < 0x80`); a raw high byte is never
+                // tested against the class bits, preserving GNU's rule that no
+                // POSIX class matches a high byte in a unibyte string.
                 let in_set = if unibyte_char {
                     let c = ch as usize;
-                    if (c / 8) < bitmap_len {
+                    let bitmap_hit = if (c / 8) < bitmap_len {
                         let byte = bytecode[pc + c / 8];
                         (byte >> (c % 8)) & 1 != 0
                     } else {
                         false
-                    }
-                } else if let Some(ranges) = pattern.multibyte_charsets.get(&charset_op_pos) {
-                    let ch = syntax_char(ch);
-                    ranges.iter().any(|&(lo, hi)| ch >= lo && ch <= hi)
+                    };
+                    // Re-derive syntax-sensitive ASCII class membership at
+                    // match time (the buffer syntax table may differ from the
+                    // hardcoded compile-time bitmap, e.g. `_` made a word
+                    // constituent).  Restricted to `ch < 0x80` so high bytes
+                    // stay bitmap-only and match no class.
+                    bitmap_hit
+                        || (ch < 0x80
+                            && pattern
+                                .charset_class_bits
+                                .get(&charset_op_pos)
+                                .copied()
+                                .map(|bits| posix_class_matches(orig_ch, bits))
+                                .unwrap_or(false))
                 } else {
-                    false
-                };
-
-                // GNU `regex-emacs.c:execute_charset` takes the union of the
-                // bitmap/ranges with POSIX class bits stored in the charset
-                // range table.  This is required for multibyte `[:alnum:]`
-                // and for syntax-table-sensitive `[:word:]`/`[:space:]`.
-                let in_set = in_set
-                    || pattern
-                        .charset_class_bits
+                    let range_hit = pattern
+                        .multibyte_charsets
                         .get(&charset_op_pos)
-                        .copied()
-                        .map(|bits| posix_class_matches(orig_ch, bits))
+                        .map(|ranges| {
+                            let ch = syntax_char(ch);
+                            ranges.iter().any(|&(lo, hi)| ch >= lo && ch <= hi)
+                        })
                         .unwrap_or(false);
+                    // Union with POSIX class bits, required for multibyte
+                    // `[:alnum:]`/`[:print:]` and syntax-sensitive
+                    // `[:word:]`/`[:space:]`.  Only reachable for true
+                    // multibyte chars, exactly as in GNU's `else if (rtp)`.
+                    range_hit
+                        || pattern
+                            .charset_class_bits
+                            .get(&charset_op_pos)
+                            .copied()
+                            .map(|bits| posix_class_matches(orig_ch, bits))
+                            .unwrap_or(false)
+                };
 
                 let matched = if negate { !in_set } else { in_set };
                 pc += bitmap_len;
