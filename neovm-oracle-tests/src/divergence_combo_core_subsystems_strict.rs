@@ -3921,3 +3921,28 @@ fn div_core_divergence_surface_replace_match_case_table_capitalization() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_case_fold_search_custom_case_pair() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (2 2 2)
+    // Neomacs:   OK (3 3 2)
+    // With a case table pairing {/} and case-fold-search t, GNU treats } as
+    // case-equivalent to { and finds the { at position 1 (match end 2) for both
+    // search-forward and re-search-forward. Neomacs ignores the custom case
+    // table and only matches the literal } at position 2 (match end 3).
+    assert_oracle_parity(
+        r##"
+(let ((table (copy-case-table (standard-case-table))))
+  (set-case-syntax-pair ?\{ ?\} table)
+  (with-temp-buffer
+    (set-case-table table)
+    (insert "{}")
+    (let ((case-fold-search t))
+      (list (progn (goto-char 1) (search-forward "}" nil t))
+            (progn (goto-char 1) (re-search-forward "}" nil t))
+            (progn (goto-char 1) (search-forward "{" nil t))))))
+"##,
+    );
+}
