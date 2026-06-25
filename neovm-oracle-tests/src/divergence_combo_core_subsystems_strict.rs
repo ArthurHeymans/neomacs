@@ -3782,3 +3782,28 @@ fn div_core_divergence_surface_network_filter_multibyte_string_shape() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_where_is_ignores_overriding_terminal_map() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil cmd-b nil nil)
+    // Neomacs:   OK (nil cmd-b nil [3 98])
+    // key-binding honors overriding-terminal-local-map for lookup, but
+    // where-is-internal should not report bindings from that transient override
+    // as stable command locations. Neomacs reports [C-c b].
+    assert_oracle_parity(
+        r##"
+(let ((local-map (make-sparse-keymap))
+      (terminal-map (make-sparse-keymap)))
+  (define-key local-map (kbd "C-c a") 'cmd-a)
+  (define-key terminal-map (kbd "C-c b") 'cmd-b)
+  (let ((overriding-local-map local-map)
+        (overriding-terminal-local-map terminal-map))
+    (list (key-binding (kbd "C-c a"))
+          (key-binding (kbd "C-c b"))
+          (where-is-internal 'cmd-a nil t)
+          (where-is-internal 'cmd-b nil t))))
+"##,
+    );
+}
