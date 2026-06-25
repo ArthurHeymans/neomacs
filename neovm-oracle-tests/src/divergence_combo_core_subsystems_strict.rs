@@ -3873,3 +3873,24 @@ fn div_core_divergence_surface_regexp_unibyte_char_class() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_regexp_nonascii_unibyte_bytes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK (nil 0)
+    // Neomacs:   OK (1 0)
+    // For a unibyte string containing raw UTF-8 bytes, GNU does not let the
+    // POSIX [:nonascii:] class match the raw high byte; Neomacs reports a
+    // match at offset 1. The [:unibyte:] control remains matching in both.
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert (string-as-unibyte "aé中"))
+  (let ((raw (buffer-string)))
+    (list (string-match-p "[[:nonascii:]]" raw)
+          (string-match-p "[[:unibyte:]]+" (string-as-unibyte "aé")))))
+"##,
+    );
+}
