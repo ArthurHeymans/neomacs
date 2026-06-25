@@ -85,6 +85,10 @@ impl ShelfAllocator {
 
     fn find_position(&mut self, alloc_w: u32, alloc_h: u32) -> Option<(u32, u32)> {
         if self.cursor_x + alloc_w <= self.page_size {
+            if self.cursor_y + alloc_h > self.page_size {
+                return None;
+            }
+
             let x = self.cursor_x;
             let y = self.cursor_y;
             self.cursor_x += alloc_w;
