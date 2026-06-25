@@ -104,6 +104,16 @@ pub(crate) fn is_compiled_for_test(id: u64) -> bool {
     COMPILED.with(|c| matches!(c.borrow().get(&id), Some(CacheEntry::Compiled(_))))
 }
 
+/// Test-only: whether the cached leaf for `id` is AOT-backed (served from a
+/// loaded `.so`, NOT JIT-compiled). Proves the AOT cache consult engaged.
+#[cfg(test)]
+pub(crate) fn cached_leaf_is_aot_for_test(id: u64) -> Option<bool> {
+    COMPILED.with(|c| match c.borrow().get(&id) {
+        Some(CacheEntry::Compiled(leaf)) => Some(leaf.is_aot_backed()),
+        _ => None,
+    })
+}
+
 /// Test-only: how many callers are recorded as inlining `sym`.
 #[cfg(test)]
 pub(crate) fn inline_dependent_count_for_test(sym: SymId) -> usize {
@@ -239,6 +249,24 @@ pub fn try_run_compiled(
             cache.remove(&id);
         }
         match cache.entry(id).or_insert_with(|| {
+            // R1c-6: consult AOT FIRST (additive — a miss/error falls through to
+            // the JIT below, leaving JIT behavior unchanged). An AOT hit is a
+            // PRE-WARMED leaf: native code already on disk, no JIT compile. Only
+            // the required-only subset the AOT emitter supports is eligible
+            // (no &optional/&rest — matches the MIR pure path's arity seeding).
+            if super::aot::aot_enabled()
+                && func.params.optional.is_empty()
+                && func.params.rest.is_none()
+            {
+                let native_arity = func.params.required.len();
+                if let Some(leaf) =
+                    super::aot::try_load_leaf(&func.ops, &func.constants, native_arity)
+                {
+                    // AOT leaves never inline → no inline deps to register. Their
+                    // reloc consts are rooted via the COMPILED walk (R1c-8).
+                    return CacheEntry::Compiled(Rc::new(leaf));
+                }
+            }
             match compile_bytecode_function_with(func, obarray) {
                 Ok(leaf) => {
                     // Compile-only (this closure runs solely on a cache miss): record

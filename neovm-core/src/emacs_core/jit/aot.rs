@@ -1,0 +1,1300 @@
+//! Ahead-of-time (AOT) object emission for compiled leaves (Phase R1c).
+//!
+//! AOT is a **fourth code producer**, never a deopt target: it emits the *same*
+//! CLIF the JIT does (via the R1b `compile::build_mir_leaf_fn::<M: Module>` seam)
+//! but routes it through Cranelift's [`ObjectModule`] instead of `JITModule`, so
+//! the result is a relocatable `.o` rather than executable memory. The `.o` is
+//! later linked into a `.so` (`cc -shared`) and `dlopen`'d, its entry inserted
+//! into the per-thread `COMPILED` cache as a pre-warmed [`CompiledLeaf`]
+//! (R1c-4..6). Tier-0 `bytecode::Vm` stays the sole oracle + `DeoptAt` landing
+//! pad; the GC is concurrent non-moving, so AOT's only GC duty is liveness +
+//! SATB-correct root publication (R1c-8) — no fixup/stackmaps.
+//!
+//! ## The three JIT seams AOT replaces (cf. `build_mir_leaf_fn`'s doc)
+//!   * `builder.symbol(...)`    — JIT bakes shim host addresses; AOT leaves the
+//!     `neovm_jit_*` shims as **undefined `Linkage::Import`s** (declared by
+//!     `declare_rt_refs`), resolved by the dynamic loader against the host
+//!     process at `dlopen` (host links `-rdynamic`; R1c-5).
+//!   * `finalize_definitions()` — replaced by `ObjectModule::finish().emit()`.
+//!   * `get_finalized_function` — replaced by a `dlsym` of the exported entry.
+//!
+//! Only built with the `jit` feature (links Cranelift).
+
+use cranelift_codegen::settings::{self, Configurable};
+use cranelift_module::{Linkage, Module, default_libcall_names};
+use cranelift_object::{ObjectBuilder, ObjectModule};
+
+use super::backend::BackendError;
+use super::compile::{CompileError, DeoptCells};
+use super::mir;
+use crate::emacs_core::bytecode::opcode::Op;
+use crate::emacs_core::value::Value;
+use crate::tagged::value::{FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE};
+
+/// Wrap a stringly backend error as a `CompileError` (module-init flavor — the
+/// ObjectModule setup + emit are the "module" steps here).
+fn module_init_err(msg: String) -> CompileError {
+    CompileError::Backend(BackendError::ModuleInit(msg))
+}
+
+// ---------------------------------------------------------------------------
+// R1c-2: content hash + ABI tag + entry symbol.
+//
+// A loaded `.so` is only safe to run if (a) it was emitted from the SAME source
+// (content hash) and (b) the host's ABI matches what the code assumes (ABI tag).
+// The loader (R1c-5) refuses a hash/tag mismatch and falls back to the JIT.
+// ---------------------------------------------------------------------------
+
+/// ABI compatibility tag for AOT artifacts — a `u32` fingerprint of every
+/// structural assumption the emitted code + loader share. Any change here MUST
+/// bump `ABI_TAG_VERSION` so a stale `.so` (with a different tag) is refused.
+///
+/// Encodes: the `STATUS_*` return codes, the entry ABI shape (3 pointer params +
+/// i64 return), the reloc-base + `DeoptCells` layout, and the `neovm_jit_*` shim
+/// name set (the imports the loader binds). Born `u32` in R1c; hardened to a
+/// `u128` ISA+layout hash in R3.4b. **No epoch is ever encoded** (epochs are
+/// re-derived from the live obarray at load — see the spec's cross-session
+/// invariants).
+pub(crate) const ABI_TAG: u32 = compute_abi_tag();
+
+/// Bump on ANY change to the entry ABI, `STATUS_*` codes, `DeoptCells`/reloc-base
+/// layout, or the shim set — it salts [`ABI_TAG`] so old artifacts stop matching.
+const ABI_TAG_VERSION: u32 = 1;
+
+/// The runtime-shim symbols an AOT `.so` imports (resolved against the host at
+/// `dlopen`). Folded into [`ABI_TAG`] so a shim-ABI change invalidates artifacts.
+/// MUST stay in sync with the `builder.symbol(...)` set in `lower_mir_pure` /
+/// `declare_rt_refs` (the shims the MIR tier can reference).
+pub(crate) const MIR_SHIM_NAMES: &[&str] = &[
+    "neovm_jit_gc_save",
+    "neovm_jit_gc_push",
+    "neovm_jit_gc_restore",
+    "neovm_jit_call",
+    "neovm_jit_apply",
+    "neovm_jit_cons",
+];
+
+/// Compute [`ABI_TAG`] at compile time from the structural invariants. A `const`
+/// FNV-1a over the salient constants + the shim names, so any drift in the ABI
+/// the code assumes changes the tag (and old `.so`s no longer match).
+const fn compute_abi_tag() -> u32 {
+    // FNV-1a (32-bit), const-evaluable.
+    let mut h: u32 = 0x811c_9dc5;
+    macro_rules! mix_u64 {
+        ($v:expr) => {{
+            let v: u64 = $v;
+            let mut i = 0;
+            while i < 8 {
+                let byte = ((v >> (i * 8)) & 0xff) as u32;
+                h ^= byte;
+                h = h.wrapping_mul(0x0100_0193);
+                i += 1;
+            }
+        }};
+    }
+    mix_u64!(ABI_TAG_VERSION as u64);
+    // STATUS_* codes (the loader + code agree on these).
+    mix_u64!(super::compile::STATUS_OK as u64);
+    mix_u64!(super::compile::STATUS_DEOPT as u64);
+    mix_u64!(super::compile::STATUS_SIGNAL as u64);
+    mix_u64!(super::compile::STATUS_DEOPT_AT as u64);
+    // Entry ABI shape: 3 pointer params + 1 i64 return (encode as a small code).
+    mix_u64!(0x0003_0001);
+    // DeoptCells layout: 3 i64 cells (pc, depth, handlers).
+    mix_u64!(core::mem::size_of::<DeoptCells>() as u64);
+    // Shim name set (count + each byte) — a shim-ABI change re-tags artifacts.
+    mix_u64!(MIR_SHIM_NAMES.len() as u64);
+    let mut si = 0;
+    while si < MIR_SHIM_NAMES.len() {
+        let name = MIR_SHIM_NAMES[si].as_bytes();
+        let mut bi = 0;
+        while bi < name.len() {
+            h ^= name[bi] as u32;
+            h = h.wrapping_mul(0x0100_0193);
+            bi += 1;
+        }
+        si += 1;
+    }
+    h
+}
+
+/// The exported entry symbol for an AOT leaf with the given content hash:
+/// `__neovm_aot_{hash:032x}_{ABI_TAG:08x}`. The tag is in the symbol so a
+/// mismatched-ABI `.so` cannot even be `dlsym`'d under the current tag (a second,
+/// cheap interlock on top of the descriptor check).
+pub(crate) fn aot_entry_symbol(content_hash: u128) -> String {
+    format!("__neovm_aot_{content_hash:032x}_{ABI_TAG:08x}")
+}
+
+// ---------------------------------------------------------------------------
+// R1c-3: per-Value rebuild recipe (canonical, pointer-free).
+//
+// Heap-object reloc constants cannot bake a pointer into a cross-session `.so`,
+// so each is serialized as a recipe (fixnum→bits, string→utf8, symbol→name,
+// cons→recursive) and rebuilt against the LIVE obarray/heap at load. The SAME
+// canonical encoding feeds the content hash (R1c-2), so two bodies with
+// identical structure + constants hash identically regardless of heap layout.
+// ---------------------------------------------------------------------------
+
+/// Recipe type tags (1 byte) for [`write_value_recipe`] / [`rebuild_value`].
+const RECIPE_FIXNUM: u8 = 1;
+const RECIPE_STRING: u8 = 2;
+const RECIPE_SYMBOL: u8 = 3;
+const RECIPE_CONS: u8 = 4;
+const RECIPE_NIL: u8 = 5;
+const RECIPE_T: u8 = 6;
+
+/// A Value whose type the AOT recipe codec does not (yet) support. The emitter
+/// bails to the JIT rather than emit an artifact it cannot rebuild — keeping AOT
+/// strictly additive (R1c-6: miss/error → JIT).
+#[derive(Debug)]
+pub(crate) struct UnsupportedRecipe(pub Value);
+
+/// Serialize one `Value` into `out` as a canonical, pointer-free recipe.
+///
+/// Supports the const subset AOT can rebuild: fixnum, string, symbol, cons
+/// (recursive), and the nil/t immediates. Anything else (float, vector, hash
+/// table, ...) returns [`UnsupportedRecipe`] so the caller bails to the JIT.
+pub(crate) fn write_value_recipe(out: &mut Vec<u8>, v: Value) -> Result<(), UnsupportedRecipe> {
+    if v == Value::NIL {
+        out.push(RECIPE_NIL);
+        return Ok(());
+    }
+    if v == Value::T {
+        out.push(RECIPE_T);
+        return Ok(());
+    }
+    if let Some(n) = v.as_fixnum() {
+        out.push(RECIPE_FIXNUM);
+        out.extend_from_slice(&n.to_le_bytes());
+        return Ok(());
+    }
+    if let Some(s) = v.as_lisp_string() {
+        let bytes = s.as_bytes();
+        out.push(RECIPE_STRING);
+        out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        out.extend_from_slice(bytes);
+        return Ok(());
+    }
+    if let Some(id) = v.as_symbol_id() {
+        let name = crate::emacs_core::intern::resolve_sym(id);
+        let nb = name.as_bytes();
+        out.push(RECIPE_SYMBOL);
+        out.extend_from_slice(&(nb.len() as u64).to_le_bytes());
+        out.extend_from_slice(nb);
+        return Ok(());
+    }
+    if v.is_cons() {
+        out.push(RECIPE_CONS);
+        write_value_recipe(out, v.cons_car())?;
+        write_value_recipe(out, v.cons_cdr())?;
+        return Ok(());
+    }
+    Err(UnsupportedRecipe(v))
+}
+
+/// Rebuild a `Value` from a recipe slice, allocating fresh heap objects against
+/// the LIVE thread-local heap + obarray (a string/cons born here is allocated
+/// black by the GC's alloc path; rooting is the caller's duty — R1c-8). Returns
+/// the value + the number of bytes consumed.
+///
+/// `#[cfg(...)]`-free so it is unit-testable; the load path (R1c-5) calls it
+/// under a live VM. Panics on a malformed/truncated recipe (the bytes come from
+/// our own emitter + a tag-checked artifact, never untrusted input).
+pub(crate) fn rebuild_value(bytes: &[u8]) -> (Value, usize) {
+    assert!(!bytes.is_empty(), "rebuild_value: empty recipe");
+    let tag = bytes[0];
+    match tag {
+        RECIPE_NIL => (Value::NIL, 1),
+        RECIPE_T => (Value::T, 1),
+        RECIPE_FIXNUM => {
+            let n = i64::from_le_bytes(bytes[1..9].try_into().expect("fixnum 8 bytes"));
+            (Value::make_int(n), 9)
+        }
+        RECIPE_STRING => {
+            let len = u64::from_le_bytes(bytes[1..9].try_into().expect("len 8 bytes")) as usize;
+            let s = std::str::from_utf8(&bytes[9..9 + len]).expect("string utf8");
+            (Value::string(s), 9 + len)
+        }
+        RECIPE_SYMBOL => {
+            let len = u64::from_le_bytes(bytes[1..9].try_into().expect("len 8 bytes")) as usize;
+            let name = std::str::from_utf8(&bytes[9..9 + len]).expect("symbol utf8");
+            let id = crate::emacs_core::intern::intern(name);
+            (Value::symbol(id), 9 + len)
+        }
+        RECIPE_CONS => {
+            let (car, n1) = rebuild_value(&bytes[1..]);
+            let (cdr, n2) = rebuild_value(&bytes[1 + n1..]);
+            (Value::cons(car, cdr), 1 + n1 + n2)
+        }
+        other => panic!("rebuild_value: unknown recipe tag {other}"),
+    }
+}
+
+/// Content hash of a leaf's SOURCE (`ops` + canonical `constants` + `arity`),
+/// salted by [`ABI_TAG`]. Gensym-stable: bytecode `Op`s carry only indices /
+/// immediates (no pointers), and constants are canonicalized by VALUE (fixnum
+/// bits, string bytes, symbol names, recursive conses) not by heap address — so
+/// the same source hashes identically across sessions. The lambda-list `arity`
+/// is folded in (the spec's arity-drift requirement). Returns `None` if any
+/// constant is outside the recipe-supported subset (caller bails to JIT).
+///
+/// Truncated to `u128` (the entry-symbol width); collisions are bounded by the
+/// descriptor check (R1c-5 verifies the recipe rebuilds an equal const vec).
+pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -> Option<u128> {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(ABI_TAG.to_le_bytes());
+    h.update((arity as u64).to_le_bytes());
+    h.update((ops.len() as u64).to_le_bytes());
+    // Ops: their Debug form is deterministic and pointer-free for this enum
+    // (Constant(idx)/Add/Goto(t)/...), so it canonically identifies the body.
+    for op in ops {
+        let s = format!("{op:?}");
+        h.update((s.len() as u64).to_le_bytes());
+        h.update(s.as_bytes());
+    }
+    // Constants: canonical recipe bytes (by value, not address).
+    h.update((constants.len() as u64).to_le_bytes());
+    let mut recipe = Vec::new();
+    for &c in constants {
+        recipe.clear();
+        write_value_recipe(&mut recipe, c).ok()?;
+        h.update((recipe.len() as u64).to_le_bytes());
+        h.update(&recipe);
+    }
+    let digest = h.finalize();
+    Some(u128::from_le_bytes(digest[..16].try_into().unwrap()))
+}
+
+// ---------------------------------------------------------------------------
+// R1c-3 (cont.): the leaf DESCRIPTOR — a versioned, exported data blob carrying
+// the lambda-list + frame metadata + reloc rebuild recipe. Emitted into the `.o`
+// alongside the entry; dlsym'd + parsed by the loader (R1c-5).
+// ---------------------------------------------------------------------------
+
+/// Magic + version header on every descriptor blob, so the loader rejects a
+/// truncated/foreign blob and a format change can be detected. The ABI_TAG also
+/// rides along (a second interlock besides the entry-symbol tag).
+const DESC_MAGIC: u32 = 0x4e41_4f54; // "NAOT"
+const DESC_VERSION: u32 = 1;
+
+/// The decoded descriptor: leaf metadata + the reloc rebuild recipe bytes.
+pub(crate) struct AotDescriptor {
+    pub meta: super::compile::AotLeafMeta,
+    /// Concatenated per-slot recipes (R1c-3); rebuilt into the reloc Vec at load.
+    pub reloc_recipe: Vec<u8>,
+    /// Number of reloc slots (recipes) in `reloc_recipe`.
+    pub reloc_count: u32,
+}
+
+/// Serialize an [`AotDescriptor`] to bytes (little-endian, fixed header + recipe
+/// tail). Layout: magic, version, ABI_TAG, then the meta fields, then
+/// reloc_count, then the concatenated recipe bytes.
+pub(crate) fn encode_descriptor(
+    meta: &super::compile::AotLeafMeta,
+    reloc_recipe: &[u8],
+    reloc_count: u32,
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&DESC_MAGIC.to_le_bytes());
+    out.extend_from_slice(&DESC_VERSION.to_le_bytes());
+    out.extend_from_slice(&ABI_TAG.to_le_bytes());
+    out.extend_from_slice(&(meta.arity as u64).to_le_bytes());
+    out.extend_from_slice(&(meta.required as u64).to_le_bytes());
+    out.push(u8::from(meta.has_rest));
+    out.push(u8::from(meta.has_binds));
+    out.push(u8::from(meta.has_handlers));
+    out.push(u8::from(meta.has_side_effects));
+    out.push(u8::from(meta.has_precise_deopt));
+    out.extend_from_slice(&(meta.max_depth as u64).to_le_bytes());
+    out.extend_from_slice(&reloc_count.to_le_bytes());
+    out.extend_from_slice(&(reloc_recipe.len() as u64).to_le_bytes());
+    out.extend_from_slice(reloc_recipe);
+    out
+}
+
+/// Parse a descriptor blob. Returns `None` on a bad magic/version/ABI_TAG or a
+/// truncated blob — the loader then refuses the artifact and falls back to JIT.
+pub(crate) fn decode_descriptor(bytes: &[u8]) -> Option<AotDescriptor> {
+    fn rd_u32(b: &[u8], at: &mut usize) -> Option<u32> {
+        let v = b.get(*at..*at + 4)?;
+        *at += 4;
+        Some(u32::from_le_bytes(v.try_into().ok()?))
+    }
+    fn rd_u64(b: &[u8], at: &mut usize) -> Option<u64> {
+        let v = b.get(*at..*at + 8)?;
+        *at += 8;
+        Some(u64::from_le_bytes(v.try_into().ok()?))
+    }
+    fn rd_u8(b: &[u8], at: &mut usize) -> Option<u8> {
+        let v = *b.get(*at)?;
+        *at += 1;
+        Some(v)
+    }
+    let mut at = 0usize;
+    if rd_u32(bytes, &mut at)? != DESC_MAGIC {
+        return None;
+    }
+    if rd_u32(bytes, &mut at)? != DESC_VERSION {
+        return None;
+    }
+    if rd_u32(bytes, &mut at)? != ABI_TAG {
+        return None; // foreign / stale ABI — refuse.
+    }
+    let arity = rd_u64(bytes, &mut at)? as usize;
+    let required = rd_u64(bytes, &mut at)? as usize;
+    let has_rest = rd_u8(bytes, &mut at)? != 0;
+    let has_binds = rd_u8(bytes, &mut at)? != 0;
+    let has_handlers = rd_u8(bytes, &mut at)? != 0;
+    let has_side_effects = rd_u8(bytes, &mut at)? != 0;
+    let has_precise_deopt = rd_u8(bytes, &mut at)? != 0;
+    let max_depth = rd_u64(bytes, &mut at)? as usize;
+    let reloc_count = rd_u32(bytes, &mut at)?;
+    let recipe_len = rd_u64(bytes, &mut at)? as usize;
+    let reloc_recipe = bytes.get(at..at + recipe_len)?.to_vec();
+    Some(AotDescriptor {
+        meta: super::compile::AotLeafMeta {
+            arity,
+            required,
+            has_rest,
+            has_binds,
+            has_handlers,
+            has_side_effects,
+            max_depth,
+            has_precise_deopt,
+        },
+        reloc_recipe,
+        reloc_count,
+    })
+}
+
+/// The exported descriptor symbol for an AOT leaf: `__neovm_aotd_{hash}_{tag}`.
+pub(crate) fn aot_descriptor_symbol(content_hash: u128) -> String {
+    format!("__neovm_aotd_{content_hash:032x}_{ABI_TAG:08x}")
+}
+
+/// Rebuild the reloc-const Vec from a descriptor's recipe (R1c-3 + R1c-8): each
+/// per-slot recipe is decoded against the LIVE heap/obarray, producing fresh
+/// heap objects (allocated black by the alloc path). The caller roots them
+/// (R1c-8). Panics on a malformed recipe (our own tag-checked emitter produced
+/// it). MUST run under a live VM (heap installed).
+pub(crate) fn rebuild_reloc_consts(desc: &AotDescriptor) -> Box<[Value]> {
+    let mut out = Vec::with_capacity(desc.reloc_count as usize);
+    let mut at = 0usize;
+    for _ in 0..desc.reloc_count {
+        let (v, n) = rebuild_value(&desc.reloc_recipe[at..]);
+        out.push(v);
+        at += n;
+    }
+    out.into_boxed_slice()
+}
+
+// ---------------------------------------------------------------------------
+// R1c-2 + R1c-5 (emit side): the full pure-leaf → object pipeline.
+// ---------------------------------------------------------------------------
+
+/// The AOT-runnable PURE subset (R1c-5 scope): a leaf whose lowering bakes NO
+/// session-specific address — no precise-deopt buffers (no call) AND no reloc
+/// vector (no heap constant). Such a `.o` is directly position-independent +
+/// runnable across the emit→load boundary (proven by the dlopen round-trip
+/// test). Reloc-bearing + precise-deopt AOT (which need the bases load-resolved
+/// via GlobalValue relocations) are a later increment; this guard keeps R1c
+/// strictly additive — a rejected body simply stays JIT-only.
+fn mir_is_aot_pure_runnable(m: &mir::MirFunction) -> bool {
+    use mir::MirOp;
+    let has_call = m.blocks.iter().any(|b| {
+        b.insts.iter().any(|i| {
+            matches!(
+                &i.op,
+                MirOp::Opaque {
+                    op: Op::Call(_) | Op::Apply(_),
+                    ..
+                }
+            )
+        })
+    });
+    if has_call {
+        return false;
+    }
+    // Any heap-object Const would need a reloc vector (a baked base address).
+    let has_heap_const = m.blocks.iter().flat_map(|b| b.insts.iter()).any(|i| {
+        if let MirOp::Const(v) = &i.op {
+            let bits = v.bits();
+            (bits & FIXNUM_CHECK_MASK) != FIXNUM_CHECK_VALUE && v.is_heap_object()
+        } else {
+            false
+        }
+    });
+    !has_heap_const
+}
+
+/// Compile one bytecode leaf to a relocatable `.o` for AOT (R1c-5 pure subset).
+///
+/// Computes the content hash + entry/descriptor symbols, builds the MIR, checks
+/// it is in the AOT-runnable pure subset, emits the entry + descriptor object,
+/// and returns `(object_bytes, content_hash)`. Returns `Ok(None)` (NOT an error)
+/// when the body is outside the supported subset — the caller stays JIT-only.
+pub(crate) fn compile_pure_leaf_to_object(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
+    let Some(content_hash) = leaf_content_hash(ops, constants, arity) else {
+        return Ok(None); // a constant outside the recipe subset.
+    };
+    let m = match mir::build_mir(ops, constants, arity) {
+        Ok(m) => m,
+        Err(_) => return Ok(None), // not MIR-lowerable → JIT-only.
+    };
+    if !mir_is_aot_pure_runnable(&m) {
+        return Ok(None);
+    }
+    let entry_name = aot_entry_symbol(content_hash);
+    let desc_name = aot_descriptor_symbol(content_hash);
+    // Pure subset: no reloc consts, no precise deopt, no binds/handlers.
+    let meta = super::compile::AotLeafMeta {
+        arity: m.arity,
+        required: m.arity,
+        has_rest: false,
+        has_binds: false,
+        has_handlers: false,
+        has_side_effects: false,
+        max_depth: 0,
+        has_precise_deopt: false,
+    };
+    let desc_bytes = encode_descriptor(&meta, &[], 0);
+    let obj = build_object_for_leaf_inner(&m, &entry_name, Some((&desc_name, &desc_bytes)))?;
+    Ok(Some((obj, content_hash)))
+}
+
+// ---------------------------------------------------------------------------
+// R1c-5: link `.o` → `.so`, load via libloading.
+// R1c-7: the content-hash-keyed unit store (from NEOVM_AOT_DIR).
+// R1c-6: `try_load_leaf` — the cache's AOT consult.
+// ---------------------------------------------------------------------------
+
+/// Link a relocatable object's bytes into a shared object at `so_path`, via
+/// `cc -shared`. The host process must export the `neovm_jit_*` shims (linked
+/// `-rdynamic`) so the loader can bind the `.so`'s undefined imports at dlopen.
+pub(crate) fn link_object_to_so(
+    obj_bytes: &[u8],
+    so_path: &std::path::Path,
+) -> Result<(), CompileError> {
+    use std::io::Write;
+    // Write the `.o` beside the target `.so` (same dir; temp name).
+    let o_path = so_path.with_extension("o");
+    std::fs::File::create(&o_path)
+        .and_then(|mut f| f.write_all(obj_bytes))
+        .map_err(|e| module_init_err(format!("write .o: {e}")))?;
+    let status = std::process::Command::new("cc")
+        .arg("-shared")
+        .arg("-o")
+        .arg(so_path)
+        .arg(&o_path)
+        .status()
+        .map_err(|e| module_init_err(format!("spawn cc: {e}")))?;
+    // Best-effort cleanup of the intermediate object.
+    let _ = std::fs::remove_file(&o_path);
+    if !status.success() {
+        return Err(module_init_err(format!("cc -shared failed: {status}")));
+    }
+    Ok(())
+}
+
+/// One AOT compilation unit's on-disk location, keyed by content hash.
+type UnitIndex = std::collections::HashMap<u128, std::path::PathBuf>;
+
+/// Process-wide index of available AOT `.so`s by content hash, built once from
+/// `NEOVM_AOT_DIR` (default: none → AOT disabled). Memoized loaded units are
+/// thread-local (the cache + leaves are `!Send`); the INDEX is shareable (just
+/// paths). Indexes only files whose name carries the CURRENT `ABI_TAG`.
+fn unit_index() -> &'static UnitIndex {
+    static INDEX: std::sync::OnceLock<UnitIndex> = std::sync::OnceLock::new();
+    INDEX.get_or_init(|| {
+        let mut idx = UnitIndex::new();
+        let Some(dir) = std::env::var_os("NEOVM_AOT_DIR") else {
+            return idx;
+        };
+        let tag_suffix = format!("_{ABI_TAG:08x}.so");
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.flatten() {
+                let path = e.path();
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                // Expect `<hash:032x>_<tag:08x>.so` (the entry-symbol stem). Only
+                // index files matching the current ABI_TAG.
+                if !name.ends_with(&tag_suffix) {
+                    continue;
+                }
+                let stem = &name[..name.len() - tag_suffix.len()];
+                if stem.len() == 32
+                    && let Ok(hash) = u128::from_str_radix(stem, 16)
+                {
+                    idx.insert(hash, path);
+                }
+            }
+        }
+        idx
+    })
+}
+
+thread_local! {
+    /// Thread-local memo of units already `dlopen`'d on THIS thread, keyed by
+    /// content hash. The `Arc<LoadedUnit>` keeps the `.so` mapped; cloned into
+    /// every `CompiledLeaf` it backs. `!Send` (so per-thread), matching the
+    /// thread-local `COMPILED` cache.
+    static LOADED_UNITS: std::cell::RefCell<
+        std::collections::HashMap<u128, std::sync::Arc<super::compile::LoadedUnit>>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// dlopen (memoized) the unit for `content_hash` from the unit index, returning
+/// the shared `Arc<LoadedUnit>`. `None` if no `.so` is indexed for this hash.
+fn load_unit(content_hash: u128) -> Option<std::sync::Arc<super::compile::LoadedUnit>> {
+    if let Some(u) = LOADED_UNITS.with(|m| m.borrow().get(&content_hash).cloned()) {
+        return Some(u);
+    }
+    // Test seam: a directly-injected unit (see `test_support::inject_unit`) takes
+    // precedence over the env-driven index, so a test can pre-load a `.so` it
+    // just built and exercise the cache path.
+    #[cfg(test)]
+    if let Some(u) = test_support::injected_unit(content_hash) {
+        return Some(u);
+    }
+    let path = unit_index().get(&content_hash)?;
+    // SAFETY: dlopen of a `.so` we emitted; its undefined imports are the
+    // `neovm_jit_*` shims, bound against the -rdynamic host. The library is
+    // never unloaded while any backed leaf is cached (held by the Arc).
+    let lib = unsafe { libloading::Library::new(path) }.ok()?;
+    let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib));
+    LOADED_UNITS.with(|m| {
+        m.borrow_mut().insert(content_hash, std::sync::Arc::clone(&unit));
+    });
+    Some(unit)
+}
+
+/// Whether AOT loading is enabled this session. R1c proves the path in-test via
+/// `NEOVM_AOT=force`; R2 wires the real dump-time pre-warm.
+pub(crate) fn aot_enabled() -> bool {
+    // Test seam: a thread-local override (see `test_support`) lets a unit test
+    // exercise the cache AOT path without relying on a process-start env var
+    // (the env reads are OnceLock-memoized, so they can't be set per-test).
+    #[cfg(test)]
+    if let Some(forced) = test_support::forced_enabled() {
+        return forced;
+    }
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        matches!(
+            std::env::var("NEOVM_AOT").as_deref(),
+            Ok("force") | Ok("1") | Ok("on")
+        )
+    })
+}
+
+/// R1c-6: try to serve a leaf for the given bytecode source from AOT.
+///
+/// Computes the content hash, finds + dlopens the matching unit, dlsym's the
+/// entry + descriptor, verifies the descriptor (magic/version/ABI_TAG), rebuilds
+/// the live reloc consts, and constructs a pre-warmed [`CompiledLeaf`]. Returns
+/// `None` on ANY miss/mismatch/error — the caller falls back to the JIT
+/// (strictly additive). The returned reloc consts are rooted by the caller's
+/// cache insertion (R1c-8: they live in `COMPILED`, walked by
+/// `collect_jit_reloc_gc_roots`).
+pub(crate) fn try_load_leaf(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+) -> Option<super::compile::CompiledLeaf> {
+    if !aot_enabled() {
+        return None;
+    }
+    let content_hash = leaf_content_hash(ops, constants, arity)?;
+    let unit = load_unit(content_hash)?;
+    load_leaf_from_unit(&unit, content_hash, arity)
+}
+
+/// The dlsym + descriptor-decode + reloc-rebuild + construct core, factored out
+/// of [`try_load_leaf`] so a test can drive it with a directly-loaded unit
+/// (bypassing the env/index resolution). Returns `None` on any symbol miss /
+/// descriptor mismatch / arity mismatch — the caller falls back to JIT.
+pub(crate) fn load_leaf_from_unit(
+    unit: &std::sync::Arc<super::compile::LoadedUnit>,
+    content_hash: u128,
+    arity: usize,
+) -> Option<super::compile::CompiledLeaf> {
+    let entry_name = aot_entry_symbol(content_hash);
+    let desc_name = aot_descriptor_symbol(content_hash);
+
+    // dlsym the entry + descriptor out of the SAME unit (so the entry points
+    // into the library the Arc keeps mapped).
+    type EntryFn = unsafe extern "C" fn(*mut u8, *const i64, *mut i64) -> i64;
+    // SAFETY: symbols we exported; the entry's ABI is the CompiledLeaf entry ABI.
+    let (entry_ptr, desc_bytes): (*const u8, Vec<u8>) = unsafe {
+        let lib = unit.library();
+        let entry: libloading::Symbol<EntryFn> = lib.get(entry_name.as_bytes()).ok()?;
+        let entry_ptr = *entry as *const u8;
+        // The descriptor is an exported data object: a pointer to its bytes. Its
+        // length is encoded by the format (header → recipe_len), so read the
+        // fixed header first to learn the full size, then copy it out.
+        let desc_sym: libloading::Symbol<*const u8> = lib.get(desc_name.as_bytes()).ok()?;
+        let desc_ptr = *desc_sym;
+        // Read the fixed header (up to + including the recipe_len field) to learn
+        // the recipe length, then map the full blob. Layout MUST match
+        // `encode_descriptor`: magic+version+tag (4+4+4) + arity+required (8+8) +
+        // 5 flag bytes + max_depth (8) + reloc_count (4) + recipe_len (8) = 53.
+        const HDR: usize = 4 + 4 + 4 + 8 + 8 + 5 + 8 + 4 + 8;
+        let hdr = std::slice::from_raw_parts(desc_ptr, HDR);
+        let recipe_len =
+            u64::from_le_bytes(hdr[HDR - 8..HDR].try_into().ok()?) as usize;
+        let total = HDR + recipe_len;
+        let all = std::slice::from_raw_parts(desc_ptr, total);
+        (entry_ptr, all.to_vec())
+    };
+
+    let desc = decode_descriptor(&desc_bytes)?;
+    // Sanity: arity must match the call site's lambda list.
+    if desc.meta.arity != arity {
+        return None;
+    }
+    // R1c-8: rebuild the live reloc consts (allocate-black via the heap path).
+    let reloc_data = rebuild_reloc_consts(&desc);
+    // SAFETY: `entry_ptr` is the real native entry inside `unit`'s loaded `.so`;
+    // `unit` is held by the returned leaf for its whole life (kept mapped).
+    let leaf = unsafe {
+        super::compile::CompiledLeaf::from_aot(entry_ptr, std::sync::Arc::clone(unit), desc.meta, reloc_data)
+    };
+    Some(leaf)
+}
+
+/// Build a relocatable object (`.o` bytes) for one pure MIR leaf `m`, exporting
+/// its entry under `entry_name`.
+///
+/// Mirrors [`compile::lower_mir_pure`]'s analysis prologue (the same `has_call`
+/// / `cons_repl` / `needs_rt` derivation, the same reloc-constant collection and
+/// deopt-buffer sizing) and then drives the SAME module-generic build seam
+/// (`build_mir_leaf_fn`) with `M = ObjectModule` — so the emitted CLIF is
+/// byte-identical to the JIT's, including the R1a reloc loads. The only
+/// differences from the JIT path are the three seams above: no `builder.symbol`,
+/// `Linkage::Export` (vs `Local`) for the entry, and `finish().emit()` (vs
+/// `finalize_definitions`/`get_finalized_function`).
+///
+/// NOTE (R1c-1 scope): the buffer base addresses (`reloc_data`/`deopt_spill`/
+/// `deopt_meta`) are still baked as immediates by `build_mir_leaf_fn`, pointing
+/// at *this session's* throwaway buffers. That makes the `.o` parseable and its
+/// symbol table correct (the R1c-1 gate) but NOT yet runnable across sessions;
+/// load-time rebuild/relocation of those bases is R1c-3/5.
+pub fn build_object_for_leaf(
+    m: &mir::MirFunction,
+    entry_name: &str,
+) -> Result<Vec<u8>, CompileError> {
+    build_object_for_leaf_inner(m, entry_name, None)
+}
+
+/// As [`build_object_for_leaf`], but also emits an exported, read-only data
+/// object `descriptor.0` holding `descriptor.1` bytes — the AOT descriptor the
+/// loader dlsym's to recover the leaf's metadata + reloc rebuild recipe (R1c-3).
+fn build_object_for_leaf_inner(
+    m: &mir::MirFunction,
+    entry_name: &str,
+    descriptor: Option<(&str, &[u8])>,
+) -> Result<Vec<u8>, CompileError> {
+    use mir::MirOp;
+
+    // --- Host ISA with PIC (the .o must be position-independent for the .so). ---
+    let mut flag_builder = settings::builder();
+    // Mirror cranelift-jit's flags, except is_pic=true (a JITModule needs
+    // is_pic=false; a shared object needs true so the loader can relocate it).
+    flag_builder
+        .set("use_colocated_libcalls", "false")
+        .map_err(|e| module_init_err(e.to_string()))?;
+    flag_builder
+        .set("is_pic", "true")
+        .map_err(|e| module_init_err(e.to_string()))?;
+    let isa_builder = cranelift_native::builder()
+        .map_err(|e| module_init_err(e.to_string()))?;
+    let isa = isa_builder
+        .finish(settings::Flags::new(flag_builder))
+        .map_err(|e| module_init_err(e.to_string()))?;
+
+    let builder = ObjectBuilder::new(isa, "neovm_aot", default_libcall_names())
+        .map_err(|e| module_init_err(e.to_string()))?;
+    let mut module = ObjectModule::new(builder);
+
+    // ----- Analysis prologue, identical to lower_mir_pure (compile.rs). --------
+    // A CALL forces all-precise deopt + the runtime scaffolding; an escaping cons
+    // needs the cons shim. Both set needs_rt (vmctx + shims).
+    let has_call = m.blocks.iter().any(|b| {
+        b.insts.iter().any(|i| {
+            matches!(
+                &i.op,
+                MirOp::Opaque {
+                    op: crate::emacs_core::bytecode::opcode::Op::Call(_)
+                        | crate::emacs_core::bytecode::opcode::Op::Apply(_),
+                    ..
+                }
+            )
+        })
+    });
+    let cons_repl: Vec<Option<(mir::MirValue, mir::MirValue)>> = if has_call {
+        vec![None; m.value_types.len()]
+    } else {
+        mir::cons_scalar_repl_targets(m)
+    };
+    let has_escaping_cons = m
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter())
+        .any(|i| matches!(&i.op, MirOp::Cons(..)) && cons_repl[i.result.0 as usize].is_none());
+    let needs_rt = has_call || has_escaping_cons;
+
+    // Precise-deopt spill buffer + cells (sized exactly as the JIT does). These
+    // are this-session throwaway buffers in R1c-1 — their *addresses* get baked,
+    // which is fine for the parse gate (load-time rebuild is R1c-3/5).
+    let max_depth = m
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter())
+        .map(|i| i.pre_stack.len())
+        .max()
+        .unwrap_or(0);
+    let deopt_spill: Box<[core::cell::Cell<i64>]> = if has_call {
+        (0..max_depth).map(|_| core::cell::Cell::new(0)).collect()
+    } else {
+        Box::from([])
+    };
+    let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
+        pc: core::cell::Cell::new(0),
+        depth: core::cell::Cell::new(0),
+        handlers: core::cell::Cell::new(0),
+    });
+
+    // R1a reloc-constant collection (dedup by tagged bits), identical to the JIT.
+    let mut reloc_vals: Vec<Value> = Vec::new();
+    let mut reloc_index: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    for blk in &m.blocks {
+        for inst in &blk.insts {
+            if let MirOp::Const(v) = &inst.op {
+                let bits = v.bits();
+                if (bits & FIXNUM_CHECK_MASK) != FIXNUM_CHECK_VALUE
+                    && v.is_heap_object()
+                    && !reloc_index.contains_key(&bits)
+                {
+                    reloc_index.insert(bits, reloc_vals.len() as u32);
+                    reloc_vals.push(*v);
+                }
+            }
+        }
+    }
+    let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
+
+    // ----- Drive the SHARED build seam with M = ObjectModule. ------------------
+    // Same CLIF as the JIT (byte-identical incl R1a reloc loads); only the entry
+    // declaration differs: Linkage::Export under `entry_name` so the loader can
+    // dlsym it. The `neovm_jit_*` shims stay undefined Linkage::Import imports.
+    super::compile::build_mir_leaf_fn(
+        &mut module,
+        m,
+        &deopt_spill,
+        &deopt_meta,
+        &reloc_data,
+        &reloc_index,
+        has_call,
+        &cons_repl,
+        needs_rt,
+        entry_name,
+        Linkage::Export,
+    )?;
+
+    // R1c-3: emit the descriptor as an exported, read-only data object so the
+    // loader can dlsym it and recover the leaf metadata + reloc rebuild recipe.
+    if let Some((desc_name, desc_bytes)) = descriptor {
+        let data_id = module
+            .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
+            .map_err(|e| module_init_err(e.to_string()))?;
+        let mut desc = cranelift_module::DataDescription::new();
+        desc.define(desc_bytes.to_vec().into_boxed_slice());
+        module
+            .define_data(data_id, &desc)
+            .map_err(|e| module_init_err(e.to_string()))?;
+    }
+
+    // No get_finalized_function: emit the relocatable object bytes.
+    module
+        .finish()
+        .emit()
+        .map_err(|e| module_init_err(e.to_string()))
+}
+
+/// Test-only seams that let a unit test drive the cache AOT path (`aot_enabled`
+/// and `load_unit`) without a process-start env var (the env reads are
+/// OnceLock-memoized and so cannot be toggled per-test). Production builds never
+/// compile this; `aot_enabled`/`load_unit` consult it only under `cfg(test)`.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    thread_local! {
+        static FORCE_ENABLED: RefCell<Option<bool>> = const { RefCell::new(None) };
+        static INJECTED: RefCell<HashMap<u128, Arc<super::super::compile::LoadedUnit>>> =
+            RefCell::new(HashMap::new());
+    }
+
+    /// The forced `aot_enabled()` value, if a test set one.
+    pub(crate) fn forced_enabled() -> Option<bool> {
+        FORCE_ENABLED.with(|c| *c.borrow())
+    }
+
+    /// Force `aot_enabled()` to `v` for the rest of this thread (test only).
+    pub(crate) fn set_forced_enabled(v: bool) {
+        FORCE_ENABLED.with(|c| *c.borrow_mut() = Some(v));
+    }
+
+    /// Reset the test overrides (call at the end of a test to avoid bleed).
+    pub(crate) fn reset() {
+        FORCE_ENABLED.with(|c| *c.borrow_mut() = None);
+        INJECTED.with(|m| m.borrow_mut().clear());
+    }
+
+    /// Inject a pre-loaded unit for `content_hash` so `load_unit` returns it.
+    pub(crate) fn inject_unit(content_hash: u128, unit: Arc<super::super::compile::LoadedUnit>) {
+        INJECTED.with(|m| {
+            m.borrow_mut().insert(content_hash, unit);
+        });
+    }
+
+    /// The injected unit for `content_hash`, if any.
+    pub(crate) fn injected_unit(
+        content_hash: u128,
+    ) -> Option<Arc<super::super::compile::LoadedUnit>> {
+        INJECTED.with(|m| m.borrow().get(&content_hash).cloned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use object::{Object, ObjectSymbol};
+
+    /// R1c-1 gate: a pure leaf's object bytes parse via `object::File`, the entry
+    /// symbol is exported (defined + global), and the `neovm_jit_*` shims appear
+    /// as UNDEFINED imports (resolved by the loader, not baked).
+    #[test]
+    fn object_emits_with_exported_entry_and_imported_shims() {
+        // A 0-arg pure body that conses two fixnums and RETURNS the cons. A
+        // returned cons escapes → escape analysis keeps a real heap allocation →
+        // needs_rt → the cons shim (+ gc_save/push/restore) declared as imports.
+        // Fixnum constants need no reloc vector, keeping this body minimal.
+        let ops = [Op::Constant(0), Op::Constant(1), Op::Cons, Op::Return];
+        let constants = [Value::make_int(1), Value::make_int(2)];
+        let m = mir::build_mir(&ops, &constants, 0).expect("build_mir for cons body");
+
+        let entry = "__neovm_aot_test_cons";
+        let bytes = build_object_for_leaf(&m, entry).expect("emit object");
+        assert!(!bytes.is_empty(), "object bytes must be non-empty");
+
+        let file = object::File::parse(&*bytes).expect("parse object bytes");
+
+        // Entry symbol: defined (not undefined) and global.
+        let entry_sym = file
+            .symbols()
+            .find(|s| s.name() == Ok(entry))
+            .unwrap_or_else(|| panic!("entry symbol {entry} not found"));
+        assert!(
+            entry_sym.is_definition(),
+            "entry {entry} must be a definition (exported)"
+        );
+        assert!(entry_sym.is_global(), "entry {entry} must be global");
+
+        // The cons shim must appear as an UNDEFINED import (the loader resolves it
+        // against the host; AOT never bakes the shim address).
+        let cons_shim = file
+            .symbols()
+            .find(|s| s.name() == Ok("neovm_jit_cons"))
+            .expect("neovm_jit_cons import symbol present");
+        assert!(
+            cons_shim.is_undefined(),
+            "shim neovm_jit_cons must be an undefined import"
+        );
+    }
+
+    /// SCRATCH validation (not a final gate): prove the FULL pure-subset path —
+    /// emit `.o` → `cc -shared` → `dlopen` → `dlsym` → call — produces native
+    /// code byte-identical to the JIT (`lower_mir_pure`). Uses a PURE arithmetic
+    /// leaf with NO heap constants and NO calls, so the lowering bakes ZERO
+    /// session-specific addresses (no reloc_base, no precise-deopt buffers) and
+    /// the `.o` is directly runnable across the emit→load boundary. This is the
+    /// foundation R1c-5 builds on; reloc/precise-deopt rebuild come later.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aot_pure_arith_leaf_matches_jit_via_dlopen() {
+        use crate::emacs_core::eval::Context;
+        use std::io::Write;
+
+        // 1-arg pure body: (+ arg 5). No heap consts, no calls, no deopt buffers.
+        let ops = [Op::Constant(0), Op::Add, Op::Return];
+        let constants = [Value::make_int(5)];
+        let m = mir::build_mir(&ops, &constants, 1).expect("build_mir add body");
+
+        // Reference: the JIT leaf for the same MIR.
+        let jit_leaf = super::super::compile::lower_mir_pure(&m).expect("JIT lowers");
+
+        // Emit the AOT object for the same MIR.
+        let entry = "__neovm_aot_test_add5";
+        let obj = build_object_for_leaf(&m, entry).expect("emit object");
+
+        // Write the `.o`, link to a `.so` with `cc -shared`.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let o_path = dir.path().join("leaf.o");
+        let so_path = dir.path().join("libleaf.so");
+        std::fs::File::create(&o_path)
+            .and_then(|mut f| f.write_all(&obj))
+            .expect("write .o");
+        let status = std::process::Command::new("cc")
+            .arg("-shared")
+            .arg("-o")
+            .arg(&so_path)
+            .arg(&o_path)
+            .status()
+            .expect("spawn cc");
+        assert!(status.success(), "cc -shared failed");
+
+        // dlopen + dlsym the entry (the CompiledLeaf entry ABI).
+        type EntryFn = unsafe extern "C" fn(*mut u8, *const i64, *mut i64) -> i64;
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen .so");
+        let aot_entry: libloading::Symbol<EntryFn> =
+            unsafe { lib.get(entry.as_bytes()) }.expect("dlsym entry");
+
+        // Call AOT and JIT for several args; results must be bit-identical.
+        let mut eval = Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut eval as *mut Context as *mut u8;
+        for a in [0i64, 1, 7, -3, 1000] {
+            let arg = Value::make_int(a);
+            // JIT result.
+            let jit = match jit_leaf.call(ctx_ptr, &[arg]) {
+                crate::emacs_core::jit::compile::NativeRun::Ok(bits) => bits as i64,
+                other => panic!("JIT did not return Ok: {other:?}"),
+            };
+            // AOT result via the raw entry ABI (one arg word, out slot).
+            let args = [arg.bits() as i64];
+            let mut out: i64 = 0;
+            let status =
+                unsafe { (aot_entry)(ctx_ptr, args.as_ptr(), &mut out as *mut i64) };
+            assert_eq!(status, super::super::compile::STATUS_OK, "AOT status not OK");
+            assert_eq!(out, jit, "AOT result != JIT result for arg {a}");
+        }
+    }
+
+    /// R1c-3 gate: a recipe round-trips a const value with a string + symbol +
+    /// (nested) cons — emit recipe → rebuild fresh against the live heap/obarray
+    /// → leaves match by VALUE (not pointer). Needs a VM harness for allocation.
+    #[test]
+    fn recipe_round_trips_string_symbol_cons() {
+        // The harness installs the thread-local heap so Value::string/cons can
+        // allocate (same pattern as the compile.rs MIR const tests).
+        let mut _eval = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+
+        // (cons "hello" (cons 'my-sym 42)) — exercises every supported recipe arm.
+        let inner = Value::cons(
+            Value::symbol(crate::emacs_core::intern::intern("my-sym")),
+            Value::make_int(42),
+        );
+        let original = Value::cons(Value::string("hello"), inner);
+
+        let mut recipe = Vec::new();
+        write_value_recipe(&mut recipe, original).expect("string+symbol+cons supported");
+        let (rebuilt, consumed) = rebuild_value(&recipe);
+        assert_eq!(consumed, recipe.len(), "recipe fully consumed");
+
+        // Structurally equal by value (fresh allocations, so NOT `eq`).
+        assert!(rebuilt.is_cons(), "top is a cons");
+        assert_eq!(
+            rebuilt.cons_car().as_lisp_string().unwrap().as_bytes(),
+            b"hello"
+        );
+        assert_eq!(
+            crate::emacs_core::intern::resolve_sym(
+                rebuilt.cons_cdr().cons_car().as_symbol_id().unwrap()
+            ),
+            "my-sym"
+        );
+        assert_eq!(rebuilt.cons_cdr().cons_cdr().as_fixnum(), Some(42));
+
+        // A float is outside the supported subset → recipe bails (caller → JIT).
+        let mut tmp = Vec::new();
+        assert!(
+            write_value_recipe(&mut tmp, Value::make_float(1.5)).is_err(),
+            "float must be unsupported (bail to JIT)"
+        );
+    }
+
+    /// R1c-2 gate: the content hash is STABLE for identical source and
+    /// DISCRIMINATES different bodies / arities / constants; the entry symbol
+    /// round-trips the hash + ABI_TAG.
+    #[test]
+    fn content_hash_stable_and_discriminating() {
+        let ops_a = [Op::Constant(0), Op::Add, Op::Return];
+        let consts_a = [Value::make_int(5)];
+        let h1 = leaf_content_hash(&ops_a, &consts_a, 1).expect("hashable");
+        let h2 = leaf_content_hash(&ops_a, &consts_a, 1).expect("hashable");
+        assert_eq!(h1, h2, "same source → same hash");
+
+        // Different constant.
+        let consts_b = [Value::make_int(6)];
+        assert_ne!(
+            h1,
+            leaf_content_hash(&ops_a, &consts_b, 1).expect("hashable"),
+            "different constant → different hash"
+        );
+        // Different arity (lambda-list drift).
+        assert_ne!(
+            h1,
+            leaf_content_hash(&ops_a, &consts_a, 2).expect("hashable"),
+            "different arity → different hash"
+        );
+        // Different ops.
+        let ops_c = [Op::Constant(0), Op::Sub, Op::Return];
+        assert_ne!(
+            h1,
+            leaf_content_hash(&ops_c, &consts_a, 1).expect("hashable"),
+            "different ops → different hash"
+        );
+
+        // Entry symbol round-trips hash + tag.
+        let sym = aot_entry_symbol(h1);
+        assert!(sym.starts_with("__neovm_aot_"));
+        assert!(sym.ends_with(&format!("{ABI_TAG:08x}")));
+        assert!(sym.contains(&format!("{h1:032x}")));
+    }
+
+    /// Shared R1c-5/R1c-9 harness: for one pure body, build → link → load the
+    /// AOT leaf and assert interp == JIT == AOT (bit-for-bit) over `args`.
+    #[cfg(target_os = "linux")]
+    fn assert_aot_matches_interp_and_jit(
+        ops: &[Op],
+        constants: &[Value],
+        nargs: usize,
+        args: &[i64],
+    ) {
+        use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::value::LambdaParams;
+
+        // Emit → link → dlopen → load via the production helpers.
+        let (obj, content_hash) = compile_pure_leaf_to_object(ops, constants, nargs)
+            .expect("compile ok")
+            .expect("pure subset → Some");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        link_object_to_so(&obj, &so_path).expect("link .so");
+        // SAFETY: dlopen a `.so` we just emitted; pure leaf has no shim imports.
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+        let aot_leaf =
+            load_leaf_from_unit(&unit, content_hash, nargs).expect("load leaf from unit");
+
+        // Reference: JIT leaf for the same MIR.
+        let m = mir::build_mir(ops, constants, nargs).expect("mir");
+        let jit_leaf = super::super::compile::lower_mir_pure(&m).expect("jit lowers");
+
+        // Reference: the interpreter (the oracle).
+        let mut eval = Context::new_minimal_vm_harness();
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (0..nargs)
+                .map(|i| crate::emacs_core::intern::SymId(1 + i as u32))
+                .collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+
+        let ctx_ptr = &mut eval as *mut Context as *mut u8;
+        // For a 1-arg body sweep `args`; otherwise call once with the first
+        // `nargs` entries (the corpus bodies below are 0- or 1-arg).
+        let calls: Vec<Vec<Value>> = if nargs == 1 {
+            args.iter().map(|&a| vec![Value::make_int(a)]).collect()
+        } else {
+            vec![args.iter().take(nargs).map(|&a| Value::make_int(a)).collect()]
+        };
+        for call in calls {
+            let interp = {
+                let mut vm = Vm::from_context(&mut eval);
+                vm.execute(&f, call.clone()).expect("interp").bits()
+            };
+            let aot = match aot_leaf.call(ctx_ptr, &call) {
+                crate::emacs_core::jit::compile::NativeRun::Ok(b) => b,
+                other => panic!("AOT not Ok: {other:?}"),
+            };
+            let jit = match jit_leaf.call(ctx_ptr, &call) {
+                crate::emacs_core::jit::compile::NativeRun::Ok(b) => b,
+                other => panic!("JIT not Ok: {other:?}"),
+            };
+            assert_eq!(aot, interp, "AOT != interp for {call:?}");
+            assert_eq!(aot, jit, "AOT != JIT for {call:?}");
+        }
+    }
+
+    /// R1c-5 gate: the FULL PRODUCTION path for a pure leaf —
+    /// `compile_pure_leaf_to_object` → `link_object_to_so` → dlopen →
+    /// `load_leaf_from_unit` → `CompiledLeaf::call` — is byte-identical to BOTH
+    /// the interpreter and the JIT, incl across several args.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aot_pure_leaf_matches_jit_and_interp() {
+        // 1-arg pure body: (* (+ arg 5) 2) — fixnum arith, no consts/calls.
+        let ops = [
+            Op::Constant(0),
+            Op::Add,
+            Op::Constant(1),
+            Op::Mul,
+            Op::Return,
+        ];
+        let constants = [Value::make_int(5), Value::make_int(2)];
+        assert_aot_matches_interp_and_jit(&ops, &constants, 1, &[0, 1, 7, -3, 1000, -1000]);
+    }
+
+    /// R1c-9 harness: a CORPUS of pure bodies — each emitted → linked → loaded →
+    /// compared interp == JIT == AOT bit-for-bit. Covers arithmetic, comparison
+    /// (branchy), unary, and a 0-arg constant-folding body, exercising the AOT
+    /// path across the pure subset (the in-test analogue of the suite-wide
+    /// `NEOVM_AOT=force` byte-identity gate, which needs R2's pre-built `.so`s).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aot_roundtrip_matches_interp_and_jit_corpus() {
+        let probe = [0i64, 1, 2, 7, -3, 42, 1000, -1000];
+
+        // 0-arg: (+ 2 3) — constant fold, no args.
+        assert_aot_matches_interp_and_jit(
+            &[Op::Constant(0), Op::Constant(1), Op::Add, Op::Return],
+            &[Value::make_int(2), Value::make_int(3)],
+            0,
+            &[],
+        );
+        // 1-arg: (- arg 1)
+        assert_aot_matches_interp_and_jit(
+            &[Op::Constant(0), Op::Sub, Op::Return],
+            &[Value::make_int(1)],
+            1,
+            &probe,
+        );
+        // 1-arg: (1+ arg)
+        assert_aot_matches_interp_and_jit(&[Op::Add1, Op::Return], &[], 1, &probe);
+        // 1-arg: (* arg arg) — needs the arg twice (StackRef duplicates it).
+        assert_aot_matches_interp_and_jit(
+            &[Op::StackRef(0), Op::Mul, Op::Return],
+            &[],
+            1,
+            &probe,
+        );
+        // 1-arg branchy: (if (< arg 0) ...) via Lss + GotoIfNil — comparison +
+        // control flow, the deopt-free pure path.
+        assert_aot_matches_interp_and_jit(
+            &[
+                Op::Constant(0),
+                Op::Lss,
+                Op::Return,
+            ],
+            &[Value::make_int(0)],
+            1,
+            &probe,
+        );
+    }
+
+    /// R1c-6 gate: a content/ABI MISMATCH (wrong arity, foreign hash) makes
+    /// `load_leaf_from_unit` return None (→ caller falls back to JIT, additive).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aot_load_miss_falls_through() {
+        let ops = [Op::Constant(0), Op::Add, Op::Return];
+        let constants = [Value::make_int(5)];
+        let arity = 1usize;
+        let (obj, content_hash) = compile_pure_leaf_to_object(&ops, &constants, arity)
+            .expect("compile ok")
+            .expect("pure subset");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join("leaf.so");
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+
+        // Right hash, WRONG arity → entry symbol embeds the hash only, but the
+        // descriptor arity check rejects... actually arity != desc.arity bails.
+        assert!(
+            load_leaf_from_unit(&unit, content_hash, /*arity=*/ 2).is_none(),
+            "arity mismatch must miss"
+        );
+        // A foreign content hash → the entry/descriptor symbols don't exist →
+        // dlsym miss → None.
+        assert!(
+            load_leaf_from_unit(&unit, content_hash ^ 0xdead_beef, arity).is_none(),
+            "foreign hash must miss"
+        );
+    }
+
+    /// R1c-6 gate: with AOT enabled and the unit pre-loaded, `try_run_compiled`
+    /// serves the leaf FROM AOT (the cached entry is AOT-backed, NOT JIT) and the
+    /// result matches the interpreter — the pre-warmed cache hit.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn aot_hit_serves_without_jitting_through_cache() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::value::LambdaParams;
+
+        // 1-arg pure body (+ arg 5) — the AOT pure subset.
+        let ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        let constants = vec![Value::make_int(5)];
+        let arity = 1usize;
+
+        // Build + link the `.so`, dlopen it, inject the unit by content hash.
+        let (obj, content_hash) = compile_pure_leaf_to_object(&ops, &constants, arity)
+            .expect("compile ok")
+            .expect("pure subset");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join("leaf.so");
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+
+        // Drive the cache path with the test seams (force-enable + inject unit).
+        // Reset at the end so the override doesn't bleed into other tests.
+        test_support::set_forced_enabled(true);
+        test_support::inject_unit(content_hash, unit);
+
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+
+        let id = f.runtime.compiled_id_or_assign();
+        let got = super::super::cache::try_run_compiled(
+            std::ptr::null_mut(),
+            &f,
+            Value::NIL,
+            &[Value::make_int(37)],
+        )
+        .unwrap();
+        // (+ 37 5) = 42.
+        assert_eq!(got, Some(Value::make_int(42).bits()), "AOT result");
+        // The cached leaf must be AOT-backed — served from the `.so`, not JIT'd.
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(true),
+            "cached leaf must be AOT-backed (served without JITing)"
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
+    }
+}

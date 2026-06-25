@@ -1284,11 +1284,99 @@ impl core::fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+/// A loaded AOT shared object (`.so`), owning its `libloading::Library`.
+///
+/// The dynamic library is kept mapped (`r-x` by the OS loader) for as long as any
+/// cached [`CompiledLeaf`] backed by it is alive — it is NEVER unloaded while
+/// cached, since the leaf's `entry` points into the library's code. Shared via
+/// `Arc` so several leaves emitted into one unit can share a single `dlopen`.
+///
+pub(crate) struct LoadedUnit {
+    /// The open dynamic library. Dropping it `dlclose`s the `.so` and unmaps its
+    /// code, so it must outlive every leaf whose `entry` points into it. Read via
+    /// [`LoadedUnit::library`] at load (dlsym); held purely to keep the mapping
+    /// alive afterwards (the leaf calls `entry` directly).
+    lib: libloading::Library,
+}
+
+impl LoadedUnit {
+    /// Wrap an already-`dlopen`'d library so leaves can hold it alive.
+    pub(crate) fn new(lib: libloading::Library) -> Self {
+        Self { lib }
+    }
+
+    /// The open library, for `dlsym`'ing the entry + descriptor (R1c-5). The
+    /// returned symbols borrow the library, which the `Arc<LoadedUnit>` keeps
+    /// alive for the leaf's lifetime.
+    pub(crate) fn library(&self) -> &libloading::Library {
+        &self.lib
+    }
+}
+
+impl core::fmt::Debug for LoadedUnit {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LoadedUnit").finish_non_exhaustive()
+    }
+}
+
+/// The lambda-list + frame-shape metadata an AOT leaf needs to rebuild a
+/// [`CompiledLeaf`] at load (R1c). Recovered from the unit's exported descriptor
+/// (`aot::AotDescriptor`) — it is the AOT analogue of the values the JIT lowering
+/// computes inline (arity/required/has_rest from the lambda list; has_binds /
+/// has_handlers / has_side_effects from the body; max_depth + has_precise_deopt
+/// for the deopt-buffer sizing). Carried separately from the reloc recipe so the
+/// loader can size the (per-thread) deopt buffers without touching the heap.
+#[derive(Debug, Clone)]
+pub(crate) struct AotLeafMeta {
+    pub arity: usize,
+    pub required: usize,
+    pub has_rest: bool,
+    pub has_binds: bool,
+    pub has_handlers: bool,
+    pub has_side_effects: bool,
+    /// Deepest pre-op operand stack (the framestate a precise guard spills);
+    /// sizes `deopt_spill` when `has_precise_deopt`.
+    pub max_depth: usize,
+    /// Whether the body has precise (post-call) deopt sites — i.e. it bakes the
+    /// deopt-buffer addresses, so those buffers must be sized + their bases
+    /// load-resolved. The R1c-5 pure subset is always `false` (rerun-from-start
+    /// deopt only); call-bearing AOT is a later increment.
+    pub has_precise_deopt: bool,
+}
+
+/// Which code producer a [`CompiledLeaf`]'s `entry` pointer lives in — and what
+/// must be kept alive for the lifetime of the leaf so the code stays mapped.
+///
+/// AOT is a fourth code producer, NOT a deopt target: a `CompiledLeaf` is the
+/// same handle, the same `entry` ABI, the same `NativeRun` outcomes whether its
+/// code came from the JIT (`JITModule`-owned executable memory) or AOT (a loaded
+/// `.so`). This enum just records the backing so drop releases the right thing.
+/// No catch-all when matching on it — the compiler enforces that a new backing
+/// is handled everywhere (the GC-tested completeness rule).
+pub(crate) enum LeafBacking {
+    /// JIT: the `JITModule` owns the executable memory `entry` points into.
+    Jit(JITModule),
+    /// AOT: a loaded shared object owns the code `entry` points into. `Arc` so
+    /// several leaves from one unit share the single mapping; never unloaded
+    /// while any backed leaf is cached.
+    Aot(std::sync::Arc<LoadedUnit>),
+}
+
+impl core::fmt::Debug for LeafBacking {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            LeafBacking::Jit(_) => f.write_str("LeafBacking::Jit"),
+            LeafBacking::Aot(_) => f.write_str("LeafBacking::Aot"),
+        }
+    }
+}
+
 /// A compiled leaf function taking a fixed number of arguments.
 ///
-/// Owns its [`JITModule`], which keeps the executable memory mapped for the
-/// lifetime of this handle. The raw entry pointer makes this neither `Send` nor
-/// `Sync`, which is correct — the code is tied to its owning module.
+/// Owns its [`LeafBacking`] (a JIT `JITModule` or a loaded AOT `.so`), which keeps
+/// the code `entry` points into mapped for the lifetime of this handle. The raw
+/// entry pointer makes this neither `Send` nor `Sync`, which is correct — the
+/// code is tied to its owning backing.
 pub struct CompiledLeaf {
     /// Number of fixed slots the native code reads from the args pointer at
     /// entry: `nonrest` parameters (required + optional, nil-padded) plus one
@@ -1346,10 +1434,11 @@ pub struct CompiledLeaf {
     /// holds NO heap pointer (GC-traceable here, AOT-portable). Fixnums + non-heap
     /// immediates (nil/t) stay baked. Traced as a GC root while the leaf is cached.
     reloc_data: Box<[Value]>,
-    // Field order matters for drop: `entry` points into `_module`'s memory; keep
-    // `_module` alive as long as the handle exists.
+    // Field order matters for drop: `entry` points into `_backing`'s memory (the
+    // JITModule's executable pages or the loaded `.so`'s code); keep `_backing`
+    // alive — and dropped AFTER `entry` — as long as the handle exists.
     entry: *const u8,
-    _module: JITModule,
+    _backing: LeafBacking,
 }
 
 impl core::fmt::Debug for CompiledLeaf {
@@ -1412,9 +1501,65 @@ impl CompiledLeaf {
         &self.reloc_data
     }
 
+    /// Construct a `CompiledLeaf` from a LOADED AOT unit (R1c-5).
+    ///
+    /// `entry` is the `dlsym`'d native entry pointing into `backing`'s `.so`
+    /// (which the leaf keeps mapped via the `Arc<LoadedUnit>`); `meta` carries
+    /// the lambda-list + frame flags + deopt sizing recovered from the unit's
+    /// descriptor; `reloc_data` is the FRESH reloc-const vector rebuilt against
+    /// the live heap (R1c-3) — already allocated-black + the caller's to root
+    /// (R1c-8, via the COMPILED-walking `collect_jit_reloc_gc_roots`). The deopt
+    /// buffers are allocated here, per-thread (the spec's per-thread-sidecar
+    /// invariant), sized by `meta.max_depth`.
+    ///
+    /// SAFETY: `entry` must be the real native entry for this leaf's ABI inside
+    /// `backing`'s loaded library, and `backing` must outlive every call — both
+    /// guaranteed by the loader (`aot::try_load_leaf`), which verifies the
+    /// ABI_TAG and dlsym's `entry` out of the same unit it stores in `backing`.
+    pub(crate) unsafe fn from_aot(
+        entry: *const u8,
+        backing: std::sync::Arc<LoadedUnit>,
+        meta: AotLeafMeta,
+        reloc_data: Box<[Value]>,
+    ) -> Self {
+        let deopt_spill: Box<[core::cell::Cell<i64>]> = if meta.has_precise_deopt {
+            (0..meta.max_depth).map(|_| core::cell::Cell::new(0)).collect()
+        } else {
+            Box::from([])
+        };
+        let deopt_meta = Box::new(DeoptCells {
+            pc: core::cell::Cell::new(0),
+            depth: core::cell::Cell::new(0),
+            handlers: core::cell::Cell::new(0),
+        });
+        CompiledLeaf {
+            arity: meta.arity,
+            required: meta.required,
+            has_rest: meta.has_rest,
+            has_binds: meta.has_binds,
+            has_handlers: meta.has_handlers,
+            // AOT leaves never inline (no epoch staleness; never re-JIT'd).
+            inline_epoch: None,
+            has_side_effects: meta.has_side_effects,
+            inline_deps: Box::from([]),
+            spec_slots: Box::from([]),
+            deopt_spill,
+            deopt_meta,
+            reloc_data,
+            entry,
+            _backing: LeafBacking::Aot(backing),
+        }
+    }
+
     /// The SymIds of the callees this leaf inlined (its precise dependency set).
     pub(crate) fn inline_deps(&self) -> &[crate::emacs_core::intern::SymId] {
         &self.inline_deps
+    }
+
+    /// Whether this leaf's code is backed by a loaded AOT `.so` (vs the JIT's
+    /// `JITModule`). Test/diagnostic aid for proving the AOT cache path engaged.
+    pub(crate) fn is_aot_backed(&self) -> bool {
+        matches!(self._backing, LeafBacking::Aot(_))
     }
 
     /// Whether a call with `n` arguments is valid for this function's lambda
@@ -2747,6 +2892,8 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         has_call,
         &cons_repl,
         needs_rt,
+        "__neovm_mir_leaf",
+        Linkage::Local,
     )?;
 
     // --- JIT-only module epilogue (the wrapper). ----------------------------
@@ -2774,7 +2921,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         deopt_meta,
         reloc_data,
         entry,
-        _module: module,
+        _backing: LeafBacking::Jit(module),
     })
 }
 
@@ -2794,8 +2941,16 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
 ///   * `builder.symbol(...)`    — AOT: `Linkage::Import` resolved via dlopen.
 ///   * `finalize_definitions()` — AOT: `ObjectModule::finish()`.
 ///   * `get_finalized_function` — AOT: `dlsym` of the exported entry symbol.
+///
+/// `pub(crate)` so the AOT path (`jit::aot`) can drive it with `M = ObjectModule`.
+///
+/// `entry_name` / `entry_linkage` parameterize ONLY the entry's symbol-table
+/// declaration (not the CLIF body, which stays byte-identical): the JIT wrapper
+/// passes `("__neovm_mir_leaf", Linkage::Local)` exactly as before, while the AOT
+/// path passes a unique `("__neovm_aot_{hash}_{tag}", Linkage::Export)` so the
+/// `.o` exports a symbol the loader can `dlsym`.
 #[allow(clippy::too_many_arguments)]
-fn build_mir_leaf_fn<M: Module>(
+pub(crate) fn build_mir_leaf_fn<M: Module>(
     module: &mut M,
     m: &mir::MirFunction,
     deopt_spill: &[core::cell::Cell<i64>],
@@ -2805,6 +2960,8 @@ fn build_mir_leaf_fn<M: Module>(
     has_call: bool,
     cons_repl: &[Option<(mir::MirValue, mir::MirValue)>],
     needs_rt: bool,
+    entry_name: &str,
+    entry_linkage: Linkage,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
 
@@ -3284,7 +3441,7 @@ fn build_mir_leaf_fn<M: Module>(
     }
 
     let fid = module
-        .declare_function("__neovm_mir_leaf", Linkage::Local, &sig)
+        .declare_function(entry_name, entry_linkage, &sig)
         .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
     let mut ctx = module.make_context();
     ctx.func = func;
@@ -5817,7 +5974,7 @@ pub fn lower_leaf_full(
         deopt_meta,
         reloc_data,
         entry,
-        _module: module,
+        _backing: LeafBacking::Jit(module),
     })
 }
 

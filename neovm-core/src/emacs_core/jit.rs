@@ -50,6 +50,13 @@ pub mod cache;
 #[cfg(feature = "jit")]
 pub mod mir;
 
+/// AOT (ahead-of-time) object emission (Phase R1c): emit the same CLIF the JIT
+/// does, but through Cranelift's `ObjectModule`, producing a relocatable `.o`
+/// that is linked to a `.so`, `dlopen`'d, and inserted as a pre-warmed
+/// `CompiledLeaf`. Only built with the `jit` feature. See `jit/aot.rs`.
+#[cfg(feature = "jit")]
+pub mod aot;
+
 #[cfg(feature = "jit")]
 pub use cache::try_run_compiled;
 

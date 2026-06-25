@@ -66,6 +66,16 @@ cranelift-codegen = { version = "0.131.0", optional = true }
 cranelift-frontend = { version = "0.131.0", optional = true }
 cranelift-jit = { version = "0.131.0", optional = true }
 cranelift-module = { version = "0.131.0", optional = true }
+# AOT object emission (R1c): emit a relocatable `.o` via Cranelift's ObjectModule
+# and parse/inspect the bytes. `object` is pinned to the version cranelift already
+# resolves in this workspace (0.37, via ar_archive_writer) to avoid a duplicate
+# major. Both optional, enabled by `jit`.
+cranelift-object = { version = "0.131.0", optional = true }
+object = { version = "0.37", optional = true }
+# Host-ISA builder for the AOT ObjectModule (is_pic=true). Already in the lock
+# transitively via cranelift-jit; made a direct dep so `jit/aot.rs` can call
+# `cranelift_native::builder()`.
+cranelift-native = { version = "0.131.0", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
@@ -82,6 +92,9 @@ jit = [
     "dep:cranelift-frontend",
     "dep:cranelift-jit",
     "dep:cranelift-module",
+    "dep:cranelift-object",
+    "dep:object",
+    "dep:cranelift-native",
 ]
 # Dynamic, execution-weighted interpreter opcode histogram — a profiling aid for
 # sizing JIT work (which ops dominate real execution). Compiled in ONLY under
