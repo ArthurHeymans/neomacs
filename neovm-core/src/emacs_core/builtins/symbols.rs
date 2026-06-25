@@ -2111,7 +2111,6 @@ pub(crate) fn builtin_rename_buffer(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let buffers = &mut eval.buffers;
     expect_range_args("rename-buffer", &args, 1, 2)?;
     let name = expect_string_lossy(&args[0])?;
 
@@ -2122,7 +2121,7 @@ pub(crate) fn builtin_rename_buffer(
         ));
     }
 
-    let current_id = match buffers.current_buffer() {
+    let current_id = match eval.buffers.current_buffer() {
         Some(buf) => buf.id,
         None => {
             return Err(signal("error", vec![Value::string("No current buffer")]));
@@ -2131,7 +2130,7 @@ pub(crate) fn builtin_rename_buffer(
 
     let unique = args.get(1).copied().unwrap_or(Value::NIL);
 
-    let new_name = match buffers.find_buffer_by_name(&name) {
+    let new_name = match eval.buffers.find_buffer_by_name(&name) {
         Some(existing_id) if existing_id == current_id => {
             // Already has this name, just return it
             name
@@ -2144,7 +2143,7 @@ pub(crate) fn builtin_rename_buffer(
                     vec![Value::string(format!("Buffer name `{}' is in use", name))],
                 ));
             }
-            buffers.generate_new_buffer_name(&name)
+            eval.buffers.generate_new_buffer_name(&name)
         }
         None => {
             // Name is free
@@ -2152,7 +2151,17 @@ pub(crate) fn builtin_rename_buffer(
         }
     };
 
-    let _ = buffers.rename_buffer(current_id, Value::string(new_name.clone()));
+    let _ = eval
+        .buffers
+        .rename_buffer(current_id, Value::string(new_name.clone()));
+
+    // GNU `Frename_buffer` (buffer.c:1726) runs `buffer-list-update-hook'
+    // after updating the buffer's name in `Vbuffer_alist', unless the buffer
+    // has hooks inhibited.  This also makes `set-visited-file-name' (which
+    // renames the buffer via `rename-buffer') fire the hook like GNU.
+    if !eval.buffers.buffer_hooks_inhibited(current_id) {
+        super::buffers::run_buffer_list_update_hook(eval)?;
+    }
 
     Ok(Value::string(new_name))
 }

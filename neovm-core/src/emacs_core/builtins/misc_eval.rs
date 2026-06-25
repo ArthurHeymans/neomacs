@@ -1131,6 +1131,7 @@ pub(crate) fn builtin_bury_buffer_internal(
 ) -> EvalResult {
     expect_args("bury-buffer-internal", &args, 1)?;
     let id = expect_buffer_id(&args[0])?;
+    let mut moved = false;
     if eval.buffers.get(id).is_some() {
         // Move to end of global buffer order (Vbuffer_alist equivalent).
         eval.buffers.note_buffer_order_tail(id);
@@ -1140,6 +1141,13 @@ pub(crate) fn builtin_bury_buffer_internal(
             frame.buried_buffer_list.retain(|bid| *bid != id);
             frame.buried_buffer_list.insert(0, id);
         }
+        moved = true;
+    }
+    // GNU `Fbury_buffer_internal` (buffer.c:2264) runs
+    // `buffer-list-update-hook' after moving BUFFER to the end of the buffer
+    // lists, unless that buffer has hooks inhibited.
+    if moved && !eval.buffers.buffer_hooks_inhibited(id) {
+        super::buffers::run_buffer_list_update_hook(eval)?;
     }
     Ok(Value::NIL)
 }
