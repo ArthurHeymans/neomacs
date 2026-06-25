@@ -609,72 +609,97 @@ pub fn is_multibyte_string(s: &str) -> bool {
     })
 }
 
+/// Resolve the EOL conversion type of a coding-system NAME.
+///
+/// GNU keys EOL conversion off `CODING_ID_EOL_TYPE` (the resolved coding
+/// system's eol_type slot — `setup_coding_system`/`consume_chars`/`decode_eol`,
+/// src/coding.c), not off the spelling of the name.  Neomacs reaches the EOL
+/// step with the coding system already spelled as a name string, so the eol
+/// type is recovered here:
+///   * an explicit `-unix`/`-dos`/`-mac` suffix maps to the matching type, and
+///   * the three bare built-in EOL aliases `unix`/`dos`/`mac` (defined by GNU
+///     `mule-conf.el` as `undecided-unix`/`-dos`/`-mac`) map to their type too.
+///
+/// Every other name (no suffix, undecided EOL) yields `Undecided`, i.e. no EOL
+/// conversion on encode and pass-through on decode, matching GNU's
+/// `EQ (eol_type, Qunix)` / `VECTORP (eol_type)` early-outs.  Centralizing this
+/// here means encode-coding-string, decode-coding-string, write-region,
+/// call-process-region and process send/filter all share one resolution and the
+/// bare aliases stop being silently dropped.
+fn coding_name_eol(coding_system: &str) -> crate::emacs_core::coding::EolType {
+    use crate::emacs_core::coding::EolType;
+    match coding_system {
+        "unix" => EolType::Unix,
+        "dos" => EolType::Dos,
+        "mac" => EolType::Mac,
+        _ => EolType::from_suffix(coding_system).unwrap_or(EolType::Undecided),
+    }
+}
+
 fn encode_eol_text(s: &str, coding_system: &str) -> String {
-    if coding_system.ends_with("-dos") {
-        let mut out = String::with_capacity(s.len() + s.matches('\n').count());
-        for ch in s.chars() {
-            if ch == '\n' {
-                out.push('\r');
+    use crate::emacs_core::coding::EolType;
+    match coding_name_eol(coding_system) {
+        EolType::Dos => {
+            let mut out = String::with_capacity(s.len() + s.matches('\n').count());
+            for ch in s.chars() {
+                if ch == '\n' {
+                    out.push('\r');
+                }
+                out.push(ch);
             }
-            out.push(ch);
+            out
         }
-        return out;
+        EolType::Mac => s.replace('\n', "\r"),
+        EolType::Unix | EolType::Undecided => s.to_string(),
     }
-
-    if coding_system.ends_with("-mac") {
-        return s.replace('\n', "\r");
-    }
-
-    s.to_string()
 }
 
 fn encode_eol_bytes(bytes: &[u8], coding_system: &str) -> Vec<u8> {
-    if coding_system.ends_with("-dos") {
-        let mut out =
-            Vec::with_capacity(bytes.len() + bytes.iter().filter(|&&byte| byte == b'\n').count());
-        for &byte in bytes {
-            if byte == b'\n' {
-                out.push(b'\r');
+    use crate::emacs_core::coding::EolType;
+    match coding_name_eol(coding_system) {
+        EolType::Dos => {
+            let mut out = Vec::with_capacity(
+                bytes.len() + bytes.iter().filter(|&&byte| byte == b'\n').count(),
+            );
+            for &byte in bytes {
+                if byte == b'\n' {
+                    out.push(b'\r');
+                }
+                out.push(byte);
             }
-            out.push(byte);
+            out
         }
-        return out;
-    }
-
-    if coding_system.ends_with("-mac") {
-        return bytes
+        EolType::Mac => bytes
             .iter()
             .map(|&byte| if byte == b'\n' { b'\r' } else { byte })
-            .collect();
+            .collect(),
+        EolType::Unix | EolType::Undecided => bytes.to_vec(),
     }
-
-    bytes.to_vec()
 }
 
 pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
-    if coding_system.ends_with("-dos") {
-        let mut out = Vec::with_capacity(bytes.len());
-        let mut i = 0usize;
-        while i < bytes.len() {
-            if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
-                out.push(b'\n');
-                i += 2;
-            } else {
-                out.push(bytes[i]);
-                i += 1;
+    use crate::emacs_core::coding::EolType;
+    match coding_name_eol(coding_system) {
+        EolType::Dos => {
+            let mut out = Vec::with_capacity(bytes.len());
+            let mut i = 0usize;
+            while i < bytes.len() {
+                if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+                    out.push(b'\n');
+                    i += 2;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
             }
+            out
         }
-        return out;
-    }
-
-    if coding_system.ends_with("-mac") {
-        return bytes
+        EolType::Mac => bytes
             .iter()
             .map(|byte| if *byte == b'\r' { b'\n' } else { *byte })
-            .collect();
+            .collect(),
+        EolType::Unix | EolType::Undecided => bytes.to_vec(),
     }
-
-    bytes.to_vec()
 }
 
 fn coding_system_family(coding_system: &str) -> &str {
@@ -694,11 +719,20 @@ fn coding_system_family(coding_system: &str) -> &str {
 }
 
 fn coding_system_base(coding_system: &str) -> &str {
-    coding_system
-        .strip_suffix("-unix")
-        .or_else(|| coding_system.strip_suffix("-dos"))
-        .or_else(|| coding_system.strip_suffix("-mac"))
-        .unwrap_or(coding_system)
+    // The three bare built-in EOL aliases (`unix`/`dos`/`mac`) are GNU
+    // `mule-conf.el` aliases of `undecided-{unix,dos,mac}`, so their base coding
+    // system is `undecided` (raw-text-style byte pass-through plus EOL
+    // conversion).  Without this the bare names fall through to the per-charset
+    // encoders with an unknown family and drop every character (the `dos`
+    // alias would encode to the empty string).
+    match coding_system {
+        "unix" | "dos" | "mac" => "undecided",
+        _ => coding_system
+            .strip_suffix("-unix")
+            .or_else(|| coding_system.strip_suffix("-dos"))
+            .or_else(|| coding_system.strip_suffix("-mac"))
+            .unwrap_or(coding_system),
+    }
 }
 
 fn coding_system_consumes_utf8_signature(coding_system: &str) -> bool {
@@ -3003,6 +3037,20 @@ fn detect_undecided_coding(bytes: &[u8], prefer_utf_8: bool) -> &'static str {
     }
 }
 
+/// Re-attach an explicit (concrete) eol_type to a detected base coding system,
+/// so a bare EOL alias (`dos`/`mac`/`unix`) still forces its EOL after the
+/// character code has been detected (GNU forces the specified eol_type in
+/// `decode_eol`).  An undecided eol leaves the name untouched.
+fn apply_explicit_eol_suffix(base: &str, eol: crate::emacs_core::coding::EolType) -> String {
+    use crate::emacs_core::coding::EolType;
+    // `no-conversion` is byte-faithful (raw-text-unix); GNU keeps it whole and
+    // never appends a DOS/MAC subsidiary, so leave it alone.
+    if matches!(eol, EolType::Undecided) || base == "no-conversion" {
+        return base.to_string();
+    }
+    format!("{base}{}", eol.suffix())
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     mut args: Vec<Value>,
@@ -3028,14 +3076,19 @@ fn builtin_coding_string_in_context(
     })?;
     let mut coding = context_coding_name(ctx, args[1])?;
     // `undecided` / `prefer-utf-8` decode by detecting the byte pattern and
-    // decoding as the resolved concrete coding system (GNU detect_coding).
+    // decoding as the resolved concrete coding system (GNU detect_coding).  When
+    // the alias carries a CONCRETE eol_type (the bare `dos`/`mac`/`unix`
+    // aliases = undecided base + a fixed eol), GNU still detects the character
+    // code but forces that eol in `decode_eol` rather than auto-detecting it, so
+    // re-attach the explicit EOL suffix to the detected coding system.
     if !encode {
         let base = coding_system_base(&coding);
         if (base == "undecided" || base == "prefer-utf-8")
             && let Some(src) = args[0].as_lisp_string()
         {
             let bytes = lisp_string_coding_source_bytes(src);
-            coding = detect_undecided_coding(&bytes, base == "prefer-utf-8").to_string();
+            let detected = detect_undecided_coding(&bytes, base == "prefer-utf-8");
+            coding = apply_explicit_eol_suffix(detected, coding_name_eol(&coding));
             // Rewrite the coding argument too, so the fallback decode path
             // (which re-reads args[1]) uses the detected system rather than the
             // original `undecided`/`prefer-utf-8`.

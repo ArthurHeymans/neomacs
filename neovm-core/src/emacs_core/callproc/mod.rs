@@ -602,12 +602,29 @@ fn configure_call_process_stdin(
     }
 }
 
-fn encode_call_process_region_string_input(input: &LispString) -> Vec<u8> {
-    crate::encoding::encode_lisp_string(input, "utf-8-unix")
+fn encode_call_process_region_string_input(input: &LispString, coding: &str) -> Vec<u8> {
+    crate::encoding::encode_lisp_string(input, coding)
 }
 
-fn encode_call_process_region_buffer_text(emacs_bytes: Vec<u8>) -> Vec<u8> {
-    crate::emacs_core::emacs_char::str_as_unibyte(&emacs_bytes)
+fn encode_call_process_region_buffer_text(text: &LispString, coding: &str) -> Vec<u8> {
+    crate::encoding::encode_lisp_string(text, coding)
+}
+
+/// Resolve the coding system that encodes the region text sent to a
+/// `call-process-region` subprocess.  GNU writes the region to a temp file with
+/// `coding-system-for-write` (or, when that is nil, falls back to a byte-faithful
+/// `raw-text` for unibyte/ASCII text), so honor `coding-system-for-write` here —
+/// this is what makes the EOL conversion of `dos`/`mac`/`unix`/`utf-8-dos`
+/// take effect on the region bytes.  When no write coding is requested the data
+/// is left untouched (`raw-text`, a byte pass-through), matching the previous
+/// behavior.
+fn resolve_call_process_region_write_coding(eval: &super::eval::Context) -> String {
+    let for_write = eval.visible_variable_value_or_nil("coding-system-for-write");
+    for_write
+        .is_truthy()
+        .then(|| resolve_sym_value_name(&for_write))
+        .flatten()
+        .unwrap_or_else(|| "raw-text".to_string())
 }
 
 fn run_process_command_in_state(
@@ -884,6 +901,10 @@ fn builtin_call_process_region_impl(
         Vec::new()
     };
 
+    // Resolve the region's write coding (`coding-system-for-write`) before taking
+    // the mutable buffers borrow below.
+    let write_coding = resolve_call_process_region_write_coding(eval);
+
     let buffers = &mut eval.buffers;
 
     let delete = args.len() > 3 && args[3].is_truthy();
@@ -900,11 +921,13 @@ fn builtin_call_process_region_impl(
                 let buf = buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                let range = buf.full_emacs_byte_range();
                 (
                     encode_call_process_region_buffer_text(
-                        buf.buffer_substring_bytes_range(buf.full_emacs_byte_range()),
+                        &buf.buffer_substring_lisp_string_range(range),
+                        &write_coding,
                     ),
-                    buf.full_emacs_byte_range(),
+                    range,
                 )
             };
             if delete {
@@ -926,6 +949,7 @@ fn builtin_call_process_region_impl(
                 args[0]
                     .as_lisp_string()
                     .expect("ValueKind::String must carry LispString payload"),
+                &write_coding,
             )
         }
         _ => {
@@ -938,7 +962,8 @@ fn builtin_call_process_region_impl(
                 let region = super::process::checked_region_bytes(buf, region_args)?;
                 (
                     encode_call_process_region_buffer_text(
-                        buf.buffer_substring_bytes_range(region),
+                        &buf.buffer_substring_lisp_string_range(region),
+                        &write_coding,
                     ),
                     region,
                 )

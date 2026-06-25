@@ -3317,14 +3317,114 @@ fn detect_coding_systems(
         }
     }
 
-    detect_categories(
+    let detected = detect_categories(
         &priorities,
         &cat_system,
         bytes,
         src_chars,
         multibytep,
         highest,
-    )
+    );
+
+    // GNU `detect_coding_system` finishes by detecting the end-of-line format
+    // (src/coding.c:8932) and rewriting every result coding system whose
+    // eol_type is still a subsidiary VECTOR (e.g. `undecided`) to its detected
+    // `-unix`/`-dos`/`-mac` variant.  Apply the same here so an all-ASCII string
+    // with CRLF/CR terminators reports `undecided-dos` / `undecided-mac` rather
+    // than the bare `undecided`.
+    apply_detected_eol(mgr, detected, bytes, highest)
+}
+
+/// GNU `EOL_SEEN_*` summary of the line terminators found in DATA.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DetectedEol {
+    None,
+    Lf,
+    Crlf,
+    Cr,
+}
+
+/// Port of GNU `detect_eol` (src/coding.c:6375) for the non-UTF-16 categories:
+/// scan up to `MAX_EOL_CHECK_COUNT` line terminators and classify the file as
+/// LF, CRLF, or CR, with the stray-^M tolerance GNU applies for DOS files.
+fn detect_eol_seen(bytes: &[u8]) -> DetectedEol {
+    const MAX_EOL_CHECK_COUNT: usize = 3;
+    let mut eol_seen = DetectedEol::None;
+    let mut total = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        i += 1;
+        if c == b'\n' || c == b'\r' {
+            let this_eol = if c == b'\n' {
+                DetectedEol::Lf
+            } else if i >= bytes.len() || bytes[i] != b'\n' {
+                DetectedEol::Cr
+            } else {
+                i += 1;
+                DetectedEol::Crlf
+            };
+            if eol_seen == DetectedEol::None {
+                eol_seen = this_eol;
+            } else if eol_seen != this_eol {
+                if (eol_seen == DetectedEol::Cr && this_eol == DetectedEol::Crlf)
+                    || (eol_seen == DetectedEol::Crlf && this_eol == DetectedEol::Cr)
+                {
+                    eol_seen = DetectedEol::Crlf;
+                } else {
+                    eol_seen = DetectedEol::Lf;
+                    break;
+                }
+            }
+            total += 1;
+            if total == MAX_EOL_CHECK_COUNT {
+                break;
+            }
+        }
+    }
+    eol_seen
+}
+
+/// Rewrite each detected coding system to its detected EOL subsidiary, mirroring
+/// the tail of GNU `detect_coding_system`.  Only coding systems with an
+/// undecided (vector) eol_type are rewritten; a coding system that already
+/// carries a concrete EOL keeps its name.
+fn apply_detected_eol(
+    mgr: &CodingSystemManager,
+    detected: Value,
+    bytes: &[u8],
+    highest: bool,
+) -> Value {
+    let eol_suffix = match detect_eol_seen(bytes) {
+        DetectedEol::Lf => Some("-unix"),
+        DetectedEol::Crlf => Some("-dos"),
+        DetectedEol::Cr => Some("-mac"),
+        DetectedEol::None => None,
+    };
+    let Some(eol_suffix) = eol_suffix else {
+        return detected;
+    };
+    let rewrite = |sym: Value| -> Value {
+        let Some(name) = sym.as_symbol_name() else {
+            return sym;
+        };
+        // A coding system that already names a concrete EOL is left untouched
+        // (GNU rewrites only when `VECTORP (eol_type)`).
+        if EolType::from_suffix(name).is_some() {
+            return sym;
+        }
+        match mgr.canonical_name_for_detected_eol(name, eol_suffix) {
+            Some(resolved) => Value::symbol(resolved),
+            None => sym,
+        }
+    };
+    if highest {
+        return rewrite(detected);
+    }
+    let Some(items) = super::value::list_to_vec(&detected) else {
+        return detected;
+    };
+    Value::list(items.into_iter().map(rewrite).collect())
 }
 
 /// The pure detection core: run the per-category detectors over `bytes` and

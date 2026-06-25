@@ -1085,6 +1085,28 @@ fn process_coding_is_binary(coding: Value) -> bool {
         )
 }
 
+/// Encode the data passed to `process-send-string`/`process-send-region`
+/// through a process's ENCODE coding system, mirroring GNU `send_process`
+/// (src/process.c).  A `binary`/`raw-text`/`no-conversion`/nil encode coding
+/// (or an unset one) leaves the bytes untouched; every other coding goes through
+/// the shared string encoder, which performs character-code conversion and the
+/// EOL conversion the coding's eol_type requests.
+fn encode_process_send_input(
+    processes: &ProcessManager,
+    id: ProcessId,
+    input: &LispString,
+) -> LispString {
+    let coding = processes
+        .get_any(id)
+        .map(|proc| proc.coding_encode)
+        .unwrap_or(Value::NIL);
+    if process_coding_is_binary(coding) {
+        return input.clone();
+    }
+    let bytes = crate::encoding::encode_lisp_string(input, process_coding_symbol_name(coding));
+    LispString::from_unibyte(bytes)
+}
+
 fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> LispString {
     if process_coding_is_binary(coding) {
         LispString::from_unibyte(bytes.to_vec())
@@ -8391,7 +8413,14 @@ pub(crate) fn builtin_process_send_string_impl(
         }
     }
     let id = resolve_process_or_missing_error_in_manager(processes, &args[0])?;
-    if !processes.send_input(id, &input)? {
+    // GNU `send_process` (src/process.c) encodes the data through the process's
+    // ENCODE coding system before writing it to the child's fd, applying both
+    // character-code and EOL conversion.  Encode the input here so a process
+    // whose output coding requests CRLF/CR (e.g. `dos`/`mac`/`utf-8-dos`) sends
+    // the converted bytes; binary/raw-text encode systems pass the bytes
+    // through unchanged.
+    let encoded = encode_process_send_input(processes, id, &input);
+    if !processes.send_input(id, &encoded)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }
     Ok(Value::NIL)
@@ -9019,7 +9048,10 @@ pub(crate) fn builtin_process_send_region_impl(
         buf.buffer_substring_lisp_string_range(region)
     };
 
-    if !processes.send_input(id, &region_text)? {
+    // Encode the region text through the process's ENCODE coding system, exactly
+    // like `process-send-string` (GNU `send_process`).
+    let encoded = encode_process_send_input(processes, id, &region_text);
+    if !processes.send_input(id, &encoded)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }
     Ok(Value::NIL)
