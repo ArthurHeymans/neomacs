@@ -3946,3 +3946,29 @@ fn div_core_divergence_surface_case_fold_search_custom_case_pair() {
 "##,
     );
 }
+
+#[test]
+fn div_core_divergence_surface_coding_region_eol_in_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-24:
+    // GNU Emacs: OK ((97 10 98) 3) and OK ((97 13 10 98) 4)
+    // Neomacs:   OK ((97 13 10 98) 4) and OK (nil 0)
+    // decode-coding-region with 'dos should collapse CRLF to LF in-buffer
+    // (GNU: bytes a LF b, size 3); Neomacs keeps the CR.
+    // encode-coding-region with 'dos should expand LF to CRLF (GNU: a CR LF b,
+    // size 4); Neomacs empties the region (0 bytes).
+    assert_oracle_parity(
+        r##"
+(list
+ (with-temp-buffer
+   (set-buffer-multibyte nil)
+   (insert (unibyte-string ?a 13 10 ?b))
+   (decode-coding-region (point-min) (point-max) 'dos)
+   (list (append (buffer-string) nil) (buffer-size)))
+ (with-temp-buffer
+   (insert "a\nb")
+   (encode-coding-region (point-min) (point-max) 'dos)
+   (list (append (buffer-string) nil) (buffer-size))))
+"##,
+    );
+}
