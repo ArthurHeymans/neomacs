@@ -787,6 +787,34 @@ fn collect_baseline_aot_relocs(
     Some((out, seen))
 }
 
+/// The LIVE reloc-constant set for a leaf, collected by the SAME tier the emitter
+/// used, in the SAME first-seen order it assigned reloc indices (audit #A: these
+/// are the live function's OWN constant objects, so the loaded leaf is
+/// `eq`-identical to interp/JIT). This is the SINGLE SOURCE of the load-path
+/// tier-select — previously duplicated verbatim in [`try_load_leaf`] and
+/// [`prepopulate_aot_from_preload`] (drift risk: the two collectors disagree on
+/// the BASELINE tier's op-symbols, so a mismatched choice mis-sizes `live_reloc`
+/// → `load_leaf_from_unit` reloc-count mismatch → the leaf silently never serves).
+///
+/// The tier pivot MUST mirror the emit path (`compile_leaf_to_object` /
+/// `build_preload_object`): MIR-AOT-runnable → `collect_reloc_consts` (the MIR
+/// `MirOp::Const` set: heap consts + symbols); else → `collect_baseline_aot_relocs`
+/// (ALSO the named-builtin / VarRef-VarSet-VarBind op-symbols the MIR collector
+/// never sees). Returns `None` only when the baseline body has a non-recipe-able
+/// const (gensym / non-canonical) — the caller then stays JIT-only.
+///
+/// (NB: the EMIT-path tier choice in `compile_leaf_to_object` / `build_preload_object`
+/// is a DIFFERENT shape — it picks which `.o` to BUILD, not which reloc collector to
+/// run — so it is intentionally NOT folded here; only the two load-path copies were
+/// verbatim-identical.)
+fn live_reloc_for_emit_tier(ops: &[Op], constants: &[Value], arity: usize) -> Option<Vec<Value>> {
+    match mir::build_mir(ops, constants, arity) {
+        Ok(m) if mir_is_aot_runnable(&m) => Some(collect_reloc_consts(&m)),
+        // MIR-rejected (or built-but-not-MIR-AOT-runnable) → baseline reloc set.
+        _ => Some(collect_baseline_aot_relocs(ops, constants)?.0),
+    }
+}
+
 /// Compile one bytecode leaf to a relocatable `.o` for AOT (R1c + sidecar).
 ///
 /// Computes the content hash + entry/descriptor symbols, builds the MIR, checks
@@ -2371,19 +2399,11 @@ pub(crate) fn try_load_leaf(
     }
     let content_hash = leaf_content_hash(ops, constants, arity)?;
     // Audit #A: the leaf's reloc constants are the LIVE function's own constant
-    // objects (re-collected here in the SAME order the emitter assigned reloc
-    // indices), NOT fresh copies rebuilt from the recipe. This makes an AOT leaf
-    // `eq`-IDENTICAL to the interpreter/JIT for every constant slot (one shared
-    // object). The collection MUST match the EMIT tier's order/predicate (R2-E):
-    //   * MIR tier — `collect_reloc_consts(build_mir)` (heap consts + symbols);
-    //   * BASELINE tier — `collect_baseline_aot_relocs` (ALSO the named-builtin
-    //     op-symbols, which the MIR collector never sees). We pick the same tier
-    //     `compile_leaf_to_object` did: MIR-AOT-runnable → MIR; else baseline.
-    let live_reloc: Vec<Value> = match mir::build_mir(ops, constants, arity) {
-        Ok(m) if mir_is_aot_runnable(&m) => collect_reloc_consts(&m),
-        // MIR-rejected (or built-but-not-MIR-AOT-runnable) → baseline reloc set.
-        _ => collect_baseline_aot_relocs(ops, constants)?.0,
-    };
+    // objects (re-collected here, NOT fresh copies rebuilt from the recipe), so the
+    // AOT leaf is `eq`-identical to interp/JIT. Tier-selected to match the emit path
+    // (the single source: `live_reloc_for_emit_tier`). `None` → non-recipe-able
+    // baseline const → stay JIT-only.
+    let live_reloc = live_reloc_for_emit_tier(ops, constants, arity)?;
     let unit = load_unit(content_hash)?;
     load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
 }
@@ -2598,17 +2618,11 @@ pub fn prepopulate_aot_from_preload(
         // entry in the preload `.so` (the producer skipped it), so its dlsym misses
         // → None → that fn just JITs. We only need the content hash (to name the
         // entry) + the live reloc consts (#A eq-identity), both cheap.
-        // Tier-select the reloc collection to MATCH the emit tier (R2-E): a baseline
-        // body's reloc set includes the named-builtin op-symbols, which the MIR
-        // collector (MirOp::Const only) never sees — using it would mis-size
-        // live_reloc → load_leaf_from_unit reloc-count mismatch → the baseline leaf
-        // never serves. Same tier choice as compile_leaf_to_object / try_load_leaf.
-        let live_reloc: Vec<Value> = match mir::build_mir(&bc.ops, &bc.constants, arity) {
-            Ok(m) if mir_is_aot_runnable(&m) => collect_reloc_consts(&m),
-            _ => match collect_baseline_aot_relocs(&bc.ops, &bc.constants) {
-                Some((vals, _)) => vals,
-                None => continue, // non-recipe-able → not preloaded; will JIT.
-            },
+        // Tier-select the reloc collection to MATCH the emit tier (the single source
+        // `live_reloc_for_emit_tier`; same choice as try_load_leaf). `None` →
+        // non-recipe-able baseline const → not preloaded; that fn will JIT.
+        let Some(live_reloc) = live_reloc_for_emit_tier(&bc.ops, &bc.constants, arity) else {
+            continue;
         };
         preps.push(Prep {
             compiled_id: bc.runtime.compiled_id_or_assign(),
