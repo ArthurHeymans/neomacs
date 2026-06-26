@@ -3141,6 +3141,18 @@ pub(crate) fn builtin_set_fringe_bitmap_face(
             vec![Value::string("Undefined fringe bitmap")],
         ));
     }
+    // Store the face override (by name, GC-safe) on the user-bitmap registry so
+    // the display pipeline applies it over the spec's FACE. GNU records the FACE
+    // symbol in `fringe_faces[n]`; we keep just the resolvable name.
+    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
+    if let Some(sym) = symbol_id_checked(&args[0], symbols_with_pos_enabled) {
+        let face_name = args
+            .get(1)
+            .filter(|face| !face.is_nil())
+            .and_then(|face| face.as_symbol_name())
+            .map(|name| name.to_string());
+        ctx.fringe_bitmaps.set_face(sym, face_name);
+    }
     Ok(Value::NIL)
 }
 

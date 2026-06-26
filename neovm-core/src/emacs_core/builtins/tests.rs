@@ -10149,7 +10149,9 @@ fn dispatch_builtin_pure_handles_fringe_display_and_debug_output_placeholders() 
     )
     .expect("define-fringe-bitmap should resolve")
     .expect("define-fringe-bitmap should evaluate");
-    assert_eq!(bitmap, Value::symbol("neo"));
+    // GNU `Fdefine_fringe_bitmap` returns the integer slot index it assigns; the
+    // first user-defined bitmap gets index 25 (just past the 25 standard ones).
+    assert_eq!(bitmap, Value::fixnum(25));
 
     let destroy = dispatch_builtin_pure("destroy-fringe-bitmap", vec![Value::symbol("neo")])
         .expect("destroy-fringe-bitmap should resolve")
@@ -10192,9 +10194,14 @@ fn defined_fringe_bitmap_can_receive_face_until_destroyed() {
         )
         .expect("defined fringe bitmap sequence should evaluate");
 
+    // `define-fringe-bitmap` now assigns a real registry index (GNU returns the
+    // slot integer it stores on the `'fringe` property). User bitmaps start at
+    // 25, the slot just past GNU's 25 standard built-in bitmaps. The
+    // `set-fringe-bitmap-face`/`destroy-fringe-bitmap` calls still return nil,
+    // and `'fringe` is cleared after destroy.
     assert_eq!(
         crate::emacs_core::print::print_value(&result),
-        "(1 nil nil nil)"
+        "(25 nil nil nil)"
     );
 
     let err = dispatch_builtin(

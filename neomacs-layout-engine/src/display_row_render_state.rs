@@ -127,6 +127,16 @@ impl RenderedDisplayRow {
             rendered_row.displays_text || !rendered_row.glyphs[GlyphArea::Text.index()].is_empty();
         row.glyphs[GlyphArea::Text.index()]
             .extend(rendered_row.glyphs[GlyphArea::Text.index()].iter().cloned());
+        // Carry a fringe bitmap recorded on the fragment (e.g. an overlay
+        // before-string with a `(left-fringe …)` display spec) onto the output
+        // row. The first fragment to set a given side wins (GNU shows one bitmap
+        // per fringe per row).
+        if row.left_fringe_bitmap.is_none() {
+            row.left_fringe_bitmap = rendered_row.left_fringe_bitmap;
+        }
+        if row.right_fringe_bitmap.is_none() {
+            row.right_fringe_bitmap = rendered_row.right_fringe_bitmap;
+        }
         DisplayRowVerticalMetrics::from_row(rendered_row).include_in_row(row);
         merge_display_row_source_slot_bounds(row, &self.source_slots);
         display_row_output_end_position(self.progress())

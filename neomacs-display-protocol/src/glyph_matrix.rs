@@ -11,9 +11,9 @@
 use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes};
 use super::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, GlyphRowRole,
-    MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, FringeBitmapData,
+    FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
+    WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use super::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 use super::ui_types::{MenuBarItem, ToolBarItem};
@@ -290,6 +290,21 @@ pub struct GlyphRow {
     pub start_charpos: usize,
     /// Buffer position at end of this row.
     pub end_charpos: usize,
+    /// Fringe bitmap to draw in this row's LEFT fringe, if any. GNU records the
+    /// per-row fringe bitmap on `struct glyph_row::left_fringe_bitmap`.
+    pub left_fringe_bitmap: Option<FringeBitmapInfo>,
+    /// Fringe bitmap to draw in this row's RIGHT fringe, if any. Reserved for
+    /// the right-fringe path (not yet emitted downstream).
+    pub right_fringe_bitmap: Option<FringeBitmapInfo>,
+}
+
+/// Per-row fringe-bitmap reference: the resolved registry index and the face id
+/// used for its foreground/background colors. The actual bits live once per
+/// frame in `FrameGlyphBuffer::fringe_bitmaps`, keyed by `bitmap_index`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FringeBitmapInfo {
+    pub bitmap_index: u16,
+    pub face_id: u32,
 }
 
 impl GlyphRow {
@@ -312,6 +327,8 @@ impl GlyphRow {
             ascent_px: 0.0,
             start_charpos: 0,
             end_charpos: 0,
+            left_fringe_bitmap: None,
+            right_fringe_bitmap: None,
         }
     }
 
@@ -685,6 +702,9 @@ pub struct FrameDisplayState {
     pub gui_compact_bar: Option<GuiCompactBarState>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
+    /// Resolved fringe bitmaps for this frame, keyed by registry index. Each
+    /// `GlyphRow::left_fringe_bitmap` references one of these by `bitmap_index`.
+    pub fringe_bitmaps: HashMap<u16, FringeBitmapData>,
 }
 
 /// One label entry in the TTY menu bar (one top-level menu like "File").
@@ -815,6 +835,7 @@ impl FrameDisplayState {
             gui_tool_bar: None,
             gui_compact_bar: None,
             tab_bar: None,
+            fringe_bitmaps: HashMap::new(),
         }
     }
 
@@ -862,6 +883,7 @@ impl FrameDisplayState {
         });
         state.cursor_effects_by_window = buf.cursor_effects_by_window.clone();
         state.stipple_patterns = buf.stipple_patterns.clone();
+        state.fringe_bitmaps = buf.fringe_bitmaps.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
         state.tab_bar = buf.tab_bar.clone();
@@ -1061,6 +1083,9 @@ impl FrameDisplayState {
         // Copy stipple patterns
         buf.stipple_patterns = self.stipple_patterns.clone();
 
+        // Copy fringe bitmaps (the bits referenced by each row's fringe info).
+        buf.fringe_bitmaps = self.fringe_bitmaps.clone();
+
         // --- Grid conversion ---
 
         // Copy effect hints
@@ -1150,6 +1175,73 @@ impl FrameDisplayState {
                     self.char_height,
                     &mut push,
                 );
+            }
+        }
+
+        // --- Materialize left/right fringe bitmaps ---
+        //
+        // Only buffer-text rows carry fringe bitmaps (magit section headings).
+        // The left fringe column spans from the window's left edge
+        // (`pixel_bounds.x`) up to the text area (`text_pixel_bounds.x`); for the
+        // magit-first scope (no left margin) this is exactly the fringe. The
+        // right fringe path is parsed but not emitted yet.
+        for entry in &self.window_matrices {
+            let window_id = DisplayWindowId::new(entry.window_id as i64);
+            for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
+                if !glyph_row.enabled {
+                    continue;
+                }
+                if glyph_row.left_fringe_bitmap.is_none() && glyph_row.right_fringe_bitmap.is_none()
+                {
+                    continue;
+                }
+                let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let y = if glyph_row.height_px > 0.0 {
+                    row_bounds.y + glyph_row.pixel_y
+                } else {
+                    row_bounds.y + row_idx as f32 * self.char_height
+                };
+                let height = if glyph_row.height_px > 0.0 {
+                    glyph_row.height_px
+                } else {
+                    self.char_height
+                };
+                let clip_rect = Some(entry.pixel_bounds);
+
+                if let Some(info) = glyph_row.left_fringe_bitmap {
+                    let x = entry.pixel_bounds.x;
+                    let width = (entry.text_pixel_bounds.x - entry.pixel_bounds.x).max(0.0);
+                    push(FrameGlyph::FringeBitmap {
+                        window_id,
+                        row_role: glyph_row.role,
+                        clip_rect,
+                        x,
+                        y,
+                        width,
+                        height,
+                        bitmap_index: info.bitmap_index,
+                        face_id: info.face_id,
+                        side: FringeSide::Left,
+                    });
+                }
+                if let Some(info) = glyph_row.right_fringe_bitmap {
+                    let text_right = entry.text_pixel_bounds.x + entry.text_pixel_bounds.width;
+                    let window_right = entry.pixel_bounds.x + entry.pixel_bounds.width;
+                    let x = text_right;
+                    let width = (window_right - text_right).max(0.0);
+                    push(FrameGlyph::FringeBitmap {
+                        window_id,
+                        row_role: glyph_row.role,
+                        clip_rect,
+                        x,
+                        y,
+                        width,
+                        height,
+                        bitmap_index: info.bitmap_index,
+                        face_id: info.face_id,
+                        side: FringeSide::Right,
+                    });
+                }
             }
         }
 

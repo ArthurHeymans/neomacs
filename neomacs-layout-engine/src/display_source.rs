@@ -27,18 +27,44 @@ use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, 
 
 pub(crate) struct DisplaySourceContext<'a> {
     face_resolver: Option<&'a mut dyn DisplayItemFaceResolver>,
+    /// Sink for `(left-fringe …)` / `(right-fringe …)` specs encountered while
+    /// walking ANY source (buffer text or a Lisp/overlay string). The covered
+    /// text is still suppressed (the replacement resolves to `Empty`); the
+    /// layout is collected here and drained by the row-render path, where the
+    /// evaluator + current row + face allocator are available to resolve the
+    /// bitmap index/face and record a fringe descriptor on the row.
+    fringe_sink: Option<&'a mut Vec<crate::display_spec::DisplayFringeLayout>>,
 }
 
 impl<'a> DisplaySourceContext<'a> {
     pub(crate) const fn empty() -> Self {
         Self {
             face_resolver: None,
+            fringe_sink: None,
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn with_face_resolver(resolver: &'a mut dyn DisplayItemFaceResolver) -> Self {
         Self {
             face_resolver: Some(resolver),
+            fringe_sink: None,
+        }
+    }
+
+    pub(crate) fn with_face_resolver_and_fringe_sink(
+        resolver: &'a mut dyn DisplayItemFaceResolver,
+        fringe_sink: &'a mut Vec<crate::display_spec::DisplayFringeLayout>,
+    ) -> Self {
+        Self {
+            face_resolver: Some(resolver),
+            fringe_sink: Some(fringe_sink),
+        }
+    }
+
+    fn collect_fringe(&mut self, layout: crate::display_spec::DisplayFringeLayout) {
+        if let Some(sink) = self.fringe_sink.as_mut() {
+            sink.push(layout);
         }
     }
 
@@ -1958,7 +1984,7 @@ impl DisplayPropertyReplacementSourceItem {
                 ),
             )),
             DisplayReplacementProperty::Media(_) => inputs.media.map(Self::Media),
-            DisplayReplacementProperty::Fringe => Some(Self::Empty),
+            DisplayReplacementProperty::Fringe(_) => Some(Self::Empty),
         }
     }
 }
@@ -2459,7 +2485,12 @@ impl DisplayPropertySourceReplacement {
             Some(DisplayReplacementProperty::Stretch(stretch)) => {
                 Self::Item(DisplayItemKind::Stretch(stretch.clone()))
             }
-            Some(DisplayReplacementProperty::Fringe) => Self::Empty,
+            Some(DisplayReplacementProperty::Fringe(layout)) => {
+                // Collect the fringe layout for the row-render path; the inline
+                // text stays suppressed (Empty).
+                context.collect_fringe(*layout);
+                Self::Empty
+            }
             Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
                 .map(DisplayItemKind::MediaReplacement)

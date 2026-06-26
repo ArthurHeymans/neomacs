@@ -144,6 +144,7 @@ impl WgpuRenderer {
         let mut bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_vertices: Vec<RectVertex> = Vec::new();
+        let mut fringe_vertices: Vec<RectVertex> = Vec::new();
         let mut scroll_bar_thumbs: Vec<(f32, f32, f32, f32, f32, Color)> = Vec::new();
 
         // --- Step 1: Collect backgrounds ---
@@ -215,6 +216,35 @@ impl WgpuRenderer {
                     );
                 }
                 _ => {}
+            }
+        }
+
+        // --- Collect fringe bitmaps (own step: own fringe column, no overlap
+        // with text) — magit section-heading fold arrows. ---
+        for glyph in &frame.glyphs {
+            if let FrameGlyph::FringeBitmap {
+                x,
+                y,
+                width,
+                height,
+                bitmap_index,
+                face_id,
+                ..
+            } = glyph
+            {
+                let Some(bitmap) = frame.fringe_bitmaps.get(bitmap_index) else {
+                    continue;
+                };
+                let face = frame.resolved_face(*face_id);
+                self.render_fringe_bitmap(
+                    &mut fringe_vertices,
+                    *x + offset_x,
+                    *y + offset_y,
+                    *width,
+                    *height,
+                    &face.fg,
+                    bitmap,
+                );
             }
         }
 
@@ -1026,6 +1056,22 @@ impl WgpuRenderer {
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..bg_vertices.len() as u32, 0..1);
+            }
+
+            // --- Draw fringe bitmaps (own column, above backgrounds, below
+            // text — fringes never overlap the text area). ---
+            if !fringe_vertices.is_empty() {
+                let buffer = self
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Content Fringe Buffer"),
+                        contents: bytemuck::cast_slice(&fringe_vertices),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+                pass.set_pipeline(rect_pl);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..fringe_vertices.len() as u32, 0..1);
             }
 
             // Filled-box cursor backgrounds must be below text so the covered

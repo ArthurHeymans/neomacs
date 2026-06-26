@@ -1054,17 +1054,76 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
     }
 }
 
+/// Read the BITS argument (vector of integers or string of rows) into raw row
+/// values, mirroring GNU `Faref`: a vector element is its integer value; a
+/// string element is its character code (one byte for unibyte rows).
+fn fringe_bits_rows(bits: &Value) -> Result<Vec<u32>, Flow> {
+    if let Some(data) = bits.as_vector_data() {
+        return Ok(data
+            .iter()
+            .map(|elt| elt.as_fixnum().map(|n| n as u32).unwrap_or(0))
+            .collect());
+    }
+    if let Some(s) = bits.as_lisp_string() {
+        if let Some(text) = s.as_utf8_str() {
+            return Ok(text.chars().map(|c| c as u32).collect());
+        }
+        // Unibyte / raw-byte string: each byte is one row value.
+        return Ok(s.as_bytes().iter().map(|b| u32::from(*b)).collect());
+    }
+    Err(signal(
+        "wrong-type-argument",
+        vec![Value::symbol("arrayp"), *bits],
+    ))
+}
+
+/// Parse the ALIGN argument per GNU `Fdefine_fringe_bitmap`. Returns
+/// `(align, periodic)` where `periodic` selects the repeat behaviour. ALIGN may
+/// be a symbol (`top`/`bottom`/`center`/nil) or a list `(ALIGN PERIODIC)`.
+fn parse_fringe_align(
+    align: Option<&Value>,
+) -> Result<(super::fringe_bitmap::FringeBitmapAlign, bool), Flow> {
+    use super::fringe_bitmap::FringeBitmapAlign;
+    let Some(align) = align else {
+        return Ok((FringeBitmapAlign::Center, false));
+    };
+    if align.is_nil() {
+        return Ok((FringeBitmapAlign::Center, false));
+    }
+    let (align_sym, periodic) = if align.is_cons() {
+        let periodic = {
+            let cdr = align.cons_cdr();
+            cdr.is_cons() && !cdr.cons_car().is_nil()
+        };
+        (align.cons_car(), periodic)
+    } else {
+        (*align, false)
+    };
+    let align_kind = match align_sym.as_symbol_name() {
+        Some("top") => FringeBitmapAlign::Top,
+        Some("bottom") => FringeBitmapAlign::Bottom,
+        Some("center") => FringeBitmapAlign::Center,
+        _ if align_sym.is_nil() => FringeBitmapAlign::Center,
+        _ => {
+            return Err(signal("error", vec![Value::string("Bad align argument")]));
+        }
+    };
+    Ok((align_kind, periodic))
+}
+
 pub(crate) fn builtin_define_fringe_bitmap(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    use super::fringe_bitmap::{FringeBitmap, fit_rows_to_height, parse_bits_rows};
     expect_range_args("define-fringe-bitmap", &args, 2, 5)?;
-    if args[0].as_symbol_name().is_none() {
+    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
+    let Some(sym) = super::symbols::symbol_id_checked(&args[0], symbols_with_pos_enabled) else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[0]],
         ));
-    }
+    };
     if !matches!(
         args[1].kind(),
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String
@@ -1074,31 +1133,88 @@ pub(crate) fn builtin_define_fringe_bitmap(
             vec![Value::symbol("arrayp"), args[1]],
         ));
     }
+    let raw_rows = fringe_bits_rows(&args[1])?;
+    let natural_height = raw_rows.len().min(255) as u8;
 
-    if let Some(height) = args.get(2) {
-        if !height.is_nil() {
-            let _ = expect_fixnum(height)?;
+    // WIDTH: integer 1..=16, default 8. GNU errors if outside the range.
+    let width: u8 = match args.get(3) {
+        Some(width) if !width.is_nil() => {
+            let requested = expect_fixnum(width)?;
+            let clamped = requested.clamp(1, 16);
+            if clamped != requested {
+                return Err(signal(
+                    "args-out-of-range",
+                    vec![*width, Value::string("Width must be from 1 to 16")],
+                ));
+            }
+            clamped as u8
         }
+        _ => 8,
+    };
+
+    // HEIGHT: integer clamped to 0..=255, default = number of BITS rows.
+    let mut height: Option<u8> = match args.get(2) {
+        Some(h) if !h.is_nil() => Some(expect_fixnum(h)?.clamp(0, 255) as u8),
+        _ => None,
+    };
+
+    // ALIGN: symbol or `(ALIGN PERIODIC)`. A periodic bitmap repeats its rows;
+    // GNU then forces height to 255 and records the natural length as period.
+    let (align, periodic) = parse_fringe_align(args.get(4))?;
+    let mut period: u8 = 0;
+    if periodic {
+        period = natural_height;
+        height = Some(255);
     }
-    if let Some(width) = args.get(3) {
-        if !width.is_nil() {
-            let _ = expect_fixnum(width)?;
+
+    let mut rows = parse_bits_rows(&raw_rows, width);
+    let final_height;
+    if periodic {
+        // Repeat the natural rows to fill 255 rows (single-tile downstream still
+        // renders correctly; this keeps the stored data faithful to GNU).
+        let target = 255usize;
+        if !rows.is_empty() {
+            let tile = rows.clone();
+            rows.clear();
+            while rows.len() < target {
+                rows.extend_from_slice(&tile);
+            }
+            rows.truncate(target);
         }
+        final_height = 255u8;
+    } else {
+        let (fitted, h) = fit_rows_to_height(rows, height);
+        rows = fitted;
+        final_height = h;
     }
-    // GNU fringe.c: ALIGN can be a symbol (top, bottom, center) or a
-    // list of alignment flags like (top repeat). Accept any non-nil value.
-    // The actual fringe rendering is a stub; just validate minimally.
+
+    let existing_index =
+        super::symbols::symbol_property_get(ctx, args[0], Value::symbol("fringe"))?
+            .1
+            .and_then(|v| v.as_fixnum())
+            .filter(|n| *n >= 0)
+            .map(|n| n as u32);
+
+    let bitmap = FringeBitmap {
+        bits: rows,
+        height: final_height,
+        width,
+        period,
+        align,
+        face: None,
+    };
+    let index = ctx.fringe_bitmaps.define(sym, existing_index, bitmap);
+
     ctx.note_macro_expansion_mutation();
-    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
     super::symbols::put_in_obarray_values(
         ctx.obarray_mut(),
         args[0],
         Value::symbol("fringe"),
-        Value::fixnum(1),
+        Value::fixnum(index as i64),
         symbols_with_pos_enabled,
     )?;
 
-    Ok(args[0])
+    Ok(Value::fixnum(index as i64))
 }
 
 pub(crate) fn builtin_destroy_fringe_bitmap(
@@ -1106,14 +1222,15 @@ pub(crate) fn builtin_destroy_fringe_bitmap(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("destroy-fringe-bitmap", &args, 1)?;
-    if args[0].as_symbol_name().is_none() {
+    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
+    let Some(sym) = super::symbols::symbol_id_checked(&args[0], symbols_with_pos_enabled) else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[0]],
         ));
-    }
+    };
+    ctx.fringe_bitmaps.destroy(sym);
     ctx.note_macro_expansion_mutation();
-    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
     super::symbols::put_in_obarray_values(
         ctx.obarray_mut(),
         args[0],

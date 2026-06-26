@@ -1976,6 +1976,9 @@ pub struct Context {
     /// Bootstrapped standard interpreted-closure filter function object.
     /// Rooted so the dumped startup state's runtime closure hook remains live.
     interpreted_closure_filter_fn: Option<Value>,
+    /// User-defined fringe bitmaps registered via `define-fringe-bitmap`.
+    /// GC-safe: holds no raw `Value`s (bits are `Vec<u16>`, faces are names).
+    pub(crate) fringe_bitmaps: super::builtins::fringe_bitmap::FringeBitmapRegistry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4850,6 +4853,7 @@ impl Context {
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
+            fringe_bitmaps: super::builtins::fringe_bitmap::FringeBitmapRegistry::new(),
         };
         ev.provide_value(
             Value::symbol("make-network-process"),
@@ -5031,6 +5035,7 @@ impl Context {
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
+            fringe_bitmaps: super::builtins::fringe_bitmap::FringeBitmapRegistry::new(),
         };
         ev.initialize_gc_stack_bottom();
         ev.setup_thread_locals();
@@ -7887,6 +7892,25 @@ impl Context {
     /// Access the obarray (for builtins that need it).
     pub fn obarray(&self) -> &Obarray {
         &self.obarray
+    }
+
+    /// Resolve a fringe-bitmap symbol value to its registry index and data.
+    /// Used by the display pipeline to turn a `(left-fringe SYMBOL FACE)` spec
+    /// into a renderable bitmap. Returns `None` for a non-symbol or a symbol
+    /// with no registered user bitmap.
+    pub fn fringe_bitmap_for_symbol(
+        &self,
+        symbol: Value,
+    ) -> Option<(u32, &super::builtins::fringe_bitmap::FringeBitmap)> {
+        let sym = symbol.as_symbol_id()?;
+        let index = self.fringe_bitmaps.index_of(sym)?;
+        let bitmap = self.fringe_bitmaps.get(sym)?;
+        Some((index, bitmap))
+    }
+
+    /// Borrow the fringe-bitmap registry (read-only) for per-frame snapshots.
+    pub fn fringe_bitmap_registry(&self) -> &super::builtins::fringe_bitmap::FringeBitmapRegistry {
+        &self.fringe_bitmaps
     }
 
     /// Access the obarray mutably.

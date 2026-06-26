@@ -11,6 +11,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplayPropertyReplacementDescriptor;
 use crate::display_origin::DisplayOrigin;
+use crate::display_property::DisplayReplacementProperty;
 use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
@@ -34,6 +35,7 @@ use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
 };
+use crate::display_spec::DisplayFringeSide;
 use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font_metrics::FontMetricsService;
 use crate::glyph_row_writer::push_stretch_to_area;
@@ -47,12 +49,31 @@ use crate::window_output::{
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
+    FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
+
+/// Current-row mutation that attaches a resolved fringe bitmap to the row's
+/// left or right fringe slot.
+struct SetRowFringeBitmapMutation {
+    side: DisplayFringeSide,
+    info: FringeBitmapInfo,
+}
+
+impl DisplayCurrentRowMutation for SetRowFringeBitmapMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        match self.side {
+            DisplayFringeSide::Left => row.left_fringe_bitmap = Some(self.info),
+            DisplayFringeSide::Right => row.right_fringe_bitmap = Some(self.info),
+        }
+    }
+}
 
 pub(crate) struct TextRowOutputRenderState<'a> {
     output: TextWindowOutputTarget<'a>,
@@ -492,6 +513,14 @@ impl<'a> TextRowOutputRenderState<'a> {
         self.evaluator.display_host.as_deref()
     }
 
+    fn evaluator(&self) -> &Context {
+        self.evaluator
+    }
+
+    fn current_row_output(&mut self) -> DisplayRowCurrentRowOutput<'_> {
+        self.output.current_row_output()
+    }
+
     fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
         self.output_emitter
     }
@@ -907,6 +936,102 @@ impl<'a> TextRowSourceRenderState<'a> {
             fallback_metrics,
             start_position,
         )
+    }
+
+    /// Record a `(left-fringe …)` / `(right-fringe …)` fringe-bitmap descriptor
+    /// on the current row, if the typed replacement is a fringe spec. The text
+    /// area still shows nothing (the replacement resolves to `Empty`); this only
+    /// attaches the bitmap so the frame-output bridge can draw it in the fringe.
+    pub(crate) fn record_fringe_bitmap_for_descriptor(
+        &mut self,
+        descriptor: &DisplayPropertyReplacementDescriptor,
+        face_ids: &mut FrameFaceIdAllocator,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) {
+        if let Some(DisplayReplacementProperty::Fringe(layout)) =
+            descriptor.classification().replacement()
+        {
+            let layout = *layout;
+            self.record_fringe_bitmap_layout(&layout, face_ids, active_face_state.face_id());
+        }
+    }
+
+    /// Record a parsed fringe layout (from any source path) on the current row.
+    /// `fallback_face_id` is the row's active face, used only when neither a
+    /// `set-fringe-bitmap-face` override nor the spec's FACE resolves.
+    ///
+    /// Resolution honors GNU's `set-fringe-bitmap-face` override: the face name
+    /// stored on the registry entry wins over the spec's FACE argument.
+    pub(crate) fn record_fringe_bitmap_layout(
+        &mut self,
+        layout: &crate::display_spec::DisplayFringeLayout,
+        face_ids: &mut FrameFaceIdAllocator,
+        fallback_face_id: u32,
+    ) {
+        let layout = *layout;
+
+        // Resolve the bitmap symbol -> registry index, and capture the registry
+        // face override name (GC-safe String) before borrowing self mutably.
+        let evaluator = self.output_render.evaluator();
+        let (bitmap_index, registry_face_name) =
+            match evaluator.fringe_bitmap_for_symbol(layout.bitmap) {
+                Some((index, bitmap)) => {
+                    if index > u32::from(u16::MAX) {
+                        return;
+                    }
+                    (index as u16, bitmap.face.clone())
+                }
+                // No registered user bitmap (e.g. a standard built-in we don't
+                // implement yet): nothing to draw.
+                None => return,
+            };
+
+        // The face id: prefer the `set-fringe-bitmap-face` override, then the
+        // spec's FACE, then the row's active face.
+        let face_id = self.resolve_fringe_face_id(
+            registry_face_name.as_deref(),
+            layout.face,
+            face_ids,
+            fallback_face_id,
+        );
+
+        let info = FringeBitmapInfo {
+            bitmap_index,
+            face_id,
+        };
+        let side = layout.side;
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(SetRowFringeBitmapMutation { side, info });
+    }
+
+    /// Resolve the face id used for a fringe bitmap. `override_name` is the
+    /// `set-fringe-bitmap-face` registry override (highest priority); `spec_face`
+    /// is the FACE from the display spec; the active row face is the fallback.
+    fn resolve_fringe_face_id(
+        &mut self,
+        override_name: Option<&str>,
+        spec_face: Option<Value>,
+        face_ids: &mut FrameFaceIdAllocator,
+        fallback_face_id: u32,
+    ) -> u32 {
+        if let Some(name) = override_name {
+            let resolved = self.face_resolver.resolve_named_face(name);
+            let face_id = face_ids.allocate();
+            self.insert_resolved_face(face_id, &resolved);
+            return face_id;
+        }
+        if let Some(face_value) = spec_face {
+            if let Some(resolved) = self
+                .face_resolver
+                .resolve_face_value_over(self.face_resolver.default_face(), &face_value)
+            {
+                let face_id = face_ids.allocate();
+                self.insert_resolved_face(face_id, &resolved);
+                return face_id;
+            }
+        }
+        fallback_face_id
     }
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {

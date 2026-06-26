@@ -9906,6 +9906,17 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
         .current_buffer()
         .expect("current buffer")
         .id();
+    // Register the magit fold-arrow bitmap so the fringe spec resolves to a real
+    // registry index (first user bitmap => 25).
+    let fringe_index = eval
+        .eval_str(
+            "(define-fringe-bitmap 'magit-fringe-bitmapv \
+             [#b00000000 #b10000010 #b11000110 #b01101100 #b00111000 #b00010000 \
+              #b00000000 #b00000000])",
+        )
+        .expect("define magit fringe bitmap")
+        .as_fixnum()
+        .expect("fringe index") as u16;
     // Build the propertized before-string out of band so the `display` property
     // is a real `(left-fringe …)` list, exactly as magit constructs it.
     let before_string = eval
@@ -9964,6 +9975,23 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     assert!(
         rows.iter().all(|row| !row.contains("fringe")),
         "expected (left-fringe …) before-string to render nothing inline, rows={rows:?}"
+    );
+
+    // Stage 2/3: the covered row records a left-fringe bitmap descriptor with the
+    // resolved registry index, so the renderer can draw the arrow in the fringe.
+    let fringe_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.left_fringe_bitmap.is_some())
+        .expect("a row carries the left-fringe bitmap");
+    let info = fringe_row.left_fringe_bitmap.expect("left fringe info");
+    assert_eq!(info.bitmap_index, fringe_index);
+
+    // Stage 3: the bitmap bits are embedded once per frame for the renderer.
+    assert!(
+        state.fringe_bitmaps.contains_key(&fringe_index),
+        "frame display state embeds the resolved fringe bitmap data"
     );
 }
 

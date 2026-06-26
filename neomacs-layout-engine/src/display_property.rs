@@ -3,8 +3,8 @@ use crate::display_item::{
     DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
 };
 use crate::display_spec::{
-    DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec, is_display_space_spec,
-    parse_display_xwidget_layout,
+    DisplayFringeLayout, DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec,
+    is_display_space_spec, parse_display_fringe_layout, parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -43,10 +43,11 @@ pub(crate) enum DisplayReplacementProperty {
     Media(DisplayMediaReplacementProperty),
     /// `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)`: GNU renders
     /// the bitmap in the fringe and shows nothing inline for the covered text
-    /// (the spec REPLACES the text in the text area). We don't draw fringe
-    /// bitmaps yet, so this resolves to an empty inline replacement: the covered
-    /// text is consumed and produces no glyph, matching GNU's text-area output.
-    Fringe,
+    /// (the spec REPLACES the text in the text area). The parsed layout carries
+    /// the bitmap symbol + side + optional face so the row-render path can
+    /// record a fringe descriptor on the row; the inline text stays suppressed
+    /// (zero inline width), matching GNU's text-area output.
+    Fringe(DisplayFringeLayout),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,7 +125,7 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
             DisplayMediaReplacementProperty::Webkit,
         ))
     } else if is_display_fringe_spec(&value) {
-        Some(DisplayReplacementProperty::Fringe)
+        parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
     } else {
         None
     };

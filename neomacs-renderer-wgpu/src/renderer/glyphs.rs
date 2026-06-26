@@ -1515,6 +1515,35 @@ impl WgpuRenderer {
             }
         }
 
+        // --- Fringe bitmaps (own fringe column, drawn with the non-overlay
+        // backgrounds so they sit below text — magit section fold arrows). ---
+        for glyph in &frame_glyphs.glyphs {
+            if let FrameGlyph::FringeBitmap {
+                x,
+                y,
+                width,
+                height,
+                bitmap_index,
+                face_id,
+                ..
+            } = glyph
+            {
+                let Some(bitmap) = frame_glyphs.fringe_bitmaps.get(bitmap_index) else {
+                    continue;
+                };
+                let face = frame_glyphs.resolved_face(*face_id);
+                self.render_fringe_bitmap(
+                    &mut non_overlay_rect_vertices,
+                    *x,
+                    *y,
+                    *width,
+                    *height,
+                    &face.fg,
+                    bitmap,
+                );
+            }
+        }
+
         // --- Current line highlight ---
         if self.effects.line_highlight.enabled {
             let (lr, lg, lb, la) = self.effects.line_highlight.color;

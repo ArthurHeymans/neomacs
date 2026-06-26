@@ -240,6 +240,31 @@ pub enum FrameGlyph {
         height: f32,
     },
 
+    /// Fringe bitmap drawn in a window's left or right fringe column. The
+    /// monochrome bits live once per frame in
+    /// [`FrameGlyphBuffer::fringe_bitmaps`], keyed by `bitmap_index`; the
+    /// renderer expands them to foreground quads in the fringe column. GNU draws
+    /// these via `rif->draw_fringe_bitmap`.
+    FringeBitmap {
+        window_id: DisplayWindowId,
+        row_role: GlyphRowRole,
+        clip_rect: Option<Rect>,
+        /// Frame-absolute X of the fringe column's left edge.
+        x: f32,
+        /// Frame-absolute Y of the row top.
+        y: f32,
+        /// Fringe column width in pixels.
+        width: f32,
+        /// Row height in pixels (the bitmap is aligned within this).
+        height: f32,
+        /// Resolved registry index into `FrameGlyphBuffer::fringe_bitmaps`.
+        bitmap_index: u16,
+        /// Face id for fg/bg colors (resolved via `resolved_face`).
+        face_id: u32,
+        /// Which fringe this bitmap belongs to.
+        side: FringeSide,
+    },
+
     /// Window background
     Background { bounds: Rect, color: Color },
 
@@ -307,6 +332,7 @@ impl FrameGlyph {
             FrameGlyph::Image { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Video { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Xwidget { row_role, .. } => row_role.is_chrome(),
+            FrameGlyph::FringeBitmap { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Border { row_role, .. } => row_role.is_chrome(),
             _ => false,
         }
@@ -401,6 +427,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { window_id, .. }
             | FrameGlyph::Video { window_id, .. }
             | FrameGlyph::Xwidget { window_id, .. }
+            | FrameGlyph::FringeBitmap { window_id, .. }
             | FrameGlyph::Border { window_id, .. }
             | FrameGlyph::ScrollBar { window_id, .. } => Some(*window_id),
             _ => None,
@@ -416,6 +443,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { row_role, .. }
             | FrameGlyph::Video { row_role, .. }
             | FrameGlyph::Xwidget { row_role, .. }
+            | FrameGlyph::FringeBitmap { row_role, .. }
             | FrameGlyph::Border { row_role, .. }
             | FrameGlyph::ScrollBar { row_role, .. } => Some(*row_role),
             _ => None,
@@ -430,6 +458,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { clip_rect, .. }
             | FrameGlyph::Video { clip_rect, .. }
             | FrameGlyph::Xwidget { clip_rect, .. }
+            | FrameGlyph::FringeBitmap { clip_rect, .. }
             | FrameGlyph::Border { clip_rect, .. }
             | FrameGlyph::ScrollBar { clip_rect, .. } => *clip_rect,
             _ => None,
@@ -485,6 +514,13 @@ impl FrameGlyph {
                 ..
             }
             | FrameGlyph::ScrollBar {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::FringeBitmap {
                 x,
                 y,
                 width,
@@ -584,6 +620,31 @@ pub struct FrameTabBarState {
     pub items: Vec<TabBarItem>,
     pub y: f32,
     pub height: f32,
+}
+
+/// Which fringe a [`FrameGlyph::FringeBitmap`] belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FringeSide {
+    Left,
+    Right,
+}
+
+/// Resolved fringe-bitmap data embedded once per frame in
+/// [`FrameGlyphBuffer::fringe_bitmaps`]. Mirrors the user-bitmap registry on
+/// the evaluator; `bits` rows are MSB-aligned `u16` (leftmost column is bit 15).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FringeBitmapData {
+    /// One MSB-aligned row per `height`; column `b` of row `r` is set when
+    /// `(bits[r] >> (15 - b)) & 1 == 1`.
+    pub bits: Vec<u16>,
+    /// Pixel columns used (1..=16).
+    pub width: u8,
+    /// Number of rows.
+    pub height: u8,
+    /// Repeat period (0 = not periodic).
+    pub period: u8,
+    /// Vertical alignment within the row: 0 = center, 1 = top, 2 = bottom.
+    pub align: u8,
 }
 
 /// Stipple pattern: XBM bitmap data for tiled background patterns
@@ -791,6 +852,11 @@ pub struct FrameGlyphBuffer {
 
     /// Stipple patterns: bitmap_id -> StipplePattern
     pub stipple_patterns: HashMap<i32, StipplePattern>,
+
+    /// Resolved fringe bitmaps for this frame, keyed by registry index. Embedded
+    /// once per frame from the evaluator's user-bitmap registry so the renderer
+    /// can expand a [`FrameGlyph::FringeBitmap`]'s `bitmap_index` to its bits.
+    pub fringe_bitmaps: HashMap<u16, FringeBitmapData>,
 }
 
 /// Derive a transition hint by comparing previous/current window metadata.
@@ -972,6 +1038,7 @@ impl FrameGlyphBuffer {
             current_clip_rect: None,
             faces: HashMap::new(),
             stipple_patterns: HashMap::new(),
+            fringe_bitmaps: HashMap::new(),
         }
     }
 
@@ -994,6 +1061,7 @@ impl FrameGlyphBuffer {
         self.window_cursors.clear();
         self.tab_bar = None;
         self.stipple_patterns.clear();
+        self.fringe_bitmaps.clear();
         self.faces.clear();
         self.current_window_id = DisplayWindowId::new(0);
         self.current_row_role = GlyphRowRole::Text;
@@ -1421,6 +1489,40 @@ impl FrameGlyphBuffer {
             y,
             width,
             height,
+        });
+    }
+
+    /// Register a resolved fringe bitmap for this frame, keyed by registry
+    /// index. Idempotent: the same index may be registered once per row that
+    /// references it; we keep a single copy.
+    pub fn register_fringe_bitmap(&mut self, bitmap_index: u16, data: FringeBitmapData) {
+        self.fringe_bitmaps.entry(bitmap_index).or_insert(data);
+    }
+
+    /// Emit a fringe-bitmap glyph for the current window/row context. The bits
+    /// must already be registered via [`Self::register_fringe_bitmap`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_fringe_bitmap(
+        &mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        bitmap_index: u16,
+        face_id: u32,
+        side: FringeSide,
+    ) {
+        self.glyphs.push(FrameGlyph::FringeBitmap {
+            window_id: self.current_window_id,
+            row_role: self.current_row_role,
+            clip_rect: self.current_clip_rect,
+            x,
+            y,
+            width,
+            height,
+            bitmap_index,
+            face_id,
+            side,
         });
     }
 

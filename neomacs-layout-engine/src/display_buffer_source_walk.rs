@@ -43,6 +43,7 @@ struct BufferSourceWalkConsumption {
     source_item: Option<BufferSourceConsumedItem>,
     source_position: DisplaySourceTextPosition,
     pending_faces: Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
+    pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
 }
 
 impl BufferSourceWalkConsumption {
@@ -50,11 +51,13 @@ impl BufferSourceWalkConsumption {
         source_item: Option<BufferSourceConsumedItem>,
         source_position: DisplaySourceTextPosition,
         pending_faces: Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
+        pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
     ) -> Self {
         Self {
             source_item,
             source_position,
             pending_faces,
+            pending_fringes,
         }
     }
 
@@ -64,11 +67,12 @@ impl BufferSourceWalkConsumption {
     ) -> (
         Option<BufferSourceConsumedItem>,
         Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
+        Vec<crate::display_spec::DisplayFringeLayout>,
     ) {
         if self.source_item.is_none() {
             progress.apply_source_position(self.source_position);
         }
-        (self.source_item, self.pending_faces)
+        (self.source_item, self.pending_faces, self.pending_fringes)
     }
 
     fn apply_to_render_progress<B: LayoutBufferView>(
@@ -77,13 +81,23 @@ impl BufferSourceWalkConsumption {
         face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<BufferSourceConsumedItem> {
-        let (source_item, pending_faces) = self.apply_to_progress(progress);
+        let (source_item, pending_faces, pending_fringes) = self.apply_to_progress(progress);
         face_resolution_context.install_pending_source_faces(
             source_render,
             row_geometry,
             pending_faces,
         );
+        // Record any `(left-fringe …)` / `(right-fringe …)` specs the buffer-text
+        // walk collected on the current row (zero inline width was already
+        // applied; the bitmap draws in the fringe column). The fallback face is
+        // only used when neither a `set-fringe-bitmap-face` override nor the
+        // spec's FACE resolves (magit always supplies a FACE).
+        let fallback_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+        for layout in &pending_fringes {
+            source_render.record_fringe_bitmap_layout(layout, face_ids, fallback_face_id);
+        }
         source_item
     }
 }
@@ -155,6 +169,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> BufferSourceWalkConsumption {
         let mut pending_faces = Vec::new();
+        let mut pending_fringes = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
             let mut resolver = DisplaySourcePropertyResolver::new(
@@ -163,14 +178,22 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
                 face_ids,
                 &mut pending_faces,
             );
-            let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
+            let mut source_context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
+                &mut resolver,
+                &mut pending_fringes,
+            );
             self.source_consumption.next_source_consumption_item(
                 &mut self.source_cursor,
                 &mut source_context,
                 &mut source_position,
             )
         };
-        BufferSourceWalkConsumption::new(source_item, source_position, pending_faces)
+        BufferSourceWalkConsumption::new(
+            source_item,
+            source_position,
+            pending_faces,
+            pending_fringes,
+        )
     }
 
     pub(crate) fn consume_source_item_for_render(
@@ -181,16 +204,17 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<BufferSourceConsumedItem> {
-        self.consume_source_item(
+        let consumption = self.consume_source_item(
             progress.source_position(),
             face_resolution_context.clone(),
             face_ids,
-        )
-        .apply_to_render_progress(
+        );
+        consumption.apply_to_render_progress(
             progress,
             face_resolution_context,
             source_render,
             row_geometry,
+            face_ids,
         )
     }
 

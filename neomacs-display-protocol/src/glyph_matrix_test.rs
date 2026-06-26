@@ -1176,3 +1176,87 @@ fn materialize_mixed_grid_and_nongrid_items() {
     assert!(matches!(&buf.glyphs[2], FrameGlyph::Char { .. }));
     assert_eq!(buf.window_cursors[0].style, CursorStyle::FilledBox);
 }
+
+#[test]
+fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
+    // A buffer-text row that carries a left-fringe bitmap (magit section-heading
+    // fold arrow) must materialize one FrameGlyph::FringeBitmap positioned in the
+    // window's left fringe column (between the window edge and the text area),
+    // with the row's bitmap index and resolved face id.
+    use crate::frame_glyphs::{FringeBitmapData, FringeSide};
+    use crate::glyph_matrix::FringeBitmapInfo;
+
+    let char_w = 8.0f32;
+    let char_h = 16.0f32;
+    let cols = 4;
+    let left_fringe = 8.0f32;
+    // Window spans from x=10; the text area starts after an 8px left fringe.
+    let win = Rect::new(10.0, 20.0, left_fringe + cols as f32 * char_w, char_h);
+    let text_area = Rect::new(10.0 + left_fringe, 20.0, cols as f32 * char_w, char_h);
+
+    let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
+    state.faces.insert(0, Face::new(0));
+    state.faces.insert(7, Face::new(7));
+
+    // Register the bitmap bits once per frame.
+    state.fringe_bitmaps.insert(
+        25,
+        FringeBitmapData {
+            bits: vec![0x6000, 0x3000, 0x1800, 0x0C00],
+            width: 8,
+            height: 4,
+            period: 0,
+            align: 0,
+        },
+    );
+
+    let mut matrix = GlyphMatrix::new(1, cols);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].height_px = char_h;
+    matrix.rows[0].pixel_y = 0.0;
+    matrix.rows[0].left_fringe_bitmap = Some(FringeBitmapInfo {
+        bitmap_index: 25,
+        face_id: 7,
+    });
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: win,
+        text_pixel_bounds: text_area,
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    let fringes: Vec<_> = buf
+        .glyphs
+        .iter()
+        .filter(|g| matches!(g, FrameGlyph::FringeBitmap { .. }))
+        .collect();
+    assert_eq!(fringes.len(), 1, "exactly one fringe bitmap glyph");
+    match fringes[0] {
+        FrameGlyph::FringeBitmap {
+            x,
+            y,
+            width,
+            height,
+            bitmap_index,
+            face_id,
+            side,
+            ..
+        } => {
+            assert_eq!(*bitmap_index, 25);
+            assert_eq!(*face_id, 7);
+            assert_eq!(*side, FringeSide::Left);
+            // Fringe column: from window left edge to text area left edge.
+            assert_eq!(*x, 10.0);
+            assert_eq!(*width, left_fringe);
+            assert_eq!(*y, 20.0);
+            assert_eq!(*height, char_h);
+        }
+        other => panic!("expected FringeBitmap, got {other:?}"),
+    }
+
+    // The bits round-trip into the materialized buffer.
+    assert!(buf.fringe_bitmaps.contains_key(&25));
+}

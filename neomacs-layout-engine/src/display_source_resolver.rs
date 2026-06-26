@@ -262,6 +262,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
 pub(crate) struct ResolvedDisplaySourceItem {
     item: Option<DisplayItem>,
     pending_faces: Vec<PendingDisplaySourceFace>,
+    pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
 }
 
 impl ResolvedDisplaySourceItem {
@@ -272,6 +273,19 @@ impl ResolvedDisplaySourceItem {
         Self {
             item,
             pending_faces,
+            pending_fringes: Vec::new(),
+        }
+    }
+
+    fn with_fringes(
+        item: Option<DisplayItem>,
+        pending_faces: Vec<PendingDisplaySourceFace>,
+        pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
+    ) -> Self {
+        Self {
+            item,
+            pending_faces,
+            pending_fringes,
         }
     }
 
@@ -281,6 +295,10 @@ impl ResolvedDisplaySourceItem {
 
     pub(crate) fn item(&self) -> Option<&DisplayItem> {
         self.item.as_ref()
+    }
+
+    pub(crate) fn take_pending_fringes(&mut self) -> Vec<crate::display_spec::DisplayFringeLayout> {
+        std::mem::take(&mut self.pending_fringes)
     }
 
     pub(crate) fn into_parts(self) -> (Option<DisplayItem>, Vec<PendingDisplaySourceFace>) {
@@ -436,7 +454,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             // `(left-fringe …)`: no inline output. The covered text is still
             // consumed (the descriptor's skip range), and the empty source item
             // emits no glyph.
-            DisplayReplacementProperty::Fringe => DisplayPropertyReplacementSourceInputs::empty(),
+            DisplayReplacementProperty::Fringe(_) => {
+                DisplayPropertyReplacementSourceInputs::empty()
+            }
         };
         DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,
@@ -573,15 +593,19 @@ pub(crate) fn resolve_next_display_source_item(
     face_ids: &mut FrameFaceIdAllocator,
 ) -> ResolvedDisplaySourceItem {
     let mut pending_faces = Vec::new();
+    let mut pending_fringes = Vec::new();
     let item = {
         let mut resolver =
             DisplaySourcePropertyResolver::new(params, state, face_ids, &mut pending_faces);
-        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        let mut context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
+            &mut resolver,
+            &mut pending_fringes,
+        );
         source
             .next_item(&mut context)
             .map(|item| resolver.resolve_item_layout(item))
     };
-    ResolvedDisplaySourceItem::new(item, pending_faces)
+    ResolvedDisplaySourceItem::with_fringes(item, pending_faces, pending_fringes)
 }
 
 #[derive(Clone, Copy)]

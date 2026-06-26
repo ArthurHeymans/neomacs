@@ -771,6 +771,25 @@ impl LayoutEngine {
 
         let mut frame_display_state = self.finish_frame_output(&frame_params);
 
+        // Embed the user-defined fringe bitmaps once per frame so the renderer
+        // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
+        // heading fold arrows). GC-safe: copied out as plain `u16`/`u8` data.
+        for (index, bitmap) in evaluator.fringe_bitmap_registry().iter_indexed() {
+            if index > u32::from(u16::MAX) {
+                continue;
+            }
+            frame_display_state.fringe_bitmaps.insert(
+                index as u16,
+                neomacs_display_protocol::frame_glyphs::FringeBitmapData {
+                    bits: bitmap.bits.clone(),
+                    width: bitmap.width,
+                    height: bitmap.height,
+                    period: bitmap.period,
+                    align: bitmap.align.as_u8(),
+                },
+            );
+        }
+
         // NOTE: GlyphMatrix vs FrameGlyphBuffer character count validation removed.
         // FrameGlyphBuffer no longer receives glyph output; the DisplayOutputBuilder
         // is now the sole output path.

@@ -12,6 +12,9 @@ pub(crate) struct DisplayRowSourceState {
     resolve_state: DisplaySourceResolveState,
     pending_item: Option<DisplayItem>,
     exhausted: bool,
+    /// `(left-fringe …)` / `(right-fringe …)` specs collected while resolving
+    /// this source's items, drained by the render path onto the output row.
+    pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
 }
 
 impl DisplayRowSourceState {
@@ -27,12 +30,18 @@ impl DisplayRowSourceState {
         if let Some(item) = self.take_pending_item() {
             return ResolvedDisplaySourceItem::new(Some(item), Vec::new());
         }
-        let resolved =
+        let mut resolved =
             resolve_next_display_source_item(source, params, &mut self.resolve_state, face_ids);
+        self.pending_fringes.extend(resolved.take_pending_fringes());
         if resolved.item().is_none() {
             self.mark_exhausted();
         }
         resolved
+    }
+
+    /// Drain the fringe layouts collected while resolving this source.
+    pub(crate) fn take_pending_fringes(&mut self) -> Vec<crate::display_spec::DisplayFringeLayout> {
+        std::mem::take(&mut self.pending_fringes)
     }
 
     pub(crate) fn resolved_face(&self, face_id: u32) -> Option<&ResolvedFace> {

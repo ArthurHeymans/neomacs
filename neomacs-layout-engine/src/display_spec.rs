@@ -78,6 +78,45 @@ pub(crate) struct DisplayXwidgetLayout {
     pub(crate) height: f32,
 }
 
+/// Which fringe a `(left-fringe …)` / `(right-fringe …)` display spec targets.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayFringeSide {
+    Left,
+    Right,
+}
+
+/// Parsed `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)` display
+/// spec. The bitmap is kept as the raw symbol `Value` (resolved to a registry
+/// index later, where the evaluator is available); FACE is the optional face
+/// symbol the spec requests (a `set-fringe-bitmap-face` override wins over it).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayFringeLayout {
+    pub(crate) bitmap: Value,
+    pub(crate) side: DisplayFringeSide,
+    pub(crate) face: Option<Value>,
+}
+
+/// Parse a `(left-fringe BITMAP [FACE])` / `(right-fringe BITMAP [FACE])` spec.
+/// Returns `None` if the head is not a fringe symbol or BITMAP is missing.
+pub(crate) fn parse_display_fringe_layout(value: &Value) -> Option<DisplayFringeLayout> {
+    if !value.is_cons() {
+        return None;
+    }
+    let side = match value.cons_car().as_symbol_name()? {
+        "left-fringe" => DisplayFringeSide::Left,
+        "right-fringe" => DisplayFringeSide::Right,
+        _ => return None,
+    };
+    let items = list_to_vec(value)?;
+    // items[0] = head, items[1] = BITMAP, items[2] = optional FACE.
+    let bitmap = *items.get(1)?;
+    if bitmap.is_nil() {
+        return None;
+    }
+    let face = items.get(2).copied().filter(|face| !face.is_nil());
+    Some(DisplayFringeLayout { bitmap, side, face })
+}
+
 pub(crate) fn parse_display_image_layout(
     prop_val: &Value,
     default_fg: u32,
@@ -384,6 +423,54 @@ pub(crate) fn display_space_positive_number(value: Value) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_display_fringe_layout_left_with_face() {
+        let _eval = neovm_core::emacs_core::Context::new();
+        let layout = parse_display_fringe_layout(&Value::list(vec![
+            Value::symbol("left-fringe"),
+            Value::symbol("magit-fringe-bitmap>"),
+            Value::symbol("magit-section-heading"),
+        ]))
+        .expect("left fringe layout");
+        assert_eq!(layout.side, DisplayFringeSide::Left);
+        assert!(layout.bitmap.is_symbol_named("magit-fringe-bitmap>"));
+        assert!(
+            layout
+                .face
+                .is_some_and(|f| f.is_symbol_named("magit-section-heading"))
+        );
+    }
+
+    #[test]
+    fn parse_display_fringe_layout_right_without_face() {
+        let _eval = neovm_core::emacs_core::Context::new();
+        let layout = parse_display_fringe_layout(&Value::list(vec![
+            Value::symbol("right-fringe"),
+            Value::symbol("right-arrow"),
+        ]))
+        .expect("right fringe layout");
+        assert_eq!(layout.side, DisplayFringeSide::Right);
+        assert!(layout.bitmap.is_symbol_named("right-arrow"));
+        assert!(layout.face.is_none());
+    }
+
+    #[test]
+    fn parse_display_fringe_layout_rejects_non_fringe_and_missing_bitmap() {
+        let _eval = neovm_core::emacs_core::Context::new();
+        // Not a fringe head.
+        assert!(
+            parse_display_fringe_layout(&Value::list(vec![
+                Value::symbol("space"),
+                Value::keyword(":width"),
+            ]))
+            .is_none()
+        );
+        // Missing BITMAP.
+        assert!(
+            parse_display_fringe_layout(&Value::list(vec![Value::symbol("left-fringe")])).is_none()
+        );
+    }
 
     #[test]
     fn display_space_keys_match_gnu_keyword_domain() {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use neomacs_display_protocol::frame_glyphs::StipplePattern;
+use neomacs_display_protocol::frame_glyphs::{FringeBitmapData, StipplePattern};
 use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
 use neomacs_display_protocol::types::{Color, Rect};
 
@@ -1984,6 +1984,84 @@ impl WgpuRenderer {
                     y + py as f32,
                     run_len as f32,
                     1.0,
+                    fg,
+                );
+            }
+        }
+    }
+
+    /// Render a monochrome fringe bitmap into a window's fringe column.
+    ///
+    /// Reuses the stipple bits-to-quads technique (no texture/atlas): each set
+    /// bit becomes a `scale`-sized foreground quad, with horizontal runs merged.
+    /// `scale` is one logical pixel (`1.0`); the logical→physical projection in
+    /// the rect pipeline then scales it by the device pixel ratio, so arrows are
+    /// full-size on hidpi without any per-bit `* scale_factor`.
+    ///
+    /// Bits are MSB-aligned `u16` (column `b` of row `r` is set when
+    /// `(bits[r] >> (15 - b)) & 1 == 1`). `column_x`/`row_y` are the fringe
+    /// column's top-left in logical (offset-applied) frame coordinates; the
+    /// bitmap is centered horizontally and aligned vertically per `align`
+    /// (0 = center, 1 = top, 2 = bottom).
+    #[allow(clippy::too_many_arguments)]
+    fn render_fringe_bitmap(
+        &self,
+        vertices: &mut Vec<RectVertex>,
+        column_x: f32,
+        row_y: f32,
+        column_width: f32,
+        row_height: f32,
+        fg: &Color,
+        bitmap: &FringeBitmapData,
+    ) {
+        if bitmap.width == 0 || bitmap.height == 0 || bitmap.bits.is_empty() {
+            return;
+        }
+        let scale = 1.0_f32;
+        let bmp_w = bitmap.width as f32 * scale;
+        let bmp_h = bitmap.height as f32 * scale;
+
+        // Horizontal: center the bitmap in the fringe column (GNU left-justifies
+        // standard bitmaps, but centering reads well for magit's narrow arrows
+        // and never clips when width <= column_width).
+        let x_off = ((column_width - bmp_w) * 0.5).max(0.0);
+        // Vertical alignment within the row.
+        let y_off = match bitmap.align {
+            1 => 0.0,                                   // TOP
+            2 => (row_height - bmp_h).max(0.0),         // BOTTOM
+            _ => ((row_height - bmp_h) * 0.5).max(0.0), // CENTER
+        };
+        let origin_x = column_x + x_off;
+        let origin_y = row_y + y_off;
+
+        let width_bits = bitmap.width.min(16) as u32;
+        for (r, row_bits) in bitmap.bits.iter().enumerate() {
+            // Periodic bitmaps repeat their rows; a stored periodic bitmap is
+            // already expanded to its row list, so we only need to clip to the
+            // visible row height here.
+            let py = origin_y + r as f32 * scale;
+            if py >= row_y + row_height {
+                break;
+            }
+            let mut b = 0u32;
+            while b < width_bits {
+                let set = (row_bits >> (15 - b)) & 1 != 0;
+                if !set {
+                    b += 1;
+                    continue;
+                }
+                let run_start = b;
+                b += 1;
+                while b < width_bits && (row_bits >> (15 - b)) & 1 != 0 {
+                    b += 1;
+                }
+                let run_len = (b - run_start) as f32;
+                self.add_rect(
+                    vertices,
+                    origin_x + run_start as f32 * scale,
+                    py,
+                    run_len * scale,
+                    scale,
                     fg,
                 );
             }

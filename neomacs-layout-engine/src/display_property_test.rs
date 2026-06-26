@@ -208,25 +208,37 @@ fn classify_display_property_recognizes_left_and_right_fringe_specs() {
 
     // `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)` are replacement
     // specs that produce no inline output (magit's section-heading fold arrows).
-    assert_eq!(
-        classify_display_property(Value::list(vec![
-            Value::symbol("left-fringe"),
-            Value::symbol("magit-fringe-bitmapv"),
-            Value::symbol("fringe"),
-        ]))
-        .replacement()
-        .cloned(),
-        Some(DisplayReplacementProperty::Fringe)
-    );
-    assert_eq!(
-        classify_display_property(Value::list(vec![
-            Value::symbol("right-fringe"),
-            Value::symbol("right-arrow"),
-        ]))
-        .replacement()
-        .cloned(),
-        Some(DisplayReplacementProperty::Fringe)
-    );
+    // The parsed layout carries the bitmap symbol, side, and optional face.
+    let left = classify_display_property(Value::list(vec![
+        Value::symbol("left-fringe"),
+        Value::symbol("magit-fringe-bitmapv"),
+        Value::symbol("fringe"),
+    ]));
+    match left.replacement() {
+        Some(crate::display_property::DisplayReplacementProperty::Fringe(layout)) => {
+            assert_eq!(layout.side, crate::display_spec::DisplayFringeSide::Left);
+            assert!(layout.bitmap.is_symbol_named("magit-fringe-bitmapv"));
+            assert!(
+                layout
+                    .face
+                    .is_some_and(|face| face.is_symbol_named("fringe"))
+            );
+        }
+        other => panic!("expected left fringe layout, got {other:?}"),
+    }
+
+    let right = classify_display_property(Value::list(vec![
+        Value::symbol("right-fringe"),
+        Value::symbol("right-arrow"),
+    ]));
+    match right.replacement() {
+        Some(crate::display_property::DisplayReplacementProperty::Fringe(layout)) => {
+            assert_eq!(layout.side, crate::display_spec::DisplayFringeSide::Right);
+            assert!(layout.bitmap.is_symbol_named("right-arrow"));
+            assert!(layout.face.is_none(), "no FACE provided");
+        }
+        other => panic!("expected right fringe layout, got {other:?}"),
+    }
 }
 
 #[test]

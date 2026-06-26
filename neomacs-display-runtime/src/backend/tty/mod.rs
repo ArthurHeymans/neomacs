@@ -593,10 +593,12 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                 }
             }
 
-            // Non-text glyphs are not rendered in TTY mode
+            // Non-text glyphs are not rendered in TTY mode. Fringe bitmaps are a
+            // GUI-only feature (the TTY has no fringe pixel column).
             FrameGlyph::Image { .. }
             | FrameGlyph::Video { .. }
             | FrameGlyph::Xwidget { .. }
+            | FrameGlyph::FringeBitmap { .. }
             | FrameGlyph::ScrollBar { .. } => {}
 
             #[cfg(feature = "neo-term")]
@@ -618,6 +620,7 @@ fn glyph_pixel_width(glyph: &FrameGlyph) -> f32 {
         FrameGlyph::Image { width, .. } => *width,
         FrameGlyph::Video { width, .. } => *width,
         FrameGlyph::Xwidget { width, .. } => *width,
+        FrameGlyph::FringeBitmap { width, .. } => *width,
         FrameGlyph::Background { bounds, .. } => bounds.width,
         FrameGlyph::Border { width, .. } => *width,
         FrameGlyph::ScrollBar { width, .. } => *width,

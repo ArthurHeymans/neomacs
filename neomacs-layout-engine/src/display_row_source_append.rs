@@ -468,13 +468,22 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let row_request =
             self.frame
                 .source_append_render_request(position, face_id, self.base_face, kind);
-        state.render_display_item_source_into_current_text_row_and_emit(
+        let outcome = state.render_display_item_source_into_current_text_row_and_emit(
             face_ids,
             source,
             source_state,
             row_request,
             render_policy,
-        )
+        );
+        // Record any fringe specs this source collected (e.g. a magit overlay
+        // before-string carrying `(left-fringe …)`) onto the current output row.
+        // The fallback face is the source's base face (used only when neither a
+        // `set-fringe-bitmap-face` override nor the spec's FACE resolves).
+        let pending_fringes = source_state.take_pending_fringes();
+        for layout in &pending_fringes {
+            state.record_fringe_bitmap_layout(layout, face_ids, face_id);
+        }
+        outcome
     }
 
     #[allow(clippy::too_many_arguments)]
