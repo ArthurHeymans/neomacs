@@ -7931,6 +7931,16 @@ impl Context {
         &self.fringe_bitmaps
     }
 
+    /// Resolve a fringe-bitmap symbol NAME (e.g. `"empty-line"`) to its registry
+    /// index, the way the display pipeline needs when it produces a synthetic
+    /// indicator row (empty-line `~` markers) rather than reacting to an explicit
+    /// `(left-fringe SYM)` display spec. Returns `None` if no bitmap is
+    /// registered under that name.
+    pub fn fringe_bitmap_index_for_name(&self, name: &str) -> Option<u32> {
+        let sym = super::intern::intern(name);
+        self.fringe_bitmaps.index_of(sym)
+    }
+
     /// Seed the 24 GNU standard built-in fringe bitmaps into the registry and
     /// set each bitmap symbol's `'fringe` plist property to its index.
     ///

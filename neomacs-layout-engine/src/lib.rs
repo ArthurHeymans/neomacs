@@ -10,6 +10,7 @@ pub mod bidi;
 pub mod composition;
 pub(crate) mod coords;
 pub(crate) mod display_buffer_display_property_render;
+pub(crate) mod display_buffer_empty_line_fringe;
 pub(crate) mod display_buffer_source_body_render;
 pub(crate) mod display_buffer_source_char_render;
 pub(crate) mod display_buffer_source_consumption;

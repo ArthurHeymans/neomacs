@@ -1,5 +1,6 @@
 //! Buffer source render plan construction and completion.
 
+use crate::display_buffer_empty_line_fringe::EmptyLineFringeFillRequest;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
 use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
@@ -393,6 +394,30 @@ impl BufferSourceOutputSetup {
             render_services.reborrow(),
             &tail_context,
             publish_request,
+        );
+        // GNU's redisplay tail fills the rows below the last buffer line with
+        // blank rows that carry the `empty-line` fringe bitmap when
+        // `indicate-empty-lines` is on (Doom's vi-tilde-fringe `~`). neomacs's
+        // buffer walk stops at ZV, so emit those filler rows here — after the
+        // body is installed (so `walk_setup.row_geometry` reflects the position
+        // below the last buffer row) and before the mode-line chrome row, into
+        // the same window grid. The request guards against over-filling the
+        // mode-line / echo-area boundary (`max_rows` + text-area bottom).
+        EmptyLineFringeFillRequest::new(
+            params,
+            geometry.display_text_row_base,
+            geometry.max_rows,
+            geometry.text_y,
+            geometry.text_height,
+            geometry.char_height,
+            window_metrics.ascent(),
+        )
+        .fill(
+            output.reborrow(),
+            evaluator,
+            render_services.face_resolver(),
+            render_services.face_ids(),
+            &walk_setup.row_geometry,
         );
         render_window_chrome_rows(
             output.reborrow(),

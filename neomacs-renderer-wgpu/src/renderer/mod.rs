@@ -2019,30 +2019,71 @@ impl WgpuRenderer {
         }
         let scale = 1.0_f32;
         let bmp_w = bitmap.width as f32 * scale;
-        let bmp_h = bitmap.height as f32 * scale;
+        let period = bitmap.period as usize;
+        // A periodic bitmap (e.g. `empty-line`, period 3) tiles its `period`-row
+        // motif down the FULL row height — GNU `draw_fringe_bitmap_1` keys the
+        // start row off the row's frame y (`p.dh = p.y % period`) so the dashed
+        // pattern stays on a single global grid across every empty row, then
+        // draws `height - dh` rows clipped to the row.  A non-periodic bitmap is
+        // a fixed-height glyph aligned within the row.
+        let bmp_h = if period > 0 {
+            row_height
+        } else {
+            bitmap.height as f32 * scale
+        };
 
         // Horizontal: center the bitmap in the fringe column (GNU left-justifies
         // standard bitmaps, but centering reads well for magit's narrow arrows
         // and never clips when width <= column_width).
         let x_off = ((column_width - bmp_w) * 0.5).max(0.0);
-        // Vertical alignment within the row.
-        let y_off = match bitmap.align {
-            1 => 0.0,                                   // TOP
-            2 => (row_height - bmp_h).max(0.0),         // BOTTOM
-            _ => ((row_height - bmp_h) * 0.5).max(0.0), // CENTER
+        // Vertical alignment within the row. Periodic bitmaps always tile from
+        // the row top (GNU stores them ALIGN_BITMAP_TOP); the phase below keeps
+        // them aligned to the global grid.
+        let y_off = if period > 0 {
+            0.0
+        } else {
+            match bitmap.align {
+                1 => 0.0,                                   // TOP
+                2 => (row_height - bmp_h).max(0.0),         // BOTTOM
+                _ => ((row_height - bmp_h) * 0.5).max(0.0), // CENTER
+            }
         };
         let origin_x = column_x + x_off;
         let origin_y = row_y + y_off;
 
+        // GNU's per-row phase: `dh = y % period`. We key off the row's logical
+        // frame y so consecutive empty rows continue the same dotted grid.
+        let phase = if period > 0 {
+            (row_y.max(0.0).round() as i64).rem_euclid(period as i64) as usize
+        } else {
+            0
+        };
+
         let width_bits = bitmap.width.min(16) as u32;
-        for (r, row_bits) in bitmap.bits.iter().enumerate() {
-            // Periodic bitmaps repeat their rows; a stored periodic bitmap is
-            // already expanded to its row list, so we only need to clip to the
-            // visible row height here.
-            let py = origin_y + r as f32 * scale;
+        let bitmap_rows = bitmap.bits.len();
+        // Number of device rows to draw: clipped to the row height, and never
+        // past the stored bitmap (a non-periodic bitmap draws its own height).
+        let device_rows = if period > 0 {
+            bmp_h.max(0.0).round() as usize
+        } else {
+            bitmap_rows
+        };
+        for dr in 0..device_rows {
+            let py = origin_y + dr as f32 * scale;
             if py >= row_y + row_height {
                 break;
             }
+            // Which stored bitmap row to sample. Periodic bitmaps wrap modulo
+            // `period`, phase-shifted so the grid is continuous across rows; a
+            // non-periodic bitmap maps device row -> bitmap row 1:1.
+            let bitmap_row = if period > 0 {
+                (phase + dr) % period
+            } else {
+                dr
+            };
+            let Some(&row_bits) = bitmap.bits.get(bitmap_row) else {
+                continue;
+            };
             let mut b = 0u32;
             while b < width_bits {
                 let set = (row_bits >> (15 - b)) & 1 != 0;

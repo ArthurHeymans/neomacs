@@ -10091,6 +10091,160 @@ fn layout_frame_rust_resolves_standard_fringe_bitmap_spec() {
 }
 
 #[test]
+fn layout_frame_rust_fills_empty_line_fringe_below_buffer_end() {
+    // Stage 3/4: a buffer that ends well before the window bottom, with
+    // `indicate-empty-lines` on (Doom's vi-tilde-fringe `~`), produces blank
+    // filler rows below the last buffer line — each carrying the periodic
+    // `empty-line` bitmap in the LEFT fringe. GNU's redisplay tail fills these
+    // (xdisp.c sets `row->indicate_empty_line_p`); before this change neomacs
+    // left bare frame background below the last line.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    // `empty-line` is GNU standard_bitmaps[] index 24, pre-seeded at startup.
+    let empty_line_index: u16 = eval
+        .eval_str("(get 'empty-line 'fringe)")
+        .expect("empty-line fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    assert_eq!(empty_line_index, 24, "empty-line is fringe.c index 24");
+
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // A single short line, so the bulk of the window is below buffer-end.
+        buf.insert("hello\n");
+        buf.set_buffer_local("indicate-empty-lines", Value::T);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+
+    // A tall enough frame that many rows sit below the one buffer line.
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-empty-line-fringe", 640, 400, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+
+    // The real buffer line still renders — the filler rows must NOT overwrite or
+    // double-count the last buffer row (off-by-one guard).
+    let texts = enabled_window_row_texts(entry);
+    assert!(
+        texts.iter().any(|row| row.contains("hello")),
+        "the buffer's own line must still render below the fillers, rows={texts:?}"
+    );
+
+    // Every filler row below the buffer carries the empty-line bitmap in the
+    // LEFT fringe, resolved to the standard registry index.
+    let empty_line_rows: Vec<_> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter_map(|row| row.left_fringe_bitmap)
+        .filter(|info| info.bitmap_index == empty_line_index)
+        .collect();
+    assert!(
+        empty_line_rows.len() >= 5,
+        "expected several empty-line filler rows below the single buffer line, \
+         got {} (rows total = {})",
+        empty_line_rows.len(),
+        entry.matrix.rows.len()
+    );
+
+    // The periodic empty-line bitmap is embedded once per frame for the renderer,
+    // and it carries its period (3) so the renderer tiles the dotted pattern.
+    let bitmap = state
+        .fringe_bitmaps
+        .get(&empty_line_index)
+        .expect("frame embeds the empty-line bitmap data");
+    assert_eq!(bitmap.period, 3, "empty-line is periodic with period 3");
+
+    // The filler rows are blank text rows that end at ZV (not chrome / mode-line).
+    for row in entry.matrix.rows.iter() {
+        if row
+            .left_fringe_bitmap
+            .is_some_and(|info| info.bitmap_index == empty_line_index)
+        {
+            assert!(
+                !row.mode_line,
+                "empty-line filler rows must not be mode-line rows"
+            );
+            assert!(
+                row.glyphs.iter().all(|area| area.is_empty()),
+                "empty-line filler rows must be blank (no glyphs)"
+            );
+        }
+    }
+}
+
+#[test]
+fn layout_frame_rust_omits_empty_line_fringe_when_indicator_off() {
+    // Control: with `indicate-empty-lines` OFF, no filler rows carry the
+    // empty-line bitmap (proves the filler path is gated on the buffer-local).
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let empty_line_index: u16 = eval
+        .eval_str("(get 'empty-line 'fringe)")
+        .expect("empty-line fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("hello\n");
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-empty-line-fringe-off", 640, 400, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    assert!(
+        entry
+            .matrix
+            .rows
+            .iter()
+            .filter_map(|row| row.left_fringe_bitmap)
+            .all(|info| info.bitmap_index != empty_line_index),
+        "no empty-line bitmaps when indicate-empty-lines is off"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
     let mut eval = Context::new();
     let buf_id = eval
