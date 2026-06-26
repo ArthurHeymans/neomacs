@@ -10,10 +10,13 @@ fn parse_options(args: &[&str]) -> FreshBuildOptions {
 }
 
 #[test]
-fn parse_defaults_to_debug_bin_dir() {
-    let options = parse_options(&[]);
-    assert!(!options.release);
-    assert_eq!(options.bin_dir, PathBuf::from("/repo/target/debug"));
+fn parse_without_release_is_rejected() {
+    let result = FreshBuildOptions::parse(PathBuf::from("/repo"), std::iter::empty::<OsString>());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("--release"),
+        "fresh-build without --release must be rejected with a --release hint; got: {err}"
+    );
 }
 
 #[test]
@@ -92,7 +95,7 @@ fn initial_cargo_build_passes_no_features_on_non_linux() {
 
 #[test]
 fn compile_main_uses_final_dumped_emacs() {
-    let options = parse_options(&[]);
+    let options = parse_options(&["--release"]);
     let paths = pipeline_paths(&options);
 
     assert_eq!(compile_main_emacs(&paths), paths.final_bin.as_path());
@@ -101,7 +104,7 @@ fn compile_main_uses_final_dumped_emacs() {
 
 #[test]
 fn gen_lisp_bootstrap_byte_compile_uses_bootstrap_emacs() {
-    let options = parse_options(&[]);
+    let options = parse_options(&["--release"]);
     let paths = pipeline_paths(&options);
 
     assert_eq!(
@@ -1332,7 +1335,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
 
 #[test]
 fn generated_unidata_admin_files_match_gnu_clean_shape() {
-    let options = parse_options(&[]);
+    let options = parse_options(&["--release"]);
     let paths = pipeline_paths(&options);
 
     assert_eq!(

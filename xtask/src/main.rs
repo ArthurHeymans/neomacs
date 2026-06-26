@@ -329,7 +329,17 @@ impl FreshBuildOptions {
             }
         }
 
-        let bin_dir = bin_dir.unwrap_or_else(|| default_bin_dir(&repo_root, release));
+        if !release {
+            return Err(format!(
+                "fresh-build must be used with --release.\n\n\
+                 fresh-build builds the runnable GNU-shaped runtime pipeline \
+                 (cargo build, temacs bootstrap, byte-compilation, pdump) and is a \
+                 release-only operation. Re-run with:\n    cargo xtask fresh-build --release"
+            )
+            .into());
+        }
+
+        let bin_dir = bin_dir.unwrap_or_else(|| default_bin_dir(&repo_root));
 
         Ok(FreshBuildOptions {
             repo_root,
@@ -352,7 +362,7 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn default_bin_dir(repo_root: &Path, release: bool) -> PathBuf {
+fn default_bin_dir(repo_root: &Path) -> PathBuf {
     env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .map(|path| {
@@ -363,7 +373,7 @@ fn default_bin_dir(repo_root: &Path, release: bool) -> PathBuf {
             }
         })
         .unwrap_or_else(|| repo_root.join("target"))
-        .join(if release { "release" } else { "debug" })
+        .join("release")
 }
 
 fn resolve_cli_path(repo_root: &Path, raw: OsString) -> PathBuf {
@@ -3675,7 +3685,9 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] [--bin-dir DIR] [--runtime-root DIR] [--release] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile]
+Usage: cargo xtask [fresh-build] --release [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile]
+
+--release is required: fresh-build produces the runnable runtime binary and is a release-only operation.
 
 Build the GNU-shaped Neomacs runtime pipeline:
   1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]
@@ -3693,7 +3705,7 @@ Build the GNU-shaped Neomacs runtime pipeline:
 Options:
   --bin-dir DIR       Directory containing neomacs and generated role copies
   --runtime-root DIR  Runtime root containing lisp/ and etc/
-  --release           Build neomacs in release mode and use target/release by default
+  --release           (required) Build neomacs in release mode and use target/release by default
   --dry-run           Print planned commands without running them
   --native-comp       Include native-comp-only COMPILE_FIRST entries
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
