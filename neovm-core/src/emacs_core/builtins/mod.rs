@@ -524,6 +524,7 @@ pub(crate) use types::*;
 mod buffers;
 mod file_notify;
 pub(crate) mod fringe_bitmap;
+pub(crate) mod fringe_standard_bitmaps;
 mod gnutls;
 pub(crate) mod higher_order;
 mod hooks;

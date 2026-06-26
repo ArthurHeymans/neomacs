@@ -9996,6 +9996,101 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
 }
 
 #[test]
+fn layout_frame_rust_resolves_standard_fringe_bitmap_spec() {
+    // Foundation Stage 1: an explicit `(left-fringe right-arrow fringe)` display
+    // spec — referencing a GNU STANDARD built-in bitmap (no
+    // `define-fringe-bitmap` call) — now resolves to a real bitmap descriptor.
+    // Before seeding the standard bitmaps, `record_fringe_bitmap_layout` returned
+    // None for `right-arrow` (its index 1..24 slot was empty), so nothing drew.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    // `right-arrow` is GNU standard_bitmaps[] index 4, pre-seeded at startup.
+    let right_arrow_index: u16 = eval
+        .eval_str("(get 'right-arrow 'fringe)")
+        .expect("right-arrow fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    assert_eq!(right_arrow_index, 4, "right-arrow is fringe.c index 4");
+
+    let before_string = eval
+        .eval_str("(propertize \"fringe\" 'display '(left-fringe right-arrow fringe))")
+        .expect("propertize fringe before-string");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Standard:");
+        let bob = 0;
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: bob,
+            end: bob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), before_string);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(bob));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-standard-left-fringe", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    // The literal "fringe" string is suppressed (replacement spec), heading shows.
+    assert!(
+        rows.iter().any(|row| row.contains("Standard:")),
+        "expected heading text to render, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains("fringe")),
+        "expected (left-fringe …) before-string to render nothing inline, rows={rows:?}"
+    );
+
+    // The covered row carries the resolved STANDARD bitmap index (4), proving the
+    // explicit-spec path now works for standard symbols, not just user bitmaps.
+    let fringe_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.left_fringe_bitmap.is_some())
+        .expect("a row carries the left-fringe bitmap");
+    let info = fringe_row.left_fringe_bitmap.expect("left fringe info");
+    assert_eq!(info.bitmap_index, right_arrow_index);
+
+    // The standard bitmap's bits are embedded once per frame for the renderer.
+    assert!(
+        state.fringe_bitmaps.contains_key(&right_arrow_index),
+        "frame display state embeds the standard fringe bitmap data"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
     let mut eval = Context::new();
     let buf_id = eval

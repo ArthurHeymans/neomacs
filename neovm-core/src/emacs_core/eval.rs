@@ -2530,6 +2530,10 @@ impl Context {
         // large (1500+ lines) for reliable codegen in debug mode when
         // combined with init_builtins (1162 defsubr calls in the same frame).
         builtins::init_builtins(&mut ctx);
+        // Seed GNU's 24 standard built-in fringe bitmaps (right-arrow, left-arrow,
+        // continuation/truncation markers, …) and their `'fringe` indices into
+        // the registry, AFTER the obarray is populated by init_builtins.
+        ctx.pre_register_standard_fringe_bitmaps();
         ctx
     }
 
@@ -3581,6 +3585,14 @@ impl Context {
         obarray.set_symbol_value("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.set_symbol_value("global-mode-string", Value::NIL);
+        // Fringe C variable (fringe.c `syms_of_fringe`: `Vfringe_bitmaps = Qnil`).
+        // GNU binds this to nil; `lisp/fringe.el` then guards its standard-bitmap
+        // seeding and `fringe-indicator-alist`/`fringe-cursor-alist` defaults on
+        // `(boundp 'fringe-bitmaps)`, and `push`es each bitmap symbol onto it.
+        // Binding it here lets fringe.el install those defaults in Lisp (GNU's
+        // own path) instead of hardcoding the alists in Rust.
+        obarray.set_symbol_value("fringe-bitmaps", Value::NIL);
+        obarray.make_special("fringe-bitmaps");
         // File loading C variables (lread.c)
         obarray.set_symbol_value("load-in-progress", Value::NIL);
         // Process/daemon C variables (process.c)
@@ -5065,6 +5077,12 @@ impl Context {
             ev.provide_value(Value::symbol("tls"), None)
                 .expect("startup tls provide should succeed");
         }
+
+        // The fringe-bitmap registry is reconstructed empty by `from_dump` (it
+        // is not part of the dump image), so re-seed GNU's standard built-in
+        // bitmaps. The `'fringe` indices may already be set on the dumped
+        // symbols; re-`put`ting the same value is idempotent.
+        ev.pre_register_standard_fringe_bitmaps();
 
         ev.finish_runtime_activation(true);
 
@@ -7911,6 +7929,36 @@ impl Context {
     /// Borrow the fringe-bitmap registry (read-only) for per-frame snapshots.
     pub fn fringe_bitmap_registry(&self) -> &super::builtins::fringe_bitmap::FringeBitmapRegistry {
         &self.fringe_bitmaps
+    }
+
+    /// Seed the 24 GNU standard built-in fringe bitmaps into the registry and
+    /// set each bitmap symbol's `'fringe` plist property to its index.
+    ///
+    /// Mirrors GNU `syms_of_fringe` (which installs `standard_bitmaps[]` and the
+    /// `'fringe` indices). This is the authoritative seed in Rust: it makes the
+    /// standard bitmaps resolvable even in contexts that never load
+    /// `lisp/fringe.el` (e.g. unit-test `Context::new()`), so an explicit
+    /// `(left-fringe right-arrow …)` display spec resolves to a real bitmap. In a
+    /// fully lisp-loaded runtime, fringe.el's `(put SYM 'fringe N)` loop runs too
+    /// (we bind `fringe-bitmaps` so its `(boundp 'fringe-bitmaps)` guard passes)
+    /// and re-puts the SAME indices — idempotent because the orders agree.
+    /// Called from `Context::new` after the obarray is populated.
+    pub(crate) fn pre_register_standard_fringe_bitmaps(&mut self) {
+        let assigned = self.fringe_bitmaps.pre_register_standard_bitmaps();
+        let symbols_with_pos_enabled = self.symbols_with_pos_enabled;
+        let fringe_prop = Value::symbol("fringe");
+        for (sym, index) in assigned {
+            let sym_value = Value::from_sym_id(sym);
+            // Ignore the (unreachable) plist error path: these are freshly
+            // interned symbols with nil plists.
+            let _ = super::builtins::symbols::put_in_obarray_values(
+                &mut self.obarray,
+                sym_value,
+                fringe_prop,
+                Value::fixnum(i64::from(index)),
+                symbols_with_pos_enabled,
+            );
+        }
     }
 
     /// Access the obarray mutably.

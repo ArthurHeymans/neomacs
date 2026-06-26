@@ -6,12 +6,13 @@
 //! standard built-in bitmaps occupy the low indices; user bitmaps defined via
 //! `define-fringe-bitmap` get the next free slot.
 //!
-//! This module models the user-bitmap subset that magit needs (its
+//! This module backs both the user bitmaps that magit needs (its
 //! section-heading fold arrows `magit-fringe-bitmap>` / `magit-fringe-bitmapv`,
-//! applied through a `(left-fringe SYMBOL FACE)` display spec). The 25 standard
-//! built-in bitmaps, periodic bitmaps beyond a single repeat, and the
-//! right-fringe rendering path are deliberately out of scope here but the data
-//! model leaves room for them (see `FringeBitmap::period` / `align`).
+//! applied through a `(left-fringe SYMBOL FACE)` display spec) AND GNU's 24
+//! standard built-in bitmaps, which `pre_register_standard_bitmaps` seeds from
+//! `fringe_standard_bitmaps::STANDARD_FRINGE_BITMAPS` (transcribed verbatim from
+//! `src/fringe.c`). Standard bitmaps take indices `1..=24`; user bitmaps start
+//! at `FIRST_USER_FRINGE_BITMAP_INDEX` (25), above the standard range.
 //!
 //! GC SAFETY: this registry holds **no raw `Value`s** — bits are stored as
 //! `Vec<u16>` and the optional `set-fringe-bitmap-face` override is stored as
@@ -24,10 +25,11 @@ use rustc_hash::FxHashMap;
 use crate::emacs_core::intern::SymId;
 
 /// The index reserved for the first user-defined fringe bitmap. GNU's standard
-/// built-in bitmaps occupy `1..=25` (`MAX_STANDARD_FRINGE_BITMAPS` is 25 in
-/// `src/fringe.c`; slot 0 is `NO_FRINGE_BITMAP`). We do not implement the
-/// standard bitmaps yet, but we leave their index range free so a later change
-/// can drop them in without renumbering user bitmaps.
+/// built-in bitmaps occupy `1..=24` (`MAX_STANDARD_FRINGE_BITMAPS` is 25 in
+/// `src/fringe.c` — the array length, slot 0 being `NO_FRINGE_BITMAP`). Those
+/// standard bitmaps are now seeded by `pre_register_standard_bitmaps`; user
+/// bitmaps from `define-fringe-bitmap` start here, above the standard range, so
+/// they never collide with a standard symbol.
 pub(crate) const FIRST_USER_FRINGE_BITMAP_INDEX: u32 = 25;
 
 /// Vertical alignment of a fringe bitmap relative to the rows it decorates.
@@ -89,6 +91,51 @@ impl FringeBitmapRegistry {
             by_index: FxHashMap::default(),
             next_index: FIRST_USER_FRINGE_BITMAP_INDEX,
         }
+    }
+
+    /// Seed the 24 GNU standard built-in fringe bitmaps (indices 1..=24) into
+    /// the registry, exactly as `src/fringe.c`'s `standard_bitmaps[]` table.
+    ///
+    /// Each entry's symbol name is interned (via the global symbol registry) and
+    /// stored both ways (`SymId -> FringeBitmap` and `index -> SymId`), so
+    /// `index_of(sym)` and `get_by_index(index)` resolve standard symbols just
+    /// like user bitmaps. Bits are MSB-aligned via `parse_bits_rows` (the same
+    /// transform `define-fringe-bitmap` applies).
+    ///
+    /// `next_index` is advanced past the standard range to
+    /// `MAX_STANDARD_FRINGE_BITMAPS` (25), so the first user bitmap defined via
+    /// `define-fringe-bitmap` still gets index 25
+    /// (`FIRST_USER_FRINGE_BITMAP_INDEX`) and never collides with a standard one.
+    ///
+    /// Returns the `(SymId, index)` pairs so the caller can set each symbol's
+    /// `'fringe` plist property to its index (matching `define-fringe-bitmap` and
+    /// `lisp/fringe.el`'s `(put SYM 'fringe N)` loop).
+    pub fn pre_register_standard_bitmaps(&mut self) -> Vec<(SymId, u32)> {
+        use crate::emacs_core::builtins::fringe_standard_bitmaps::{
+            MAX_STANDARD_FRINGE_BITMAPS, STANDARD_FRINGE_BITMAPS,
+        };
+
+        let mut assigned = Vec::with_capacity(STANDARD_FRINGE_BITMAPS.len());
+        for entry in STANDARD_FRINGE_BITMAPS {
+            let sym = crate::emacs_core::intern::intern(entry.name);
+            let bits = parse_bits_rows(entry.rows, entry.width);
+            let bitmap = FringeBitmap {
+                bits,
+                height: entry.height,
+                width: entry.width,
+                period: entry.period,
+                align: entry.align,
+                face: None,
+            };
+            self.user_bitmaps.insert(sym, bitmap);
+            self.by_index.insert(entry.index, sym);
+            assigned.push((sym, entry.index));
+        }
+        // Keep user bitmaps above the standard range. `next_index` may already
+        // have been bumped by an earlier `define-fringe-bitmap` (e.g. in tests
+        // that seed lazily); never lower it below the standard count.
+        self.next_index = self.next_index.max(MAX_STANDARD_FRINGE_BITMAPS);
+        assigned
     }
 
     /// Store (or replace) a bitmap for `sym`, returning the assigned index.
