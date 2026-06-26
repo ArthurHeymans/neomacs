@@ -69,6 +69,33 @@ fn rendered_display_row_content_height(rendered: &RenderedDisplayRow) -> f32 {
     height
 }
 
+/// Compute the row height a `MeasuredDisplayRow` would resolve for the given
+/// rendered row, fallback height, and bounds policy — without consuming the
+/// rendered row. The chrome render uses this to learn a row's real height the
+/// moment it is built (before wrapping it for install), so the bottom-anchored
+/// mode line can be pinned to the window bottom and its measured height reported
+/// as `window-mode-line-height`. Sharing this helper with `MeasuredDisplayRow`
+/// guarantees the reported height equals the height the installed row renders
+/// at.
+pub(crate) fn measured_display_row_height(
+    rendered: &RenderedDisplayRow,
+    fallback_height: f32,
+    bounds_policy: DisplayRowBoundsPolicy,
+) -> f32 {
+    let content_height = stable_pixel_ceil(rendered_display_row_content_height(rendered));
+    let allocated_height = stable_pixel_ceil(
+        fallback_height
+            .max(rendered.row().height_px)
+            .max(rendered.progress().height())
+            .max(content_height),
+    );
+    match bounds_policy {
+        DisplayRowBoundsPolicy::PreserveAllocatedMinimum => allocated_height,
+        DisplayRowBoundsPolicy::MeasureContent => content_height,
+    }
+    .max(1.0)
+}
+
 impl MeasuredDisplayRow {
     pub(crate) fn new(
         owner: DisplayRowOwner,
@@ -77,18 +104,7 @@ impl MeasuredDisplayRow {
         rendered: RenderedDisplayRow,
         bounds_policy: DisplayRowBoundsPolicy,
     ) -> Self {
-        let content_height = stable_pixel_ceil(rendered_display_row_content_height(&rendered));
-        let allocated_height = stable_pixel_ceil(
-            fallback_bounds
-                .height
-                .max(rendered.row().height_px)
-                .max(rendered.progress().height())
-                .max(content_height),
-        );
-        let height = match bounds_policy {
-            DisplayRowBoundsPolicy::PreserveAllocatedMinimum => allocated_height,
-            DisplayRowBoundsPolicy::MeasureContent => content_height,
-        };
+        let height = measured_display_row_height(&rendered, fallback_bounds.height, bounds_policy);
         Self {
             owner,
             row_index,

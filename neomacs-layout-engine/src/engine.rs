@@ -373,6 +373,11 @@ impl LayoutEngine {
         // frames use realized font pixels, terminal frames stay on cell
         // metrics.
 
+        // Reset the per-redisplay mode-line eval counter. Each chrome row is
+        // laid out (and thus its `*-format` evaluated) exactly once per window
+        // per frame; the single-eval invariant test asserts this stays at 1.
+        crate::display_status_line::reset_mode_line_eval_count();
+
         evaluator.sync_runtime_faces_for_frame(frame_id);
 
         let (bootstrap_bg, bootstrap_font_size, window_system) = {

@@ -29,6 +29,7 @@ use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
 pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
 use crate::display_row_measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
+    measured_display_row_height,
 };
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
@@ -50,6 +51,39 @@ use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::window::WindowId;
 use strum::{EnumString, IntoStaticStr};
+
+// Instrumentation: count how many times the mode line is *evaluated* (the
+// expensive `format-mode-line` elisp run, ~4.3ms in a Doom config) per
+// redisplay. GNU `display_mode_line` lays the mode line out exactly once per
+// redisplay, after the window body is laid out (so `%p`/`%l` reflect the final
+// window-start); neomacs matches that — the mode line is evaluated once, in the
+// chrome render after the body, and its *measured* height (not the face-only
+// estimate) is reported as `window-mode-line-height`. This counter proves the
+// single-eval invariant: a measure-then-render two-pass approach increments it
+// to 2, the single layout keeps it at 1. The counter is thread-local because
+// layout runs on the evaluator's thread; `layout_frame_rust` resets it per
+// frame.
+thread_local! {
+    static MODE_LINE_EVAL_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Reset the per-redisplay mode-line eval counter. Called once at the start of
+/// `layout_frame_rust`.
+pub fn reset_mode_line_eval_count() {
+    MODE_LINE_EVAL_COUNT.with(|count| count.set(0));
+}
+
+/// How many times `mode-line-format` has been evaluated for display since the
+/// last `reset_mode_line_eval_count`. Used by the single-eval invariant test.
+pub fn mode_line_eval_count() -> u32 {
+    MODE_LINE_EVAL_COUNT.with(std::cell::Cell::get)
+}
+
+fn record_mode_line_eval(format_symbol: &str) {
+    if format_symbol == "mode-line-format" {
+        MODE_LINE_EVAL_COUNT.with(|count| count.set(count.get() + 1));
+    }
+}
 
 pub(crate) enum FrameTabBarDisplayRowRender {
     Empty,
@@ -527,7 +561,20 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         self.target_columns().columns()
     }
 
-    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, 'face>) {
+    /// Evaluate each chrome row's `*-format` ONCE (after the body, so `%p`/`%l`
+    /// reflect the final window-start) and install the built rows. Returns the
+    /// *measured* row heights — GNU `display_mode_line` returns the laid-out
+    /// row's `glyph_row->height`, which becomes `w->mode_line_height`. The
+    /// caller reports these as `window-mode-line-height` etc. and uses them to
+    /// place the rows below. A tall `display` element (doom-modeline's bar)
+    /// therefore grows the reported height past the face-only estimate, instead
+    /// of being clamped to it. The text-area geometry was already reserved from
+    /// the face estimate (GNU `estimate_mode_line_height`); the mode line is
+    /// pinned to the window bottom, so the measured height is taken from there.
+    pub(crate) fn render(
+        self,
+        state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
+    ) -> WindowChromeMeasuredHeights {
         let params = self.params;
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
@@ -544,6 +591,11 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             &params.tab_stop_list,
         );
         let target_cols = self.target_cols();
+        let mut measured = WindowChromeMeasuredHeights {
+            tab_line_height: self.tab_line_height,
+            header_line_height: self.header_line_height,
+            mode_line_height: self.mode_line_height,
+        };
 
         if params.tab_line_height > 0.0 {
             let tab_line_y = params.bounds.y;
@@ -555,30 +607,36 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| Value::string(""));
-            state.render_display_row(WindowChromeDisplayRowRequest {
-                window_id: params.window_id as u64,
-                kind: WindowChromeKind::TabLine,
-                selected: params.selected,
-                display_row_index: 0,
-                output: ChromeRowOutput::new(0, tab_line_y),
-                bounds: Rect::new(
-                    params.bounds.x,
-                    tab_line_y,
-                    params.bounds.width,
-                    self.tab_line_height,
-                ),
-                metrics: self.metrics,
-                tab_policy: chrome_tab_policy.clone(),
-                base_face: self
-                    .tab_line_face
-                    .expect("tab-line face should exist when tab-line height is positive"),
-                symbol_values: status_line_symbol_values.clone(),
-                text: tab_line_text,
-            });
+            if let Some(height) = state.render_display_row(
+                WindowChromeDisplayRowRequest {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::TabLine,
+                    selected: params.selected,
+                    display_row_index: 0,
+                    output: ChromeRowOutput::new(0, tab_line_y),
+                    bounds: Rect::new(
+                        params.bounds.x,
+                        tab_line_y,
+                        params.bounds.width,
+                        self.tab_line_height,
+                    ),
+                    metrics: self.metrics,
+                    tab_policy: chrome_tab_policy.clone(),
+                    base_face: self
+                        .tab_line_face
+                        .expect("tab-line face should exist when tab-line height is positive"),
+                    symbol_values: status_line_symbol_values.clone(),
+                    text: tab_line_text,
+                },
+                ChromeRowVerticalAnchor::Top,
+            ) {
+                measured.tab_line_height = height;
+            }
         }
 
         if params.header_line_height > 0.0 {
-            let header_line_y = params.bounds.y + self.tab_line_height;
+            // The header line sits directly below the (measured) tab line.
+            let header_line_y = params.bounds.y + measured.tab_line_height;
             let header_line_text = eval_status_line_format_value(
                 state.evaluator,
                 "header-line-format",
@@ -587,30 +645,42 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| Value::string(""));
-            state.render_display_row(WindowChromeDisplayRowRequest {
-                window_id: params.window_id as u64,
-                kind: WindowChromeKind::HeaderLine,
-                selected: params.selected,
-                display_row_index: usize::from(self.tab_line_height > 0.0),
-                output: ChromeRowOutput::new(i64::from(self.tab_line_height > 0.0), header_line_y),
-                bounds: Rect::new(
-                    params.bounds.x,
-                    header_line_y,
-                    params.bounds.width,
-                    self.header_line_height,
-                ),
-                metrics: self.metrics,
-                tab_policy: chrome_tab_policy.clone(),
-                base_face: self
-                    .header_line_face
-                    .expect("header-line face should exist when header-line height is positive"),
-                symbol_values: status_line_symbol_values.clone(),
-                text: header_line_text,
-            });
+            if let Some(height) = state.render_display_row(
+                WindowChromeDisplayRowRequest {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::HeaderLine,
+                    selected: params.selected,
+                    display_row_index: usize::from(self.tab_line_height > 0.0),
+                    output: ChromeRowOutput::new(
+                        i64::from(self.tab_line_height > 0.0),
+                        header_line_y,
+                    ),
+                    bounds: Rect::new(
+                        params.bounds.x,
+                        header_line_y,
+                        params.bounds.width,
+                        self.header_line_height,
+                    ),
+                    metrics: self.metrics,
+                    tab_policy: chrome_tab_policy.clone(),
+                    base_face: self.header_line_face.expect(
+                        "header-line face should exist when header-line height is positive",
+                    ),
+                    symbol_values: status_line_symbol_values.clone(),
+                    text: header_line_text,
+                },
+                ChromeRowVerticalAnchor::Top,
+            ) {
+                measured.header_line_height = height;
+            }
         }
 
         if params.mode_line_height > 0.0 {
-            let mode_line_y = params.bounds.y + params.bounds.height - self.mode_line_height;
+            let window_bottom = params.bounds.y + params.bounds.height;
+            // Provisional Y from the face estimate; `render_and_apply` re-pins
+            // the row to `window_bottom − measured_height` once it knows the
+            // real height.
+            let mode_line_y = window_bottom - self.mode_line_height;
             let mode_line_text = {
                 let result = eval_status_line_format_value(
                     state.evaluator,
@@ -630,28 +700,46 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 );
                 result
             };
-            state.render_display_row(WindowChromeDisplayRowRequest {
-                window_id: params.window_id as u64,
-                kind: WindowChromeKind::ModeLine,
-                selected: params.selected,
-                display_row_index: self.mode_line_display_row,
-                output: ChromeRowOutput::new(self.mode_line_display_row as i64, mode_line_y),
-                bounds: Rect::new(
-                    params.bounds.x,
-                    mode_line_y,
-                    params.bounds.width,
-                    self.mode_line_height,
-                ),
-                metrics: self.metrics,
-                tab_policy: chrome_tab_policy,
-                base_face: self
-                    .mode_line_face
-                    .expect("mode-line face should exist when mode-line height is positive"),
-                symbol_values: status_line_symbol_values,
-                text: mode_line_text,
-            });
+            if let Some(height) = state.render_display_row(
+                WindowChromeDisplayRowRequest {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::ModeLine,
+                    selected: params.selected,
+                    display_row_index: self.mode_line_display_row,
+                    output: ChromeRowOutput::new(self.mode_line_display_row as i64, mode_line_y),
+                    bounds: Rect::new(
+                        params.bounds.x,
+                        mode_line_y,
+                        params.bounds.width,
+                        self.mode_line_height,
+                    ),
+                    metrics: self.metrics,
+                    tab_policy: chrome_tab_policy,
+                    base_face: self
+                        .mode_line_face
+                        .expect("mode-line face should exist when mode-line height is positive"),
+                    symbol_values: status_line_symbol_values,
+                    text: mode_line_text,
+                },
+                ChromeRowVerticalAnchor::Bottom(window_bottom),
+            ) {
+                measured.mode_line_height = height;
+            }
         }
+
+        measured
     }
+}
+
+/// The measured chrome row heights produced by a single chrome-render pass.
+/// These are the laid-out rows' real heights (GNU `glyph_row->height`), which
+/// the window snapshot reports as `window-mode-line-height` / header / tab. A
+/// tall `display` element grows them past the face-only estimate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WindowChromeMeasuredHeights {
+    pub(crate) tab_line_height: f32,
+    pub(crate) header_line_height: f32,
+    pub(crate) mode_line_height: f32,
 }
 
 struct ChromeDisplayRowRenderRequest<'face> {
@@ -709,7 +797,21 @@ struct WindowChromeDisplayRowRenderRequest<'face> {
     row: ChromeDisplayRowRenderRequest<'face>,
 }
 
+/// How a chrome row is anchored vertically once its real (measured) height is
+/// known. Top-anchored rows (tab line, header line) keep the Y they were laid
+/// out at; the bottom-anchored mode line is pinned to the window bottom, so its
+/// top moves up when its measured height exceeds the face-only estimate. This
+/// is the only place the laid-out row's Y is adjusted for the measured height —
+/// GNU pins `display_mode_line`'s row to the bottom of the window the same way.
+#[derive(Clone, Copy)]
+enum ChromeRowVerticalAnchor {
+    Top,
+    /// The window-bottom Y; the row's top is `bottom − measured_height`.
+    Bottom(f32),
+}
+
 impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
+    #[cfg(test)]
     fn render_measured(
         self,
         render_services: &mut ChromeRowRenderServices<'_, 'face>,
@@ -725,26 +827,57 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
         })
     }
 
+    /// Evaluate-and-build the row ONCE, measure its real height, re-anchor it
+    /// (mode line → window bottom), then install + emit. Returns the measured
+    /// row height so the caller can report it as `window-mode-line-height` and
+    /// position any rows below it. The single `format-mode-line` eval already
+    /// happened in `eval_status_line_format_value`; nothing is re-evaluated.
     fn render_and_apply(
         self,
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
-    ) -> Option<MeasuredDisplayRow> {
-        let rendered = self.render_measured(
+        anchor: ChromeRowVerticalAnchor,
+    ) -> Option<f32> {
+        let output = self.output;
+        let rendered = self.row.render_row(
             &mut state.render_services,
             state.evaluator.display_host.as_deref(),
         )?;
-        let progress = rendered.measured.output_progress();
-        state
-            .output
-            .install_measured_window_display_row(&rendered.measured);
+        // Measure the built row's real height (tallest glyph/media, but never
+        // below the reserved face estimate) without consuming it, so we can pin
+        // the bottom-anchored mode line before wrapping it for install.
+        let measured_height = measured_display_row_height(
+            &rendered.rendered,
+            rendered.bounds.height,
+            rendered.bounds_policy,
+        );
+        let final_y = match anchor {
+            ChromeRowVerticalAnchor::Top => rendered.bounds.y,
+            ChromeRowVerticalAnchor::Bottom(window_bottom) => window_bottom - measured_height,
+        };
+        let bounds = Rect::new(
+            rendered.bounds.x,
+            final_y,
+            rendered.bounds.width,
+            measured_height,
+        );
+        let measured = MeasuredDisplayRow::new(
+            rendered.owner,
+            rendered.display_row_index,
+            bounds,
+            rendered.rendered,
+            rendered.bounds_policy,
+        );
+        let progress = measured.output_progress();
+        state.output.install_measured_window_display_row(&measured);
         state.output_emitter.emit_chrome_progress(
             state.evaluator,
-            ChromeRowProgress::new(rendered.output, progress),
+            ChromeRowProgress::new(output.with_y(final_y), progress),
         );
-        Some(rendered.measured)
+        Some(measured.row_height())
     }
 }
 
+#[cfg(test)]
 struct WindowChromeDisplayRowRender {
     output: ChromeRowOutput,
     measured: MeasuredDisplayRow,
@@ -813,10 +946,11 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
     fn render_display_row(
         &mut self,
         request: WindowChromeDisplayRowRequest<'face>,
-    ) -> Option<MeasuredDisplayRow> {
+        anchor: ChromeRowVerticalAnchor,
+    ) -> Option<f32> {
         request
             .into_render_request(self.render_services.face_ids())
-            .render_and_apply(self)
+            .render_and_apply(self, anchor)
     }
 }
 
@@ -921,6 +1055,12 @@ pub(crate) fn eval_status_line_format_value(
     //
     // `target_cols` is the window's width in character cells, which
     // the DISPLAY walker uses to size the dash fill for `%-`.
+    //
+    // Count this eval for the single-eval invariant: each redisplay runs the
+    // mode-line format exactly once (in the chrome render, after the body, so
+    // `%p`/`%l` reflect the final window-start). The reserved/reported height
+    // is the *measured* row height, not a second eval.
+    record_mode_line_eval(format_symbol);
     let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display(
         evaluator,
         format_value,

@@ -9179,6 +9179,112 @@ fn layout_frame_rust_uses_window_mode_line_format_override() {
     );
 }
 
+/// A mode line whose format carries a tall `display` element (here a glyph
+/// with `(display (height 2.0))`, the same shape doom-modeline's bar uses)
+/// must reserve a mode-line height taller than the bare font/char height —
+/// mirroring GNU, where `display_mode_line` returns the laid-out row's max
+/// ascent+descent and that becomes `w->mode_line_height`. Before the fix the
+/// reserved height was a fixed face/char height and clamped the bar short.
+#[test]
+fn layout_frame_rust_grows_mode_line_height_for_tall_display_element() {
+    fn mode_line_height_for(build_format: impl FnOnce() -> Value) -> i64 {
+        let mut eval = Context::new();
+        let buf_id = eval
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        {
+            // Build the format Value after the Context (and its thread heap)
+            // exists so heap-allocated display properties are valid.
+            let format = build_format();
+            let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buf.insert("body line\n");
+            buf.set_buffer_local("mode-line-format", format);
+        }
+        let frame_id =
+            eval.frame_manager_mut()
+                .create_frame("layout-window-mode-line-tall", 640, 160, buf_id);
+        let selected_window = eval
+            .frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .selected_window;
+
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+
+        eval.frame_manager()
+            .get(frame_id)
+            .and_then(|frame| frame.window_display_snapshot(selected_window))
+            .expect("display snapshot")
+            .mode_line_height
+    }
+
+    let plain_height = mode_line_height_for(|| Value::string("MODE"));
+    let tall_height = mode_line_height_for(|| {
+        Value::string_with_text_properties(
+            "MB",
+            vec![StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+                ]),
+            }],
+        )
+    });
+
+    assert!(plain_height > 0, "plain mode line should reserve height");
+    assert!(
+        tall_height > plain_height,
+        "tall display element in the mode line must grow the reserved mode-line height \
+         (tall={tall_height} should exceed plain={plain_height})"
+    );
+}
+
+/// The single-eval invariant: a full `layout_frame_rust` must evaluate
+/// `mode-line-format` exactly ONCE per window with a mode line. The chrome
+/// rows are laid out once up front (their measured height feeds the geometry)
+/// and that same laid-out row is reused at render time — no second
+/// `format-mode-line` run. The expensive elisp (~4.3ms in a Doom config) must
+/// not be doubled on every keystroke.
+///
+/// This test FAILS on the rejected two-pass approach (a separate measure pass
+/// + the render pass each evaluate the format, count == 2) and PASSES on the
+/// single-layout approach (count == 1). The counter is reset at the start of
+/// `layout_frame_rust`, so it reflects exactly this redisplay.
+#[test]
+fn layout_frame_rust_evaluates_mode_line_exactly_once_per_redisplay() {
+    use crate::display_status_line::mode_line_eval_count;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+        buf.set_buffer_local("mode-line-format", Value::string("MODE LINE"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-mode-line-single-eval", 640, 160, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        mode_line_eval_count(),
+        1,
+        "mode-line-format must be evaluated exactly once per redisplay (a two-pass \
+         measure+render approach would make this 2)"
+    );
+}
+
 #[test]
 fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
     let mut eval = Context::new();

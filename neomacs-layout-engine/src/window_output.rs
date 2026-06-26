@@ -6,8 +6,8 @@
 //! handoff.
 
 use super::display_status_line::{
-    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderRequest,
-    WindowChromeRowsRenderState,
+    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeMeasuredHeights,
+    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
@@ -126,6 +126,13 @@ impl ChromeRowOutput {
 
     pub(crate) fn y(self) -> f32 {
         self.y
+    }
+
+    /// Re-anchor this chrome row's Y once its measured height is known (the
+    /// bottom-anchored mode line moves up when it measures taller than the
+    /// reserved estimate).
+    pub(crate) fn with_y(self, y: f32) -> Self {
+        Self { y, ..self }
     }
 }
 
@@ -498,13 +505,13 @@ pub(crate) fn render_window_chrome_rows(
     evaluator: &mut Context,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
-) {
+) -> WindowChromeMeasuredHeights {
     request.render(&mut WindowChromeRowsRenderState::new(
         output,
         output_emitter,
         evaluator,
         render_services,
-    ));
+    ))
 }
 
 pub(crate) fn close_text_window_output(mut output: TextWindowOutputTarget<'_>) {

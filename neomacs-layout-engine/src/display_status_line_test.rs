@@ -103,6 +103,88 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     assert_eq!(render.measured.output_progress().y(), 24.0);
 }
 
+/// A mode-line whose text carries a tall `display` element (here a glyph with
+/// `(display (height 2.0))`, the same shape doom-modeline's bar uses) must
+/// produce a measured row height taller than the bare font/char height — GNU's
+/// `display_mode_line` returns the row's max ascent+descent. The single-layout
+/// fix reserves this measured height for the mode line instead of the fixed
+/// face height, and reuses the same built row at render time.
+#[test]
+fn window_chrome_mode_line_row_grows_for_tall_display_element() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver
+        .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut render_services =
+        ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+
+    // Allocated bounds use a 16px char height (the face estimate).
+    let allocated_height = 16.0_f32;
+
+    // Plain mode line: measured height stays at the allocated/char height.
+    let plain = WindowChromeDisplayRowRequest {
+        window_id: 7,
+        kind: WindowChromeKind::ModeLine,
+        selected: true,
+        display_row_index: 1,
+        output: ChromeRowOutput::new(1, 0.0),
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 240.0, allocated_height),
+        metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, allocated_height, 12.0),
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: &base_face,
+        symbol_values: std::collections::HashMap::new(),
+        text: Value::string("AB"),
+    }
+    .into_render_request(render_services.face_ids())
+    .render_measured(&mut render_services, None)
+    .expect("plain mode-line row should render");
+    assert_eq!(
+        plain.measured.row_height(),
+        allocated_height,
+        "plain mode line stays at the face/char height"
+    );
+
+    // Mode line with a tall display element on the 'B' glyph.
+    let tall_text = Value::string_with_text_properties(
+        "AB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+            ]),
+        }],
+    );
+    let tall = WindowChromeDisplayRowRequest {
+        window_id: 7,
+        kind: WindowChromeKind::ModeLine,
+        selected: true,
+        display_row_index: 1,
+        output: ChromeRowOutput::new(1, 0.0),
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 240.0, allocated_height),
+        metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, allocated_height, 12.0),
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: &base_face,
+        symbol_values: std::collections::HashMap::new(),
+        text: tall_text,
+    }
+    .into_render_request(render_services.face_ids())
+    .render_measured(&mut render_services, None)
+    .expect("tall mode-line row should render");
+
+    assert!(
+        tall.measured.row_height() > allocated_height,
+        "tall display element must grow the mode-line row beyond the face/char height \
+         (got {} <= {})",
+        tall.measured.row_height(),
+        allocated_height
+    );
+}
+
 #[test]
 fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
     let _eval = Context::new();

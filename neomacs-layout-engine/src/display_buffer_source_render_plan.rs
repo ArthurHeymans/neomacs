@@ -320,9 +320,6 @@ impl BufferSourceOutputSetup {
             self.body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
-            chrome_request.mode_line_height,
-            chrome_request.header_line_height,
-            chrome_request.tab_line_height,
         );
         let publish_request = BufferSourceRedisplayPublishRequest::new(
             self.begin_request.frame_id(),
@@ -442,7 +439,12 @@ impl BufferSourceOutputSetup {
         ) {
             arrows.install(output.builder(), &walk_setup.row_flags);
         }
-        render_window_chrome_rows(
+        // GNU `display_mode_line` returns the laid-out row's height into
+        // `w->mode_line_height`; the chrome render likewise hands back the
+        // *measured* chrome heights so the window snapshot reports the real
+        // (possibly taller, e.g. doom-modeline's bar) height rather than the
+        // face-only estimate the text-area geometry was reserved from.
+        let measured_chrome_heights = render_window_chrome_rows(
             output.reborrow(),
             &mut output_emitter,
             evaluator,
@@ -456,6 +458,7 @@ impl BufferSourceOutputSetup {
                 evaluator,
                 std::mem::take(&mut walk_setup.hit_rows),
             ),
+            measured_chrome_heights,
             hit_data,
             display_snapshots,
         );

@@ -11,6 +11,7 @@ use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source_progress::DisplaySourceRowProgressState;
+use crate::display_status_line::WindowChromeMeasuredHeights;
 use crate::display_text_window_row_lifecycle::{
     TextWindowBodyInstallRenderContext, TextWindowBodyInstallRequest, TextWindowFinishRequest,
     TextWindowFinishState, TextWindowTailFinalizeContext, TextWindowTailFinalizeRequest,
@@ -54,9 +55,6 @@ pub(crate) struct BufferSourceTailRequestContext<'a> {
     body_install_context: BufferSourceBodyInstallContext,
     reserve_right_special_col: bool,
     reserve_right_border_col: bool,
-    mode_line_height: f32,
-    header_line_height: f32,
-    tab_line_height: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,9 +149,6 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         body_install_context: BufferSourceBodyInstallContext,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
-        mode_line_height: f32,
-        header_line_height: f32,
-        tab_line_height: f32,
     ) -> Self {
         Self {
             params,
@@ -174,9 +169,6 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
         }
     }
 
@@ -244,25 +236,34 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         )
     }
 
-    pub(crate) fn finish_request(&self) -> TextWindowFinishRequest {
+    pub(crate) fn finish_request(
+        &self,
+        measured_chrome_heights: WindowChromeMeasuredHeights,
+    ) -> TextWindowFinishRequest {
+        // Report the chrome rows' *measured* heights (GNU `w->mode_line_height`)
+        // — a tall `display` element grows these past the face-only estimate the
+        // text-area geometry was reserved from.
         TextWindowFinishRequest::new(
             self.params.window_id,
             self.content_x,
             self.char_width,
             (self.text_area_left - self.params.bounds.x).round() as i64,
-            self.mode_line_height.round() as i64,
-            self.header_line_height.round() as i64,
-            self.tab_line_height.round() as i64,
+            measured_chrome_heights.mode_line_height.round() as i64,
+            measured_chrome_heights.header_line_height.round() as i64,
+            measured_chrome_heights.tab_line_height.round() as i64,
         )
     }
 
     pub(crate) fn finish_and_install(
         &self,
         finish_state: TextWindowFinishState<'_>,
+        measured_chrome_heights: WindowChromeMeasuredHeights,
         hit_data: &mut Vec<WindowHitData>,
         display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
-        let finished_window = self.finish_request().finish_and_snapshot(finish_state);
+        let finished_window = self
+            .finish_request(measured_chrome_heights)
+            .finish_and_snapshot(finish_state);
         let (finished_hit_data, finished_snapshot) = finished_window.into_parts();
         hit_data.push(finished_hit_data);
         display_snapshots.push(finished_snapshot);
