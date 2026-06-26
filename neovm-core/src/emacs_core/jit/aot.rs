@@ -763,6 +763,24 @@ fn collect_baseline_aot_relocs(
                     add(*v, &mut out, &mut seen)?;
                 }
             }
+            // Dynamic variable access — the symbol operand is session-specific
+            // (audit CRITICAL #2). Collect the NORMALIZED plain symbol so the
+            // reloc key matches `materialize_op_sym_id`'s `Value::symbol(sym).bits()`
+            // (a symbol-with-pos const collapses to its underlying symbol — the var
+            // SymId is all the shim needs). Without this the var-symbol wasn't in the
+            // reloc vector at all → the lowering had nothing to load → baked the id.
+            Op::VarRef(idx) | Op::VarSet(idx) | Op::VarBind(idx) => {
+                if let Some(v) = constants.get(*idx as usize) {
+                    let sym = v
+                        .as_symbol_id()
+                        .or_else(|| v.as_symbol_with_pos_sym().and_then(|s| s.as_symbol_id()));
+                    if let Some(id) = sym {
+                        add(Value::symbol(id), &mut out, &mut seen)?;
+                    }
+                    // Non-symbol operand (malformed) → leave to the lowering's
+                    // const_sym_id, which errors the leaf (caller stays JIT).
+                }
+            }
             _ => {}
         }
     }
@@ -1771,6 +1789,212 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     }
 
     super::cache::clear();
+    Ok(())
+}
+
+/// R2-E audit CRITICAL fix: prove the OTHER baseline op-SymId sites — a SYMBOL
+/// `Op::Constant` and the dynamic-variable ops (`VarRef`/`VarSet`/`VarBind`) —
+/// also reloc their session-specific SymId BY NAME, not bake it.
+///
+/// The audit found that the `aot` reloc-awareness reached only the CallBuiltinSym
+/// callee site; symbol consts (gated on `is_heap_object()`, which excludes
+/// symbols) and the var ops (`iconst(sym)`, not even collected) baked the SESSION
+/// SymId under baseline-AOT → silent cross-session corruption (recipe check still
+/// passes). This test exercises both kinds of body END-TO-END through the
+/// baseline serve, with the same decoy-growth + reloc-set-membership rigor as
+/// [`testkit_callbuiltinsym_aot_selftest`].
+///
+/// CRUCIAL — both bodies carry a `CallBuiltinSym` so `mir_is_aot_runnable` is
+/// FALSE → the emit AND load tier-selects BOTH pick the baseline tier (a
+/// VarRef-only body would route MIR-then-error and never reach baseline, so it
+/// could not exercise the fix). Each asserts: the served leaf's `reloc_values()`
+/// contain the symbol/var resolved BY NAME (a baked id would be absent), and the
+/// result matches the interpreter.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::LambdaParams;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled".into());
+    }
+
+    // One test body: the bytecode, its inputs, and the symbol that must be reloc'd
+    // BY NAME. Both bodies carry a CallBuiltinSym so `mir_is_aot_runnable` is FALSE
+    // → the emit AND load tier-selects both pick the baseline tier.
+    struct Body {
+        label: &'static str,
+        ops: Vec<Op>,
+        constants: Vec<Value>,
+        arity: usize,
+        args: Vec<Value>,
+        must_contain: &'static str,
+    }
+
+    // --- Body A: a SYMBOL Op::Constant (audit CRITICAL #1) ---
+    // (lambda (x) (symbol-name 'aot-symconst)) — the quoted symbol const flows
+    // through `lower_simple_op`'s Op::Constant; CallBuiltinSym forces the baseline
+    // tier. symbol-name of the canonical symbol → its name string, == interp.
+    let body_a = {
+        let symconst = Value::symbol(crate::emacs_core::intern::intern("aot-symconst"));
+        let symbol_name = crate::emacs_core::intern::intern("symbol-name");
+        Body {
+            label: "symbol-const",
+            ops: vec![
+                Op::Constant(0),
+                Op::CallBuiltinSym(symbol_name, 1),
+                Op::Return,
+            ],
+            constants: vec![symconst],
+            arity: 1,
+            args: vec![Value::NIL],
+            must_contain: "aot-symconst",
+        }
+    };
+    // --- Body B: VarBind + VarSet + VarRef on a dynamic variable (CRITICAL #2) ---
+    // (lambda () (let ((aot-dynvar 1)) (setq aot-dynvar 42) (identity aot-dynvar)))
+    // VarBind binds, VarSet assigns, VarRef reads the SAME var-symbol (constants[0]);
+    // CallBuiltinSym(identity) forces the baseline tier + returns the read value 42.
+    let body_b = {
+        let dynvar = Value::symbol(crate::emacs_core::intern::intern("aot-dynvar"));
+        let identity = crate::emacs_core::intern::intern("identity");
+        Body {
+            label: "varbind/set/ref",
+            ops: vec![
+                Op::Constant(1),                 // 1
+                Op::VarBind(0),                  // bind aot-dynvar = 1
+                Op::Constant(2),                 // 42
+                Op::VarSet(0),                   // aot-dynvar = 42
+                Op::VarRef(0),                   // read aot-dynvar -> 42
+                Op::CallBuiltinSym(identity, 1), // (identity 42) -> 42 [forces baseline]
+                Op::Unbind(1),                   // pop the dynamic binding
+                Op::Return,
+            ],
+            constants: vec![dynvar, Value::make_int(1), Value::make_int(42)],
+            arity: 0,
+            args: vec![],
+            must_contain: "aot-dynvar",
+        }
+    };
+    let bodies = [body_a, body_b];
+
+    // PASS 1 — emit + place ALL `.so`s BEFORE any serve. The unit index is a
+    // process-wide `OnceLock` frozen on the FIRST `load_unit`, so a body whose
+    // `.so` is placed after the first serve would be invisible (the #32-audit
+    // "G-serves-from-JIT" gotcha). Emit-all-first guarantees both are indexed.
+    for b in &bodies {
+        // Must route through the BASELINE tier (not MIR) for the fix to be tested.
+        if let Ok(m) = mir::build_mir(&b.ops, &b.constants, b.arity)
+            && mir_is_aot_runnable(&m)
+        {
+            return Err(format!(
+                "{}: body is MIR-AOT-runnable → would not exercise the BASELINE op-SymId site",
+                b.label
+            ));
+        }
+        // The session-specific symbol MUST be in the reloc recipe BY NAME (a baked
+        // id would not be collected at all).
+        let (reloc_data, _idx, recipe) = prepare_baseline_relocs(&b.ops, &b.constants)
+            .ok_or(format!("{}: baseline relocs None (symbol not recipe-able?)", b.label))?;
+        if reloc_data.is_empty() {
+            return Err(format!(
+                "{}: NO reloc consts — the op-SymId was BAKED, not collected by name",
+                b.label
+            ));
+        }
+        if !recipe
+            .windows(b.must_contain.len())
+            .any(|w| w == b.must_contain.as_bytes())
+        {
+            return Err(format!(
+                "{}: reloc recipe does not encode '{}' by name",
+                b.label, b.must_contain
+            ));
+        }
+        testkit_emit_baseline_and_place_so(&b.ops, &b.constants, b.arity, dir)
+            .ok_or(format!("{}: baseline AOT emit/place failed", b.label))?;
+    }
+
+    // Cross-session drift: grow the intern table AFTER all emits so a baked
+    // emit-time SymId would now be stale relative to a fresh rebuild (audit #16).
+    for i in 0..64 {
+        let _ = crate::emacs_core::intern::intern(&format!("aot-opsym-decoy-{i}"));
+    }
+
+    // PASS 2 — serve + verify each body (the index is now frozen with both `.so`s).
+    for b in &bodies {
+        let mk_fn = || {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: (0..b.arity).map(|i| SymId(1 + i as u32)).collect(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = b.ops.clone();
+            f.constants = b.constants.clone();
+            f.max_stack = 16;
+            f
+        };
+
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context;
+        let f = mk_fn();
+        let f_val = Value::make_bytecode(f.clone());
+        let aot = super::cache::try_run_compiled(ctx, &f, f_val, &b.args)
+            .map_err(|_| format!("{}: aot run raised", b.label))?
+            .ok_or(format!("{}: aot run returned None (reloc/tier mismatch?)", b.label))?;
+        if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+            return Err(format!("{}: not served AOT-backed", b.label));
+        }
+        // Result must equal the interpreter (a wrong/stale baked id would diverge).
+        let interp = {
+            let g = mk_fn();
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&g, b.args.clone())
+                .map_err(|_| format!("{}: interp raised", b.label))?
+        };
+        // `equal` (content), not `eql` (identity): a String result from
+        // `symbol-name` is a distinct allocation per call, so an identity compare
+        // would falsely fail even though the names match. `equal_value` is also
+        // correct for fixnum/float/bignum results.
+        if !crate::emacs_core::value::equal_value(&Value::from_bits(aot), &interp, 0) {
+            return Err(format!(
+                "{}: AOT {:?} != interp {:?}",
+                b.label,
+                Value::from_bits(aot),
+                interp
+            ));
+        }
+
+        // RELOC-SET PROOF: load the leaf + assert the symbol is in its reloc set,
+        // resolved BY NAME to `must_contain` (the CURRENT canonical symbol — the
+        // intern table was grown above). A BAKED id would NOT appear.
+        let content_hash = leaf_content_hash(&b.ops, &b.constants, b.arity)
+            .ok_or(format!("{}: hash None", b.label))?;
+        let unit = load_unit(content_hash).ok_or(format!("{}: unit not found", b.label))?;
+        let live_reloc = collect_baseline_aot_relocs(&b.ops, &b.constants)
+            .ok_or(format!("{}: baseline relocs None at load", b.label))?
+            .0;
+        let leaf = load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc)
+            .ok_or(format!("{}: load_leaf_from_unit None (reloc/recipe mismatch?)", b.label))?;
+        let reloc_names: std::collections::HashSet<String> = leaf
+            .reloc_values()
+            .iter()
+            .filter_map(|v| v.as_symbol_id())
+            .map(|id| crate::emacs_core::intern::resolve_sym(id).to_string())
+            .collect();
+        if !reloc_names.contains(b.must_contain) {
+            return Err(format!(
+                "{}: '{}' NOT in the leaf's reloc set (op-SymId was BAKED) — reloc names: {reloc_names:?}",
+                b.label, b.must_contain
+            ));
+        }
+        super::cache::clear();
+    }
+
     Ok(())
 }
 

@@ -83,3 +83,29 @@ fn aot_baseline_callbuiltinsym_relocs_callee_by_name_and_matches_interp() {
         panic!("CallBuiltinSym AOT self-test failed: {e}");
     }
 }
+
+/// R2-E audit CRITICAL fix: the OTHER baseline op-SymId sites — a SYMBOL
+/// `Op::Constant` and the dynamic-var ops `VarRef`/`VarSet`/`VarBind` — also
+/// reloc their session-specific SymId BY NAME (not bake it). Two baseline bodies
+/// (each forced to the baseline tier by a co-occurring `CallBuiltinSym`): the
+/// quoted-symbol-const body and the var-bind/set/ref body. Each asserts the
+/// served leaf's reloc set contains the symbol/var by name (decoy-grown intern
+/// table = cross-session drift) + result == interp. Integration test: the var +
+/// builtin shims need this shim-exporting binary.
+#[test]
+fn aot_baseline_symbol_const_and_var_ops_reloc_sym_by_name() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded setup before any AOT entry point reads these.
+    unsafe {
+        std::env::set_var("NEOVM_AOT", "force");
+        std::env::set_var("NEOVM_AOT_DIR", dir.path());
+    }
+    let r = neovm_core::emacs_core::jit::aot::testkit_baseline_op_symbol_reloc_selftest(dir.path());
+    unsafe {
+        std::env::remove_var("NEOVM_AOT");
+        std::env::remove_var("NEOVM_AOT_DIR");
+    }
+    if let Err(e) = r {
+        panic!("baseline op-SymId reloc self-test failed: {e}");
+    }
+}

@@ -2051,6 +2051,35 @@ fn const_sym_id(constants: &[Value], idx: u16) -> Result<u32, CompileError> {
         .ok_or(CompileError::BadOperand)
 }
 
+/// Materialize a session-specific op-operand SymId as a Cranelift `i64`.
+///
+/// The JIT bakes `iconst(sym)` (valid same-session). AOT must RELOC it BY NAME:
+/// the normalized `Value::symbol(sym)` is collected into the per-leaf reloc
+/// vector (`collect_baseline_aot_relocs`), so its tagged bits are loaded from
+/// `reloc_base[idx]` and the SymId recovered via `bits >> TAG_BITS`
+/// (TAG_SYMBOL == 0b000). Keyed on `reloc_index` PRESENCE: the JIT reloc set
+/// never holds op-symbols, so JIT always bakes → byte-identical. Mirrors the
+/// CallBuiltinSym callee site (audit CRITICAL #2: VarRef/VarSet/VarBind baked a
+/// session SymId here).
+fn materialize_op_sym_id(
+    fb: &mut FunctionBuilder,
+    reloc_base: Option<ClifValue>,
+    reloc_index: &std::collections::HashMap<usize, u32>,
+    sym: u32,
+) -> ClifValue {
+    let key = (sym as usize) << TAG_BITS | TAG_SYMBOL;
+    match reloc_index.get(&key) {
+        Some(&idx) => {
+            let base = reloc_base.expect("reloc_base set when an op-symbol is reloc'd");
+            let sym_bits = fb
+                .ins()
+                .load(types::I64, MemFlags::trusted(), base, (idx * 8) as i32);
+            fb.ins().ushr_imm(sym_bits, TAG_BITS as i64)
+        }
+        None => fb.ins().iconst(types::I64, sym as i64),
+    }
+}
+
 /// True iff this function's parameters are pushed onto the operand stack at
 /// entry (so the body's `StackRef` opcodes reach them) — mirrors the
 /// interpreter's `params_on_stack` in `vm.rs` `run_frame`. Dynamic-binding
@@ -4434,15 +4463,24 @@ fn lower_simple_op(
             let v = constants
                 .get(*idx as usize)
                 .ok_or(CompileError::BadOperand)?;
-            let cv = if v.is_heap_object() {
-                // Heap object: load from the per-leaf reloc vector (R1a) — never bake
-                // a heap pointer, so the code is GC-pointer-free + AOT-portable.
+            // Reloc-load when this const's bits are in the per-leaf reloc vector,
+            // else bake. Keyed on `reloc_index` PRESENCE (not `is_heap_object`):
+            //  - heap objects are ALWAYS collected (both JIT + AOT) → present → load
+            //    (never bake a heap pointer; GC-pointer-free + AOT-portable, R1a);
+            //  - a non-nil/t SYMBOL const is collected ONLY under AOT
+            //    (collect_baseline_aot_relocs, const_relocs_for_aot) → present under
+            //    AOT → loads its session-stable reloc; absent under JIT → bakes. This
+            //    closes the audit CRITICAL #1: a quoted/arg symbol const took the
+            //    iconst else-branch and baked its SESSION SymId (silent cross-session
+            //    corruption). JIT stays byte-identical (its reloc_index never holds an
+            //    op-symbol), exactly as the CallBuiltinSym site below.
+            let cv = if reloc_index.contains_key(&v.bits()) {
                 let i = reloc_index[&v.bits()];
-                let base = reloc_base.expect("reloc_base set when the body has heap consts");
+                let base = reloc_base.expect("reloc_base set when a const is reloc'd");
                 fb.ins()
                     .load(types::I64, MemFlags::trusted(), base, (i * 8) as i32)
             } else {
-                // Fixnum / nil / t / char (immediate): no heap pointer, bake the bits.
+                // Fixnum / nil / t / char (immediate, session-stable): bake the bits.
                 fb.ins().iconst(types::I64, v.bits() as i64)
             };
             stack.push(cv);
@@ -4749,7 +4787,7 @@ fn lower_simple_op(
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
-            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
             let call = fb.ins().call(rt.refs.varref, &[vmctx, sym_v, out_addr]);
             let status = fb.inst_results(call)[0];
@@ -4782,7 +4820,7 @@ fn lower_simple_op(
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
-            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
             let call = fb.ins().call(rt.refs.varset, &[vmctx, sym_v, val]);
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
@@ -4899,7 +4937,7 @@ fn lower_simple_op(
             let sym = const_sym_id(constants, *idx)?;
             let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let vmctx = fb.use_var(rt.vmctx_var);
-            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
             // The shim runs variable watchers (arbitrary lisp -> GC). `val` is
             // rooted by `specbind` inside the shim, but the remaining operand
             // stack lives only in Cranelift registers — root it across the call
