@@ -36,3 +36,50 @@ fn aot_call_bearing_deopt_across_call_side_effect_once_and_eq() {
         panic!("call-bearing AOT self-test failed: {e}");
     }
 }
+
+/// R2-E E1a: a BASELINE-tier AOT leaf (build_leaf_fn::<ObjectModule>(aot=true))
+/// emits + serves AOT==interp, INCLUDING a FORCED fixnum→bignum overflow deopt —
+/// the genuinely-new baseline-deopt-resume-via-sidecar path (must-nail #1).
+/// Integration test because a baseline `.so` may import shims (this body is
+/// builtin-free, but the binary's shim export is the safe place to exercise it).
+#[test]
+fn aot_baseline_tier_emit_serve_and_forced_deopt_match_interp() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded setup before any AOT entry point reads these
+    // (nextest isolates each test in its own process → no OnceLock cross-talk).
+    unsafe {
+        std::env::set_var("NEOVM_AOT", "force");
+        std::env::set_var("NEOVM_AOT_DIR", dir.path());
+    }
+    let r = neovm_core::emacs_core::jit::aot::testkit_baseline_aot_selftest(dir.path());
+    unsafe {
+        std::env::remove_var("NEOVM_AOT");
+        std::env::remove_var("NEOVM_AOT_DIR");
+    }
+    if let Err(e) = r {
+        panic!("baseline-tier AOT self-test failed: {e}");
+    }
+}
+
+/// R2-E E1b (must-nail #2): a baseline-tier AOT leaf calling a builtin via
+/// `Op::CallBuiltinSym` serves AOT==interp, with the callee SymId reloc'd BY NAME
+/// (recipe encodes the name; served result correct) — the cross-session-correct
+/// op-SymId reloc. Integration test: CallBuiltinSym lowers to the
+/// `neovm_jit_named_builtin` shim, which needs this shim-exporting binary.
+#[test]
+fn aot_baseline_callbuiltinsym_relocs_callee_by_name_and_matches_interp() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded setup before any AOT entry point reads these.
+    unsafe {
+        std::env::set_var("NEOVM_AOT", "force");
+        std::env::set_var("NEOVM_AOT_DIR", dir.path());
+    }
+    let r = neovm_core::emacs_core::jit::aot::testkit_callbuiltinsym_aot_selftest(dir.path());
+    unsafe {
+        std::env::remove_var("NEOVM_AOT");
+        std::env::remove_var("NEOVM_AOT_DIR");
+    }
+    if let Err(e) = r {
+        panic!("CallBuiltinSym AOT self-test failed: {e}");
+    }
+}

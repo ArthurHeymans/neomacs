@@ -72,7 +72,8 @@ use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{Value, ValueKind};
 use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
-    FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING, TAG_SYMBOL,
+    FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_BITS, TAG_CONS, TAG_MASK, TAG_STRING,
+    TAG_SYMBOL,
 };
 
 // ---------------------------------------------------------------------------
@@ -5032,7 +5033,26 @@ fn lower_simple_op(
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let variant_v = fb.ins().iconst(types::I64, variant);
-            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            // R2-E (must-nail #2): the named-builtin callee SymId is session-specific.
+            // The JIT bakes it (`iconst(sym)`); AOT must RELOC it BY NAME — the op's
+            // symbol Value was collected into the per-leaf reloc vector, so load its
+            // bits from reloc_base[idx] and recover the SymId (`bits >> TAG_BITS`,
+            // TAG_SYMBOL==0). Keyed on `reloc_index` presence: the JIT reloc set never
+            // contains op-symbols (only heap consts), so JIT always bakes → byte-
+            // identical. `Aset` (variant 2, sym==0) has no symbol → unchanged iconst.
+            let sym_v = match reloc_index
+                .get(&((sym as usize) << TAG_BITS | TAG_SYMBOL))
+                .filter(|_| variant != 2)
+            {
+                Some(&idx) => {
+                    let base = reloc_base.expect("reloc_base set when an op-symbol is reloc'd");
+                    let sym_bits =
+                        fb.ins()
+                            .load(types::I64, MemFlags::trusted(), base, (idx * 8) as i32);
+                    fb.ins().ushr_imm(sym_bits, TAG_BITS as i64)
+                }
+                None => fb.ins().iconst(types::I64, sym as i64),
+            };
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let n_val = fb.ins().iconst(types::I64, nargs as i64);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
@@ -6075,6 +6095,69 @@ fn emit_backedge_jump(
 
 /// Lower a leaf bytecode body taking `arity` fixed arguments to native code.
 ///
+/// Whether the body has a BACKWARD jump (a loop) — needs the back-edge poll
+/// (GC safepoint + quit), mirroring the interpreter's `branch_to!` wrap. Switch
+/// targets count: a jump-table edge can also close a loop. Single source of truth
+/// for both the JIT (`lower_leaf_full`) and the baseline-AOT emit (R2-E).
+pub(crate) fn baseline_has_backedge(ops: &[Op], cfg: &Cfg) -> bool {
+    ops.iter().enumerate().any(|(i, o)| match o {
+        Op::Goto(t)
+        | Op::GotoIfNil(t)
+        | Op::GotoIfNotNil(t)
+        | Op::GotoIfNilElsePop(t)
+        | Op::GotoIfNotNilElsePop(t) => (*t as usize) <= i,
+        _ => false,
+    }) || cfg
+        .switch_targets
+        .iter()
+        .any(|(i, ts)| ts.iter().any(|&(_, t)| t <= *i))
+}
+
+/// Whether the body re-enters the runtime (needs vmctx + the `neovm_jit_*` shim
+/// scaffolding): a back-edge polls through vmctx; Eq/Symbolp use the
+/// symbols-with-pos slow path; VarRef/VarSet/VarBind/Unbind hit the variable
+/// machinery; Call/Apply/named-builtins/handlers re-enter elisp. Single source of
+/// truth for both the JIT and the baseline-AOT emit (R2-E).
+pub(crate) fn baseline_needs_rt(ops: &[Op], has_backedge: bool) -> bool {
+    has_backedge
+        || ops.iter().any(|o| {
+            direct_builtin_spec(o).is_some()
+                || slice_builtin_spec(o).is_some()
+                || matches!(
+                    o,
+                    Op::List(_)
+                        | Op::CallBuiltin(..)
+                        | Op::CallBuiltinSym(..)
+                        | Op::Aset
+                        | Op::SaveWindowExcursion
+                )
+                || matches!(
+                    o,
+                    Op::Cons
+                        | Op::Call(_)
+                        | Op::Apply(_)
+                        | Op::Eq
+                        | Op::Symbolp
+                        | Op::VarRef(_)
+                        | Op::VarSet(_)
+                        | Op::VarBind(_)
+                        | Op::Unbind(_)
+                        | Op::SaveCurrentBuffer
+                        | Op::SaveExcursion
+                        | Op::SaveRestriction
+                        | Op::UnwindProtectPop
+                        | Op::Throw
+                        | Op::Integerp
+                        | Op::Numberp
+                        | Op::PushConditionCase(_)
+                        | Op::PushConditionCaseRaw(_)
+                        | Op::PushCatch(_)
+                        | Op::PopHandler
+                        | Op::Switch
+                )
+        })
+}
+
 /// Handles arbitrary intra-function control flow (`Goto`/`GotoIf*`) by building a
 /// CLIF basic-block CFG: each bytecode basic block becomes a CLIF block, and the
 /// operand stack flows across edges through per-slot SSA variables (Cranelift
@@ -6249,60 +6332,10 @@ pub fn lower_leaf_full(
     );
     builder.symbol("neovm_jit_call_spec", neovm_jit_call_spec as *const u8);
     let mut module = JITModule::new(builder);
-    // Backward jumps need the back-edge service poll (GC safepoint + quit),
-    // mirroring the interpreter's branch_to! wrap path. Switch targets count:
-    // a jump-table edge can also close a loop.
-    let has_backedge = ops.iter().enumerate().any(|(i, o)| match o {
-        Op::Goto(t)
-        | Op::GotoIfNil(t)
-        | Op::GotoIfNotNil(t)
-        | Op::GotoIfNilElsePop(t)
-        | Op::GotoIfNotNilElsePop(t) => (*t as usize) <= i,
-        _ => false,
-    }) || cfg
-        .switch_targets
-        .iter()
-        .any(|(i, ts)| ts.iter().any(|&(_, t)| t <= *i));
-    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
-    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery;
-    // back-edges poll through vmctx.
-    let needs_rt = has_backedge
-        || ops.iter().any(|o| {
-            direct_builtin_spec(o).is_some()
-                || slice_builtin_spec(o).is_some()
-                || matches!(
-                    o,
-                    Op::List(_)
-                        | Op::CallBuiltin(..)
-                        | Op::CallBuiltinSym(..)
-                        | Op::Aset
-                        | Op::SaveWindowExcursion
-                )
-                || matches!(
-                    o,
-                    Op::Cons
-                        | Op::Call(_)
-                        | Op::Apply(_)
-                        | Op::Eq
-                        | Op::Symbolp
-                        | Op::VarRef(_)
-                        | Op::VarSet(_)
-                        | Op::VarBind(_)
-                        | Op::Unbind(_)
-                        | Op::SaveCurrentBuffer
-                        | Op::SaveExcursion
-                        | Op::SaveRestriction
-                        | Op::UnwindProtectPop
-                        | Op::Throw
-                        | Op::Integerp
-                        | Op::Numberp
-                        | Op::PushConditionCase(_)
-                        | Op::PushConditionCaseRaw(_)
-                        | Op::PushCatch(_)
-                        | Op::PopHandler
-                        | Op::Switch
-                )
-        });
+    // has_backedge + needs_rt via the shared single-source helpers (R2-E) — same
+    // logic as before, just factored so the baseline-AOT emit can reuse it.
+    let has_backedge = baseline_has_backedge(ops, &cfg);
+    let needs_rt = baseline_needs_rt(ops, has_backedge);
 
     // Build + define the leaf into the module via the module-generic seam
     // (`build_leaf_fn`). Buffers (`spec_slots`/`deopt_*`/`reloc_data`) are owned
@@ -6324,6 +6357,9 @@ pub fn lower_leaf_full(
         &reloc_index,
         has_backedge,
         needs_rt,
+        /*aot=*/ false,
+        "__neovm_jit_leaf",
+        Linkage::Local,
     )?;
 
     // --- JIT-only module epilogue (the wrapper). ----------------------------
@@ -6373,6 +6409,104 @@ pub fn lower_leaf_full(
     })
 }
 
+/// R2-E: the BASELINE-tier metadata an AOT leaf's descriptor needs (the loader
+/// sizes the per-thread deopt buffers + records the frame shape from this).
+pub(crate) struct BaselineAotMeta {
+    pub arity: usize,
+    /// `cfg.max_depth` — the deopt operand-stack spill size.
+    pub max_depth: usize,
+    /// VarBind/Unbind/save-* present (the loader's `has_binds`).
+    pub has_binds: bool,
+    /// condition-case/catch handlers present.
+    pub has_handlers: bool,
+}
+
+/// R2-E (baseline-tier AOT emit): lower a bytecode body through the BASELINE tier
+/// into `module` as an AOT object entry (`build_leaf_fn::<M>(aot=true)`), for
+/// bodies the MIR tier rejects (Switch/Throw/handlers/CallBuiltin(Sym)/VarRef...).
+///
+/// Replicates [`lower_leaf_full`]'s analysis prologue but: (1) D0 — `obarray=None`
+/// so `spec_sites` is EMPTY (no speculation, no per-spec-slot baked state — the
+/// deopt then fits the sidecar's existing bases); (2) the reloc set is the
+/// caller's (covering const-relocs + the named-builtin op-symbols, #16/#17), with
+/// the index keyed by tagged bits; (3) `aot=true` so reloc/deopt bases load from
+/// the sidecar; (4) the entry is `Linkage::Export` under `entry_name` for the
+/// loader to `dlsym`. The deopt buffers are sized-but-unbaked (AOT reads bases
+/// from the sidecar, not these addresses) — throwaway here.
+///
+/// Returns the [`BaselineAotMeta`] for the descriptor.
+pub(crate) fn build_baseline_leaf_object<M: Module>(
+    module: &mut M,
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    reloc_data: &[Value],
+    reloc_index: &std::collections::HashMap<usize, u32>,
+    entry_name: &str,
+) -> Result<BaselineAotMeta, CompileError> {
+    let cfg = analyze_cfg(ops, constants, None, arity)?;
+    let known_fixnum_slots = compute_known_fixnum_slots(ops, constants, &cfg);
+    let n = ops.len();
+    // D0: no obarray → empty speculation (no spec-slot baked pointers, so the
+    // baseline deopt fits the existing sidecar fields — see materialize_deopt_refs).
+    let spec_sites: HashMap<usize, SpecSite> = HashMap::new();
+    let spec_slots: Box<[SpecSlot]> = Box::from([]);
+    let has_backedge = baseline_has_backedge(ops, &cfg);
+    let needs_rt = baseline_needs_rt(ops, has_backedge);
+    // Sized-but-unbaked deopt buffers: in AOT mode build_leaf_fn loads the spill +
+    // meta bases from the SIDECAR (not these addresses), so these are throwaway
+    // (the per-thread real buffers are allocated by the loader from the descriptor).
+    let deopt_spill: Box<[core::cell::Cell<i64>]> =
+        (0..cfg.max_depth).map(|_| core::cell::Cell::new(0)).collect();
+    let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
+        pc: core::cell::Cell::new(0),
+        depth: core::cell::Cell::new(0),
+        handlers: core::cell::Cell::new(0),
+    });
+    let max_depth = cfg.max_depth;
+    build_leaf_fn(
+        module,
+        ops,
+        constants,
+        arity,
+        &cfg,
+        &known_fixnum_slots,
+        &spec_sites,
+        &spec_slots,
+        n,
+        &deopt_spill,
+        &deopt_meta,
+        reloc_data,
+        reloc_index,
+        has_backedge,
+        needs_rt,
+        /*aot=*/ true,
+        entry_name,
+        Linkage::Export,
+    )?;
+    Ok(BaselineAotMeta {
+        arity,
+        max_depth,
+        has_binds: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::VarBind(_)
+                    | Op::Unbind(_)
+                    | Op::SaveCurrentBuffer
+                    | Op::SaveExcursion
+                    | Op::SaveRestriction
+                    | Op::UnwindProtectPop
+            )
+        }),
+        has_handlers: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
+            )
+        }),
+    })
+}
+
 /// Module-generic build seam for [`lower_leaf_full`]: sets up the leaf ABI
 /// signature, lowers the bytecode `ops` through a `FunctionBuilder`, then
 /// declares + defines the function into `module`, returning its `FuncId`. CLIF
@@ -6406,6 +6540,15 @@ fn build_leaf_fn<M: Module>(
     reloc_index: &std::collections::HashMap<usize, u32>,
     has_backedge: bool,
     needs_rt: bool,
+    // R2-E (baseline-tier AOT): false → JIT (bases baked as `iconst`, byte-identical
+    // to before); true → AOT (reloc-base + deopt bases loaded from the per-thread
+    // `LeafSidecar` 4th entry arg, since the addresses are session-specific). Mirrors
+    // `build_mir_leaf_fn`'s `aot` flag. Same RESULTS either way.
+    aot: bool,
+    // The exported entry symbol + its linkage. JIT: `("__neovm_jit_leaf", Local)`.
+    // AOT: the content-hash entry name + `Export` so the loader can `dlsym` it.
+    entry_name: &str,
+    entry_linkage: Linkage,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -6416,9 +6559,8 @@ fn build_leaf_fn<M: Module>(
     // STATUS_SIGNAL when a runtime call raised a Flow (stashed for
     // `take_pending_flow`). `vmctx` is only used by runtime-call shims.
     // Unified 4-param entry ABI: fn(vmctx, args, out, sidecar) -> status (see
-    // build_mir_leaf_fn). The baseline never reads `sidecar` yet (AOT lowering of
-    // the baseline tier is a later increment) — it is declared for ABI uniformity
-    // so every CompiledLeaf entry has one signature.
+    // build_mir_leaf_fn). JIT (`aot=false`) declares but ignores `sidecar` (bases
+    // stay `iconst`); AOT (`aot=true`) reads its reloc/deopt bases from it.
     let mut sig = Signature::new(call_conv);
     sig.params.push(AbiParam::new(ptr_ty)); // vmctx
     sig.params.push(AbiParam::new(ptr_ty)); // args
@@ -6504,21 +6646,36 @@ fn build_leaf_fn<M: Module>(
         let vmctx_param = fb.block_params(entry)[0];
         let args_ptr = fb.block_params(entry)[1];
         let out_ptr = fb.block_params(entry)[2];
-        // R1a: base address of the heap-constant reloc vector, baked once in entry
-        // (dominates all blocks); the baseline Op::Constant loads off it by index.
+        // R2-E: the 4th entry param (the per-thread `*const LeafSidecar`). Read only
+        // in AOT mode; JIT ignores it. The entry block dominates every block, so a
+        // base materialized here is valid in any (incl. cold deopt) block.
+        let sidecar_param = aot.then(|| fb.block_params(entry)[3]);
+        // R1a: base address of the heap-constant reloc vector, materialized once in
+        // entry (dominates all blocks); the baseline Op::Constant loads off it by
+        // index. JIT bakes the Box address as `iconst`; AOT loads it from the
+        // sidecar (session-specific). `None` when the body references no heap consts.
         let reloc_base = if reloc_data.is_empty() {
             None
+        } else if aot {
+            let sc = sidecar_param.expect("AOT sets sidecar_param");
+            Some(
+                fb.ins()
+                    .load(ptr_ty, MemFlags::trusted(), sc, LeafSidecar::OFF_RELOC_BASE),
+            )
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
         };
-        // Deopt-buffer bases as entry-block values (baseline tier = JIT-only, so
-        // always the `iconst` form — no sidecar).
+        // Deopt-buffer bases as entry-block values: JIT (`aot=false`) → the `iconst`
+        // form (deferred to the cold deopt blocks, byte-identical to pre-R2-E); AOT
+        // (`aot=true`) → loaded from the sidecar. The baseline's precise deopt spills
+        // operand-stack + pc/depth/handlers — exactly the sidecar's carried bases (at
+        // D0 there are no spec slots, so no per-spec-slot state beyond these).
         let deopt_refs = materialize_deopt_refs(
             &mut fb,
             ptr_ty,
-            /*aot=*/ false,
+            aot,
             /*has_precise_deopt=*/ true,
-            None,
+            sidecar_param,
             spill_base_addr,
             meta_pc_addr,
             meta_depth_addr,
@@ -6948,7 +7105,7 @@ fn build_leaf_fn<M: Module>(
     }
 
     let fid = module
-        .declare_function("__neovm_jit_leaf", Linkage::Local, &sig)
+        .declare_function(entry_name, entry_linkage, &sig)
         .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
     let mut ctx = module.make_context();
     ctx.func = func;

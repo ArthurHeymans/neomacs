@@ -443,12 +443,33 @@ pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -
     // until it is explicitly classified as canonical-or-bail, so we can never
     // silently key the AOT cache on a session-specific op.
     for op in ops {
-        if !op_debug_is_canonical(op) {
-            return None;
+        match op {
+            // R2-E (must-nail #2, the cache-KEY half): CallBuiltinSym's Debug embeds
+            // a SESSION-SPECIFIC raw SymId. Hash it BY the callee's canonical NAME
+            // (byte-faithful) + nargs instead — session-stable. (Cross-session
+            // CORRECTNESS — that the loaded leaf calls the right builtin — is the
+            // reloc-by-name half, handled separately in the lowering/recipe.) A
+            // gensym/uninterned callee → bail (non-unique name, #16 hole).
+            Op::CallBuiltinSym(sym, n) => {
+                if !crate::emacs_core::intern::is_canonical_id(*sym) {
+                    return None;
+                }
+                let name = crate::emacs_core::intern::resolve_sym_lisp_string(*sym);
+                let nb = name.as_bytes();
+                h.update(b"CBS:");
+                h.update([*n]);
+                h.update((nb.len() as u64).to_le_bytes());
+                h.update(nb);
+            }
+            _ => {
+                if !op_debug_is_canonical(op) {
+                    return None;
+                }
+                let s = format!("{op:?}");
+                h.update((s.len() as u64).to_le_bytes());
+                h.update(s.as_bytes());
+            }
         }
-        let s = format!("{op:?}");
-        h.update((s.len() as u64).to_le_bytes());
-        h.update(s.as_bytes());
     }
     // Constants: canonical recipe bytes (by value, not address).
     h.update((constants.len() as u64).to_le_bytes());
@@ -689,6 +710,65 @@ fn collect_reloc_consts(m: &mir::MirFunction) -> Vec<Value> {
     out
 }
 
+/// R2-E (baseline-tier AOT): collect the per-leaf reloc set for the BASELINE
+/// lowering, walking the raw `ops` (the baseline tier has no MIR). Covers BOTH:
+///   * const-pool relocs (`Op::Constant` → `constants[idx]`, same predicate as the
+///     MIR path's `const_relocs_for_aot`: heap objects + non-nil/t symbols), AND
+///   * the named-builtin callee SYMBOLS that the baseline bakes as a session SymId
+///     (`Op::CallBuiltinSym(sym, _)` → the symbol by id; `Op::CallBuiltin(idx, _)`
+///     → `constants[idx]`'s symbol) — the must-nail #2 op-operand reloc. Each is a
+///     symbol `Value`, which the recipe codec encodes BY NAME (#16) and the
+///     lowering reloads via `reloc_index` (compile.rs named-builtin site).
+///
+/// Returns `None` if ANY symbol is uninterned/gensym (`!is_canonical_id`) — a
+/// non-unique name would resolve to a DIFFERENT symbol cross-session (#16 hole),
+/// so the whole leaf bails to the JIT. The returned Vec is in first-seen order
+/// (== the recipe order); the index maps each Value's tagged bits → slot.
+fn collect_baseline_aot_relocs(
+    ops: &[Op],
+    constants: &[Value],
+) -> Option<(Vec<Value>, std::collections::HashMap<usize, u32>)> {
+    let mut seen: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    let mut out: Vec<Value> = Vec::new();
+    let add = |v: Value, out: &mut Vec<Value>, seen: &mut std::collections::HashMap<usize, u32>| -> Option<()> {
+        if !super::compile::const_relocs_for_aot(v) {
+            return Some(()); // immediate (fixnum/nil/t/char) — baked, not reloc'd.
+        }
+        // Gensym guard (#16): reloc-by-name is sound only for the CANONICAL interned
+        // symbol of a name. An uninterned/gensym symbol → bail the whole leaf.
+        if let Some(id) = v.as_symbol_id()
+            && !crate::emacs_core::intern::is_canonical_id(id)
+        {
+            return None;
+        }
+        let bits = v.bits();
+        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(bits) {
+            e.insert(out.len() as u32);
+            out.push(v);
+        }
+        Some(())
+    };
+    for op in ops {
+        match op {
+            Op::Constant(idx) => {
+                if let Some(v) = constants.get(*idx as usize) {
+                    add(*v, &mut out, &mut seen)?;
+                }
+            }
+            Op::CallBuiltinSym(sym, _) => {
+                add(Value::symbol(*sym), &mut out, &mut seen)?;
+            }
+            Op::CallBuiltin(name_idx, _) => {
+                if let Some(v) = constants.get(*name_idx as usize) {
+                    add(*v, &mut out, &mut seen)?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Some((out, seen))
+}
+
 /// Compile one bytecode leaf to a relocatable `.o` for AOT (R1c + sidecar).
 ///
 /// Computes the content hash + entry/descriptor symbols, builds the MIR, checks
@@ -776,12 +856,111 @@ pub(crate) fn compile_leaf_to_object(
     constants: &[Value],
     arity: usize,
 ) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
-    let Some(p) = prepare_leaf_emit(ops, constants, arity)? else {
+    // MIR tier first (the existing pure/reloc/call-bearing subset).
+    if let Some(p) = prepare_leaf_emit(ops, constants, arity)? {
+        // build_object_for_leaf_inner runs the #15 shim-import audit on the bytes.
+        let obj =
+            build_object_for_leaf_inner(&p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
+        return Ok(Some((obj, p.content_hash)));
+    }
+    // R2-E (b/d): fall back to the BASELINE tier for a body the MIR tier rejects
+    // (Switch/Throw/handlers, or CallBuiltin(Sym)/VarRef Opaque-lowering errors),
+    // BUT only for the conservatively-allowlisted op set whose AOT-deopt soundness
+    // we've validated (Q2). Outside the allowlist → stay JIT-only (Ok(None)).
+    if !baseline_is_aot_runnable(ops) {
         return Ok(None);
-    };
-    // build_object_for_leaf_inner runs the #15 shim-import audit on the bytes.
-    let obj = build_object_for_leaf_inner(&p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
-    Ok(Some((obj, p.content_hash)))
+    }
+    build_baseline_object_for_leaf(ops, constants, arity)
+}
+
+/// R2-E (Q2): the CONSERVATIVE allowlist of ops the baseline-tier AOT path may
+/// emit. Admits ONLY op-classes whose AOT-via-baseline soundness (esp. the new
+/// sidecar deopt-resume + the named-builtin op-SymId reloc) is covered by a test.
+/// Everything not listed → the leaf stays JIT-only. INCREMENTAL (Q1): this E1b set
+/// adds the Category-2 ops (CallBuiltin(Sym)/VarRef/VarSet/VarBind/Unbind + the
+/// pure/arith/list/string baseline ops); the Category-1 control ops
+/// (Switch/Throw/condition-case/catch handlers) are DEFERRED to a follow-up and
+/// remain rejected here. NB: any rejected op anywhere in the body bails the whole
+/// leaf (an allowlist, not a per-op filter).
+fn baseline_is_aot_runnable(ops: &[Op]) -> bool {
+    ops.iter().all(|op| {
+        matches!(
+            op,
+            // Stack / constants / control (no handlers/switch/throw yet).
+            Op::Constant(_)
+                | Op::Nil
+                | Op::True
+                | Op::Pop
+                | Op::Dup
+                | Op::StackRef(_)
+                | Op::StackSet(_)
+                | Op::DiscardN(_)
+                | Op::Goto(_)
+                | Op::GotoIfNil(_)
+                | Op::GotoIfNotNil(_)
+                | Op::GotoIfNilElsePop(_)
+                | Op::GotoIfNotNilElsePop(_)
+                | Op::Return
+                // Arithmetic / comparison (the fixnum-guard deopt surface).
+                | Op::Add
+                | Op::Sub
+                | Op::Mul
+                | Op::Div
+                | Op::Rem
+                | Op::Add1
+                | Op::Sub1
+                | Op::Negate
+                | Op::Eqlsign
+                | Op::Gtr
+                | Op::Lss
+                | Op::Leq
+                | Op::Geq
+                | Op::Max
+                | Op::Min
+                // List / type-predicate / string / vector ops.
+                | Op::Car
+                | Op::Cdr
+                | Op::Cons
+                | Op::List(_)
+                | Op::Length
+                | Op::Nth
+                | Op::Nthcdr
+                | Op::Setcar
+                | Op::Setcdr
+                | Op::CarSafe
+                | Op::CdrSafe
+                | Op::Elt
+                | Op::Memq
+                | Op::Member
+                | Op::Assq
+                | Op::Symbolp
+                | Op::Consp
+                | Op::Stringp
+                | Op::Listp
+                | Op::Integerp
+                | Op::Numberp
+                | Op::Null
+                | Op::Not
+                | Op::Eq
+                | Op::Equal
+                | Op::Concat(_)
+                | Op::Substring
+                | Op::StringEqual
+                | Op::StringLessp
+                | Op::Aref
+                | Op::Aset
+                // Variables + the named-builtin escape hatch (the Category-2 unlock;
+                // CallBuiltinSym's op-SymId is reloc'd by name — must-nail #2).
+                | Op::VarRef(_)
+                | Op::VarSet(_)
+                | Op::VarBind(_)
+                | Op::Unbind(_)
+                | Op::Call(_)
+                | Op::Apply(_)
+                | Op::CallBuiltin(..)
+                | Op::CallBuiltinSym(..)
+        )
+    })
 }
 
 /// Stats from a multi-leaf preload build: how many candidates collapsed to how
@@ -820,18 +999,58 @@ pub fn build_preload_object(
         ..Default::default()
     };
     for leaf in leaves {
-        let Some(p) = prepare_leaf_emit(leaf.ops, leaf.constants, leaf.arity)? else {
+        // MIR tier first (the existing pure/reloc/call-bearing subset).
+        if let Some(p) = prepare_leaf_emit(leaf.ops, leaf.constants, leaf.arity)? {
+            stats.prepared += 1;
+            if !seen.insert(p.content_hash) {
+                // Identical body already emitted — its entry/descriptor symbols are
+                // shared; re-defining them would collide. Skip (correct: same code).
+                stats.deduped += 1;
+                continue;
+            }
+            define_leaf_into_module(
+                &mut module,
+                &p.m,
+                &p.entry_name,
+                Some((&p.desc_name, &p.desc_bytes)),
+            )?;
+            stats.unique_emitted += 1;
+            continue;
+        }
+        // R2-E: BASELINE tier for a MIR-rejected body in the conservative allowlist
+        // (mirrors compile_leaf_to_object's routing, so the producer's emitted set ==
+        // the is_d0_aot_candidate set — no "candidate but not emitted" gap).
+        if !baseline_is_aot_runnable(leaf.ops) {
+            stats.skipped_unsupported += 1;
+            continue;
+        }
+        let Some(content_hash) = leaf_content_hash(leaf.ops, leaf.constants, leaf.arity) else {
             stats.skipped_unsupported += 1;
             continue;
         };
         stats.prepared += 1;
-        if !seen.insert(p.content_hash) {
-            // Identical body already emitted — its entry/descriptor symbols are
-            // shared; re-defining them would collide. Skip (correct: same code).
+        if !seen.insert(content_hash) {
             stats.deduped += 1;
             continue;
         }
-        define_leaf_into_module(&mut module, &p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
+        let entry_name = aot_entry_symbol(content_hash);
+        let desc_name = aot_descriptor_symbol(content_hash);
+        if define_baseline_leaf_into_module(
+            &mut module,
+            leaf.ops,
+            leaf.constants,
+            leaf.arity,
+            &entry_name,
+            &desc_name,
+        )?
+        .is_none()
+        {
+            // A non-recipe-able const/symbol slipped past the allowlist → skip.
+            seen.remove(&content_hash);
+            stats.prepared -= 1;
+            stats.skipped_unsupported += 1;
+            continue;
+        }
         stats.unique_emitted += 1;
     }
     let obj = module
@@ -1046,6 +1265,23 @@ pub fn testkit_emit_and_place_so(
     dir: &std::path::Path,
 ) -> Option<u128> {
     let (obj, content_hash) = compile_leaf_to_object(ops, constants, arity).ok()??;
+    let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+    link_object_to_so(&obj, &so_path).ok()?;
+    Some(content_hash)
+}
+
+/// R2-E test seam: emit a body via the BASELINE tier AOT path + place its `.so`
+/// in `dir` (unit-index naming), so an integration test exercises the real
+/// `NEOVM_AOT=force` + `NEOVM_AOT_DIR` production serve of a BASELINE leaf.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_emit_baseline_and_place_so(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    dir: &std::path::Path,
+) -> Option<u128> {
+    let (obj, content_hash) = build_baseline_object_for_leaf(ops, constants, arity).ok()??;
     let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
     link_object_to_so(&obj, &so_path).ok()?;
     Some(content_hash)
@@ -1274,6 +1510,267 @@ pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String
         ));
     }
 
+    Ok(())
+}
+
+/// R2-E E1a self-test: a BASELINE-tier AOT leaf emits + serves AOT==interp,
+/// INCLUDING a FORCED precise deopt (must-nail #1, the genuinely-new
+/// baseline-deopt-resume-via-sidecar path). Body = `(* x x)` — at D0 the baseline
+/// emits a fixnum-range guard on the multiply; an in-range x stays native, an
+/// x whose square overflows fixnum→bignum DEOPTS (STATUS_DEOPT_AT) → the
+/// interpreter resumes at pc and does the bignum multiply. We assert AOT == interp
+/// for BOTH (no-deopt and forced-deopt) inputs, end-to-end through the public
+/// `try_run_compiled` under `NEOVM_AOT=force` + `NEOVM_AOT_DIR`.
+///
+/// Emitted via the BASELINE tier (`build_baseline_object_for_leaf`) — NOT the MIR
+/// tier — so it exercises `build_leaf_fn::<ObjectModule>(aot=true)` + the sidecar
+/// deopt bases (the new path (a) wired). `(* x x)` is intentionally builtin-free
+/// (no op-SymId reloc) so this isolates the deopt-RESUME from must-nail #2's reloc.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::LambdaParams;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled (env must be set before any AOT call)".into());
+    }
+
+    // (lambda (x) (* x x)) — 1 required arg, lexical. StackRef(0) twice, Mul, Return.
+    let ops = vec![Op::StackRef(0), Op::StackRef(0), Op::Mul, Op::Return];
+    let constants: Vec<Value> = vec![];
+    let arity = 1usize;
+
+    // Emit through the BASELINE AOT path + place the `.so` in NEOVM_AOT_DIR.
+    let content_hash = testkit_emit_baseline_and_place_so(&ops, &constants, arity, dir)
+        .ok_or("baseline AOT emit/place failed (body not baseline-AOT-runnable?)")?;
+    let _ = content_hash;
+
+    let mk_fn = |required: usize| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (0..required).map(|i| SymId(1 + i as u32)).collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+        f
+    };
+
+    let mut ev = Context::new();
+    let ctx = &mut ev as *mut Context;
+
+    // Helper: AOT result via the cache (forced), and interp result, for one input
+    // Value. Returns the two Values; compare by `eql_value` (a bignum/float result
+    // is a HEAP object — distinct allocations have distinct addresses, so a raw-bits
+    // compare would falsely fail; eql compares by numeric VALUE).
+    let aot_and_interp = |ev: &mut Context, ctx: *mut Context, x: Value| -> Result<(Value, Value), String> {
+        let f = mk_fn(arity);
+        let f_val = Value::make_bytecode(f.clone());
+        // AOT serve (try_run_compiled consults AOT first under force).
+        let aot = super::cache::try_run_compiled(ctx, &f, f_val, &[x])
+            .map_err(|_| "aot run raised".to_string())?
+            .ok_or("aot run returned None (not served)".to_string())?;
+        // Confirm it was actually AOT-backed (not JIT'd).
+        if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+            return Err(format!("body not served AOT-backed for x={x:?}"));
+        }
+        // Interp result (a fresh fn, never compiled — run via the VM directly).
+        let interp = {
+            use crate::emacs_core::bytecode::Vm;
+            let g = mk_fn(arity);
+            let mut vm = Vm::from_context(ev);
+            vm.execute(&g, vec![x])
+                .map_err(|_| "interp run raised".to_string())?
+        };
+        Ok((Value::from_bits(aot), interp))
+    };
+
+    // (1) In-range: x=7 → 49, native (no deopt). AOT == interp (by value).
+    let (a1, i1) = aot_and_interp(&mut ev, ctx, Value::make_int(7))?;
+    if !crate::emacs_core::value::eql_value(&a1, &i1) {
+        return Err(format!("no-deopt: AOT {a1:?} != interp {i1:?} (x=7)"));
+    }
+    if a1.as_fixnum() != Some(49) {
+        return Err(format!("no-deopt: wrong result {a1:?} (expected 49)"));
+    }
+
+    // (2) FORCED OVERFLOW DEOPT: x large enough that x*x overflows fixnum → bignum.
+    // The baseline's fixnum-RANGE guard on Mul (raw_fixnum_mul) fails → STATUS_DEOPT_AT
+    // → the interp resumes and computes the bignum. AOT == interp proves the resume.
+    let big = 3_037_000_500i64; // big*big ≈ 9.22e18 > MOST_POSITIVE_FIXNUM (~2.3e18)
+    let (a2, i2) = aot_and_interp(&mut ev, ctx, Value::make_int(big))?;
+    if !crate::emacs_core::value::eql_value(&a2, &i2) {
+        return Err(format!("overflow-deopt: AOT {a2:?} != interp {i2:?} (x={big})"));
+    }
+    if a2.as_fixnum().is_some() {
+        return Err("overflow-deopt: result is a fixnum — no overflow happened, deopt not exercised".into());
+    }
+
+    // (3) FORCED TYPE-GUARD DEOPT (team-lead defense-in-depth): a NON-fixnum operand
+    // (a float) makes the fixnum TYPE guard (guard_fixnum) on Mul fail — a DISTINCT
+    // deopt SITE at a different pc/operand-stack-depth than the overflow range-check.
+    // → STATUS_DEOPT_AT → interp resumes → float multiply → 6.25. AOT == interp proves
+    // the framestate restore is correct at >1 site (where a baseline-meta off-by-one
+    // would bite differently).
+    let fx = Value::make_float(2.5);
+    let (a3, i3) = aot_and_interp(&mut ev, ctx, fx)?;
+    if !crate::emacs_core::value::eql_value(&a3, &i3) {
+        return Err(format!("type-guard-deopt: AOT {a3:?} != interp {i3:?} (x=2.5)"));
+    }
+    // Sanity: a float result (2.5*2.5=6.25) — NOT a fixnum, so the type-guard deopt
+    // genuinely fired (the native fixnum fast path cannot produce a float).
+    if a3.as_fixnum().is_some() {
+        return Err("type-guard-deopt: result is a fixnum — the float type-guard deopt did not fire".into());
+    }
+
+    super::cache::clear();
+    Ok(())
+}
+
+/// R2-E E1b self-test (must-nail #2): a BASELINE-tier AOT leaf that calls a
+/// builtin via `Op::CallBuiltinSym` serves AOT==interp, AND its callee SymId is
+/// RELOC'd BY NAME (not the session-specific baked id). Body = `(length x)` via
+/// `CallBuiltinSym(intern("length"), 1)` — the Category-2 unlock that needs both
+/// the baseline-emit path (b) and the op-SymId reloc (c).
+///
+/// The cross-session CORRECTNESS proof has THREE legs, all checked here:
+///   1. the content hash is BY NAME — `leaf_content_hash` hashes CallBuiltinSym by
+///      the callee's name+nargs, so the same body hashes identically regardless of
+///      the session's intern order (the cache KEY is session-stable);
+///   2. the callee symbol is in the leaf's RELOC set + recipe BY NAME (not baked):
+///      we GROW the intern table after emit (modeling the cross-session intern-order
+///      drift the #16 hazard is about — a baked emit-time SymId would now be stale),
+///      then assert the SERVED leaf's reloc_values() contain the callee symbol
+///      resolved to "length" (a baked id would NOT appear in the reloc set);
+///   3. the served leaf computes the RIGHT result (== interp) — a wrong/stale baked
+///      SymId would call the wrong builtin → wrong result or crash.
+///
+/// (One process can't literally re-assign "length"'s id, but the decoy-growth +
+/// reloc-set-membership is the SAME rigor the #16 symbol-const cross-session test
+/// uses — it proves the id is reloc'd-by-name, not baked, which IS the divergence
+/// protection.)
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::LambdaParams;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled".into());
+    }
+    let length_id = crate::emacs_core::intern::intern("length");
+    // (lambda (x) (length x)) — push arg, CallBuiltinSym length/1, return.
+    let ops = vec![
+        Op::StackRef(0),
+        Op::CallBuiltinSym(length_id, 1),
+        Op::Return,
+    ];
+    let constants: Vec<Value> = vec![];
+    let arity = 1usize;
+
+    // Leg 2a: the descriptor recipe must encode the callee BY NAME (reloc-by-name),
+    // not a baked SymId. Build the baseline object + decode its descriptor recipe.
+    let (reloc_data, _reloc_index, recipe) = prepare_baseline_relocs(&ops, &constants)
+        .ok_or("baseline relocs: length symbol not recipe-able?")?;
+    if reloc_data.is_empty() {
+        return Err("CallBuiltinSym callee was NOT collected into the reloc set (op-SymId not reloc'd by name)".into());
+    }
+    // The recipe should contain the bytes "length" (the RECIPE_SYMBOL name).
+    if !recipe.windows(b"length".len()).any(|w| w == b"length") {
+        return Err("reloc recipe does not encode the callee name 'length' (reloc-by-name missing)".into());
+    }
+
+    // Emit via the baseline AOT path + place the `.so`.
+    testkit_emit_baseline_and_place_so(&ops, &constants, arity, dir)
+        .ok_or("baseline AOT emit/place failed for the CallBuiltinSym body")?;
+
+    // Leg 2 (cross-session drift): GROW the intern table AFTER emit, so an emit-time
+    // BAKED SymId would now be stale relative to a fresh rebuild (models a different
+    // intern order at load). The reloc-by-name path is immune; a baked id would not
+    // be. (Same rigor as `aot_symbol_const_relocs_by_name_not_baked_sym_id`.)
+    for i in 0..64 {
+        let _ = crate::emacs_core::intern::intern(&format!("aot-cbs-decoy-{i}"));
+    }
+
+    let mk_fn = || {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+        f
+    };
+
+    let mut ev = Context::new();
+    let ctx = &mut ev as *mut Context;
+    // arg = a 3-element list → (length arg) == 3.
+    let arg = Value::list(vec![Value::make_int(10), Value::make_int(20), Value::make_int(30)]);
+
+    let f = mk_fn();
+    let f_val = Value::make_bytecode(f.clone());
+    let aot = super::cache::try_run_compiled(ctx, &f, f_val, &[arg])
+        .map_err(|_| "aot run raised".to_string())?
+        .ok_or("aot run returned None".to_string())?;
+    if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+        return Err("CallBuiltinSym body not served AOT-backed".into());
+    }
+    // Leg 1+2b: the served result must be CORRECT (3). A wrong/stale baked SymId
+    // would have called a different builtin → wrong result. Cross-check vs interp.
+    let interp = {
+        let g = mk_fn();
+        let mut vm = Vm::from_context(&mut ev);
+        vm.execute(&g, vec![arg]).map_err(|_| "interp raised".to_string())?
+    };
+    if !crate::emacs_core::value::eql_value(&Value::from_bits(aot), &interp) {
+        return Err(format!(
+            "CallBuiltinSym: AOT {:?} != interp {:?}",
+            Value::from_bits(aot),
+            interp
+        ));
+    }
+    if Value::from_bits(aot).as_fixnum() != Some(3) {
+        return Err(format!(
+            "CallBuiltinSym: wrong (length ...) result {:?} (expected 3 — reloc'd to the WRONG builtin?)",
+            Value::from_bits(aot)
+        ));
+    }
+
+    // Leg 2 PROOF: load the leaf directly + assert the callee symbol is in its
+    // RELOC SET, resolved BY NAME to "length" (the CURRENT canonical symbol — note
+    // the intern table was grown above). A BAKED SymId would NOT appear in
+    // reloc_values(); its presence proves the op-SymId is reloc'd-by-name.
+    let content_hash =
+        leaf_content_hash(&ops, &constants, arity).ok_or("content hash None")?;
+    let unit = load_unit(content_hash).ok_or("unit not found for reloc-set proof")?;
+    let live_reloc = collect_baseline_aot_relocs(&ops, &constants)
+        .ok_or("baseline relocs None at load")?
+        .0;
+    let leaf = load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
+        .ok_or("load_leaf_from_unit None (reloc count/recipe mismatch?)")?;
+    let reloc_names: std::collections::HashSet<&str> = leaf
+        .reloc_values()
+        .iter()
+        .filter_map(|v| v.as_symbol_id())
+        .map(crate::emacs_core::intern::resolve_sym)
+        .collect();
+    if !reloc_names.contains("length") {
+        return Err(format!(
+            "callee 'length' NOT in the leaf's reloc set (op-SymId was BAKED, not reloc'd-by-name) — reloc names: {reloc_names:?}"
+        ));
+    }
+
+    super::cache::clear();
     Ok(())
 }
 
@@ -1537,11 +2034,16 @@ pub(crate) fn try_load_leaf(
     // objects (re-collected here in the SAME order the emitter assigned reloc
     // indices), NOT fresh copies rebuilt from the recipe. This makes an AOT leaf
     // `eq`-IDENTICAL to the interpreter/JIT for every constant slot (one shared
-    // object), so a reloc const observed across a deopt or returned from the leaf
-    // compares equal exactly as under interp/JIT. Building the MIR re-derives the
-    // reloc set from `ops`/`constants` identically to the emit side.
-    let m = mir::build_mir(ops, constants, arity).ok()?;
-    let live_reloc = collect_reloc_consts(&m);
+    // object). The collection MUST match the EMIT tier's order/predicate (R2-E):
+    //   * MIR tier — `collect_reloc_consts(build_mir)` (heap consts + symbols);
+    //   * BASELINE tier — `collect_baseline_aot_relocs` (ALSO the named-builtin
+    //     op-symbols, which the MIR collector never sees). We pick the same tier
+    //     `compile_leaf_to_object` did: MIR-AOT-runnable → MIR; else baseline.
+    let live_reloc: Vec<Value> = match mir::build_mir(ops, constants, arity) {
+        Ok(m) if mir_is_aot_runnable(&m) => collect_reloc_consts(&m),
+        // MIR-rejected (or built-but-not-MIR-AOT-runnable) → baseline reloc set.
+        _ => collect_baseline_aot_relocs(ops, constants)?.0,
+    };
     let unit = load_unit(content_hash)?;
     load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
 }
@@ -1756,10 +2258,18 @@ pub fn prepopulate_aot_from_preload(
         // entry in the preload `.so` (the producer skipped it), so its dlsym misses
         // → None → that fn just JITs. We only need the content hash (to name the
         // entry) + the live reloc consts (#A eq-identity), both cheap.
-        let Ok(m) = mir::build_mir(&bc.ops, &bc.constants, arity) else {
-            continue;
+        // Tier-select the reloc collection to MATCH the emit tier (R2-E): a baseline
+        // body's reloc set includes the named-builtin op-symbols, which the MIR
+        // collector (MirOp::Const only) never sees — using it would mis-size
+        // live_reloc → load_leaf_from_unit reloc-count mismatch → the baseline leaf
+        // never serves. Same tier choice as compile_leaf_to_object / try_load_leaf.
+        let live_reloc: Vec<Value> = match mir::build_mir(&bc.ops, &bc.constants, arity) {
+            Ok(m) if mir_is_aot_runnable(&m) => collect_reloc_consts(&m),
+            _ => match collect_baseline_aot_relocs(&bc.ops, &bc.constants) {
+                Some((vals, _)) => vals,
+                None => continue, // non-recipe-able → not preloaded; will JIT.
+            },
         };
-        let live_reloc = collect_reloc_consts(&m);
         preps.push(Prep {
             compiled_id: bc.runtime.compiled_id_or_assign(),
             content_hash,
@@ -1948,6 +2458,105 @@ fn define_leaf_into_module(
             .map_err(|e| module_init_err(e.to_string()))?;
     }
     Ok(())
+}
+
+/// R2-E: prepare the baseline-tier AOT emit for a body the MIR tier rejects.
+/// Returns the per-leaf reloc set (const-relocs + named-builtin op-symbols, #16/#17)
+/// + the recipe bytes, or `None` if any const/symbol is outside the recipe subset
+/// (gensym / non-recipe-able) → the caller bails to the JIT. Shared by the
+/// single-leaf and (later) multi-leaf baseline emit paths.
+fn prepare_baseline_relocs(
+    ops: &[Op],
+    constants: &[Value],
+) -> Option<(Box<[Value]>, std::collections::HashMap<usize, u32>, Vec<u8>)> {
+    let (reloc_vals, reloc_index) = collect_baseline_aot_relocs(ops, constants)?;
+    let mut recipe = Vec::new();
+    for v in &reloc_vals {
+        if write_value_recipe(&mut recipe, *v).is_err() {
+            return None;
+        }
+    }
+    Some((reloc_vals.into_boxed_slice(), reloc_index, recipe))
+}
+
+/// R2-E: define ONE baseline-tier AOT leaf into `module` — the analog of
+/// [`define_leaf_into_module`] for bodies the MIR tier rejects. Drives
+/// `build_baseline_leaf_object` (build_leaf_fn::<ObjectModule>(aot=true)) + emits
+/// the descriptor data object. The descriptor's meta comes from the BASELINE
+/// analysis (`cfg.max_depth`, has_handlers) — the baseline is all-precise deopt
+/// (every guard is STATUS_DEOPT_AT), so `has_precise_deopt=true`,
+/// `has_side_effects=false` (no rerun-from-start). Returns `Ok(None)` if the body
+/// has a non-recipe-able const/symbol (caller stays JIT-only).
+fn define_baseline_leaf_into_module(
+    module: &mut ObjectModule,
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    entry_name: &str,
+    desc_name: &str,
+) -> Result<Option<()>, CompileError> {
+    let Some((reloc_data, reloc_index, recipe)) = prepare_baseline_relocs(ops, constants) else {
+        return Ok(None);
+    };
+    let bmeta = super::compile::build_baseline_leaf_object(
+        module,
+        ops,
+        constants,
+        arity,
+        &reloc_data,
+        &reloc_index,
+        entry_name,
+    )?;
+    let meta = super::compile::AotLeafMeta {
+        arity: bmeta.arity,
+        required: bmeta.arity,
+        has_rest: false,
+        has_binds: bmeta.has_binds,
+        has_handlers: bmeta.has_handlers,
+        has_side_effects: false,
+        max_depth: bmeta.max_depth,
+        has_precise_deopt: true,
+    };
+    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_data.len() as u32);
+    let data_id = module
+        .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
+        .map_err(|e| module_init_err(e.to_string()))?;
+    let mut desc = cranelift_module::DataDescription::new();
+    desc.define(desc_bytes.into_boxed_slice());
+    module
+        .define_data(data_id, &desc)
+        .map_err(|e| module_init_err(e.to_string()))?;
+    Ok(Some(()))
+}
+
+/// R2-E: build a single-leaf relocatable object via the BASELINE tier (for a body
+/// the MIR tier rejects). Returns `(object_bytes, content_hash)`, or `Ok(None)` if
+/// the body is outside the recipe subset. Mirrors `build_object_for_leaf_inner`.
+/// (Used by the E1a testkit now + the E1b real routing — `allow(dead_code)` until
+/// the routing lands so a production build without the routing doesn't warn.)
+#[allow(dead_code)]
+pub(crate) fn build_baseline_object_for_leaf(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
+    let Some(content_hash) = leaf_content_hash(ops, constants, arity) else {
+        return Ok(None);
+    };
+    let entry_name = aot_entry_symbol(content_hash);
+    let desc_name = aot_descriptor_symbol(content_hash);
+    let mut module = make_aot_object_module()?;
+    if define_baseline_leaf_into_module(&mut module, ops, constants, arity, &entry_name, &desc_name)?
+        .is_none()
+    {
+        return Ok(None);
+    }
+    let obj = module
+        .finish()
+        .emit()
+        .map_err(|e| module_init_err(e.to_string()))?;
+    assert_aot_imports_exported(&obj)?;
+    Ok(Some((obj, content_hash)))
 }
 
 /// Build a single-leaf relocatable object: make a module, define the leaf, emit.
