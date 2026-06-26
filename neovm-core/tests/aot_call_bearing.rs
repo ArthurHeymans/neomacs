@@ -61,6 +61,30 @@ fn aot_baseline_tier_emit_serve_and_forced_deopt_match_interp() {
     }
 }
 
+/// R2-E audit follow-up (test gap a): a baseline-AOT deopt at a DEEPER stack
+/// (depth 4) with LIVE RAW unboxed slots — `(* (+ a 1) (+ b 1))` forced to
+/// overflow at the outer Mul. Exercises the cold raw-slot-retag + deeper
+/// framestate-spill path the `(* x x)` selftest (pc=2/depth=2, no live raw slot)
+/// never reaches. Integration test for the deopt resume's shim path.
+#[test]
+fn aot_baseline_deep_rawslot_deopt_matches_interp() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded setup before any AOT entry point reads these.
+    unsafe {
+        std::env::set_var("NEOVM_AOT", "force");
+        std::env::set_var("NEOVM_AOT_DIR", dir.path());
+    }
+    let r =
+        neovm_core::emacs_core::jit::aot::testkit_baseline_deep_rawslot_deopt_selftest(dir.path());
+    unsafe {
+        std::env::remove_var("NEOVM_AOT");
+        std::env::remove_var("NEOVM_AOT_DIR");
+    }
+    if let Err(e) = r {
+        panic!("baseline deep raw-slot deopt self-test failed: {e}");
+    }
+}
+
 /// R2-E E1b (must-nail #2): a baseline-tier AOT leaf calling a builtin via
 /// `Op::CallBuiltinSym` serves AOT==interp, with the callee SymId reloc'd BY NAME
 /// (recipe encodes the name; served result correct) — the cross-session-correct

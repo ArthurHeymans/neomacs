@@ -1650,6 +1650,122 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
     Ok(())
 }
 
+/// R2-E audit follow-up (test gap a): a baseline-AOT deopt at a DEEPER stack with
+/// LIVE RAW (unboxed) slots — the path the `(* x x)` selftest never reaches
+/// (its deopt is always at pc=2/depth=2 with no live raw slot below the guard).
+///
+/// Body `(lambda (a b) (* (+ a 1) (+ b 1)))`: the two inner `Add`s leave unboxed
+/// fixnums on the operand stack, so at the outer `Mul`'s deopt the pre-op stack is
+/// `[a, b, (a+1), (b+1)]` (DEPTH 4 > 2) with `(a+1)`/`(b+1)` as LIVE RAW slots.
+/// Forcing the `Mul` to overflow exercises emit_pending_deopts'
+/// raw-slot-retag (stack_raw[j] → re-tag to a tagged Value) + the spill of a
+/// deeper framestate — the cold path the audit flagged as AOT-uncovered. AOT ==
+/// interp proves the deeper restore is correct.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::LambdaParams;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled".into());
+    }
+
+    // (lambda (a b) (* (+ a 1) (+ b 1))). Stack starts [a, b] (b on top).
+    //   StackRef(1) → a ; Constant(0)=1 ; Add → (a+1)
+    //   StackRef(1) → b ; Constant(0)=1 ; Add → (b+1)
+    //   Mul → result.  At Mul the pre-stack is [a, b, (a+1), (b+1)] (depth 4).
+    let ops = vec![
+        Op::StackRef(1),
+        Op::Constant(0),
+        Op::Add,
+        Op::StackRef(1),
+        Op::Constant(0),
+        Op::Add,
+        Op::Mul,
+        Op::Return,
+    ];
+    let constants: Vec<Value> = vec![Value::make_int(1)];
+    let arity = 2usize;
+
+    // Place ONLY the BASELINE `.so` (no MIR `.so`), so `try_run_compiled` serves the
+    // BASELINE leaf even though this pure-arith body is also MIR-AOT-runnable — the
+    // unit index has only the baseline object for this content hash (same approach
+    // as `testkit_baseline_aot_selftest`). `try_run_compiled` drives the FULL path:
+    // native call + finish_native_run + run_resumed_frame on STATUS_DEOPT_AT, so the
+    // deopt RESUME is exercised (a direct `leaf.call` would only return the raw
+    // deopt status, not the resumed result).
+    testkit_emit_baseline_and_place_so(&ops, &constants, arity, dir)
+        .ok_or("baseline AOT emit/place failed for the deep-raw-slot body")?;
+
+    let mk_fn = || {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1), SymId(2)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+        f
+    };
+
+    let mut ev = Context::new();
+    let ctx = &mut ev as *mut Context;
+
+    // Serve via the cache (baseline-backed) + the interpreter; compare. Two regimes:
+    //  (1) NO deopt: small a,b → native fixnum result.
+    //  (2) FORCED OVERFLOW deopt at the deep Mul (depth 4, live raw slots).
+    let run_baseline = |ev: &mut Context, ctx: *mut Context, a: Value, b: Value| -> Result<(Value, Value), String> {
+        let f = mk_fn();
+        let f_val = Value::make_bytecode(f.clone());
+        let bits = super::cache::try_run_compiled(ctx, &f, f_val, &[a, b])
+            .map_err(|_| "baseline leaf call raised".to_string())?
+            .ok_or("aot run returned None (not served)".to_string())?;
+        if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+            return Err("deep body not served AOT-backed".to_string());
+        }
+        let interp = {
+            let g = mk_fn();
+            let mut vm = Vm::from_context(ev);
+            vm.execute(&g, vec![a, b])
+                .map_err(|_| "interp raised".to_string())?
+        };
+        Ok((Value::from_bits(bits), interp))
+    };
+
+    // (1) No-deopt: (* (+ 3 1) (+ 4 1)) = 4*5 = 20.
+    let (n_aot, n_int) = run_baseline(&mut ev, ctx, Value::make_int(3), Value::make_int(4))?;
+    if !crate::emacs_core::value::eql_value(&n_aot, &n_int) {
+        return Err(format!("deep no-deopt: AOT {n_aot:?} != interp {n_int:?}"));
+    }
+    if n_aot.as_fixnum() != Some(20) {
+        return Err(format!("deep no-deopt: wrong result {n_aot:?} (expected 20)"));
+    }
+
+    // (2) FORCED OVERFLOW at the DEEP Mul (depth 4, two live raw slots (a+1),(b+1)):
+    // a=b=2_000_000_000 → (a+1)*(b+1) ≈ 4.0e18 > MOST_POSITIVE_FIXNUM (~2.3e18) →
+    // the Mul fixnum-range guard fails → STATUS_DEOPT_AT → the interp resumes from
+    // the DEEPER framestate (raw slots retagged) → bignum. AOT == interp proves the
+    // deep raw-slot restore is correct.
+    let big = 2_000_000_000i64;
+    let (d_aot, d_int) = run_baseline(&mut ev, ctx, Value::make_int(big), Value::make_int(big))?;
+    if !crate::emacs_core::value::eql_value(&d_aot, &d_int) {
+        return Err(format!("deep overflow-deopt: AOT {d_aot:?} != interp {d_int:?} (a=b={big})"));
+    }
+    if d_aot.as_fixnum().is_some() {
+        return Err(
+            "deep overflow-deopt: result is a fixnum — no overflow, the deep deopt was not exercised".into(),
+        );
+    }
+
+    super::cache::clear();
+    Ok(())
+}
+
 /// R2-E E1b self-test (must-nail #2): a BASELINE-tier AOT leaf that calls a
 /// builtin via `Op::CallBuiltinSym` serves AOT==interp, AND its callee SymId is
 /// RELOC'd BY NAME (not the session-specific baked id). Body = `(length x)` via
