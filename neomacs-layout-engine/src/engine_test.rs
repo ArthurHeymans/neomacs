@@ -2927,6 +2927,49 @@ fn multiline_overlay_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
     )
 }
 
+#[test]
+fn layout_frame_rust_renders_overlay_display_property() {
+    // GNU get_char_property: an overlay `display` overrides the text property —
+    // e.g. org-display-inline-images overlays the link with an `(image …)`.
+    // Reading only the text property left those as raw text. Here an overlay
+    // covering "HIDE" with display "SHOWN" must render "SHOWN", not "HIDE".
+    let text = "AA HIDE BB\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, buf_id: BufferId, text: &str| {
+        let start = text.find("HIDE").expect("HIDE");
+        let end = start + "HIDE".len();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start,
+            end,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("display"),
+            Value::string("SHOWN"),
+        );
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+    let rendered = backend_trace_text_area_text(&trace);
+
+    assert!(
+        rendered.contains("SHOWN"),
+        "overlay display string must render, rendered={rendered:?}"
+    );
+    assert!(
+        !rendered.contains("HIDE"),
+        "the overlay-covered text must be replaced, rendered={rendered:?}"
+    );
+    assert!(
+        rendered.contains("AA") && rendered.contains("BB"),
+        "text around the overlay must still render, rendered={rendered:?}"
+    );
+}
+
 fn bidi_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     let text = "abc אבג def\n";
     backend_layout_trace_with_buffer_setup(

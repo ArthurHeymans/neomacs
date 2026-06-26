@@ -150,8 +150,54 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     }
 
     fn display_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
-        self.buffer
-            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("display"))
+        let bytepos = self.byte_pos(char_pos);
+        // GNU `get_char_property` (src/textprop.c): an overlay `display` property
+        // overrides the text property (highest-priority overlay wins). Several
+        // common features attach `display` to an OVERLAY covering a region rather
+        // than to a text property — notably `org-display-inline-images`, which
+        // overlays the link with `(image …)`. Reading only the text property here
+        // left those rendered as raw text. The run is already bounded at every
+        // overlay boundary by `compute_stop_pos`, so the replacement spans the
+        // overlay's extent.
+        let overlays = self.buffer.layout_overlays();
+        let overlay_display = overlays
+            .overlays_at_emacs_byte_pos(bytepos)
+            .iter()
+            .filter_map(|oid| {
+                let value = overlays.overlay_get_named(*oid, Value::symbol("display"))?;
+                let priority = overlays
+                    .overlay_get_named(*oid, Value::symbol("priority"))
+                    .and_then(|value| value.as_int())
+                    .unwrap_or(0);
+                Some((priority, value))
+            })
+            .max_by_key(|(priority, _)| *priority)
+            .map(|(_, value)| value);
+        overlay_display.or_else(|| {
+            self.buffer
+                .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"))
+        })
+    }
+
+    /// The extent over which the resolved `display` value stays the same object,
+    /// starting from `extent` (the first run end). Mirrors GNU
+    /// `next_single_char_property_change(pos, Qdisplay)` so a display REPLACEMENT
+    /// renders once over the whole property: an overlay `display` covers text
+    /// whose internal `face`/`invisible` changes would otherwise break the run
+    /// (and replay the replacement per sub-run).
+    fn display_value_extent(&self, value: Value, mut extent: CharPos0) -> CharPos0 {
+        while extent < self.end {
+            match self.display_prop_at(extent) {
+                Some(next) if next.bits() == value.bits() => {
+                    extent = self
+                        .next_property_change(extent)
+                        .max(extent.add_len(CharLen::new(1)))
+                        .min(self.end);
+                }
+                _ => break,
+            }
+        }
+        extent
     }
 
     fn display_replacement_source(
@@ -335,20 +381,28 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             let span = self.span(start, property_end);
 
             if let Some(display_prop) = self.display_prop_at(start) {
-                self.char_pos = property_end;
                 let display_property = DisplayPropertySourcePlan::new(display_prop);
                 if replacement_mode.consumes_typed_replacements()
                     && display_property.replacement().is_some()
                 {
+                    // GNU renders a display REPLACEMENT once over the full extent
+                    // of the display value (next_single_char_property_change(pos,
+                    // Qdisplay)). The general run breaks at any text-prop/overlay
+                    // boundary, so an overlay `display` (e.g. an org inline image)
+                    // covering text with internal face/invisible changes would
+                    // otherwise replay the replacement once per sub-run.
+                    let display_end = self.display_value_extent(display_prop, property_end);
+                    self.char_pos = display_end;
                     return Some(BufferTextCursorItem::DisplayPropertyReplacement(
                         self.display_replacement_item(
                             display_prop,
                             display_property.into_classification(),
                             start,
-                            property_end,
+                            display_end,
                         ),
                     ));
                 }
+                self.char_pos = property_end;
                 let item_layout = match self.display_property_cursor_action(
                     context,
                     &display_property,
