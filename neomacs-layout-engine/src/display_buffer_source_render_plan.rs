@@ -1,6 +1,7 @@
 //! Buffer source render plan construction and completion.
 
 use crate::display_buffer_empty_line_fringe::EmptyLineFringeFillRequest;
+use crate::display_buffer_fringe_arrows::TruncationContinuationFringeRequest;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
 use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
@@ -413,12 +414,34 @@ impl BufferSourceOutputSetup {
             window_metrics.ascent(),
         )
         .fill(
+            buffer,
             output.reborrow(),
             evaluator,
             render_services.face_resolver(),
             render_services.face_ids(),
             &walk_setup.row_geometry,
         );
+        // GNU `draw_window_fringes` (src/fringe.c): every truncated/continued
+        // buffer-text row gets a left/right arrow bitmap in its fringe. neomacs's
+        // body walk records the truncation/continuation state in `row_flags`
+        // (+ `GlyphRow::truncated_left` for the hscroll left edge); resolve the
+        // arrow bitmaps through `fringe-indicator-alist` and stamp them onto the
+        // already-installed rows here, after the body + empty-line filler so an
+        // explicit `(left-fringe …)` spec or the empty-line `~` keeps the slot.
+        if let Some(arrows) = TruncationContinuationFringeRequest::new(
+            buffer,
+            evaluator,
+            params,
+            geometry.display_text_row_base,
+            {
+                let resolved = render_services.face_resolver().resolve_named_face("fringe");
+                let face_id = render_services.face_ids().allocate();
+                output.install_resolved_face(face_id, &resolved, None);
+                face_id
+            },
+        ) {
+            arrows.install(output.builder(), &walk_setup.row_flags);
+        }
         render_window_chrome_rows(
             output.reborrow(),
             &mut output_emitter,

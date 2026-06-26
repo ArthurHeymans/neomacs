@@ -2178,6 +2178,170 @@ fn layout_frame_rust_lays_out_wrapped_long_line() {
     assert!(!trace.matrix_rows.is_empty());
 }
 
+/// Stage 5: a long line with `truncate-lines=t` (wider than the window) sets
+/// the `right-arrow` truncation bitmap in the RIGHT fringe of the truncated row.
+#[test]
+fn layout_frame_rust_truncated_row_sets_right_arrow_fringe() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_arrow_index: u16 = eval
+        .eval_str("(get 'right-arrow 'fringe)")
+        .expect("right-arrow fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
+        buf.set_buffer_local("truncate-lines", Value::T);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("trunc-fringe", 48, 200, buf_id);
+    // Window-system frame so the fringes have width (GNU only draws fringe
+    // bitmaps on GUI frames; TTY frames have 0-width fringes).
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+
+    let right_arrow_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.right_fringe_bitmap
+                .is_some_and(|info| info.bitmap_index == right_arrow_index)
+        })
+        .count();
+    assert!(
+        right_arrow_rows >= 1,
+        "a truncated long line should set right-arrow in the right fringe \
+         (right_arrow_index={right_arrow_index}); right fringe bitmaps = {:?}",
+        entry
+            .matrix
+            .rows
+            .iter()
+            .map(|r| r.right_fringe_bitmap.map(|i| i.bitmap_index))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Stage 5: a long line with `truncate-lines=nil` (wraps) sets the
+/// `right-curly-arrow` continuation bitmap in the RIGHT fringe of the continued
+/// row, and the `left-curly-arrow` on the continuation row's LEFT fringe.
+#[test]
+fn layout_frame_rust_continued_row_sets_curly_arrow_fringe() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_curly_index: u16 = eval
+        .eval_str("(get 'right-curly-arrow 'fringe)")
+        .expect("right-curly-arrow fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    let left_curly_index: u16 = eval
+        .eval_str("(get 'left-curly-arrow 'fringe)")
+        .expect("left-curly-arrow fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
+        buf.set_buffer_local("truncate-lines", Value::NIL);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("cont-fringe", 48, 200, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+
+    let right_curly_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.right_fringe_bitmap
+                .is_some_and(|info| info.bitmap_index == right_curly_index)
+        })
+        .count();
+    let left_curly_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.left_fringe_bitmap
+                .is_some_and(|info| info.bitmap_index == left_curly_index)
+        })
+        .count();
+    assert!(
+        right_curly_rows >= 1,
+        "a wrapped line should set right-curly-arrow on the continued row's right \
+         fringe (idx={right_curly_index}); right = {:?}",
+        entry
+            .matrix
+            .rows
+            .iter()
+            .map(|r| r.right_fringe_bitmap.map(|i| i.bitmap_index))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        left_curly_rows >= 1,
+        "the continuation row should set left-curly-arrow on its left fringe \
+         (idx={left_curly_index}); left = {:?}",
+        entry
+            .matrix
+            .rows
+            .iter()
+            .map(|r| r.left_fringe_bitmap.map(|i| i.bitmap_index))
+            .collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn layout_frame_rust_lays_out_line_numbers() {
     let text = "abc\ndef\nghi\n";

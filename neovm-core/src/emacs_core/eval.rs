@@ -7941,6 +7941,21 @@ impl Context {
         self.fringe_bitmaps.index_of(sym)
     }
 
+    /// The buffer-default value of a variable (GNU `BVAR(&buffer_defaults, …)`).
+    /// For a slot-backed per-buffer variable this reads `buffer_defaults[slot]`
+    /// (the value seen by buffers that haven't set a local override); for any
+    /// other variable it falls back to the obarray value cell. Used by the
+    /// layout-side fringe-indicator resolver, which mirrors GNU's two-level
+    /// lookup (buffer-local, then `buffer_defaults`) — the obarray value cell of
+    /// a forwarded slot var is always nil, so the resolver must read the default
+    /// slot directly.
+    pub fn buffer_default_value(&self, name: &str) -> Option<Value> {
+        if let Some(info) = crate::buffer::buffer::lookup_buffer_slot(name) {
+            return Some(self.buffers.buffer_defaults[info.offset.index()]);
+        }
+        self.obarray.symbol_value(name).copied()
+    }
+
     /// Seed the 24 GNU standard built-in fringe bitmaps into the registry and
     /// set each bitmap symbol's `'fringe` plist property to its index.
     ///
@@ -7969,6 +7984,55 @@ impl Context {
                 symbols_with_pos_enabled,
             );
         }
+        self.pre_register_standard_fringe_indicator_alist();
+    }
+
+    /// Seed the GNU default `fringe-indicator-alist` / `fringe-cursor-alist`
+    /// (`lisp/fringe.el`'s `(boundp 'fringe-bitmaps)`-guarded `setq-default`
+    /// block, ~lines 65-84), so the logical-indicator resolver
+    /// (`get_logical_fringe_bitmap`) finds the standard truncation / continuation
+    /// / empty-line bitmaps even in a bare `Context::new()` that never loads
+    /// `lisp/fringe.el`. In a fully lisp-loaded runtime fringe.el runs the same
+    /// `setq-default`, which simply overwrites this identical default. Only seeds
+    /// when the current default is still nil so a loaded fringe.el (or user
+    /// customization that ran first) is never clobbered.
+    fn pre_register_standard_fringe_indicator_alist(&mut self) {
+        let Some(info) = crate::buffer::buffer::lookup_buffer_slot("fringe-indicator-alist") else {
+            return;
+        };
+        let offset = info.offset.index();
+        // Don't clobber a default already installed (loaded fringe.el / user).
+        if !self.buffers.buffer_defaults[offset].is_nil() {
+            return;
+        }
+        // Build the literal GNU default alist (`lisp/fringe.el` ~65-77). Evaluate
+        // the quoted form so the cons cells are heap-allocated and rooted by the
+        // evaluator; `setq-default`'s per-buffer-default plumbing is too early to
+        // rely on during init, so write the resolved default slot directly.
+        let Ok(alist) = self.eval_str(
+            "'((truncation . (left-arrow right-arrow)) \
+               (continuation . (left-curly-arrow right-curly-arrow)) \
+               (overlay-arrow . right-triangle) \
+               (up . up-arrow) \
+               (down . down-arrow) \
+               (top . (top-left-angle top-right-angle)) \
+               (bottom . (bottom-left-angle bottom-right-angle \
+                          top-right-angle top-left-angle)) \
+               (top-bottom . (left-bracket right-bracket \
+                              top-right-angle top-left-angle)) \
+               (empty-line . empty-line) \
+               (unknown . question-mark))",
+        ) else {
+            return;
+        };
+        // Set the per-buffer default (GNU `buffer_defaults`) and propagate to
+        // every existing buffer still using the default (its slot was copied
+        // from `buffer_defaults` at creation, before this seed ran). GNU buffers
+        // read `buffer_defaults` live; neomacs copies, so update the copies that
+        // are still nil (no explicit local override).
+        self.buffers.buffer_defaults[offset] = alist;
+        self.buffers
+            .seed_default_slot_into_unset_buffers(info.offset, alist);
     }
 
     /// Access the obarray mutably.

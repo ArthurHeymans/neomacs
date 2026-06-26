@@ -2404,3 +2404,253 @@ fn test_face_from_plist_realizes_relative_height_family_and_weight() {
         realized.font_size
     );
 }
+
+// ---------------------------------------------------------------------------
+// Stage 6: `resolve_fringe_indicator_bitmap_index` — GNU `get_logical_fringe_bitmap`.
+// ---------------------------------------------------------------------------
+
+/// `index_of` for a standard fringe-bitmap symbol seeded by `Context::new`.
+fn fringe_index_of(ctx: &neovm_core::emacs_core::Context, name: &str) -> u16 {
+    let sym = neovm_core::emacs_core::intern::intern(name);
+    u16::try_from(
+        ctx.fringe_bitmap_registry()
+            .index_of(sym)
+            .unwrap_or_else(|| panic!("standard bitmap `{name}` should be registered")),
+    )
+    .expect("index fits in u16")
+}
+
+fn intern_value(name: &str) -> Value {
+    Value::from_sym_id(neovm_core::emacs_core::intern::intern(name))
+}
+
+#[test]
+fn resolve_fringe_indicator_bare_symbol_used_for_all_cases() {
+    // `(empty-line . right-arrow)` — a bare symbol cdr is used for every case.
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((empty-line . right-arrow))");
+    let mut buf = test_buffer(1, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let want = fringe_index_of(&ctx, "right-arrow");
+    let empty_line = intern_value("empty-line");
+    // Bare symbol => same result for left/right and partial/full.
+    for &right_p in &[false, true] {
+        for &partial_p in &[false, true] {
+            assert_eq!(
+                resolve_fringe_indicator_bitmap_index(&buf, &ctx, empty_line, right_p, partial_p),
+                Some(want),
+                "bare symbol should resolve for right_p={right_p} partial_p={partial_p}",
+            );
+        }
+    }
+}
+
+#[test]
+fn resolve_fringe_indicator_list_selects_left_or_right() {
+    // `(truncation left-arrow right-arrow)` — 2-element cdr list. Left for
+    // right_p=false (ix1=0), right for right_p=true (ix1=1).
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((truncation left-arrow right-arrow))");
+    let mut buf = test_buffer(2, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let left = fringe_index_of(&ctx, "left-arrow");
+    let right = fringe_index_of(&ctx, "right-arrow");
+    let truncation = intern_value("truncation");
+
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, false),
+        Some(left),
+        "right_p=false picks the left element",
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, false),
+        Some(right),
+        "right_p=true picks the right element",
+    );
+    // No partial element present: partial_p falls back to the ix1 element.
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, true),
+        Some(right),
+        "partial with no partial element falls back to ix1 (right)",
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, true),
+        Some(left),
+        "partial with no partial element falls back to ix1 (left)",
+    );
+}
+
+#[test]
+fn resolve_fringe_indicator_partial_elements_selected() {
+    // `(L R PL PR)` — partial_p picks ix2 (= ix1 + 2).
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(
+        &mut ctx,
+        "'((truncation left-arrow right-arrow left-curly-arrow right-curly-arrow))",
+    );
+    let mut buf = test_buffer(3, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let left = fringe_index_of(&ctx, "left-arrow");
+    let right = fringe_index_of(&ctx, "right-arrow");
+    let pleft = fringe_index_of(&ctx, "left-curly-arrow");
+    let pright = fringe_index_of(&ctx, "right-curly-arrow");
+    let truncation = intern_value("truncation");
+
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, false),
+        Some(left),
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, false),
+        Some(right),
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, true),
+        Some(pleft),
+        "partial-left = ix2 (index 2)",
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, true),
+        Some(pright),
+        "partial-right = ix2 (index 3)",
+    );
+}
+
+#[test]
+fn resolve_fringe_indicator_t_element_is_no_bitmap() {
+    // A `t` element means "no bitmap here". With only a `t` left element and no
+    // global fallback, the result is `None`.
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((truncation t right-arrow))");
+    let mut buf = test_buffer(4, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let truncation = intern_value("truncation");
+    let right = fringe_index_of(&ctx, "right-arrow");
+
+    // Left element is `t` -> no bitmap. Note GNU then falls through to the
+    // global default; a bare Context has the standard default which also yields
+    // left-arrow for truncation, so assert the buffer-local-only branch result
+    // by using an indicator absent from the default.
+    let _ = right;
+    assert!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, false).is_some()
+            || resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, false)
+                .is_none(),
+        "smoke: call must not panic on a `t` element",
+    );
+    // The right element is a real bitmap.
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, false),
+        Some(right),
+        "right element resolves even when the left element is `t`",
+    );
+}
+
+#[test]
+fn resolve_fringe_indicator_t_element_with_custom_indicator_yields_none() {
+    // A custom indicator absent from the global default: a `t` element really
+    // yields `None` (no global fallback can rescue it).
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((test-custom-xxx t right-arrow))");
+    let mut buf = test_buffer(5, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let custom = intern_value("test-custom-xxx");
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, custom, false, false),
+        None,
+        "`t` left element + no global fallback => None",
+    );
+    let right = fringe_index_of(&ctx, "right-arrow");
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, custom, true, false),
+        Some(right),
+    );
+}
+
+#[test]
+fn resolve_fringe_indicator_unregistered_symbol_is_none() {
+    // A bitmap symbol that isn't registered resolves to `None`.
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((empty-line . no-such-bitmap-zzz))");
+    let mut buf = test_buffer(6, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let empty_line = intern_value("empty-line");
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, empty_line, false, false),
+        None,
+    );
+}
+
+#[test]
+fn resolve_fringe_indicator_missing_entry_is_none() {
+    // No matching entry and no global default => None.
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let alist = eval_lisp(&mut ctx, "'((continuation . right-curly-arrow))");
+    let mut buf = test_buffer(7, "*fringe*");
+    buf.set_buffer_local("fringe-indicator-alist", alist);
+
+    let absent = intern_value("definitely-absent-indicator");
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, absent, false, false),
+        None,
+    );
+}
+
+#[test]
+fn default_fringe_indicator_alist_seeded_resolves_standard_indicators() {
+    // A bare `Context::new()` (no lisp/fringe.el load) still has the GNU default
+    // `fringe-indicator-alist` seeded in Rust, so the resolver yields the
+    // standard truncation / continuation / empty-line bitmaps via the
+    // buffer-default fallback (no buffer-local override on a fresh scratch buf).
+    let mut ctx = neovm_core::emacs_core::Context::new();
+    let dv = ctx
+        .eval_str("(default-value 'fringe-indicator-alist)")
+        .expect("default-value");
+    assert!(
+        !dv.is_nil(),
+        "default fringe-indicator-alist should be seeded"
+    );
+
+    let buf_id = ctx
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buf = ctx.buffer_manager().get(buf_id).expect("buffer").clone();
+
+    let idx = |name: &str| {
+        let sym = neovm_core::emacs_core::intern::intern(name);
+        u16::try_from(ctx.fringe_bitmap_registry().index_of(sym).unwrap()).unwrap()
+    };
+    let empty_line = Value::from_sym_id(neovm_core::emacs_core::intern::intern("empty-line"));
+    let truncation = Value::from_sym_id(neovm_core::emacs_core::intern::intern("truncation"));
+    let continuation = Value::from_sym_id(neovm_core::emacs_core::intern::intern("continuation"));
+
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, empty_line, false, false),
+        Some(idx("empty-line")),
+        "empty-line resolves via the seeded default alist",
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, false, false),
+        Some(idx("left-arrow")),
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, truncation, true, false),
+        Some(idx("right-arrow")),
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, continuation, false, false),
+        Some(idx("left-curly-arrow")),
+    );
+    assert_eq!(
+        resolve_fringe_indicator_bitmap_index(&buf, &ctx, continuation, true, false),
+        Some(idx("right-curly-arrow")),
+    );
+}

@@ -18,12 +18,13 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::neovm_bridge::FaceResolver;
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
 use crate::types::WindowParams;
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphRow};
-use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::intern::intern;
+use neovm_core::emacs_core::{Context, Value};
 
 /// Geometry + policy needed to fill empty-line indicator rows past buffer end.
 #[derive(Clone, Copy, Debug)]
@@ -113,8 +114,9 @@ impl EmptyLineFringeFillRequest {
     /// row (0-based within the text area) and `row_geometry.y()` its top.
     ///
     /// Returns the number of filler rows installed.
-    pub(crate) fn fill(
+    pub(crate) fn fill<B: LayoutBufferView>(
         &self,
+        buffer: &B,
         mut output: TextWindowOutputTarget<'_>,
         evaluator: &Context,
         face_resolver: &FaceResolver,
@@ -124,14 +126,24 @@ impl EmptyLineFringeFillRequest {
         let Some(side) = self.side() else {
             return 0;
         };
-        // Resolve the standard `empty-line` bitmap by name (seeded at index 24).
-        // If it isn't registered (a stripped runtime), there is nothing to draw.
-        let Some(bitmap_index) = evaluator.fringe_bitmap_index_for_name("empty-line") else {
+        // Resolve the `empty-line` LOGICAL indicator through GNU's
+        // `fringe-indicator-alist` resolver (`get_logical_fringe_bitmap`), not by
+        // the hardcoded standard name: Doom rebinds the buffer-local entry to
+        // `(empty-line . vi-tilde-fringe-bitmap)`, so this yields the `~` bitmap
+        // instead of the dotted standard `empty-line` glyph (the GUI parity fix).
+        // The empty-line filler always draws the LEFT/full element (GNU produces
+        // these synthetic rows with `right_p = partial_p = 0`).
+        let empty_line_sym = Value::from_sym_id(intern("empty-line"));
+        let Some(bitmap_index) = resolve_fringe_indicator_bitmap_index(
+            buffer,
+            evaluator,
+            empty_line_sym,
+            /* right_p */ false,
+            /* partial_p */ false,
+        ) else {
             return 0;
         };
-        if bitmap_index > u32::from(u16::MAX) {
-            return 0;
-        }
+        let bitmap_index = u32::from(bitmap_index);
         let char_height = self.char_height.max(1.0);
         let ascent = self.char_ascent.max(0.0).min(char_height);
 

@@ -4349,6 +4349,29 @@ impl BufferManager {
         self.buffers.get_mut(&id)
     }
 
+    /// Propagate a newly-installed per-buffer default into every live buffer
+    /// that is still using the old default for `slot`. GNU buffers read
+    /// `buffer_defaults` live, so a late `setq-default` is visible everywhere;
+    /// neomacs copies the default into each buffer's slot at creation, so a
+    /// default installed *after* some buffers exist must be pushed into those
+    /// copies. Only buffers without an explicit local override (the slot-local
+    /// flag is clear, or — for unconditional slots — the slot is still nil) are
+    /// updated; a buffer that set its own value keeps it.
+    pub(crate) fn seed_default_slot_into_unset_buffers(&mut self, slot: BufferSlot, value: Value) {
+        let conditional =
+            buffer_slot_info_by_offset(slot).is_some_and(|info| info.local_flags_idx >= 0);
+        for buffer in self.buffers.values_mut() {
+            let unset = if conditional {
+                !buffer.slot_local_flag(slot)
+            } else {
+                buffer.slots[slot.index()].is_nil()
+            };
+            if unset {
+                buffer.slots[slot.index()] = value;
+            }
+        }
+    }
+
     /// Collect a raw `*mut *mut MarkerObj` pointer to every live buffer's
     /// marker-chain head slot. Used by the GC to feed
     /// `TaggedHeap::unchain_dead_markers` between mark and sweep so dead

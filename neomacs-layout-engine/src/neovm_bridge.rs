@@ -657,6 +657,112 @@ pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(buffer: &B, name: &s
         .unwrap_or_default()
 }
 
+/// Resolve a LOGICAL fringe indicator (`empty-line`, `truncation`,
+/// `continuation`, `up`, `down`, …) to a concrete fringe-bitmap registry index,
+/// honoring `fringe-indicator-alist`. Direct port of GNU
+/// `get_logical_fringe_bitmap` (`src/fringe.c`).
+///
+/// `right_p` selects the right vs left element; `partial_p` selects the
+/// partial vs full element. The alist `cdr` for an indicator is either:
+///   * a BARE SYMBOL — used for every (left/right/partial) case, or
+///   * a list `(LEFT RIGHT [PARTIAL-LEFT PARTIAL-RIGHT])` — indexed by
+///     `right_p ? (partial_p ? 3 : 1) : (partial_p ? 2 : 0)`, falling back to
+///     the non-partial element (`ix1 = right_p`) when a partial element is
+///     absent.
+/// An element equal to `t` means "no bitmap here" (skip to the fallback). The
+/// buffer-local alist is consulted first, then the global/default value.
+///
+/// Returns `None` when no bitmap applies (the `t`/missing/unregistered cases),
+/// matching GNU's `NO_FRINGE_BITMAP`.
+pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
+    buffer: &B,
+    ctx: &Context,
+    logical_sym: Value,
+    right_p: bool,
+    partial_p: bool,
+) -> Option<u16> {
+    let ix1 = usize::from(right_p);
+    let ix2 = ix1 + if partial_p { 2 } else { 0 };
+
+    // Look up the cdr of (LOGICAL . SPEC) in an alist value.
+    fn assq_cdr(alist: Value, key: Value) -> Option<Value> {
+        let mut cursor = alist;
+        while cursor.is_cons() {
+            let entry = cursor.cons_car();
+            if entry.is_cons() && eq_value(&entry.cons_car(), &key) {
+                return Some(entry.cons_cdr());
+            }
+            cursor = cursor.cons_cdr();
+        }
+        None
+    }
+
+    // From a resolved cdr SPEC, pick the bitmap SYMBOL for this (right/partial)
+    // case. `t` (or out-of-range) yields `None`; a bare symbol is used directly.
+    // When `partial_p` and the partial element is absent, fall back to `ix1`.
+    fn pick_bitmap_symbol(spec: Value, ix1: usize, ix2: usize, partial_p: bool) -> Option<Value> {
+        if spec.is_nil() {
+            // GNU: a present-but-nil cdr means NO_FRINGE_BITMAP for the whole
+            // indicator (handled by the caller treating `None` as "stop").
+            return None;
+        }
+        if !spec.is_cons() {
+            // BARE SYMBOL: used for all cases unless it is `t`.
+            return (spec.bits() != Value::T.bits()).then_some(spec);
+        }
+        let items = list_to_vec(&spec)?;
+        // Prefer the partial element when requested and present & not `t`.
+        if partial_p {
+            if let Some(elem) = items.get(ix2).copied() {
+                if elem.bits() != Value::T.bits() {
+                    return Some(elem);
+                }
+            }
+        }
+        // Non-partial (or partial-absent) fallback: the ix1 element.
+        let elem = items.get(ix1).copied()?;
+        (elem.bits() != Value::T.bits()).then_some(elem)
+    }
+
+    let registry = ctx.fringe_bitmap_registry();
+    let resolve_index = |sym: Value| -> Option<u16> {
+        let sym_id = sym.as_symbol_id()?;
+        let index = registry.index_of(sym_id)?;
+        u16::try_from(index).ok()
+    };
+
+    // 1. Buffer-local `fringe-indicator-alist`.
+    let local = buffer.layout_buffer_local_value("fringe-indicator-alist");
+    // 2. Global/default value (GNU `BVAR(&buffer_defaults, fringe_indicator_alist)`).
+    // `fringe-indicator-alist` is a forwarded per-buffer slot, so its default
+    // lives in `buffer_defaults` — the obarray value cell is always nil.
+    let global = ctx.buffer_default_value("fringe-indicator-alist");
+
+    // Try the buffer-local binding first. GNU only falls through to the global
+    // value when the local lookup yields no usable element (a `t` element or a
+    // missing partial spec); a present non-`t` element short-circuits.
+    if let Some(local) = local.filter(|v| !v.is_nil()) {
+        if let Some(cdr) = assq_cdr(local, logical_sym) {
+            if cdr.is_nil() {
+                // Explicit nil cdr => NO_FRINGE_BITMAP for this indicator.
+                return None;
+            }
+            if let Some(sym) = pick_bitmap_symbol(cdr, ix1, ix2, partial_p) {
+                return resolve_index(sym);
+            }
+        }
+    }
+
+    // Fall back to the global/default alist.
+    let global = global.filter(|v| !v.is_nil())?;
+    let cdr = assq_cdr(global, logical_sym)?;
+    if cdr.is_nil() {
+        return None;
+    }
+    let sym = pick_bitmap_symbol(cdr, ix1, ix2, partial_p)?;
+    resolve_index(sym)
+}
+
 pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     buffer: &B,
 ) -> DisplayLineNumbersMode {
