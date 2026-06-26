@@ -13902,6 +13902,229 @@ fn aot_bench_compute_loop() {
     );
 }
 
+/// R2-E E2: the ONE-MORE-REAL-FN demo — a RECOGNIZABLE pure-fixnum algorithm
+/// (Collatz step-count) served via the AOT path NATIVE FROM CALL 1 vs the
+/// interpreter. The body is the REAL byte-compiled `rb-collatz-steps` (verified
+/// off-line via the byte-compiler that its hot loop is ZERO CallBuiltin(Sym) —
+/// only dedicated arith ops: Gtr/Rem/Eqlsign/Div/Mul/Add1, the unboxable fixnum
+/// set the JIT/AOT actually speeds up). This is the NARROW pure-fixnum-compute
+/// sweet spot: the win is real on a recognizable algorithm, but most real elisp
+/// is shim-bound (aref/aset/logand/named-builtins → CallBuiltinSym → ~1x). We
+/// show "here's WHERE it helps", not "AOT helps everywhere".
+///
+/// Workload: sum collatz-step-counts over a sweep of starting values, each call
+/// < HOT_THRESHOLD so the interp copy never tiers (stays interpreted), while AOT
+/// serves it native from call 1. AOT served via compile_leaf_to_object (no shims
+/// in this body, so its `.so` dlopens in the unit-test binary) + inject + force.
+#[cfg(all(feature = "jit", target_os = "linux"))]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn aot_bench_real_algorithm() {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::jit::aot;
+    use crate::emacs_core::value::LambdaParams;
+
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // rb-collatz-steps's REAL byte-compiled ops (extracted from the byte-compiler,
+    // VERIFIED zero CallBuiltin(Sym) — pure dedicated arith). (defun rb-collatz-steps
+    // (n) (let ((steps 0)) (while (> n 1) (if (= (% n 2) 0) (setq n (/ n 2))
+    // (setq n (+ (* 3 n) 1))) (setq steps (1+ steps))) steps))
+    let ops = vec![
+        Op::Constant(0),       // 0  steps=0  [n steps]
+        Op::StackRef(1),       // 1  [n steps n]   <- loop head
+        Op::Constant(1),       // 2  [.. n 1]
+        Op::Gtr,               // 3  [.. (> n 1)]
+        Op::GotoIfNil(23),     // 4  exit
+        Op::StackRef(1),       // 5  [.. n]
+        Op::Constant(2),       // 6  [.. n 2]
+        Op::Rem,               // 7  [.. (% n 2)]
+        Op::Constant(0),       // 8  [.. r 0]
+        Op::Eqlsign,           // 9  [.. (= r 0)]
+        Op::GotoIfNil(16),     // 10 odd branch
+        Op::StackRef(1),       // 11 [.. n]
+        Op::Constant(2),       // 12 [.. n 2]
+        Op::Div,               // 13 [.. (/ n 2)]
+        Op::StackSet(2),       // 14 n=/   [n steps]
+        Op::Goto(21),          // 15
+        Op::StackRef(1),       // 16 [.. n]   <- odd
+        Op::Constant(3),       // 17 [.. n 3]
+        Op::Mul,               // 18 [.. (* 3 n)]  (constants[3]=3)
+        Op::Add1,              // 19 [.. (1+ (* 3 n))]
+        Op::StackSet(2),       // 20 n=3n+1
+        Op::Add1,              // 21 steps=1+steps  [n steps']  <- join
+        Op::Goto(1),           // 22 backedge
+        Op::Return,            // 23 return steps
+    ];
+    let constants = vec![
+        Value::make_int(0),
+        Value::make_int(1),
+        Value::make_int(2),
+        Value::make_int(3),
+    ];
+    let arity = 1usize;
+
+    // Correctness anchor: collatz(27)=111, collatz(97)=118 (independent reference).
+    let collatz_ref = |mut n: i64| -> i64 {
+        let mut s = 0;
+        while n > 1 {
+            n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 };
+            s += 1;
+        }
+        s
+    };
+    assert_eq!(collatz_ref(27), 111);
+    assert_eq!(collatz_ref(97), 118);
+
+    // Emit + serve via AOT (pure body, no shim imports → dlopens in this binary).
+    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity)
+        .expect("compile ok")
+        .expect("pure-fixnum collatz body is AOT-runnable");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let so_path = dir.path().join("aot_bench_collatz.so");
+    aot::link_object_to_so(&obj, &so_path).expect("link");
+    let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+    let unit = std::sync::Arc::new(crate::emacs_core::jit::compile::LoadedUnit::new(lib));
+    aot::test_support::set_forced_enabled(true);
+    aot::test_support::inject_unit(content_hash, unit);
+
+    // The AOT-served copy: a fresh bytecode fn, cold heat — try_run_compiled
+    // consults AOT FIRST (forced) and serves it native from call 1.
+    let mut aot_fn = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    aot_fn.lexical = true;
+    aot_fn.ops = ops.clone();
+    aot_fn.constants = constants.clone();
+    aot_fn.max_stack = 16;
+    let aot_val = Value::make_bytecode(aot_fn.clone());
+
+    // Interp copy: force-COLD via the shared BenchTier mechanism, never tiers
+    // (each call < HOT_THRESHOLD), invoked through the normal interpreter path.
+    let mut cold_f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    cold_f.lexical = true;
+    cold_f.ops = ops.clone();
+    cold_f.constants = constants.clone();
+    cold_f.max_stack = 16;
+    BenchTier::Cold.apply(&cold_f.runtime);
+    let cold_val = Value::make_bytecode(cold_f);
+
+    let ctx = &mut ev as *mut Context;
+
+    // Confirm AOT-served at heat=0 + correct result (collatz(27)=111).
+    let n0 = 27i64;
+    let r0 = crate::emacs_core::jit::cache::try_run_compiled(
+        ctx,
+        &aot_fn,
+        aot_val,
+        &[Value::make_int(n0)],
+    )
+    .expect("aot run ok");
+    assert_eq!(
+        r0,
+        Some(Value::make_int(collatz_ref(n0)).bits()),
+        "AOT collatz(27) result must be 111"
+    );
+    assert_eq!(
+        crate::emacs_core::jit::cache::cached_leaf_is_aot_for_func(&aot_fn),
+        Some(true),
+        "collatz must be served AOT-backed (native from call 1), not JIT'd"
+    );
+    // Cross-check the interp copy agrees (and is genuinely interpreted, not tiered).
+    assert_eq!(
+        ev.funcall_general_untraced(cold_val, vec![Value::make_int(97)])
+            .unwrap(),
+        Value::make_int(collatz_ref(97)),
+        "interp collatz(97) result must be 118"
+    );
+    let ctx = &mut ev as *mut Context;
+
+    // Realistic pattern: sum collatz-step-counts over starting values 2..=sweep,
+    // each a separate call (< HOT_THRESHOLD so the cold copy stays interpreted).
+    // min-of-5 over the whole sweep. AOT = native from call 1; cold = interpreted.
+    //
+    // Two regimes on the SAME real algorithm, to separate the two costs honestly:
+    //  (A) many SHORT calls (sweep 2..8000, ~100 inner iters each) — realistic call
+    //      pattern; per-call dispatch (try_run/funcall entry) dilutes the body win.
+    //  (B) FEW LONG calls (long-orbit fixnum-safe seeds, ~500 inner iters each) —
+    //      isolates the inner-loop compute win, the regime where AOT pays off.
+    // Both keep call-count < HOT_THRESHOLD so the interp copy never tiers.
+    let aot_fn = &aot_fn; // borrow for closures
+    let aot_val2 = aot_val;
+    let mut regime = |calls: &[i64], reps: usize| -> (std::time::Duration, std::time::Duration, i64) {
+        let want: i64 = calls.iter().map(|&n| collatz_ref(n)).sum::<i64>() * reps as i64;
+        let aot_min = {
+            let mut best = std::time::Duration::MAX;
+            for _ in 0..9 {
+                let t = std::time::Instant::now();
+                let mut acc = 0i64;
+                for _ in 0..reps {
+                    for &n in calls {
+                        let r = crate::emacs_core::jit::cache::try_run_compiled(
+                            ctx, aot_fn, aot_val2, &[Value::make_int(n)],
+                        )
+                        .expect("aot run")
+                        .expect("aot served");
+                        acc += Value::from_bits(r).as_fixnum().expect("fixnum");
+                    }
+                }
+                best = best.min(t.elapsed());
+                assert_eq!(acc, want, "AOT collatz regime sum");
+            }
+            best
+        };
+        let int_min = {
+            let mut best = std::time::Duration::MAX;
+            for _ in 0..9 {
+                let t = std::time::Instant::now();
+                let mut acc = 0i64;
+                for _ in 0..reps {
+                    for &n in calls {
+                        let r = ev
+                            .funcall_general_untraced(cold_val, vec![Value::make_int(n)])
+                            .unwrap();
+                        acc += r.as_fixnum().expect("fixnum");
+                    }
+                }
+                best = best.min(t.elapsed());
+                assert_eq!(acc, want, "interp collatz regime sum");
+            }
+            best
+        };
+        (aot_min, int_min, want)
+    };
+
+    // (A) realistic many-short-calls: 7999 calls × ~100 inner iters.
+    let short_calls: Vec<i64> = (2..=8000).collect();
+    let (a_aot, a_int, _) = regime(&short_calls, 1);
+    let a_ratio = a_int.as_secs_f64() / a_aot.as_secs_f64();
+
+    // (B) inner-loop-bound: long-orbit fixnum-safe seeds (524/685 steps), repeated.
+    // 8 seeds × 800 reps = 6400 calls < HOT_THRESHOLD, but ~500 inner iters/call.
+    let long_seeds: Vec<i64> = vec![703, 6171, 77031, 837799, 8400511, 6171, 837799, 8400511];
+    let (b_aot, b_int, _) = regime(&long_seeds, 800);
+    let b_ratio = b_int.as_secs_f64() / b_aot.as_secs_f64();
+
+    aot::test_support::reset();
+    crate::emacs_core::jit::cache::clear();
+    panic!(
+        "BENCH aot-real-collatz [pure-fixnum, ZERO CallBuiltin(Sym) — verified]: \
+         (A) realistic many-short-calls(7999×~100it): aot {a_aot:?} interp {a_int:?} -> {a_ratio:.2}x \
+         | (B) inner-loop-bound long-orbits(6400×~500it): aot {b_aot:?} interp {b_int:?} -> {b_ratio:.2}x. \
+         NARROW sweet spot: the compute win ({b_ratio:.2}x) is REAL on this recognizable algorithm when \
+         per-call work dominates; short calls are dispatch-bound ({a_ratio:.2}x); most real elisp is \
+         shim-bound (~1x). Showing WHERE AOT helps, not that it helps everywhere."
+    );
+}
+
 /// Profiling aid (NOT a pass/fail test): dump the dynamic, execution-weighted
 /// opcode histogram the interpreter runs for a workload — which opcodes actually
 /// dominate execution, the input the deferred tier-0 IC/quickening work needs to

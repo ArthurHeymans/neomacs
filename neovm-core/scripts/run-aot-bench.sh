@@ -199,5 +199,22 @@ cargo nextest run -p neovm-core --release --run-ignored ignored-only \
     -E 'test(/aot_bench_compute_loop/)' --no-fail-fast --no-capture 2>&1 \
     | grep -oE 'BENCH aot-compute-loop.*' || echo "  (compute bench did not report — check the build)"
 
+# ---------------------------------------------------------------------------
+# 5. REAL-ALGORITHM (R2-E E2): a RECOGNIZABLE pure-fixnum algorithm — Collatz
+#    step-count, whose hot loop byte-compiles to ZERO CallBuiltin(Sym) (only the
+#    dedicated arith ops Gtr/Rem/Eqlsign/Div/Mul/Add1 — VERIFIED via the
+#    byte-compiler) — served AOT-native-from-call-1 vs the interpreter. Reports
+#    TWO regimes to be honest about WHERE the win lands: (A) realistic many-short
+#    -calls (dispatch-bound, ~1x) and (B) inner-loop-bound long orbits (the real
+#    compute win, ~4-4.5x). This is the NARROW pure-fixnum sweet spot — most real
+#    elisp is shim-bound (~1x); we show where AOT helps, not that it helps
+#    everywhere.
+# ---------------------------------------------------------------------------
 echo
-echo "=== R2-D bench complete ==="
+echo "--- 5. real-algorithm collatz (pure-fixnum, verified zero-CallBuiltinSym; A=short B=long-orbit) ---"
+cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+    -E 'test(/aot_bench_real_algorithm/)' --no-fail-fast --no-capture 2>&1 \
+    | grep -oE 'BENCH aot-real-collatz.*' || echo "  (real-algorithm bench did not report — check the build)"
+
+echo
+echo "=== R2-D/E bench complete ==="
