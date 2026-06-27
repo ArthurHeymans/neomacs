@@ -1518,6 +1518,41 @@ fn test_builtin_expand_file_name_eval_uses_default_directory() {
 }
 
 #[test]
+fn builtin_expand_file_name_empty_name_and_empty_default_dir_returns_empty() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.set_variable("default-directory", Value::string("/base/dir/"));
+
+    // GNU: `(expand-file-name "" "")` => "" — both "" share
+    // `empty_unibyte_string`, so they are `eq`, the recursive expansion of
+    // DEFAULT-DIRECTORY is skipped, and the empty NAME is returned unchanged.
+    let both_empty =
+        builtin_expand_file_name(&mut eval, vec![Value::string(""), Value::string("")]).unwrap();
+    assert_eq!(both_empty.as_utf8_str(), Some(""));
+
+    // GNU: `(expand-file-name "")` [nil/absent dir] => "/base/dir" — falls back
+    // to `default-directory`.  Must NOT be affected by the narrow fix above.
+    let empty_name_nil_dir = builtin_expand_file_name(&mut eval, vec![Value::string("")]).unwrap();
+    assert_eq!(empty_name_nil_dir.as_utf8_str(), Some("/base/dir"));
+
+    let empty_name_explicit_nil =
+        builtin_expand_file_name(&mut eval, vec![Value::string(""), Value::NIL]).unwrap();
+    assert_eq!(empty_name_explicit_nil.as_utf8_str(), Some("/base/dir"));
+
+    // GNU: `(expand-file-name "x" "")` => "/base/dir/x" — only NAME is empty, so
+    // DEFAULT-DIRECTORY "" is still expanded against `default-directory`.
+    let nonempty_name_empty_dir =
+        builtin_expand_file_name(&mut eval, vec![Value::string("x"), Value::string("")]).unwrap();
+    assert_eq!(nonempty_name_empty_dir.as_utf8_str(), Some("/base/dir/x"));
+
+    // GNU: `(expand-file-name "" "/other/")` => "/other" — non-empty explicit dir.
+    let empty_name_other_dir =
+        builtin_expand_file_name(&mut eval, vec![Value::string(""), Value::string("/other/")])
+            .unwrap();
+    assert_eq!(empty_name_other_dir.as_utf8_str(), Some("/other"));
+}
+
+#[test]
 fn builtin_expand_file_name_preserves_raw_unibyte_default_directory_bytes() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

@@ -2332,7 +2332,16 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
         implicit_default_directory_value_for_expand_file_name(eval)?
     };
     let default_dir_lisp = expect_lisp_filename_string_strict(&default_dir_value)?;
-    let default_dir_eq_name = eq_value(&default_dir_value, &args[0]);
+    // GNU's `Fexpand_file_name` guards the recursive expansion of
+    // DEFAULT-DIRECTORY with `!EQ (default_directory, name)`.  In GNU all empty
+    // string literals share the same `empty_unibyte_string` object, so when both
+    // NAME and the explicit DEFAULT-DIRECTORY arg are "", they are `eq` and the
+    // recursion is skipped, leaving the empty NAME unchanged (e.g.
+    // `(expand-file-name "" "")` => "").  neomacs allocates a fresh object per
+    // empty string, so mirror GNU by also treating two empty filename strings as
+    // `eq` here.  (A non-empty NAME or a nil/absent dir arg are unaffected.)
+    let default_dir_eq_name = eq_value(&default_dir_value, &args[0])
+        || (name_lisp.as_bytes().is_empty() && default_dir_lisp.as_bytes().is_empty());
     let default_handler = find_file_name_handler_lisp_for_eval(eval, &default_dir_lisp, operation);
     if !default_handler.is_nil() {
         let result = eval.funcall_general(
