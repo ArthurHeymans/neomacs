@@ -59,8 +59,15 @@ fn string_comparison_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
 fn builtin_string_equal_values(a_value: Value, b_value: Value) -> EvalResult {
     let a = expect_string_comparison_operand(&a_value)?;
     let b = expect_string_comparison_operand(&b_value)?;
+    // GNU `Fstring_equal` compares SCHARS, SBYTES, then `memcmp` of the raw
+    // internal-form bytes. It deliberately does NOT decode to char codes: a raw
+    // unibyte byte >=128 occupies one byte, while the same-numbered multibyte
+    // (eight-bit or real) char occupies two bytes, so their byte lengths differ
+    // and they compare unequal. Pure-ASCII unibyte/multibyte strings share an
+    // identical byte representation and stay equal, matching GNU. Multibyteness
+    // itself is not compared (GNU does not), only the byte counts and bytes.
     Ok(Value::bool_val(
-        string_comparison_codes(&a) == string_comparison_codes(&b),
+        a.schars() == b.schars() && a.sbytes() == b.sbytes() && a.as_bytes() == b.as_bytes(),
     ))
 }
 

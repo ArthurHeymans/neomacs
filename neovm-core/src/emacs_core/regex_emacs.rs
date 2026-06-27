@@ -668,14 +668,50 @@ pub(crate) fn regex_compile_lisp_with_translation(
                     last = split_trailing_exactn_atom_if_needed(&mut buf, last);
                 }
 
-                let greedy = if p < plen && pattern_bytes[p] == b'?' {
-                    p += 1; // consume '?' for non-greedy
-                    false
-                } else {
-                    true
+                // GNU regex-emacs.c: if there is a sequence of repetition
+                // chars, collapse it down to just one (the right one).  We
+                // track zero_times_ok / many_times_ok / greedy exactly as GNU
+                // does so that stacked quantifiers like `a**`, `a*?*`, `a++`,
+                // `a???` fold onto the preceding atom instead of being treated
+                // as literals.  (Interval operators `\{n,m\}` are NOT folded
+                // here, matching GNU.)
+                let mut cur = c;
+                let mut zero_times_ok = false;
+                let mut many_times_ok = false;
+                let mut greedy = true;
+                loop {
+                    if cur == b'?' && (zero_times_ok || many_times_ok) {
+                        greedy = false;
+                    } else {
+                        zero_times_ok |= cur != b'+';
+                        many_times_ok |= cur != b'?';
+                    }
+
+                    if !(p < plen
+                        && (pattern_bytes[p] == b'*'
+                            || pattern_bytes[p] == b'+'
+                            || pattern_bytes[p] == b'?'))
+                    {
+                        break;
+                    }
+                    // Found another repeat character — consume and fold it.
+                    cur = pattern_bytes[p];
+                    p += 1;
+                }
+
+                // Map the collapsed flags back to a single effective postfix
+                // operator for `compile_repetition`:
+                //   (zero, many) = (T,T) -> `*`, (T,F) -> `?`, (F,T) -> `+`.
+                let folded_op = match (zero_times_ok, many_times_ok) {
+                    (true, true) => b'*',
+                    (true, false) => b'?',
+                    (false, true) => b'+',
+                    // Unreachable: the first iteration always sets at least one
+                    // flag, but fall back to a plain match if it somehow isn't.
+                    (false, false) => b'+',
                 };
 
-                compile_repetition(c, greedy, posix, last, &mut buf)?;
+                compile_repetition(folded_op, greedy, posix, last, &mut buf)?;
 
                 laststart = None; // Can't apply another postfix op
                 laststart_is_group = false;
@@ -2169,6 +2205,18 @@ fn parse_interval(
     } else {
         Some(min) // \{n\} — exact count
     };
+
+    // GNU regex-emacs.c:2390 rejects a descending interval where a finite
+    // upper bound is smaller than the lower bound (e.g. `a\{2,1\}`), signaling
+    // `(invalid-regexp "Invalid content of \\{\\}")`.  An unbounded `\{n,\}`
+    // (max == None) is always valid.
+    if let Some(m) = max {
+        if m < min {
+            return Err(RegexCompileError {
+                message: "Invalid content of \\{\\}".to_string(),
+            });
+        }
+    }
 
     // Expect \}
     if *p + 1 < plen && pattern[*p] == b'\\' && pattern[*p + 1] == b'}' {

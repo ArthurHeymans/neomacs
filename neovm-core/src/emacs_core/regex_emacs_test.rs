@@ -365,3 +365,81 @@ fn test_multibyte_charset_match_position() {
     assert_eq!(pos, 6, "á starts at byte 6");
     assert_eq!(regs.end[0], 8, "á is 2 bytes in UTF-8, ends at byte 8");
 }
+
+// ---------------------------------------------------------------------------
+// GNU parity: descending intervals \{n,m\} with n>m must be rejected.
+// (string-match "a\\{2,1\\}" "aa") -> (invalid-regexp "Invalid content of \\{\\}")
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_descending_interval_reports_gnu_badbr() {
+    crate::test_utils::init_test_tracing();
+    // \{2,1\}, \{5,2\}, \{3,0\}: lower > upper must signal "Invalid content of \{\}".
+    for pat in ["a\\{2,1\\}", "a\\{5,2\\}", "a\\{3,0\\}"] {
+        match regex_compile(pat, false, false) {
+            Ok(_) => panic!("descending interval {pat:?} should fail to compile"),
+            Err(err) => assert_eq!(
+                err.message, "Invalid content of \\{\\}",
+                "wrong error for {pat:?}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn test_ascending_and_unbounded_intervals_still_compile() {
+    crate::test_utils::init_test_tracing();
+    // Equal bounds, ascending bounds, and an unbounded upper must remain valid.
+    for pat in ["a\\{2,3\\}", "a\\{2,2\\}", "a\\{2,\\}", "a\\{0,2\\}"] {
+        assert!(
+            regex_compile(pat, false, false).is_ok(),
+            "valid interval {pat:?} should compile"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GNU parity: a redundant trailing quantifier folds onto the preceding one.
+// (string-match "a**" "aaa") -> 0  (GNU; neo previously returned nil)
+// Also a*?*, a*+, a++, a???.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_stacked_quantifiers_fold_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // Each of these must compile and match at position 0 of "aaa",
+    // exactly like GNU's quantifier folding.
+    for pat in ["a**", "a*?*", "a*+", "a++", "a???", "a+*", "a?*", "a?+"] {
+        let r = search_pattern(pat, "aaa", 0, false, &syn, 0);
+        let r = r.unwrap_or_else(|e| panic!("{pat:?} failed to compile: {e:?}"));
+        let (pos, _regs) = r.unwrap_or_else(|| panic!("{pat:?} should match \"aaa\""));
+        assert_eq!(pos, 0, "{pat:?} should match at position 0");
+    }
+}
+
+#[test]
+fn test_stacked_greedy_star_consumes_all() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // `a**` folds to a greedy `a*`, so on "aaa" it consumes all three a's.
+    let (pos, regs) = search_pattern("a**", "aaa", 0, false, &syn, 0)
+        .unwrap()
+        .expect("a** should match \"aaa\"");
+    assert_eq!(pos, 0);
+    assert_eq!(regs.end[0], 3, "greedy a** should consume all three a's");
+}
+
+#[test]
+fn test_stacked_plus_requires_one() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // `a++` folds to a greedy `a+`: must match at least one `a`.
+    let r = search_pattern("a++", "aaa", 0, false, &syn, 0).unwrap();
+    let (pos, regs) = r.expect("a++ should match \"aaa\"");
+    assert_eq!(pos, 0);
+    assert_eq!(regs.end[0], 3);
+    // `a+` (folded from a++) must NOT match a string with no `a`.
+    let r = search_pattern("a++", "bbb", 0, false, &syn, 0).unwrap();
+    assert!(r.is_none(), "a++ must not match a string with no a's");
+}

@@ -5300,6 +5300,59 @@ fn bootstrap_string_match_open_interval_quantifier_matches_gnu_semantics() {
 }
 
 #[test]
+fn string_match_descending_interval_signals_invalid_regexp_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (string-match "a\\{2,1\\}" "aa") => (invalid-regexp "Invalid content of \\{\\}")
+    // A descending interval (lower > upper) must be rejected, not accepted.
+    // The error-data string is "Invalid content of \{\}" (single backslashes),
+    // which prin1 / print_value renders with the backslashes doubled.
+    assert_eq!(
+        eval_one(
+            r#"(condition-case e (string-match "a\\{2,1\\}" "aa")
+                 (invalid-regexp (car (cdr e))))"#
+        ),
+        r#"OK "Invalid content of \\{\\}""#
+    );
+    // Also {5,2} and {3,0}.
+    assert_eq!(
+        eval_one(
+            r#"(condition-case e (string-match "a\\{5,2\\}" "aaaaa")
+                 (invalid-regexp (car (cdr e))))"#
+        ),
+        r#"OK "Invalid content of \\{\\}""#
+    );
+    assert_eq!(
+        eval_one(
+            r#"(condition-case e (string-match "a\\{3,0\\}" "aaa")
+                 (invalid-regexp (car (cdr e))))"#
+        ),
+        r#"OK "Invalid content of \\{\\}""#
+    );
+}
+
+#[test]
+fn string_match_stacked_trailing_quantifiers_fold_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU folds a redundant trailing quantifier onto the preceding one, so each
+    // of these matches at position 0 of "aaa" (neo previously returned nil and
+    // then signaled args-out-of-range in match-string).
+    for pat in [r#"a**"#, r#"a*?*"#, r#"a*+"#, r#"a++"#, r#"a???"#] {
+        assert_eq!(
+            eval_one(&format!(r#"(string-match "{pat}" "aaa")"#)),
+            "OK 0",
+            "pattern {pat:?} should match at 0 like GNU"
+        );
+    }
+    // a** folds to greedy a*, so it consumes the whole run: the match end is 3.
+    // (match-string is a lisp subr unavailable in the bare context, so assert
+    // the match-end via the C builtin match-end instead.)
+    assert_eq!(
+        eval_one(r#"(progn (string-match "a**" "aaa") (match-end 0))"#),
+        "OK 3"
+    );
+}
+
+#[test]
 fn bootstrap_string_match_posix_char_class_sequence_matches_gnu_order() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
@@ -15808,4 +15861,27 @@ fn bench_jit_vs_vm_loop() {
     eprintln!("VM  : total {:?}  ->  {:.1} ns/call", vm_elapsed, vm_ns);
     eprintln!("JIT : total {:?}  ->  {:.1} ns/call", jit_elapsed, jit_ns);
     eprintln!("speedup (VM/JIT): {:.2}x", ratio);
+}
+
+#[test]
+fn string_equal_unibyte_high_byte_vs_multibyte_char() {
+    crate::test_utils::init_test_tracing();
+    // GNU: these are all nil because the raw unibyte byte (1 byte) and the
+    // multibyte char of the same number (2 bytes) differ in internal-form bytes.
+    assert_eq!(eval_one(r#"(string= "é" (unibyte-string 233))"#), "OK nil");
+    assert_eq!(
+        eval_one(r#"(string= (unibyte-string 200) (char-to-string 200))"#),
+        "OK nil"
+    );
+    assert_eq!(
+        eval_one(r#"(string= (unibyte-string 233 234) "éê")"#),
+        "OK nil"
+    );
+    // Sanity: identical multibyte strings and pure-ASCII unibyte/multibyte
+    // still compare equal, matching GNU.
+    assert_eq!(eval_one(r#"(string= "éê" "éê")"#), "OK t");
+    assert_eq!(
+        eval_one(r#"(string= (string-to-unibyte "abc") (string-to-multibyte "abc"))"#),
+        "OK t"
+    );
 }
