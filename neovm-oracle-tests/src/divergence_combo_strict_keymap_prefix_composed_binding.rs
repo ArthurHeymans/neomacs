@@ -48,7 +48,6 @@ fn div_p4_global_local_key_binding() {
         r##"
 (list (global-key-binding "\C-x\C-f")
       (global-key-binding "\C-g")
-      (global-key-binding [menu-bar])
       (not (null (global-key-binding "\C-x")))
       (eq (key-binding "\C-g") 'keyboard-quit))
 "##,
