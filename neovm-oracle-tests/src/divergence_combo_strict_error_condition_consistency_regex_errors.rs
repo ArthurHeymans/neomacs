@@ -24,6 +24,13 @@ fn div_r3_error_condition_consistency() {
 #[test]
 fn div_r3_malformed_regex_error_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-27:
+    // GNU Emacs: OK (nil nil "Premature end of regular expression" "Unmatched ( or \\(" "Unmatched ) or \\)")
+    // Neomacs:   OK (nil nil "Unmatched [ or [^" "Unmatched ( or \\(" "Unmatched ) or \\)")
+    // Malformed regex "[a-" produces a different error message: GNU says
+    // "Premature end of regular expression" (regex ends inside a char class),
+    // Neomacs says "Unmatched [ or [^". The other regex errors ("(", "*", "\\(",
+    // "\\)") agree (nil for valid, matching messages for the rest).
     assert_oracle_parity(
         r##"
 (list (condition-case err (string-match "(" "text") (invalid-regexp (cadr err)) (error 'other))
