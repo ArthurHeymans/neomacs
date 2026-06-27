@@ -2202,6 +2202,44 @@ fn subst_char_in_region_replaces_chars_in_accessible_region() {
     );
 }
 
+/// A same-length substitution (overwrite-mode / subst-char-in-region) must feed
+/// the unchanged-region accumulator a dirty span, so the localized-edit fast
+/// path applies instead of a full rebuild (Phase 3 same-len hook).
+#[test]
+fn subst_char_in_region_records_unchanged_region_dirty_span() {
+    let mut eval = super::super::eval::Context::new();
+    builtin_insert(&mut eval, vec![Value::string("hello world hello")]).unwrap();
+
+    // Ack the initial insert's dirty span so we measure only the substitution.
+    eval.buffers
+        .current_buffer()
+        .unwrap()
+        .reset_unchanged_region();
+    assert_eq!(
+        eval.buffers.current_buffer().unwrap().changed_char_range(),
+        None
+    );
+
+    builtin_subst_char_in_region(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(18),
+            Value::fixnum('l' as i64),
+            Value::fixnum('L' as i64),
+        ],
+    )
+    .expect("subst-char-in-region should succeed");
+
+    let dirty = eval.buffers.current_buffer().unwrap().changed_char_range();
+    assert!(
+        dirty.is_some(),
+        "same-len subst records a dirty range (got {dirty:?})"
+    );
+    let (start, end) = dirty.unwrap();
+    assert!(start < end, "non-empty dirty span (got {start}..{end})");
+}
+
 #[test]
 fn subst_char_in_region_noundo_marks_buffer_modified_like_gnu() {
     crate::test_utils::init_test_tracing();
@@ -16668,4 +16706,44 @@ fn buffer_text_pixel_size_plain_text_unchanged() {
     let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
     assert_eq!(result.cons_car(), Value::fixnum(6));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
+}
+
+/// Adversarial-review fix: changing or moving an overlay alters layout (face /
+/// before-string / hl-line position) with no buffer-text edit, so it MUST bump
+/// the overlay modification tick — otherwise the cursor-only / scroll fast paths
+/// reuse rows that don't reflect the overlay (e.g. hl-line stuck on the old line).
+#[test]
+fn overlay_put_and_move_bump_overlay_modified_tick() {
+    let mut eval = super::super::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("*ov-tick*");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "hello world")
+        .expect("insert");
+
+    let overlay = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(3)])
+        .expect("make-overlay");
+
+    let before = eval.buffers.get(buffer_id).unwrap().overlay_modified_tick();
+    crate::emacs_core::textprop::builtin_overlay_put(
+        &mut eval,
+        vec![overlay, Value::symbol("face"), Value::symbol("bold")],
+    )
+    .expect("overlay-put");
+    let after_put = eval.buffers.get(buffer_id).unwrap().overlay_modified_tick();
+    assert!(
+        after_put > before,
+        "overlay-put must bump the overlay tick ({before} -> {after_put})"
+    );
+
+    crate::emacs_core::textprop::builtin_move_overlay(
+        &mut eval,
+        vec![overlay, Value::fixnum(5), Value::fixnum(8)],
+    )
+    .expect("move-overlay");
+    let after_move = eval.buffers.get(buffer_id).unwrap().overlay_modified_tick();
+    assert!(
+        after_move > after_put,
+        "move-overlay must bump the overlay tick ({after_put} -> {after_move})"
+    );
 }

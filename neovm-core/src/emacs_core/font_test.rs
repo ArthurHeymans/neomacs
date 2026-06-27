@@ -738,6 +738,35 @@ fn clear_font_cache_resets_face_caches() {
 }
 
 #[test]
+fn set_lisp_face_attribute_bumps_face_change_count() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+    let mut eval = Context::new();
+    let face_name = "__neovm_incr_layout_probe_face";
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+
+    // Changing a face attribute must advance the global face-change counter:
+    // incremental redisplay's retained key compares `face_change_count` and
+    // drops matrices when set-face-attribute / theme load mutates appearance
+    // in place (spec §4.2 escalation — the hash cannot backstop face drift).
+    let before = eval.face_change_count;
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":foreground"),
+            Value::string("green"),
+        ],
+    )
+    .unwrap();
+    let after = eval.face_change_count;
+    assert!(
+        after > before,
+        "set-face-attribute must bump face_change_count (before={before} after={after})"
+    );
+}
+
+#[test]
 fn created_face_runtime_state_uses_symbol_identity() {
     crate::test_utils::init_test_tracing();
     clear_font_cache_state();

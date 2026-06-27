@@ -411,7 +411,15 @@ impl Buffer {
         }
         self.overlays
             .adjust_for_inserted_text(insertion, edit.marker_placement().before_markers());
+        let insert_char_pos = insertion.char_pos().get() as i64;
         self.record_char_modification(char_len);
+        // Phase 3 unchanged-region accumulator: an insert is a zero-width change
+        // at `pos` (everything from `pos` shifts right). `old_z` is the char
+        // count before this insert.
+        let new_z = self.text.char_count().get() as i64;
+        let inserted = char_len.get() as i64;
+        self.text
+            .note_changed_char_region(insert_char_pos, insert_char_pos, new_z - inserted);
     }
 
     fn apply_byte_delete_side_effects(
@@ -436,7 +444,17 @@ impl Buffer {
                 .adjust_text_props_for_delete_range(range.char_range());
         }
         self.overlays.adjust_for_deleted_text(range);
+        let delete_char_start = range.char_range().start().get() as i64;
         self.record_char_modification(char_len);
+        // Phase 3 unchanged-region accumulator: a delete of [a, a+M) leaves a
+        // change at `a` (the deleted span is gone). old_z = new_z + M.
+        let new_z = self.text.char_count().get() as i64;
+        let deleted = char_len.get() as i64;
+        self.text.note_changed_char_region(
+            delete_char_start,
+            delete_char_start + deleted,
+            new_z + deleted,
+        );
     }
 
     pub(in crate::buffer) fn apply_same_len_edit_side_effects(
@@ -448,7 +466,17 @@ impl Buffer {
             return;
         }
         let old_state = self.modified_state_value();
+        let modified = edit.modified_range();
+        let changed_start = modified.char_start().get() as i64;
+        let changed_end = modified.char_end().get() as i64;
         self.record_char_modification(edit.changed_chars());
+        // Phase 3 unchanged-region accumulator: a same-length substitution
+        // changes chars [start, end) IN PLACE — nothing shifts, so old_z == the
+        // current (unchanged) char count. Lets overwrite-mode / subst-char edits
+        // take the localized-edit fast path instead of a full rebuild.
+        let new_z = self.text.char_count().get() as i64;
+        self.text
+            .note_changed_char_region(changed_start, changed_end, new_z);
         if modified_state.preserve_unmodified_if_clean() && old_state.is_nil() {
             self.text.set_save_modified_tick(self.text.modified_tick());
         }

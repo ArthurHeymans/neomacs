@@ -3222,6 +3222,34 @@ impl Buffer {
         self.text.chars_modified_tick()
     }
 
+    /// The accumulated dirty char range `[beg, end)` since the last redisplay
+    /// ack, or `None` if nothing changed (incremental-layout Phase 3, spec §6).
+    /// Buffer-absolute char positions; the window side intersects with the
+    /// accessible/visible region.
+    pub fn changed_char_range(&self) -> Option<(i64, i64)> {
+        let current_z = self.text.char_count().get() as i64;
+        self.text.changed_char_range(current_z)
+    }
+
+    /// Reset the unchanged-region accumulator — the redisplay ack, performed at
+    /// the committed (accepted) layout break.
+    pub fn reset_unchanged_region(&self) {
+        self.text.reset_unchanged_region();
+    }
+
+    /// Tick that advances on every text-PROPERTY change to this buffer
+    /// (face/display/invisible/composition props), without moving the chars
+    /// tick. Source-of-truth signal for incremental redisplay invalidation.
+    pub fn props_modified_tick(&self) -> i64 {
+        self.text.props_modified_tick()
+    }
+
+    /// Record a text-property modification on this buffer (advances
+    /// `props_modified_tick` + `modified_tick`, not `chars_modified_tick`).
+    pub fn record_text_property_modification(&mut self) {
+        self.text.record_text_property_modification();
+    }
+
     pub fn save_modified_tick(&self) -> i64 {
         self.text.save_modified_tick()
     }
@@ -4897,11 +4925,13 @@ impl BufferManager {
         name: Value,
         value: Value,
     ) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .overlays
-            .overlay_put(overlay_id, name, value)
-            .ok()?;
+        let buf = self.buffers.get_mut(&id)?;
+        buf.overlays.overlay_put(overlay_id, name, value).ok()?;
+        // An overlay property change (face/display/before-string/invisible/...) can
+        // alter layout with no buffer-text edit; bump the overlay tick so the
+        // incremental fast paths re-lay instead of reusing stale rows (GNU bumps
+        // the overlay modiff on any overlay change).
+        buf.increment_overlay_modified_tick();
         Some(())
     }
 
@@ -5131,7 +5161,11 @@ impl BufferManager {
 
     pub fn record_buffer_text_property_modification(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        buf.text.increment_modified_tick(1);
+        // Bumps `modified_tick` (as before) AND the dedicated
+        // `props_modified_tick` — the single choke point every text-property
+        // builtin (put/add/set/remove) routes through, so redisplay sees an
+        // appearance change without a char edit.
+        buf.record_text_property_modification();
         Some(())
     }
 
@@ -5230,10 +5264,13 @@ impl BufferManager {
         overlay_id: Value,
         range: EmacsByteRange,
     ) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .overlays
+        let buf = self.buffers.get_mut(&id)?;
+        buf.overlays
             .move_overlay_to_emacs_byte_range(overlay_id, range);
+        // Moving an overlay (e.g. hl-line following the cursor) changes which
+        // lines it covers with no buffer-text edit; bump the overlay tick so the
+        // cursor-only / scroll fast paths re-lay the affected rows.
+        buf.increment_overlay_modified_tick();
         Some(())
     }
 

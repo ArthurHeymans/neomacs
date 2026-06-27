@@ -2885,6 +2885,10 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         rear_advance,
     });
     buf.overlays.insert_overlay(overlay);
+    // Creating an overlay changes what redisplay must consider (it can carry a
+    // face/display/before-string the moment a property is attached), so bump
+    // the modification tick here — matching move/put/delete, which already do.
+    buf.increment_overlay_modified_tick();
     Ok(overlay)
 }
 

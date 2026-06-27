@@ -350,6 +350,59 @@ fn get_char_property_delegates() {
 }
 
 #[test]
+fn overlay_lifecycle_bumps_overlay_modified_tick() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+
+    // Creating an overlay must bump the tick. This was an asymmetry:
+    // move/put/delete bumped `overlay_modified_tick` but `make-overlay` did
+    // not, so incremental redisplay could miss a freshly created overlay.
+    let before_make = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .overlay_modified_tick();
+    let ov = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(3)]).unwrap();
+    let after_make = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .overlay_modified_tick();
+    assert!(
+        after_make > before_make,
+        "make-overlay must bump overlay_modified_tick (before={before_make} after={after_make})"
+    );
+
+    // Putting a display-affecting property bumps it too (already worked).
+    builtin_overlay_put(
+        &mut eval,
+        vec![ov, Value::symbol("face"), Value::symbol("highlight")],
+    )
+    .unwrap();
+    let after_put = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .overlay_modified_tick();
+    assert!(
+        after_put > after_make,
+        "overlay-put must bump overlay_modified_tick"
+    );
+
+    // Deleting bumps it too (already worked).
+    builtin_delete_overlay(&mut eval, vec![ov]).unwrap();
+    let after_delete = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .overlay_modified_tick();
+    assert!(
+        after_delete > after_put,
+        "delete-overlay must bump overlay_modified_tick"
+    );
+}
+
+#[test]
 fn get_char_property_and_overlay_shape() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("abcd");

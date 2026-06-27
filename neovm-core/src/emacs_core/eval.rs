@@ -1945,6 +1945,14 @@ pub struct Context {
     /// Incremented when any face attribute changes; layout engine uses
     /// this to invalidate its resolved face cache.
     pub face_change_count: u64,
+    /// Incremented when any display-affecting buffer-local/global variable is
+    /// set (truncate-lines, bidi-*, ctl-arrow, buffer-display-table,
+    /// buffer-invisibility-spec, fill-column-indicator, overlay-arrow,
+    /// display-line-numbers, …). These change layout with NO buffer-text/face/
+    /// overlay tick, so the incremental fast paths key on this counter to force
+    /// a full rebuild (adversarial-review fix). Rare event → a global counter
+    /// (over-invalidating all windows) is acceptable and simpler than per-var keys.
+    pub display_var_change_count: u64,
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
@@ -2668,6 +2676,7 @@ impl Context {
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
         ev.face_change_count = 0;
+        ev.display_var_change_count = 0;
         ev.redisplay_generation = 0;
         ev.last_redisplay_signature = None;
         ev.depth = 0;
@@ -4980,6 +4989,7 @@ impl Context {
             coding_systems: CodingSystemManager::new(),
             face_table: FaceTable::new(),
             face_change_count: 0,
+            display_var_change_count: 0,
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
@@ -5162,6 +5172,7 @@ impl Context {
             coding_systems,
             face_table,
             face_change_count: 0,
+            display_var_change_count: 0,
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
@@ -6893,6 +6904,10 @@ impl Context {
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
         if crate::buffer::buffer::variable_affects_display_by_sym_id(resolved) {
             self.invalidate_redisplay();
+            // A display-affecting variable changed: the incremental fast paths
+            // key on this counter so they re-lay instead of reusing rows shaped
+            // under the old setting (the four buffer/face ticks do not move here).
+            self.display_var_change_count = self.display_var_change_count.wrapping_add(1);
         }
     }
 

@@ -57,6 +57,20 @@ struct BufferTextStorage {
     virtual_gap: GapCompatState,
     modified_tick: i64,
     chars_modified_tick: i64,
+    /// Tracks `modified_tick` at the last text-PROPERTY change (GNU has no
+    /// direct analog; mirrors `chars_modified_tick` for char edits). Lets
+    /// redisplay distinguish "appearance changed" (face/display/invisible
+    /// props) from "text changed" without conflating the two. Bumped only via
+    /// [`BufferText::record_text_property_modification`].
+    props_modified_tick: i64,
+    /// GNU `BEG_UNCHANGED` analog (incremental-layout Phase 3, spec §6): the
+    /// number of chars at the buffer START that are unchanged since the last
+    /// redisplay ack. `i64::MAX` means "fully unchanged" (no edit since reset).
+    /// Composed by `min` across edits; survives position shifts because it is a
+    /// COUNT from the end, not an absolute position.
+    beg_unchanged: i64,
+    /// GNU `END_UNCHANGED` analog: chars at the buffer END unchanged since ack.
+    end_unchanged: i64,
     save_modified_tick: i64,
     text_props: TextPropertyTable,
     /// Head of the intrusive per-buffer marker chain (GNU `buffer->own_text.markers`).
@@ -159,6 +173,9 @@ impl Clone for BufferTextStorage {
             virtual_gap: self.virtual_gap,
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
+            props_modified_tick: self.props_modified_tick,
+            beg_unchanged: self.beg_unchanged,
+            end_unchanged: self.end_unchanged,
             save_modified_tick: self.save_modified_tick,
             text_props: self.text_props.clone(),
             // Chain head intentionally not cloned: chain pointers are unique
@@ -221,6 +238,9 @@ impl BufferText {
                 virtual_gap,
                 modified_tick: 1,
                 chars_modified_tick: 1,
+                props_modified_tick: 1,
+                beg_unchanged: i64::MAX,
+                end_unchanged: i64::MAX,
                 save_modified_tick: 1,
                 text_props: TextPropertyTable::new(),
                 markers_head: std::ptr::null_mut(),
@@ -547,6 +567,10 @@ impl BufferText {
         self.storage.borrow().chars_modified_tick
     }
 
+    pub fn props_modified_tick(&self) -> i64 {
+        self.storage.borrow().props_modified_tick
+    }
+
     pub fn save_modified_tick(&self) -> i64 {
         self.storage.borrow().save_modified_tick
     }
@@ -863,6 +887,51 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         storage.modified_tick += delta;
         storage.chars_modified_tick = storage.modified_tick;
+    }
+
+    /// Record a text-PROPERTY modification: advances `modified_tick` and
+    /// rejoins `props_modified_tick` to it, leaving `chars_modified_tick`
+    /// untouched. The single choke point for the props tick; mirrors
+    /// [`Self::record_char_modification`] for char edits.
+    pub fn record_text_property_modification(&self) {
+        let mut storage = self.storage.borrow_mut();
+        storage.modified_tick += 1;
+        storage.props_modified_tick = storage.modified_tick;
+    }
+
+    /// Compose a changed char region `[start, end)` (OLD positions, before the
+    /// edit) into the unchanged-region accumulator (GNU `BUF_COMPUTE_UNCHANGED`,
+    /// incremental-layout Phase 3 / spec §6). `old_z` is the buffer's char count
+    /// before the edit. The prefix `[0, start)` and suffix `[end, old_z)` remain
+    /// unchanged; their lengths compose by `min` across multiple edits, so the
+    /// accumulated dirty span is the union of every edit since the last ack.
+    pub fn note_changed_char_region(&self, start: i64, end: i64, old_z: i64) {
+        let mut storage = self.storage.borrow_mut();
+        storage.beg_unchanged = storage.beg_unchanged.min(start.max(0));
+        storage.end_unchanged = storage.end_unchanged.min((old_z - end).max(0));
+    }
+
+    /// Reset the unchanged-region accumulator to "fully unchanged" — the
+    /// redisplay ack, performed at the committed (accepted) layout break, NOT on
+    /// a retry/`continue` (which would under-invalidate, spec §6).
+    pub fn reset_unchanged_region(&self) {
+        let mut storage = self.storage.borrow_mut();
+        storage.beg_unchanged = i64::MAX;
+        storage.end_unchanged = i64::MAX;
+    }
+
+    /// The accumulated dirty char range `[beg, end)` since the last ack, or
+    /// `None` when nothing changed. `current_z` is the buffer's CURRENT char
+    /// count — the suffix length is measured from the end, so this stays correct
+    /// after the edits' position shifts (insertions/deletions).
+    pub fn changed_char_range(&self, current_z: i64) -> Option<(i64, i64)> {
+        let storage = self.storage.borrow();
+        if storage.beg_unchanged == i64::MAX && storage.end_unchanged == i64::MAX {
+            return None;
+        }
+        let start = storage.beg_unchanged.min(current_z).max(0);
+        let end = (current_z - storage.end_unchanged.min(current_z)).max(start);
+        Some((start, end))
     }
 
     pub(crate) fn emacs_byte_range_contains_char_code(

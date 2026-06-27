@@ -19625,3 +19625,24 @@ fn alloc_probe_bytecode_hash_isolation() {
     // under nextest's capture (NOT a failure).
     panic!("BYTECODE-ALLOC ISOLATION PROBE (profiling aid, not a failure)\n{out}");
 }
+
+/// Adversarial-review fix: setting a display-affecting variable (truncate-lines,
+/// bidi-*, buffer-display-table, …) must advance the global display-var change
+/// counter — the incremental fast paths key on it to escalate to a full rebuild,
+/// since these change layout with no buffer/face/overlay tick.
+#[test]
+fn display_affecting_var_set_bumps_display_var_change_count() {
+    let mut eval = Context::new();
+    let before = eval.display_var_change_count;
+    eval.mark_redisplay_dirty_if_display_var(intern("truncate-lines"));
+    let after = eval.display_var_change_count;
+    assert!(
+        after > before,
+        "a display-affecting var must bump display_var_change_count ({before} -> {after})"
+    );
+    eval.mark_redisplay_dirty_if_display_var(intern("neomacs--definitely-not-a-display-var"));
+    assert_eq!(
+        eval.display_var_change_count, after,
+        "an ordinary variable must not bump the display-var counter"
+    );
+}

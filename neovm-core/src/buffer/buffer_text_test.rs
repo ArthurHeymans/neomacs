@@ -931,3 +931,43 @@ fn replace_lisp_string_handles_unibyte_raw_bytes() {
     text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
+
+#[test]
+fn unchanged_region_accumulator_composes_edits_and_resets() {
+    let text = BufferText::new();
+    // No edits since the last ack → no dirty region.
+    assert_eq!(text.changed_char_range(100), None);
+
+    // A single edit at [5, 10) in a 100-char buffer dirties exactly that span.
+    text.note_changed_char_region(5, 10, 100);
+    assert_eq!(text.changed_char_range(100), Some((5, 10)));
+
+    // A second, disjoint edit at [50, 60) unions into [5, 60) (the prefix and
+    // suffix unchanged-lengths each shrink to their minimum).
+    text.note_changed_char_region(50, 60, 100);
+    assert_eq!(text.changed_char_range(100), Some((5, 60)));
+
+    // The suffix length is measured from the END, so an insertion that grew the
+    // buffer (current_z larger) keeps the unchanged tail aligned.
+    text.note_changed_char_region(50, 50, 100); // 4-char insert at 50
+    assert_eq!(text.changed_char_range(104), Some((5, 64)));
+
+    // Ack resets to fully-unchanged.
+    text.reset_unchanged_region();
+    assert_eq!(text.changed_char_range(104), None);
+}
+
+#[test]
+fn unchanged_region_accumulator_edit_at_buffer_ends() {
+    let text = BufferText::new();
+    // Insert at the very beginning (start == end == 0): dirty starts at 0.
+    text.note_changed_char_region(0, 0, 100);
+    // After inserting 3 chars, current_z = 103, the unchanged suffix is all 100
+    // original chars, so the dirty span is exactly the 3 inserted chars.
+    assert_eq!(text.changed_char_range(103), Some((0, 3)));
+
+    let text = BufferText::new();
+    // Delete the last 5 chars [95, 100): dirty extends to the (new) end.
+    text.note_changed_char_region(95, 100, 100);
+    assert_eq!(text.changed_char_range(95), Some((95, 95)));
+}

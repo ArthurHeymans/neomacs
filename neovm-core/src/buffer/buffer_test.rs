@@ -2553,6 +2553,43 @@ fn modification_ticks_track_content_changes() {
 }
 
 #[test]
+fn props_modified_tick_tracks_text_property_changes_independently_of_chars() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    assert_eq!(buf.modified_tick(), 1);
+    assert_eq!(buf.chars_modified_tick(), 1);
+    assert_eq!(buf.props_modified_tick(), 1);
+
+    // A char edit bumps the chars tick (and modiff) but NOT the props tick:
+    // redisplay must be able to tell "text changed" from "appearance changed".
+    buf.insert("abcdef");
+    let after_insert_modiff = buf.modified_tick();
+    assert_eq!(buf.chars_modified_tick(), after_insert_modiff);
+    assert_eq!(
+        buf.props_modified_tick(),
+        1,
+        "a char edit must not move the props tick"
+    );
+
+    // A text-property modification bumps the props tick (and modiff) but NOT
+    // the chars tick. This is the signal the cursor-only / edit classifier
+    // needs: `put-text-property` of a face/display/invisible prop changes
+    // appearance without changing buffer text.
+    buf.record_text_property_modification();
+    assert!(buf.modified_tick() > after_insert_modiff);
+    assert_eq!(
+        buf.props_modified_tick(),
+        buf.modified_tick(),
+        "the props tick rejoins modiff on a text-property change"
+    );
+    assert_eq!(
+        buf.chars_modified_tick(),
+        after_insert_modiff,
+        "a text-property change must not move the chars tick"
+    );
+}
+
+#[test]
 fn chars_modified_tick_rejoins_modiff_after_non_char_modification() {
     crate::test_utils::init_test_tracing();
     let mut buf = Buffer::new(BufferId(1), Value::string("test"));
@@ -3115,4 +3152,34 @@ fn buffer_mark_marker_survives_gc_without_lisp_reference() {
             "raw buffer mark pointer still refers to its buffer"
         );
     }
+}
+
+#[test]
+fn changed_char_range_tracks_real_edits() {
+    let mut buf = buf_with_text("hello world\nfoo bar\nbaz qux\n");
+    // Ack to start from a clean (fully-unchanged) state.
+    buf.reset_unchanged_region();
+    assert_eq!(buf.changed_char_range(), None);
+
+    // Insert one char at position 6.
+    buf.goto_emacs_byte_pos(EmacsBytePos::new(6));
+    buf.insert("X");
+    assert_eq!(buf.changed_char_range(), Some((6, 7)));
+
+    // A second insert at 0 unions in; the earlier X has shifted to 7, so the
+    // dirty span grows to [0, 8).
+    buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    buf.insert("Y");
+    assert_eq!(buf.changed_char_range(), Some((0, 8)));
+
+    // Ack clears it.
+    buf.reset_unchanged_region();
+    assert_eq!(buf.changed_char_range(), None);
+
+    // A delete of 3 chars at [10, 13) leaves an (empty) change marker at 10.
+    buf.delete_emacs_byte_range(EmacsByteRange::from_start_len(
+        EmacsBytePos::new(10),
+        EmacsByteLen::new(3),
+    ));
+    assert_eq!(buf.changed_char_range(), Some((10, 10)));
 }
