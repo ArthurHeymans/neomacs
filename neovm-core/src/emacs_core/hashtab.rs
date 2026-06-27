@@ -398,7 +398,15 @@ fn hash_value_for_equal(value: &Value, hasher: &mut DefaultHasher, depth: usize)
         }
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
             8_u8.hash(hasher);
-            let items = value.as_vector_data().unwrap().clone();
+            // Records aren't `is_vector()`, so as_vector_data() returns None for
+            // them -- fall back to as_record_data() (mirrors GNU sxhash hashing a
+            // record's slots like a vector). Previously this unwrap() panicked on
+            // any record / cl-defstruct, aborting the whole process.
+            let items = value
+                .as_vector_data()
+                .or_else(|| value.as_record_data())
+                .unwrap()
+                .clone();
             items.len().hash(hasher);
             for item in items.iter() {
                 hash_value_for_equal(item, hasher, depth + 1);

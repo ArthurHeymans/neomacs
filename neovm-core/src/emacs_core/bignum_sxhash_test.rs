@@ -122,3 +122,28 @@ fn sxhash_bignum_matches_gnu_oracle_fixnum_values() {
         Value::fixnum(85899346240)
     );
 }
+
+/// `sxhash-equal` of a record (any `cl-defstruct`/`record`) must return an
+/// integer, not PANIC.  The equal-hash vector arm collapsed Vector+Record and
+/// called `as_vector_data().unwrap()`, which is `None` for records -> process
+/// abort.  GNU: `(integerp (sxhash-equal (record 'foo 1 2)))` => t.
+#[test]
+fn sxhash_equal_of_record_does_not_panic() {
+    use crate::emacs_core::builtins::symbols::builtin_record;
+    crate::test_utils::init_test_tracing();
+    let rec = builtin_record(vec![
+        Value::symbol("foo"),
+        Value::fixnum(1),
+        Value::fixnum(2),
+    ])
+    .unwrap();
+    let h = builtin_sxhash_equal(vec![rec]).unwrap();
+    assert!(
+        h.is_fixnum(),
+        "sxhash-equal of a record must be a fixnum, got {h:?}"
+    );
+    // A record nested inside a list must also hash without panicking.
+    let rec2 = builtin_record(vec![Value::symbol("bar"), Value::fixnum(9)]).unwrap();
+    let nested = Value::make_cons(rec2, Value::NIL);
+    assert!(builtin_sxhash_equal(vec![nested]).unwrap().is_fixnum());
+}
