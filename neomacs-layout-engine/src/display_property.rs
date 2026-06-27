@@ -4,7 +4,8 @@ use crate::display_item::{
 };
 use crate::display_spec::{
     DisplayFringeLayout, DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec,
-    is_display_space_spec, parse_display_fringe_layout, parse_display_xwidget_layout,
+    is_display_space_spec, is_display_spec_list, parse_display_fringe_layout,
+    parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -97,7 +98,55 @@ impl DisplayMediaReplacementProperty {
 
 pub(crate) type DisplayTextPropertyModifiers = DisplayItemLayout;
 
+/// Classify a `display` property value into a typed replacement + text-property
+/// modifiers.
+///
+/// Mirrors GNU `handle_display_spec` (src/xdisp.c): when the value is a LIST OF
+/// DISPLAY SPECS (a cons whose car is not a recognized single-spec head and not
+/// nil — e.g. diff-hl's list-wrapped `((left-fringe BITMAP FACE))`), iterate the
+/// elements and classify each as its own single spec, accumulating the result.
+/// Otherwise classify the value as a single spec directly.
 pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassification {
+    if is_display_spec_list(&value) {
+        return classify_display_spec_list(value);
+    }
+    classify_single_display_spec(value)
+}
+
+/// Iterate a list of display specs (GNU `handle_display_spec`'s cons loop),
+/// classifying each element as a single spec. GNU keeps the LAST element whose
+/// `handle_single_display_spec` reported a replacement (`replacing = rv`); we
+/// match that by letting a later element's replacement override an earlier one,
+/// while merging non-replacement modifiers (`raise`/`height`) from every element.
+fn classify_display_spec_list(value: Value) -> DisplayPropertyClassification {
+    let Some(items) = list_to_vec(&value) else {
+        return DisplayPropertyClassification::default();
+    };
+    let mut replacement = None;
+    let mut modifiers = DisplayTextPropertyModifiers::default();
+    for item in items {
+        let element = classify_single_display_spec(item);
+        if let Some(element_replacement) = element.replacement {
+            replacement = Some(element_replacement);
+        }
+        if let Some(raise) = element.modifiers.raise {
+            modifiers.raise = Some(raise);
+        }
+        if let Some(height) = element.modifiers.height {
+            modifiers.height = Some(height);
+        }
+    }
+    // GNU suppresses inline modifiers once a replacement claims the text.
+    if replacement.is_some() {
+        modifiers = DisplayTextPropertyModifiers::default();
+    }
+    DisplayPropertyClassification {
+        replacement,
+        modifiers,
+    }
+}
+
+fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
     let replacement = if value.is_string() {
         Some(DisplayReplacementProperty::String)
     } else if is_display_space_spec(&value) {

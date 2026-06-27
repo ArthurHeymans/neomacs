@@ -2342,6 +2342,128 @@ fn layout_frame_rust_continued_row_sets_curly_arrow_fringe() {
     );
 }
 
+/// diff-hl / git-gutter / flycheck attach their fringe marker via an overlay
+/// before-string (or a text property) whose `display` value is LIST-WRAPPED:
+///   `((left-fringe BITMAP FACE))`
+/// — a list whose single element is the bare `(left-fringe …)` spec. GNU
+/// iterates such a list (`handle_display_spec`) and draws BITMAP in the LEFT
+/// fringe while showing NO inline glyph for the covered char (no text shift).
+/// Before the list-of-specs unwrap, neomacs failed to classify the inner spec
+/// and rendered the covered space INLINE, shifting the line's text right.
+#[test]
+fn layout_frame_rust_list_wrapped_left_fringe_spec_draws_in_fringe_not_inline() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+
+    // Register a user fringe bitmap (diff-hl does this at load time) so the
+    // bitmap symbol resolves to a registry index.
+    let bmp_index: u16 = eval
+        .eval_str("(define-fringe-bitmap 'fringespec-test-bmp [255 255] nil nil 'center)")
+        .expect("define-fringe-bitmap")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // Line 1 plain; line 2 begins with a space carrying the fringe marker.
+        buf.insert("first\n MARK\n");
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+    // The leading space of line 2 is at char position 7 (1-based: "first" =
+    // chars 1-5, "\n" = char 6, the space = char 7). put-text-property covers
+    // the half-open range [START, END), so 7..8 marks just the space. Apply the
+    // LIST-WRAPPED display spec — exactly diff-hl's shape:
+    //   ((left-fringe BITMAP FACE)).
+    eval.eval_str(
+        "(put-text-property 7 8 'display \
+           '((left-fringe fringespec-test-bmp fringe)) \
+           (current-buffer))",
+    )
+    .expect("put-text-property");
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("fringespec", 48, 200, buf_id);
+    // Window-system frame so the fringes have width.
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+
+    // Gap 1: the list-wrapped `(left-fringe …)` is classified + recorded, so
+    // exactly one row carries the bitmap in its LEFT fringe.
+    let fringe_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.left_fringe_bitmap
+                .is_some_and(|info| info.bitmap_index == bmp_index)
+        })
+        .count();
+    assert_eq!(
+        fringe_rows,
+        1,
+        "the list-wrapped (left-fringe …) display spec should set the bitmap in \
+         the left fringe of exactly one row (idx={bmp_index}); left fringe bitmaps = {:?}",
+        entry
+            .matrix
+            .rows
+            .iter()
+            .map(|r| r.left_fringe_bitmap.map(|i| i.bitmap_index))
+            .collect::<Vec<_>>()
+    );
+
+    // The marked row is the one with the fringe bitmap. Its text area must NOT
+    // begin with an inline space glyph for the covered char (no text shift): the
+    // first text glyph is 'M' (the char after the fringe-marked space).
+    let marked_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.left_fringe_bitmap
+                .is_some_and(|info| info.bitmap_index == bmp_index)
+        })
+        .expect("marked row");
+    let text_glyphs = &marked_row.glyphs[GlyphArea::Text.index()];
+    let first_char = text_glyphs.iter().find_map(|g| match &g.glyph_type {
+        GlyphType::Char { ch } => Some(*ch),
+        _ => None,
+    });
+    assert_eq!(
+        first_char,
+        Some('M'),
+        "the fringe-covered space must produce NO inline glyph (text not shifted); \
+         got text glyphs = {:?}",
+        text_glyphs
+            .iter()
+            .map(|g| g.glyph_type.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn layout_frame_rust_lays_out_line_numbers() {
     let text = "abc\ndef\nghi\n";

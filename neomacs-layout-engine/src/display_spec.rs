@@ -412,6 +412,74 @@ pub(crate) fn is_display_fringe_spec(value: &Value) -> bool {
             || value.cons_car().is_symbol_named("right-fringe"))
 }
 
+/// Recognized heads of a SINGLE `display` spec — the symbols GNU's
+/// `handle_display_spec` (src/xdisp.c) tests before deciding a list is a
+/// *list of display specs* rather than one spec. A `display` value that is a
+/// cons whose car is NONE of these (and not nil) is iterated element-by-element
+/// (e.g. diff-hl's `((left-fringe BITMAP FACE))`).
+///
+/// We omit only the eval/control heads NeoMacs does not yet implement
+/// (`when`/`slice`/`disable-eval`); those still get treated as single specs by
+/// `is_display_spec_list` returning false, matching GNU's "not a list" branch.
+const SINGLE_DISPLAY_SPEC_HEADS: &[&str] = &[
+    "image",
+    "xwidget",
+    "space",
+    "when",
+    "slice",
+    "space-width",
+    "height",
+    "raise",
+    "left-fringe",
+    "right-fringe",
+    "min-width",
+    // NeoMacs-only convenience heads handled as single specs.
+    "video",
+    "webkit",
+];
+
+/// Mirror of GNU `handle_display_spec`'s list-of-specs test (src/xdisp.c):
+/// a `display` value is a LIST OF DISPLAY SPECS (to be iterated, each element
+/// handled as its own single spec) when it is a cons whose car is neither a
+/// recognized single-spec head symbol, nor a `(margin …)` marginal-area spec,
+/// nor nil. Otherwise it is a single spec.
+///
+/// This is what classifies diff-hl/flycheck/git-gutter's list-wrapped
+/// `((left-fringe BITMAP FACE))` so the inner `(left-fringe …)` is reached.
+pub(crate) fn is_display_spec_list(value: &Value) -> bool {
+    if !value.is_cons() {
+        return false;
+    }
+    let car = value.cons_car();
+    if car.is_nil() {
+        return false;
+    }
+    // `(margin …)` marginal-area spec: car is itself `(margin . _)`.
+    if car.is_cons() && car.cons_car().is_symbol_named("margin") {
+        return false;
+    }
+    if let Some(name) = car.as_symbol_name() {
+        // A recognized single-spec head symbol => single spec.
+        if SINGLE_DISPLAY_SPEC_HEADS.contains(&name) {
+            return false;
+        }
+        // A keyword head (`:raise`/`:height`/…) is a flat property list, not a
+        // list of display specs. NeoMacs accepts the keyword-plist convenience
+        // form `(:raise 0.2 :height 1.4)` as a SINGLE spec whose modifiers are
+        // parsed from the whole plist; iterating it element-by-element would
+        // discard those modifiers (a regression GNU never hits — GNU has no such
+        // keyword-plist form). Treat any keyword-headed list as a single spec.
+        if name.starts_with(':') {
+            return false;
+        }
+        // Any other symbol head (unknown to us) => GNU iterates it as a list.
+        return true;
+    }
+    // car is a cons (e.g. an inner `(left-fringe …)`) or other non-symbol:
+    // GNU iterates it as a list of specs.
+    true
+}
+
 pub(crate) fn display_space_positive_number(value: Value) -> Option<f32> {
     value
         .as_float()

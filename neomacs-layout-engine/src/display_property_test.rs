@@ -242,6 +242,58 @@ fn classify_display_property_recognizes_left_and_right_fringe_specs() {
 }
 
 #[test]
+fn classify_display_property_unwraps_list_wrapped_fringe_spec() {
+    let _eval = Context::new();
+
+    // diff-hl / flycheck / git-gutter attach the fringe marker via an overlay
+    // before-string whose `display` value is LIST-WRAPPED:
+    //   ((left-fringe diff-hl-bmp-middle diff-hl-change))
+    // i.e. a list whose single element is the bare `(left-fringe …)` spec. GNU
+    // `handle_display_spec` (src/xdisp.c) iterates such a list and handles each
+    // element as a single spec, so the inner fringe spec must still classify as
+    // a Fringe replacement (drawn in the fringe, no inline glyph).
+    let bare = vec![
+        Value::symbol("left-fringe"),
+        Value::symbol("diff-hl-bmp-middle"),
+        Value::symbol("diff-hl-change"),
+    ];
+    let wrapped = classify_display_property(Value::list(vec![Value::list(bare.clone())]));
+    match wrapped.replacement() {
+        Some(crate::display_property::DisplayReplacementProperty::Fringe(layout)) => {
+            assert_eq!(layout.side, crate::display_spec::DisplayFringeSide::Left);
+            assert!(layout.bitmap.is_symbol_named("diff-hl-bmp-middle"));
+            assert!(
+                layout
+                    .face
+                    .is_some_and(|face| face.is_symbol_named("diff-hl-change"))
+            );
+        }
+        other => panic!("expected fringe layout from list-wrapped spec, got {other:?}"),
+    }
+
+    // The list-wrapped classification must match the bare spec exactly.
+    assert_eq!(
+        wrapped.replacement().cloned(),
+        classify_display_property(Value::list(bare))
+            .replacement()
+            .cloned(),
+    );
+
+    // A right-fringe list-wrapped spec resolves to the right side.
+    let right = classify_display_property(Value::list(vec![Value::list(vec![
+        Value::symbol("right-fringe"),
+        Value::symbol("diff-hl-bmp-insert"),
+    ])]));
+    match right.replacement() {
+        Some(crate::display_property::DisplayReplacementProperty::Fringe(layout)) => {
+            assert_eq!(layout.side, crate::display_spec::DisplayFringeSide::Right);
+            assert!(layout.bitmap.is_symbol_named("diff-hl-bmp-insert"));
+        }
+        other => panic!("expected right fringe layout from list-wrapped spec, got {other:?}"),
+    }
+}
+
+#[test]
 fn classify_display_property_keeps_fringe_length_units_in_space_specs() {
     let _eval = Context::new();
 
