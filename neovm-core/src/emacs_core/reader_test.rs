@@ -4239,3 +4239,112 @@ fn read_from_string_hash_dollar_inside_dotted_pair_uses_load_file_name() {
         other => panic!("Expected cons from read-from-string, got {other:?}"),
     }
 }
+
+/// GNU `string_to_number` (`src/lread.c`) lexes a digit sequence with a single
+/// trailing "." (no fractional digits and no exponent) as an INTEGER, not a
+/// float. The trailing dot is an integer terminator: `(read "5.")` => 5, and a
+/// magnitude that overflows a fixnum (`"1000000000000000000000."`) becomes a
+/// bignum integer rather than `1e+21`.
+///   GNU oracle: (list (read "5.") (type-of (read "5."))) => (5 integer)
+///               (read "1000000000000000000000.")        => 1000000000000000000000
+#[test]
+fn read_from_string_trailing_dot_integer_is_not_a_float() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // "5." is the integer 5, not the float 5.0.
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("5.")]).unwrap();
+    let value = result.cons_car();
+    assert!(
+        value.is_integer() && !value.is_float(),
+        "GNU reads \"5.\" as an integer, got {value:?}"
+    );
+    assert_eq!(value.as_int(), Some(5));
+
+    // Signed trailing-dot integers: GNU reads "-5." => -5, "+5." => 5.
+    let neg = builtin_read_from_string(&mut ev, vec![Value::string("-5.")]).unwrap();
+    assert!(
+        neg.cons_car().is_integer() && !neg.cons_car().is_float(),
+        "GNU reads \"-5.\" as an integer, got {:?}",
+        neg.cons_car()
+    );
+    assert_eq!(neg.cons_car().as_int(), Some(-5));
+    let pos = builtin_read_from_string(&mut ev, vec![Value::string("+5.")]).unwrap();
+    assert!(
+        pos.cons_car().is_integer() && !pos.cons_car().is_float(),
+        "GNU reads \"+5.\" as an integer, got {:?}",
+        pos.cons_car()
+    );
+    assert_eq!(pos.cons_car().as_int(), Some(5));
+
+    // A magnitude wider than a fixnum becomes a bignum integer, not 1e+21.
+    let big =
+        builtin_read_from_string(&mut ev, vec![Value::string("1000000000000000000000.")]).unwrap();
+    let big_value = big.cons_car();
+    assert!(
+        big_value.is_integer() && !big_value.is_float(),
+        "GNU reads \"1000000000000000000000.\" as a bignum integer, got {big_value:?}"
+    );
+    assert_eq!(print_value(&big_value), "1000000000000000000000");
+
+    // Sanity: genuine floats still read as floats.
+    let real_float = builtin_read_from_string(&mut ev, vec![Value::string("5.0")]).unwrap();
+    assert!(
+        real_float.cons_car().is_float(),
+        "\"5.0\" must still read as a float"
+    );
+    let exp_float = builtin_read_from_string(&mut ev, vec![Value::string("5e0")]).unwrap();
+    assert!(
+        exp_float.cons_car().is_float(),
+        "\"5e0\" must still read as a float"
+    );
+    let dot_exp_float = builtin_read_from_string(&mut ev, vec![Value::string("5.e0")]).unwrap();
+    assert!(
+        dot_exp_float.cons_car().is_float(),
+        "\"5.e0\" must still read as a float"
+    );
+    let lead_dot_float = builtin_read_from_string(&mut ev, vec![Value::string(".5")]).unwrap();
+    assert!(
+        lead_dot_float.cons_car().is_float(),
+        "\".5\" must still read as a float"
+    );
+}
+
+/// Inside a string literal, GNU's reader drops `\<SPC>` and `\<LF>` entirely
+/// (whitespace/line continuation): `read_string_literal` in `src/lread.c` has
+///   case ' ': case '\n': ... continue;
+/// `\<TAB>` and `\<CR>` are NOT dropped — they fall through to
+/// `read_char_escape` and keep the literal char.
+///   GNU oracle: (length (read "\"a\\ b\"")) => 2   ;; backslash-space
+///               (length (read "\"a\\\nb\"")) => 2  ;; backslash-newline
+///               (length (read "\"a\\\tb\"")) => 3  ;; backslash-tab kept
+#[test]
+fn read_from_string_backslash_space_is_a_continuation_escape() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    // "a\ b" => "ab" (the backslash-space is dropped) => length 2.
+    let space = builtin_read_from_string(&mut ev, vec![Value::string("\"a\\ b\"")]).unwrap();
+    let space_str = space.cons_car();
+    assert_eq!(
+        space_str.as_utf8_str(),
+        Some("ab"),
+        "GNU drops backslash-space in a string literal"
+    );
+
+    // Backslash-newline is also dropped (pre-existing behavior, kept).
+    let newline = builtin_read_from_string(&mut ev, vec![Value::string("\"a\\\nb\"")]).unwrap();
+    assert_eq!(
+        newline.cons_car().as_utf8_str(),
+        Some("ab"),
+        "GNU drops backslash-newline in a string literal"
+    );
+
+    // Backslash-tab is NOT dropped by GNU: the literal tab is kept => length 3.
+    let tab = builtin_read_from_string(&mut ev, vec![Value::string("\"a\\\tb\"")]).unwrap();
+    assert_eq!(
+        tab.cons_car().as_utf8_str(),
+        Some("a\tb"),
+        "GNU keeps backslash-tab (length 3) in a string literal"
+    );
+}

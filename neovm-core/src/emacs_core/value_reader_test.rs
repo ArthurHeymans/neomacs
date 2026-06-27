@@ -114,6 +114,47 @@ fn float_nan() {
     assert!(v.as_number_f64().unwrap().is_nan());
 }
 
+/// GNU `string_to_number` (`src/lread.c`) lexes a digit run followed by a
+/// single trailing "." (no fractional digits, no exponent) as an INTEGER —
+/// the dot is a terminator. Only "5.0"/"5e0"/"5.e0"/".5" are floats.
+///   GNU oracle: (read "5.") => 5 (integer); (read "5.0") => 5.0 (float)
+///               (read "1000000000000000000000.") => 1000000000000000000000
+#[test]
+fn integer_trailing_dot_is_not_a_float() {
+    crate::test_utils::init_test_tracing();
+
+    // "5." => integer 5, not the float 5.0.
+    let v = read1("5.");
+    assert_eq!(v.as_fixnum(), Some(5));
+    assert!(!v.is_float(), "\"5.\" must not be a float, got {v:?}");
+
+    // Signed trailing-dot integers.
+    assert_eq!(read1("-5.").as_fixnum(), Some(-5));
+    assert_eq!(read1("+5.").as_fixnum(), Some(5));
+    assert_eq!(read1("100.").as_fixnum(), Some(100));
+
+    // A magnitude wider than a fixnum becomes a bignum integer, not 1e+21.
+    let big = read1("1000000000000000000000.");
+    assert!(
+        big.is_integer() && !big.is_float(),
+        "\"1000000000000000000000.\" must be a bignum integer, got {big:?}"
+    );
+    assert_eq!(
+        crate::emacs_core::print_value(&big),
+        "1000000000000000000000"
+    );
+
+    // Sanity: genuine floats still read as floats.
+    assert_eq!(read1("5.0").as_number_f64(), Some(5.0));
+    assert!(read1("5.0").is_float());
+    assert_eq!(read1("5e0").as_number_f64(), Some(5.0));
+    assert!(read1("5e0").is_float());
+    assert_eq!(read1("5.e0").as_number_f64(), Some(5.0));
+    assert!(read1("5.e0").is_float());
+    assert_eq!(read1(".5").as_number_f64(), Some(0.5));
+    assert!(read1(".5").is_float());
+}
+
 // ---------------------------------------------------------------------------
 // Symbols
 // ---------------------------------------------------------------------------
@@ -221,6 +262,30 @@ fn string_escapes() {
     crate::test_utils::init_test_tracing();
     let v = read1(r#""a\nb\t""#);
     assert_eq!(v.as_utf8_str().unwrap(), "a\nb\t");
+}
+
+/// In a string literal GNU drops `\<SPC>` and `\<LF>` entirely (whitespace /
+/// line continuation): `read_string_literal` in `src/lread.c` has
+///   case ' ': case '\n': ... continue;
+/// `\<TAB>` and `\<CR>` are NOT dropped (they keep the literal char).
+///   GNU oracle: (length (read "\"a\\ b\"")) => 2   ;; backslash-space
+///               (length (read "\"a\\\nb\"")) => 2  ;; backslash-newline
+///               (length (read "\"a\\\tb\"")) => 3  ;; backslash-tab kept
+#[test]
+fn string_backslash_space_is_dropped_like_backslash_newline() {
+    crate::test_utils::init_test_tracing();
+
+    // Backslash-space is dropped: "a\ b" => "ab".
+    let space = read1("\"a\\ b\"");
+    assert_eq!(space.as_utf8_str(), Some("ab"));
+
+    // Backslash-newline is also dropped (pre-existing behavior).
+    let newline = read1("\"a\\\nb\"");
+    assert_eq!(newline.as_utf8_str(), Some("ab"));
+
+    // Backslash-tab is NOT dropped by GNU: the literal tab is kept.
+    let tab = read1("\"a\\\tb\"");
+    assert_eq!(tab.as_utf8_str(), Some("a\tb"));
 }
 
 #[test]

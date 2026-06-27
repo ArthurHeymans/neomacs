@@ -1053,8 +1053,14 @@ impl<'a> Reader<'a> {
                                 }
                             }
                         }
-                        x if x == b'\n' as u32 => {
-                            // Line continuation — skip newline
+                        x if x == b'\n' as u32 || x == b' ' as u32 => {
+                            // `\<LF>` and `\<SPC>` generate no characters at
+                            // all (line/whitespace continuation). Matches GNU
+                            // `read_string_literal` in `src/lread.c`:
+                            //   case ' ': case '\n': ... continue;
+                            // Note: `\<TAB>`/`\<CR>` are NOT dropped by GNU;
+                            // they fall through to `read_char_escape` and keep
+                            // the literal char, so they stay in `other`.
                         }
                         other => {
                             // Unknown escape — keep the escaped source character.
@@ -2144,10 +2150,17 @@ impl<'a> Reader<'a> {
                 // overflow, fall through to a malachite::Integer parse so true
                 // bignum literals work.
                 if looks_like_integer(token_text) {
-                    if let Ok(n) = token_text.parse::<i64>() {
+                    // A single trailing "." with no fractional digits and no
+                    // exponent is an integer terminator in GNU's reader (e.g.
+                    // "5." reads as the integer 5, not the float 5.0). Strip it
+                    // before parsing the magnitude. See `string_to_number` in
+                    // GNU `src/lread.c`: float_syntax requires TRAIL_INT or an
+                    // exponent, so "1." is lexed as an integer.
+                    let digits = token_text.strip_suffix('.').unwrap_or(token_text);
+                    if let Ok(n) = digits.parse::<i64>() {
                         return Ok(Value::make_integer(Integer::from(n)));
                     }
-                    if let Ok(parsed) = token_text.parse::<Integer>() {
+                    if let Ok(parsed) = digits.parse::<Integer>() {
                         return Ok(Value::make_integer(parsed));
                     }
                 }
@@ -2761,7 +2774,18 @@ fn looks_like_float(s: &str) -> bool {
     if !first.is_ascii_digit() && first != b'.' {
         return false;
     }
-    s.contains('.') || s.contains('e') || s.contains('E')
+    // Mirror GNU `string_to_number` (`src/lread.c`): float syntax requires
+    // either a fractional digit after the dot (TRAIL_INT) or an exponent
+    // (E_EXP). A bare trailing dot like "5." has no fractional digits and no
+    // exponent, so it is an integer terminator, not a float.
+    if s.contains('e') || s.contains('E') {
+        return true;
+    }
+    match s.split_once('.') {
+        // Has a dot: float only if there are digits after it.
+        Some((_, frac)) => frac.bytes().any(|b| b.is_ascii_digit()),
+        None => false,
+    }
 }
 
 /// True if `s` is a plain decimal integer literal (with optional sign)
@@ -2775,7 +2799,11 @@ fn looks_like_integer(s: &str) -> bool {
     } else {
         s
     };
-    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+    // Accept a single optional trailing "." as an integer terminator (GNU
+    // `string_to_number` lexes "5." / "100." as integers, not floats). The
+    // magnitude before the dot must be a non-empty run of digits.
+    let digits = s.strip_suffix('.').unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
 pub(crate) fn parse_emacs_special_float(token: &str) -> Option<f64> {
