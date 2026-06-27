@@ -47,9 +47,11 @@ fn div_wdm_display_motion_and_screen_lines() {
     // GNU Emacs: OK (2 23 80 151 1)
     // Neomacs:   OK (1 23 1 1 1)
     // count-screen-lines and vertical-motion wrapping diverge: GNU wraps the
-    // 30-word buffer across its 80-column batch frame (2 screen lines; one
+    // 30-word buffer across the 80-column body (2 screen lines; one
     // vertical-motion step lands at char 80), while Neomacs treats the whole
-    // buffer as a single screen line — its batch frame is wider than 80.
+    // buffer as a single screen line — screen-line motion does not wrap long
+    // lines at the body width (window-body-width and window-text-height agree
+    // with GNU in both engines).
     assert_oracle_parity(
         r##"
 (let ((b (get-buffer-create " *probe-screen*")))
