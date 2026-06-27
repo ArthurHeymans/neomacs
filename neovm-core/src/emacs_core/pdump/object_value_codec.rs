@@ -319,6 +319,7 @@ const HASH_KEY_TEXT: u8 = 17;
 const HASH_KEY_MARKER: u8 = 18;
 const HASH_KEY_OVERLAY: u8 = 19;
 const HASH_KEY_BOOL_VEC: u8 = 20;
+const HASH_KEY_BIGNUM: u8 = 21;
 
 fn write_hash_key(out: &mut Vec<u8>, key: &DumpHashKey) -> Result<(), DumpError> {
     match key {
@@ -327,6 +328,13 @@ fn write_hash_key(out: &mut Vec<u8>, key: &DumpHashKey) -> Result<(), DumpError>
         DumpHashKey::Int(value) => {
             write_u8(out, HASH_KEY_INT);
             write_i64(out, *value);
+        }
+        DumpHashKey::Bignum(limbs) => {
+            write_u8(out, HASH_KEY_BIGNUM);
+            write_len(out, limbs.len(), "bignum hash key limb count")?;
+            for limb in limbs {
+                write_u64(out, *limb);
+            }
         }
         DumpHashKey::Float(value) => {
             write_u8(out, HASH_KEY_FLOAT);
@@ -1058,6 +1066,14 @@ impl<'a> Cursor<'a> {
             HASH_KEY_NIL => Ok(DumpHashKey::Nil),
             HASH_KEY_TRUE => Ok(DumpHashKey::True),
             HASH_KEY_INT => Ok(DumpHashKey::Int(self.read_i64("hash int key")?)),
+            HASH_KEY_BIGNUM => {
+                let len = self.read_len("bignum hash key limb count")?;
+                let mut limbs = Vec::with_capacity(len);
+                for _ in 0..len {
+                    limbs.push(self.read_u64("bignum hash key limb")?);
+                }
+                Ok(DumpHashKey::Bignum(limbs))
+            }
             HASH_KEY_FLOAT => Ok(DumpHashKey::Float(self.read_u64("hash float key")?)),
             HASH_KEY_FLOAT_EQ => Ok(DumpHashKey::FloatEq(
                 self.read_u64("hash float eq key")?,
@@ -1570,7 +1586,13 @@ mod tests {
                     ),
                     DumpValue::Cons(DumpHeapRef { index: 1 }),
                 )],
-                key_snapshots: vec![(DumpHashKey::Char('x'), DumpValue::Int(8))],
+                key_snapshots: vec![
+                    (DumpHashKey::Char('x'), DumpValue::Int(8)),
+                    (
+                        DumpHashKey::Bignum(vec![0, 0xFFFF_FFFF_FFFF_FFFF, 1]),
+                        DumpValue::Int(9),
+                    ),
+                ],
                 insertion_order: vec![DumpHashKey::HeapRef(1)],
             }),
             DumpHeapObject::Marker(DumpMarker {

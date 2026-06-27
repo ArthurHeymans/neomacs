@@ -353,6 +353,8 @@ pub enum DumpHashKey {
     Nil,
     True,
     Int(i64),
+    /// Bignum key: canonical two's-complement little-endian limbs.
+    Bignum(Vec<u64>),
     Float(u64),
     FloatEq(u64, u32),
     Symbol(DumpSymId),

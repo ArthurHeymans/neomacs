@@ -721,6 +721,11 @@ pub enum HashKey {
     Nil,
     True,
     Int(i64),
+    /// Value-based key for bignums, holding the canonical two's-complement
+    /// little-endian limbs. Two numerically-equal bignums (which are `eql`
+    /// and `equal`) yield equal limb vectors, so they collide in the table
+    /// instead of hashing by heap address.
+    Bignum(Box<[u64]>),
     Float(u64),
     FloatEq(u64, u32),
     Symbol(SymId),
@@ -759,6 +764,7 @@ impl std::hash::Hash for HashKey {
             HashKey::Nil => 0,
             HashKey::True => 1,
             HashKey::Int(_) => 2,
+            HashKey::Bignum(_) => 21,
             HashKey::Float(_) => 3,
             HashKey::FloatEq(_, _) => 4,
             HashKey::Symbol(_) => 5,
@@ -780,6 +786,7 @@ impl std::hash::Hash for HashKey {
         match self {
             HashKey::Nil | HashKey::True => {}
             HashKey::Int(n) => n.hash(state),
+            HashKey::Bignum(limbs) => limbs.hash(state),
             HashKey::Float(bits) => bits.hash(state),
             HashKey::FloatEq(bits, id) => {
                 bits.hash(state);
@@ -833,6 +840,7 @@ impl PartialEq for HashKey {
         match (self, other) {
             (HashKey::Nil, HashKey::Nil) | (HashKey::True, HashKey::True) => true,
             (HashKey::Int(a), HashKey::Int(b)) => a == b,
+            (HashKey::Bignum(a), HashKey::Bignum(b)) => a == b,
             (HashKey::Float(a), HashKey::Float(b)) => a == b,
             (HashKey::FloatEq(a, id_a), HashKey::FloatEq(b, id_b)) => a == b && id_a == id_b,
             (HashKey::Symbol(a), HashKey::Symbol(b)) => a == b,
@@ -2172,7 +2180,21 @@ impl TaggedValue {
         match self.kind() {
             ValueKind::Fixnum(n) => HashKey::Int(n),
             ValueKind::Float => HashKey::Float(self.xfloat().to_bits()),
+            // Bignums are `eql` (and `equal`) by value, not by heap address.
+            ValueKind::Veclike(VecLikeType::Bignum) => self.bignum_hash_key(),
             _ => self.to_eq_key(),
+        }
+    }
+
+    /// Build a value-based [`HashKey`] for a bignum from its canonical
+    /// two's-complement little-endian limbs. Falls back to pointer identity
+    /// only if the value is somehow not a bignum.
+    fn bignum_hash_key(&self) -> HashKey {
+        match self.as_bignum() {
+            Some(bignum) => {
+                HashKey::Bignum(bignum.to_twos_complement_limbs_asc().into_boxed_slice())
+            }
+            None => self.to_eq_key(),
         }
     }
 
@@ -2204,6 +2226,8 @@ impl TaggedValue {
             ValueKind::T => HashKey::True,
             ValueKind::Fixnum(n) => HashKey::Int(n),
             ValueKind::Float => HashKey::Float(self.xfloat().to_bits()),
+            // Bignums are `equal` by value, not by heap address.
+            ValueKind::Veclike(VecLikeType::Bignum) => self.bignum_hash_key(),
             ValueKind::Symbol(id) => HashKey::Symbol(id),
             ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
                 let swp = self.as_symbol_with_pos().unwrap();

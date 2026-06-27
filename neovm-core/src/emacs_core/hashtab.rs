@@ -87,6 +87,9 @@ fn hash_key_to_value(key: &HashKey) -> Value {
         HashKey::Nil => Value::NIL,
         HashKey::True => Value::T,
         HashKey::Int(n) => Value::fixnum(*n),
+        HashKey::Bignum(limbs) => Value::make_integer(
+            malachite::integer::Integer::from_twos_complement_limbs_asc(limbs),
+        ),
         HashKey::Float(bits) => Value::make_float(f64::from_bits(*bits)),
         HashKey::FloatEq(bits, _id) => Value::make_float(f64::from_bits(*bits)),
         HashKey::Symbol(id) => Value::from_sym_id(*id),
@@ -130,6 +133,24 @@ pub(crate) fn hash_key_to_visible_value(table: &LispHashTable, key: &HashKey) ->
 
 fn sxhash_combine(x: u64, y: u64) -> u64 {
     x.rotate_left(4).wrapping_add(y)
+}
+
+/// Hash a bignum by its numeric value, mirroring GNU `sxhash_bignum`:
+/// seed with the sign (1 if negative, else 0) then fold each machine limb
+/// of the magnitude (least-significant first). On a 64-bit host malachite's
+/// limbs are `u64`, matching GMP's `mpz_getlimbn` / `EMACS_UINT`, so two
+/// numerically-equal bignums hash identically regardless of heap address.
+fn sxhash_bignum(value: &Value) -> Option<u64> {
+    let bignum = value.as_bignum()?;
+    let mut hash: u64 = if *bignum < malachite::integer::Integer::from(0) {
+        1
+    } else {
+        0
+    };
+    for limb in bignum.unsigned_abs_ref().to_limbs_asc() {
+        hash = sxhash_combine(hash, limb);
+    }
+    Some(hash)
 }
 
 fn read_u16_ne(bytes: &[u8]) -> u16 {
@@ -266,6 +287,7 @@ fn emacs_sxhash_obj(value: &Value, depth: usize) -> Option<u64> {
         )),
         ValueKind::Cons => Some(emacs_sxhash_list(value, depth)),
         ValueKind::Veclike(VecLikeType::Vector) => Some(emacs_sxhash_vector(value, depth)),
+        ValueKind::Veclike(VecLikeType::Bignum) => sxhash_bignum(value),
         ValueKind::Veclike(VecLikeType::Marker) => emacs_sxhash_marker(value),
         ValueKind::Veclike(VecLikeType::Overlay) => emacs_sxhash_overlay(value, depth),
         _ => None,
@@ -461,6 +483,11 @@ fn sxhash_emacs_uint_for(value: &Value, test: HashTableTest) -> u64 {
         HashTableTest::Eq | HashTableTest::Eql => match value.kind() {
             ValueKind::Fixnum(n) => sxhash_eq_fixnum_uint(n as u64),
             ValueKind::Float if matches!(test, HashTableTest::Eql) => value.xfloat().to_bits(),
+            // GNU `sxhash_eql` hashes floats and bignums by value (full
+            // `sxhash`); only `eq` uses object identity for bignums.
+            ValueKind::Veclike(VecLikeType::Bignum) if matches!(test, HashTableTest::Eql) => {
+                sxhash_bignum(value).unwrap_or_else(|| fallback_sxhash_emacs_uint(value, test))
+            }
             _ => fallback_sxhash_emacs_uint(value, test),
         },
     }
@@ -1039,6 +1066,9 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
     };
     Ok(if removed { Value::T } else { Value::NIL })
 }
+#[cfg(test)]
+#[path = "bignum_sxhash_test.rs"]
+mod bignum_sxhash_tests;
 #[cfg(test)]
 #[path = "hashtab_test.rs"]
 mod tests;
