@@ -1047,6 +1047,20 @@ pub fn make_char_table_with_extra_slots(sub_type: Value, default: Value, n_extra
     Value::make_char_table(sub_type, default, n_extras.max(0) as usize)
 }
 
+/// Look up a single character entry in a char-table Value.
+///
+/// Mirrors GNU `char_table_ref` / `CHAR_TABLE_REF` (the lookup behind
+/// `DISP_CHAR_VECTOR`): returns the char's own entry, else the table default,
+/// else the parent's entry, else nil.  Used by the display engine to resolve
+/// per-character display-table glyph vectors.  Returns nil for a non-char-table
+/// or out-of-range char rather than signalling.
+pub fn ct_ref(table: &Value, ch: i64) -> Value {
+    if !(0..=MAX_CHAR).contains(&ch) {
+        return Value::NIL;
+    }
+    ct_lookup(table, ch).unwrap_or(Value::NIL)
+}
+
 /// Set a single character entry in a char-table Value (for bootstrap code).
 /// Panics if `table` is not a char-table Vector.
 pub fn ct_set_single(table: &Value, ch: i64, value: Value) {

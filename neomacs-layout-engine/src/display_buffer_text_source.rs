@@ -1,7 +1,7 @@
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
-    DisplayItemKind, DisplayItemLayout, DisplaySourcePosition, DisplayTextRun, RenderFaceRef,
-    SourceSpan,
+    DisplayItemKind, DisplayItemLayout, DisplaySourceMappedText, DisplaySourcePosition,
+    DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -285,9 +285,23 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             if classify_text_source_char(ch) != TextSourceCharClassification::Text {
                 break;
             }
+            // A char that the active display table remaps to a glyph vector must
+            // break the plain text run so it is emitted as its own item (GNU
+            // `DISP_CHAR_VECTOR` is consulted per character in the producer).
+            if self.display_table_glyphs(ch).is_some() {
+                break;
+            }
             end = end.add_len(CharLen::new(1));
         }
         end.max(start.add_len(CharLen::new(1))).min(limit)
+    }
+
+    /// Resolve the active display table's glyph vector for `ch`, returning the
+    /// decoded glyph characters to display in place of `ch` (GNU
+    /// `DISP_CHAR_VECTOR`).  `None` is the hot path (no table / no entry / not a
+    /// vector) and leaves `ch` to render literally.
+    fn display_table_glyphs(&self, ch: char) -> Option<String> {
+        crate::neovm_bridge::buffer_display_table_glyphs(self.buffer, ch)
     }
 
     fn display_property_cursor_action(
@@ -322,6 +336,27 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         layout: DisplayItemLayout,
     ) -> Option<DisplayItem> {
         let ch = self.char_at(start)?;
+
+        // GNU `get_next_display_element`: before the control-char / glyphless /
+        // tab arms, consult the active display table.  If the char remaps to a
+        // glyph vector, the WHOLE vector is ONE display element spanning the
+        // single source char — emit it as a `SourceMappedText` over
+        // `[start, start+1)`.  The source walk advances by the item's span-end
+        // (the single char) exactly once, so byte/charpos never desync; each
+        // decoded glyph is appended as a real glyph (a `?\t` glyph re-expands
+        // through the ordinary tab path), keeping the row non-blank.
+        if let Some(glyphs) = self.display_table_glyphs(ch) {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(
+                DisplayItem::new(
+                    self.span(start, self.char_pos),
+                    face,
+                    DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(glyphs)),
+                )
+                .with_layout(layout),
+            );
+        }
+
         if let Some(kind) = display_item_kind_for_text_source_char(ch) {
             self.char_pos = start.add_len(CharLen::new(1));
             return Some(

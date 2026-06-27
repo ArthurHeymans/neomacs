@@ -30,6 +30,28 @@ fn make_char_table_basic() {
 }
 
 #[test]
+fn ct_ref_reads_char_entry_with_default_and_range_guard() {
+    // `ct_ref` is the public display-table reader (GNU `char_table_ref` /
+    // `CHAR_TABLE_REF` behind `DISP_CHAR_VECTOR`): own entry, else default,
+    // else nil; out-of-range chars never signal.
+    crate::test_utils::init_test_tracing();
+    let ct = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+    let glyphs = Value::vector(vec![Value::fixnum('<' as i64), Value::fixnum('>' as i64)]);
+    ct_set_single(&ct, 'x' as i64, glyphs);
+
+    // Own entry returned as-is.
+    let entry = ct_ref(&ct, 'x' as i64);
+    assert_eq!(entry.as_vector_data().map(|v| v.len()), Some(2));
+    // Unmapped char -> nil (no default).
+    assert!(ct_ref(&ct, 'y' as i64).is_nil());
+    // Out-of-range / negative chars -> nil, never a signal.
+    assert!(ct_ref(&ct, -1).is_nil());
+    assert!(ct_ref(&ct, 0x40_0000).is_nil());
+    // Not a char-table -> nil.
+    assert!(ct_ref(&Value::fixnum(1), 'x' as i64).is_nil());
+}
+
+#[test]
 fn make_char_table_with_default() {
     crate::test_utils::init_test_tracing();
     let ct = make_char_table_value(Value::symbol("syntax-table"), Value::fixnum(42));

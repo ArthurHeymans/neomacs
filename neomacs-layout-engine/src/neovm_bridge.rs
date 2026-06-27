@@ -361,7 +361,10 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     }
 }
 
-pub(crate) fn buffer_local_value<B: LayoutBufferView>(buffer: &B, name: &str) -> Option<Value> {
+pub(crate) fn buffer_local_value<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    name: &str,
+) -> Option<Value> {
     // GNU `buffer_local_value` (`buffer.c:1359-1413`) returns a buffer's
     // local binding when present and otherwise falls through to the default
     // value.  Layout uses this helper for display variables such as
@@ -816,6 +819,16 @@ fn glyph_code_char(glyph: Value) -> Option<char> {
     char::from_u32((code as u64 & 0x3F_FFFF) as u32)
 }
 
+/// The active display table for a buffer: `buffer-display-table`, else
+/// `standard-display-table` (GNU `disp_char_vector`'s `dp` argument selection).
+/// Per-window display tables are not yet wired into the layout buffer view.
+fn active_buffer_display_table<B: LayoutBufferView + ?Sized>(buffer: &B) -> Option<Value> {
+    buffer_local_value(buffer, "buffer-display-table")
+        .filter(|v| !v.is_nil())
+        .or_else(|| buffer_local_value(buffer, "standard-display-table"))
+        .filter(|v| !v.is_nil())
+}
+
 /// Resolve the ellipsis string GNU renders for invisible/selective-display
 /// folds from the active display table's `DISP_INVIS_VECTOR` slot.
 ///
@@ -825,10 +838,7 @@ fn glyph_code_char(glyph: Value) -> Option<char> {
 /// default three `.` glyphs.  We mirror the character selection; returning
 /// `None` lets the caller use the hard-coded `"..."` default.
 pub(crate) fn buffer_invisible_ellipsis_text<B: LayoutBufferView>(buffer: &B) -> Option<String> {
-    let table = buffer_local_value(buffer, "buffer-display-table")
-        .filter(|v| !v.is_nil())
-        .or_else(|| buffer_local_value(buffer, "standard-display-table"))
-        .filter(|v| !v.is_nil())?;
+    let table = active_buffer_display_table(buffer)?;
     let slot = table
         .as_char_table_obj()?
         .extras
@@ -840,6 +850,37 @@ pub(crate) fn buffer_invisible_ellipsis_text<B: LayoutBufferView>(buffer: &B) ->
     }
     let text: String = glyphs.iter().filter_map(|g| glyph_code_char(*g)).collect();
     (!text.is_empty()).then_some(text)
+}
+
+/// Resolve the per-character display-vector for `ch` from the active display
+/// table, returning the decoded glyph characters to render in place of `ch`.
+///
+/// Mirrors GNU `get_next_display_element` (`xdisp.c:8463`): `dv =
+/// DISP_CHAR_VECTOR(it->dp, c)`; when `dv` is a non-empty vector the character
+/// is displayed as the sequence of glyph codes in the vector (each decoded by
+/// `GLYPH_CODE_CHAR = code & MAX_CHAR`), all sharing the original char's buffer
+/// position.  We return the decoded glyph string so the caller can emit it as a
+/// single `SourceMappedText` item over the one source char (the whole vector is
+/// one display item, consumed once — matching GNU's `dpvec_char_len`-once
+/// advance), and so a `?\t` glyph inside the vector re-expands through the
+/// normal tab path.
+///
+/// Returns `None` (the hot path) when there is no active display table, no
+/// entry for `ch`, or the entry is not a vector — leaving `ch` to render
+/// literally.  An EMPTY vector means "display nothing"; we return `Some("")`
+/// so the char is replaced by no glyphs (GNU skips it entirely).
+///
+/// Per-glyph faces (`GLYPH_CODE_FACE = code >> 22`) are not yet honored here:
+/// the whole mapped vector inherits the source char's active face, which is
+/// correct for the common `make-glyph-code` form with no face (face id 0).
+pub(crate) fn buffer_display_table_glyphs<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    ch: char,
+) -> Option<String> {
+    let table = active_buffer_display_table(buffer)?;
+    let entry = neovm_core::emacs_core::chartable::ct_ref(&table, ch as i64);
+    let glyphs = entry.as_vector_data()?;
+    Some(glyphs.iter().filter_map(|g| glyph_code_char(*g)).collect())
 }
 
 pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {

@@ -2715,6 +2715,201 @@ fn layout_frame_rust_collapses_consecutive_invisible_runs_to_one_ellipsis() {
 }
 
 #[test]
+fn layout_frame_rust_display_table_maps_char_to_glyph_vector() {
+    // `buffer-display-table` maps a buffer char (`x`) to a glyph VECTOR
+    // `[?< ?>]`.  A char source position that resolves to MULTIPLE glyphs must
+    // render those glyphs into the text area (`a<>b`) AND keep the row
+    // non-blank.  The rejected single-char-run + pending_render_items design
+    // produced ZERO text glyphs (the whole buffer blanked) while source-item
+    // unit tests still saw an item; this drives the full
+    // `engine.layout_frame_rust` path and inspects the rendered `GlyphRow`.
+    let text = "axb\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
+        // A display table is a char-table with 6 extra slots.  Map the
+        // per-char slot for `x` to the glyph vector [?< ?>].
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        let glyphs = Value::vector(vec![Value::fixnum('<' as i64), Value::fixnum('>' as i64)]);
+        neovm_core::emacs_core::chartable::ct_set_single(&table, 'x' as i64, glyphs);
+        buffer.set_buffer_local("buffer-display-table", table);
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    // (1) The RENDERED text area shows the mapped glyphs in place of `x`.
+    let rendered = backend_trace_text_area_text(&trace);
+    assert!(
+        rendered.contains("a<>b"),
+        "display-table char must render its glyph vector inline, got {rendered:?}"
+    );
+    assert!(
+        !rendered.contains('x'),
+        "the source char must not also render literally, got {rendered:?}"
+    );
+
+    // (2) THE regression assertion the unit tests missed: the row is NOT blank.
+    //     A real text row that displays_text and has Char glyphs in glyphs[Text].
+    let text_row = trace
+        .matrix_rows
+        .iter()
+        .find(|r| r.role == GlyphRowRole::Text && r.displays_text)
+        .expect("a non-blank text row must exist for the display-table line");
+    let text_glyphs = &text_row.glyph_areas[GlyphArea::Text.index()];
+    assert!(
+        text_glyphs
+            .iter()
+            .any(|g| matches!(g.kind, GlyphKindTrace::Char('<'))),
+        "the mapped '<' glyph must be present in the rendered text area, glyphs={text_glyphs:?}"
+    );
+    assert!(
+        text_glyphs
+            .iter()
+            .any(|g| matches!(g.kind, GlyphKindTrace::Char('>'))),
+        "the mapped '>' glyph must be present in the rendered text area, glyphs={text_glyphs:?}"
+    );
+    // Both mapped glyphs carry the SAME (single) source charpos: `x` is at
+    // index 1 in "axb".  This is the GNU `it->position`-frozen invariant.
+    let mapped: Vec<usize> = text_glyphs
+        .iter()
+        .filter(|g| {
+            matches!(
+                g.kind,
+                GlyphKindTrace::Char('<') | GlyphKindTrace::Char('>')
+            )
+        })
+        .map(|g| g.charpos)
+        .collect();
+    assert_eq!(
+        mapped,
+        vec![1, 1],
+        "both mapped glyphs must share the single source charpos of `x`"
+    );
+}
+
+#[test]
+fn layout_frame_rust_display_table_maps_tab_to_glyph_then_tab() {
+    // whitespace-mode pattern: `buffer-display-table` maps TAB to `[?> ?\t]` so
+    // a leading indentation tab shows a `>` marker followed by tab spacing.  The
+    // tab element inside the vector must re-expand to the tab stop (it flows
+    // through the ordinary tab path), and the leading-tab-on-every-line layout
+    // (the exact case that blanked the buffer in the rejected attempt) must
+    // still render the following text.
+    let text = "\tabc\n\tdef\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        let glyphs = Value::vector(vec![Value::fixnum('>' as i64), Value::fixnum('\t' as i64)]);
+        neovm_core::emacs_core::chartable::ct_set_single(&table, '\t' as i64, glyphs);
+        buffer.set_buffer_local("buffer-display-table", table);
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    // The leading tab on EVERY line renders its `>` marker, and the text that
+    // follows survives (the blank-buffer regression dropped all of it).
+    assert!(
+        rendered.contains(">abc"),
+        "tab-mapped `>` marker must precede the line text, got {rendered:?}"
+    );
+    assert!(
+        rendered.contains(">def"),
+        "second leading-tab line must also render, got {rendered:?}"
+    );
+
+    // Both lines produced non-blank text rows (rejected attempt: tildes only).
+    let text_rows: Vec<_> = trace
+        .matrix_rows
+        .iter()
+        .filter(|r| r.role == GlyphRowRole::Text && r.displays_text)
+        .collect();
+    assert!(
+        text_rows.len() >= 2,
+        "both display-table lines must produce non-blank text rows, got {}",
+        text_rows.len()
+    );
+    // The tab element re-expanded: the first row has a Stretch glyph (tab stop)
+    // after the `>` marker.
+    let first = text_rows[0];
+    let glyphs = &first.glyph_areas[GlyphArea::Text.index()];
+    assert!(
+        glyphs
+            .iter()
+            .any(|g| matches!(g.kind, GlyphKindTrace::Stretch(_))),
+        "the mapped tab element must re-expand to a tab-stop stretch, glyphs={glyphs:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_without_display_table_renders_text_unchanged() {
+    // Sibling guard: a NORMAL buffer with NO display table renders its text
+    // verbatim.  This is the hot path that must be untouched by the
+    // display-table hook (a single cheap check when no table is present).
+    let text = "axb\n";
+    let trace = layout_trace_for_plain_text(text);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    assert!(
+        rendered.contains("axb"),
+        "a buffer without a display table must render its text verbatim, got {rendered:?}"
+    );
+    assert!(
+        !rendered.contains('<') && !rendered.contains('>'),
+        "no display-table glyphs must appear without a display table, got {rendered:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_display_table_empty_vector_displays_nothing() {
+    // GNU `get_next_display_element`: an EMPTY display vector means the char is
+    // displayed as nothing.  The char is consumed (no literal glyph) but the
+    // surrounding text and row survive.
+    let text = "axb\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        neovm_core::emacs_core::chartable::ct_set_single(&table, 'x' as i64, Value::vector(vec![]));
+        buffer.set_buffer_local("buffer-display-table", table);
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    assert!(
+        rendered.contains("ab") && !rendered.contains('x'),
+        "an empty display vector must drop the char, keeping neighbors, got {rendered:?}"
+    );
+    assert!(
+        trace
+            .matrix_rows
+            .iter()
+            .any(|r| r.role == GlyphRowRole::Text && r.displays_text),
+        "the line must still produce a non-blank text row"
+    );
+}
+
+#[test]
+fn layout_frame_rust_display_table_decodes_cons_glyph_code() {
+    // A glyph code can be a `(char . face-id)` cons (GNU `make-glyph-code` when
+    // the face id needs more than 6 bits) as well as a packed fixnum.  Both
+    // decode to their character via GLYPH_CODE_CHAR.
+    let text = "axb\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        // [ (?< . 285)  (?> | (12 << 22)) ] : a cons-form and a face-packed
+        // fixnum-form glyph code; both must decode to '<' and '>'.
+        let packed = ('>' as i64) | (12i64 << 22);
+        let glyphs = Value::vector(vec![
+            Value::cons(Value::fixnum('<' as i64), Value::fixnum(285)),
+            Value::fixnum(packed),
+        ]);
+        neovm_core::emacs_core::chartable::ct_set_single(&table, 'x' as i64, glyphs);
+        buffer.set_buffer_local("buffer-display-table", table);
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let rendered = backend_trace_text_area_text(&trace);
+    assert!(
+        rendered.contains("a<>b"),
+        "both cons-form and face-packed glyph codes must decode to their char, got {rendered:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_lays_out_nobreak_chars() {
     // U+00A0 NBSP and U+00AD SHY are delivered as plain Text by the typed cursor;
     // the nobreak display policy is applied downstream by the walk.

@@ -1405,6 +1405,70 @@ fn buffer_invisible_ellipsis_text_absent_when_no_display_table() {
 }
 
 #[test]
+fn buffer_display_table_glyphs_decodes_per_char_vector() {
+    // The per-character display-table slot (GNU `DISP_CHAR_VECTOR`): a vector of
+    // glyph codes for `ch` decodes to the glyph characters.  Covers both the
+    // bare-fixnum and `(char . face-id)` cons glyph-code forms, plus a `?\t`
+    // glyph that must be returned literally so the renderer re-expands it.
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*disp-char*");
+
+    let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+    // tab -> [ ?> (?\t packed with a face id) ]
+    let packed_tab = ('\t' as i64) | (7i64 << 22);
+    let glyphs = Value::vector(vec![Value::fixnum('>' as i64), Value::fixnum(packed_tab)]);
+    neovm_core::emacs_core::chartable::ct_set_single(&table, '\t' as i64, glyphs);
+    // 'x' -> [ (?A . 99) ] : cons-form glyph code.
+    neovm_core::emacs_core::chartable::ct_set_single(
+        &table,
+        'x' as i64,
+        Value::vector(vec![Value::cons(
+            Value::fixnum('A' as i64),
+            Value::fixnum(99),
+        )]),
+    );
+    // 'q' -> [] : empty vector means "display nothing".
+    neovm_core::emacs_core::chartable::ct_set_single(&table, 'q' as i64, Value::vector(vec![]));
+    // 'n' -> 65 (a plain character entry, NOT a vector): not a glyph vector.
+    neovm_core::emacs_core::chartable::ct_set_single(&table, 'n' as i64, Value::fixnum(65));
+
+    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
+        set_buffer_text(buf, "x");
+        buf.set_buffer_local("buffer-display-table", table);
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    assert_eq!(
+        buffer_display_table_glyphs(buf, '\t').as_deref(),
+        Some(">\t"),
+        "tab maps to '>' then a literal tab glyph"
+    );
+    assert_eq!(buffer_display_table_glyphs(buf, 'x').as_deref(), Some("A"));
+    // Empty vector -> Some("") (display nothing), distinct from None (no entry).
+    assert_eq!(buffer_display_table_glyphs(buf, 'q').as_deref(), Some(""));
+    // A plain-character entry is NOT a glyph vector -> None (render literally).
+    assert_eq!(buffer_display_table_glyphs(buf, 'n'), None);
+    // An unmapped char -> None (the hot path).
+    assert_eq!(buffer_display_table_glyphs(buf, 'z'), None);
+}
+
+#[test]
+fn buffer_display_table_glyphs_absent_when_no_display_table() {
+    // Hot path: with no buffer/standard display table the helper returns None so
+    // every char renders literally (a single cheap check, untouched).
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*no-disp-char*");
+    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
+        set_buffer_text(buf, "abc");
+    }
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    assert_eq!(buffer_display_table_glyphs(buf, 'a'), None);
+    assert_eq!(buffer_display_table_glyphs(buf, '\t'), None);
+}
+
+#[test]
 fn test_text_prop_line_spacing() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");
