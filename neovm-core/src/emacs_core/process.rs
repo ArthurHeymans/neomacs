@@ -5969,15 +5969,57 @@ pub(crate) fn builtin_minibuffer_sort_preprocess_history(
 }
 
 /// (print--preprocess OBJECT) -> nil
+///
+/// Extracts sharing info from OBJECT needed to print it: fills the
+/// `print-number-table` hash when `print-circle' is non-nil, and does nothing
+/// otherwise.  Mirrors GNU `Fprint_preprocess` (src/print.c).
 pub(crate) fn builtin_print_preprocess(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_print_preprocess_impl(args)
-}
-
-pub(crate) fn builtin_print_preprocess_impl(args: Vec<Value>) -> EvalResult {
     expect_args("print--preprocess", &args, 1)?;
+    let object = args[0];
+
+    // GNU: does nothing if `print-circle' is nil.
+    let print_circle = eval
+        .obarray
+        .symbol_value("print-circle")
+        .is_some_and(|v| v.is_truthy());
+    if !print_circle {
+        return Ok(Value::NIL);
+    }
+
+    let print_gensym = eval
+        .obarray
+        .symbol_value("print-gensym")
+        .is_some_and(|v| v.is_truthy());
+    let print_continuous_numbering = eval
+        .obarray
+        .symbol_value("print-continuous-numbering")
+        .is_some_and(|v| v.is_truthy());
+
+    // GNU: `if (!HASH_TABLE_P (Vprint_number_table)) Vprint_number_table = make-hash-table :test eq`.
+    let table_value = match eval.obarray.symbol_value("print-number-table") {
+        Some(v) if v.is_hash_table() => *v,
+        _ => {
+            let table = Value::hash_table(super::value::HashTableTest::Eq);
+            eval.set_variable("print-number-table", table);
+            table
+        }
+    };
+
+    // Root the object and table across the (allocation-heavy) traversal.
+    let roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(object);
+    eval.push_specpdl_root(table_value);
+    super::print::preprocess_print_number_table(
+        &object,
+        table_value,
+        print_gensym,
+        print_continuous_numbering,
+    );
+    eval.restore_specpdl_roots(roots);
+
     Ok(Value::NIL)
 }
 

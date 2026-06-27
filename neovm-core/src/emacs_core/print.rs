@@ -26,6 +26,7 @@ pub struct PrintOptions {
     pub print_escape_nonascii: bool,
     pub print_escape_multibyte: bool,
     pub print_escape_control_characters: bool,
+    pub print_integers_as_characters: bool,
     pub print_level: Option<i64>,
     pub print_length: Option<i64>,
     pub print_continuous_numbering: bool,
@@ -41,30 +42,100 @@ impl Default for PrintOptions {
     }
 }
 
-fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
-    if let Some(test_name) = table.test_name {
-        out.push_str(" test ");
-        out.push_str(resolve_sym(test_name));
-        return;
+/// Return the test-name symbol GNU would print for this table, or `None` when
+/// the test is the default `eql` (in which case GNU omits the ` test ` field).
+///
+/// Mirrors GNU's `!BASE_EQ (h->test->name, Qeql)` check (print.c): the
+/// comparison is against the test *name* symbol, so a table created with
+/// `:test 'eql` (which sets `test_name` to `eql`) is treated as the default.
+fn hash_table_printed_test_name(table: &LispHashTable) -> Option<&'static str> {
+    match table.test_name {
+        Some(test_name) => {
+            let name = resolve_sym(test_name);
+            if name == "eql" { None } else { Some(name) }
+        }
+        None => {
+            if matches!(table.test, HashTableTest::Eql) {
+                None
+            } else {
+                Some(table.test.name())
+            }
+        }
     }
+}
 
-    if !matches!(table.test, HashTableTest::Eql) {
+fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
+    if let Some(name) = hash_table_printed_test_name(table) {
         out.push_str(" test ");
-        out.push_str(table.test.name());
+        out.push_str(name);
     }
 }
 
 fn append_hash_table_test_bytes(table: &LispHashTable, out: &mut Vec<u8>) {
-    if let Some(test_name) = table.test_name {
+    if let Some(name) = hash_table_printed_test_name(table) {
         out.extend_from_slice(b" test ");
-        out.extend_from_slice(resolve_sym(test_name).as_bytes());
-        return;
+        out.extend_from_slice(name.as_bytes());
+    }
+}
+
+/// Mirrors GNU `named_escape` (print.c): the single-letter escape used to
+/// print a character in `?\X` form, or `None` if there is no named escape.
+///
+/// `\a`, `\v`, `\e` and `\d` are intentionally excluded (matching GNU): they
+/// are rare as characters and more likely meant as plain integers.
+fn named_escape(i: u32) -> Option<char> {
+    match i {
+        0x08 => Some('b'), // \b
+        0x09 => Some('t'), // \t
+        0x0A => Some('n'), // \n
+        0x0C => Some('f'), // \f
+        0x0D => Some('r'), // \r
+        0x20 => Some('s'), // space
+        _ => None,
+    }
+}
+
+/// If `print-integers-as-characters` is active and `i` is a character that
+/// GNU prints in `?X` syntax, format it that way and return `true`. Mirrors
+/// the `Lisp_Int0/Int1` case of GNU `print_object` (print.c).
+///
+/// `escapeflag` is true for `prin1`-style output (adds the extra backslash
+/// before the self-delimiting characters), false for `princ`-style output.
+fn try_format_integer_as_character(
+    i: i64,
+    escapeflag: bool,
+    push_char: &mut dyn FnMut(char),
+) -> bool {
+    use crate::emacs_core::emacs_char::{MAX_UNICODE_CHAR, char_general_category, graphic_base_p};
+
+    if !(0..=i64::from(MAX_UNICODE_CHAR)).contains(&i) {
+        return false;
+    }
+    let code = i as u32;
+    let escaped_name = named_escape(code);
+    let is_graphic_base = char_general_category(code).is_some_and(graphic_base_p);
+    if escaped_name.is_none() && !is_graphic_base {
+        return false;
     }
 
-    if !matches!(table.test, HashTableTest::Eql) {
-        out.extend_from_slice(b" test ");
-        out.extend_from_slice(table.test.name().as_bytes());
+    push_char('?');
+    if let Some(name) = escaped_name {
+        push_char('\\');
+        push_char(name);
+    } else {
+        // `code` is graphic_base, so it is a valid scalar value.
+        let ch = char::from_u32(code).unwrap();
+        if escapeflag
+            && matches!(
+                ch,
+                ';' | '"' | '\'' | '\\' | '(' | ')' | '{' | '}' | '[' | ']'
+            )
+        {
+            push_char('\\');
+        }
+        push_char(ch);
     }
+    true
 }
 
 impl PrintOptions {
@@ -78,6 +149,7 @@ impl PrintOptions {
             print_escape_nonascii: false,
             print_escape_multibyte: false,
             print_escape_control_characters: false,
+            print_integers_as_characters: false,
             print_level: None,
             print_length: None,
             print_continuous_numbering: false,
@@ -104,6 +176,7 @@ impl PrintOptions {
             print_escape_nonascii: false,
             print_escape_multibyte: false,
             print_escape_control_characters: false,
+            print_integers_as_characters: false,
             print_level,
             print_length,
             print_continuous_numbering: false,
@@ -464,6 +537,20 @@ fn print_preprocess(value: &Value, state: &mut PrintCircleState, options: PrintO
 }
 
 fn print_preprocess_external(value: &Value, table_value: Value, options: PrintOptions) {
+    print_preprocess_external_with_t_removal(value, table_value, options, true);
+}
+
+/// Core of GNU `print_preprocess`. When `remove_t_entries` is true the
+/// neomacs printer path strips the transient `t` status entries afterwards
+/// (they are cosmetic — the printer only acts on fixnum/string labels). The
+/// `print--preprocess` primitive passes `false` so the user-visible
+/// `print-number-table` keeps every traversed candidate, exactly like GNU.
+fn print_preprocess_external_with_t_removal(
+    value: &Value,
+    table_value: Value,
+    options: PrintOptions,
+    remove_t_entries: bool,
+) {
     let mut stack: Vec<Value> = vec![*value];
     while let Some(obj) = stack.pop() {
         if !is_print_circle_candidate(&obj, options.print_gensym) {
@@ -545,7 +632,9 @@ fn print_preprocess_external(value: &Value, table_value: Value, options: PrintOp
         }
     }
 
-    remove_print_number_table_t_entries(table_value);
+    if remove_t_entries {
+        remove_print_number_table_t_entries(table_value);
+    }
 }
 
 fn push_string_text_property_plists(value: Value, stack: &mut Vec<Value>) {
@@ -554,6 +643,33 @@ fn push_string_text_property_plists(value: Value, stack: &mut Vec<Value>) {
             stack.push(run.plist);
         }
     }
+}
+
+/// Public preprocessing entry point used by the `print--preprocess` builtin.
+///
+/// Mirrors GNU `print_preprocess` (print.c): resets the shared-structure
+/// number index and traverses `value`, filling `table_value` (the Lisp
+/// `print-number-table` hash) with sharing info so that circular and shared
+/// structures can be printed with `#N=` / `#N#` labels.
+///
+/// `print_gensym` and `print_continuous_numbering` come from the like-named
+/// dynamic variables; they affect which symbols are treated as candidates and
+/// the gensym special case, exactly as in GNU.
+pub(crate) fn preprocess_print_number_table(
+    value: &Value,
+    table_value: Value,
+    print_gensym: bool,
+    print_continuous_numbering: bool,
+) {
+    reset_print_number_index();
+    let mut options = PrintOptions::default();
+    options.print_circle = true;
+    options.print_gensym = print_gensym;
+    options.print_continuous_numbering = print_continuous_numbering;
+    // GNU's `print--preprocess` leaves the transient `t` status entries in the
+    // table (the printer simply ignores non-fixnum entries), so don't strip
+    // them here.
+    print_preprocess_external_with_t_removal(value, table_value, options, false);
 }
 
 /// Entry point for stateful printing (circle/level/length aware).
@@ -696,7 +812,15 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
     match value.kind() {
         ValueKind::Nil => out.push_str("nil"),
         ValueKind::T => out.push_str("t"),
-        ValueKind::Fixnum(v) => write!(out, "{}", v).unwrap(),
+        ValueKind::Fixnum(v) => {
+            if !(state.options.print_integers_as_characters
+                && try_format_integer_as_character(v, !state.options.print_noescape, &mut |c| {
+                    out.push(c)
+                }))
+            {
+                write!(out, "{}", v).unwrap();
+            }
+        }
         ValueKind::Float => out.push_str(&format_float_with_options(value.xfloat(), state.options)),
         ValueKind::Symbol(id) => out.push_str(&format_symbol(id, state.options)),
         ValueKind::String => {
@@ -1683,7 +1807,16 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
     match value.kind() {
         ValueKind::Nil => out.extend_from_slice(b"nil"),
         ValueKind::T => out.extend_from_slice(b"t"),
-        ValueKind::Fixnum(v) => out.extend_from_slice(v.to_string().as_bytes()),
+        ValueKind::Fixnum(v) => {
+            let mut buf = String::new();
+            if options.print_integers_as_characters
+                && try_format_integer_as_character(v, !options.print_noescape, &mut |c| buf.push(c))
+            {
+                out.extend_from_slice(buf.as_bytes());
+            } else {
+                out.extend_from_slice(v.to_string().as_bytes());
+            }
+        }
         ValueKind::Float => {
             out.extend_from_slice(format_float_with_options(value.xfloat(), options).as_bytes())
         }

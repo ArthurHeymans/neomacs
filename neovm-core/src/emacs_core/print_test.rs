@@ -688,3 +688,145 @@ fn print_markers_use_gnu_style_handles() {
         "#<marker in no buffer>"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Eval-driven printer regression tests (printer dynamic variables).
+// ---------------------------------------------------------------------------
+
+fn print_eval_one(src: &str) -> String {
+    let mut ev = crate::emacs_core::Context::new();
+    let result = ev.eval_str(src);
+    crate::emacs_core::format_eval_result(&result)
+}
+
+#[test]
+fn print_integers_as_characters_uses_char_syntax_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (?A ?\t). Letters print via graphic_base_p; tab via named_escape.
+    assert_eq!(
+        print_eval_one("(let ((print-integers-as-characters t)) (prin1-to-string (list 65 9)))"),
+        "OK \"(?A ?\\\\t)\"",
+    );
+    // A broader spread, matching GNU exactly:
+    //  - named escapes: 8 -> ?\b, 10 -> ?\n, 32 -> ?\s, 13 -> ?\r
+    //  - graphic bases: 256 -> ?Ā, 955 -> ?λ, 59 -> ?\; (escaped by prin1)
+    //  - left as integers: 0, 7, 11, 27, 127 (control), 8203 (Cf format)
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-integers-as-characters t)) \
+             (prin1-to-string (list 65 9 10 32 0 1 127 ?\\( 7 11 27 ?\\; 256 955 8203)))"
+        ),
+        "OK \"(?A ?\\\\t ?\\\\n ?\\\\s 0 1 127 ?\\\\( 7 11 27 ?\\\\; ?Ā ?λ 8203)\"",
+    );
+    // princ-style output (no escapeflag): the self-delimiting `;` is NOT
+    // backslash-escaped, but named escapes and `?` still apply. Exercise the
+    // printer directly with `print_noescape` (the C `escapeflag = false` path).
+    let mut princ_opts = PrintOptions::default();
+    princ_opts.print_integers_as_characters = true;
+    princ_opts.print_noescape = true;
+    let list = Value::list(vec![
+        Value::fixnum(65),
+        Value::fixnum(9),
+        Value::fixnum(';' as i64),
+    ]);
+    assert_eq!(print_value_with_options(&list, princ_opts), "(?A ?\\t ?;)",);
+    // When the variable is nil, integers print as integers.
+    assert_eq!(
+        print_eval_one("(prin1-to-string (list 65 9))"),
+        "OK \"(65 9)\"",
+    );
+}
+
+#[test]
+fn print_preprocess_fills_number_table_for_circular_structures_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // Root cause of the cl-print circular-list hang: `print--preprocess` was a
+    // no-op stub, so cl-print never built `print-number-table` and recursed
+    // forever.  GNU's `print--preprocess` fills the table when `print-circle'
+    // is non-nil; a shared/circular object gets a negative-fixnum label.
+    //
+    // Circular list: l = (1 2 . l).  GNU: (gethash l print-number-table) = -1.
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-circle t) \
+                   (print-number-table (make-hash-table :test 'eq)) \
+                   (l (list 1 2))) \
+               (setcdr (cdr l) l) \
+               (print--preprocess l) \
+               (and (< (gethash l print-number-table 0) 0) t))"
+        ),
+        "OK t",
+    );
+    // Circular vector: v = [v nil].  GNU labels the shared vector negatively.
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-circle t) \
+                   (print-number-table (make-hash-table :test 'eq)) \
+                   (v (make-vector 2 nil))) \
+               (aset v 0 v) \
+               (print--preprocess v) \
+               (and (< (gethash v print-number-table 0) 0) t))"
+        ),
+        "OK t",
+    );
+    // With `print-circle' nil, GNU does nothing (the table stays empty).
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-circle nil) \
+                   (print-number-table (make-hash-table :test 'eq)) \
+                   (l (list 1 2))) \
+               (setcdr (cdr l) l) \
+               (print--preprocess l) \
+               (gethash l print-number-table 'absent))"
+        ),
+        "OK absent",
+    );
+    // Acyclic, non-shared structure: no shared label is assigned (the head
+    // gets the transient `t` status, which is not a number), but GNU records
+    // every traversed candidate, so the three cons cells of (1 2 3) leave a
+    // table count of 3.  cl-print only treats *numberp* entries as labels, so
+    // an acyclic list prints without any `#N=` prefix.
+    assert_eq!(
+        print_eval_one(
+            "(let* ((print-circle t) \
+                    (print-number-table (make-hash-table :test 'eq)) \
+                    (l (list 1 2 3))) \
+               (print--preprocess l) \
+               (list (hash-table-count print-number-table) \
+                     (numberp (gethash l print-number-table))))"
+        ),
+        "OK (3 nil)",
+    );
+}
+
+#[test]
+fn hash_table_printer_omits_default_eql_test_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // Default test (no :test arg) -> omitted.
+    assert_eq!(
+        print_eval_one("(prin1-to-string (make-hash-table))"),
+        "OK \"#s(hash-table)\"",
+    );
+    // Explicit :test 'eql is still the default -> omitted (GNU compares the
+    // test *name* symbol against `eql`).
+    assert_eq!(
+        print_eval_one("(prin1-to-string (make-hash-table :test 'eql))"),
+        "OK \"#s(hash-table)\"",
+    );
+    // Non-default tests are still printed.
+    assert_eq!(
+        print_eval_one("(prin1-to-string (make-hash-table :test 'eq))"),
+        "OK \"#s(hash-table test eq)\"",
+    );
+    assert_eq!(
+        print_eval_one("(prin1-to-string (make-hash-table :test 'equal))"),
+        "OK \"#s(hash-table test equal)\"",
+    );
+    // Data is still printed; the default test stays omitted.
+    assert_eq!(
+        print_eval_one(
+            "(let ((h (make-hash-table :test 'eql))) (puthash 1 2 h) (prin1-to-string h))"
+        ),
+        "OK \"#s(hash-table data (1 2))\"",
+    );
+}

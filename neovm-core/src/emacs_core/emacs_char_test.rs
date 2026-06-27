@@ -747,6 +747,48 @@ fn blankp_only_zs() {
     assert!(!blankp(UnicodeCategory::Control as i64));
 }
 
+#[test]
+fn char_general_category_matches_gnu_unicode_data() {
+    // Values cross-checked against GNU `(get-char-code-property C 'general-category)`.
+    assert_eq!(
+        char_general_category(b'A' as u32),
+        Some(UnicodeCategory::UppercaseLetter as i64)
+    );
+    assert_eq!(
+        char_general_category(b'a' as u32),
+        Some(UnicodeCategory::LowercaseLetter as i64)
+    );
+    assert_eq!(
+        char_general_category(b';' as u32),
+        Some(UnicodeCategory::OtherPunctuation as i64)
+    );
+    assert_eq!(
+        char_general_category(0x00),
+        Some(UnicodeCategory::Control as i64)
+    );
+    assert_eq!(
+        char_general_category(0x20),
+        Some(UnicodeCategory::SpaceSeparator as i64)
+    );
+    assert_eq!(
+        char_general_category(0x3BB), // GREEK SMALL LETTER LAMBDA (λ)
+        Some(UnicodeCategory::LowercaseLetter as i64)
+    );
+    assert_eq!(
+        char_general_category(0x200B), // ZERO WIDTH SPACE
+        Some(UnicodeCategory::Format as i64)
+    );
+    // graphic_base_p, fed by char_general_category, matches GNU's print logic:
+    // letters/punctuation are graphic bases, control/format/space are not.
+    assert!(char_general_category(b'A' as u32).is_some_and(graphic_base_p));
+    assert!(char_general_category(0x3BB).is_some_and(graphic_base_p));
+    assert!(!char_general_category(0x00).is_some_and(graphic_base_p));
+    assert!(!char_general_category(0x20).is_some_and(graphic_base_p));
+    assert!(!char_general_category(0x200B).is_some_and(graphic_base_p));
+    // Out-of-range (eight-bit / non-scalar) yields None, like GNU's nil entry.
+    assert_eq!(char_general_category(0x110000), None);
+}
+
 // -----------------------------------------------------------------------
 // EmacsChar newtype (issue #131): make the "char code as Rust char / PUA
 // sentinel" mistake un-writable.

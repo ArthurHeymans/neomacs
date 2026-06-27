@@ -364,6 +364,9 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     let print_escape_control_characters = obarray
         .symbol_value("print-escape-control-characters")
         .is_some_and(|v| v.is_truthy());
+    let print_integers_as_characters = obarray
+        .symbol_value("print-integers-as-characters")
+        .is_some_and(|v| v.is_truthy());
     let print_continuous_numbering = obarray
         .symbol_value("print-continuous-numbering")
         .is_some_and(|v| v.is_truthy());
@@ -382,6 +385,7 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     opts.print_escape_nonascii = print_escape_nonascii;
     opts.print_escape_multibyte = print_escape_multibyte;
     opts.print_escape_control_characters = print_escape_control_characters;
+    opts.print_integers_as_characters = print_integers_as_characters;
     opts.print_continuous_numbering = print_continuous_numbering;
     opts.print_number_table = print_number_table;
     opts.float_output_format = obarray

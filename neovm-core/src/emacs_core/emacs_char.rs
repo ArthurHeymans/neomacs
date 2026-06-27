@@ -328,6 +328,59 @@ pub enum UnicodeCategory {
     Unassigned,
 }
 
+impl From<unicode_general_category::GeneralCategory> for UnicodeCategory {
+    fn from(gc: unicode_general_category::GeneralCategory) -> Self {
+        use unicode_general_category::GeneralCategory as G;
+        match gc {
+            G::UppercaseLetter => UnicodeCategory::UppercaseLetter,
+            G::LowercaseLetter => UnicodeCategory::LowercaseLetter,
+            G::TitlecaseLetter => UnicodeCategory::TitlecaseLetter,
+            G::ModifierLetter => UnicodeCategory::ModifierLetter,
+            G::OtherLetter => UnicodeCategory::OtherLetter,
+            G::NonspacingMark => UnicodeCategory::NonspacingMark,
+            G::SpacingMark => UnicodeCategory::SpacingMark,
+            G::EnclosingMark => UnicodeCategory::EnclosingMark,
+            G::DecimalNumber => UnicodeCategory::DecimalNumber,
+            G::LetterNumber => UnicodeCategory::LetterNumber,
+            G::OtherNumber => UnicodeCategory::OtherNumber,
+            G::ConnectorPunctuation => UnicodeCategory::ConnectorPunctuation,
+            G::DashPunctuation => UnicodeCategory::DashPunctuation,
+            G::OpenPunctuation => UnicodeCategory::OpenPunctuation,
+            G::ClosePunctuation => UnicodeCategory::ClosePunctuation,
+            G::InitialPunctuation => UnicodeCategory::InitialPunctuation,
+            G::FinalPunctuation => UnicodeCategory::FinalPunctuation,
+            G::OtherPunctuation => UnicodeCategory::OtherPunctuation,
+            G::MathSymbol => UnicodeCategory::MathSymbol,
+            G::CurrencySymbol => UnicodeCategory::CurrencySymbol,
+            G::ModifierSymbol => UnicodeCategory::ModifierSymbol,
+            G::OtherSymbol => UnicodeCategory::OtherSymbol,
+            G::SpaceSeparator => UnicodeCategory::SpaceSeparator,
+            G::LineSeparator => UnicodeCategory::LineSeparator,
+            G::ParagraphSeparator => UnicodeCategory::ParagraphSeparator,
+            G::Control => UnicodeCategory::Control,
+            G::Format => UnicodeCategory::Format,
+            G::Surrogate => UnicodeCategory::Surrogate,
+            G::PrivateUse => UnicodeCategory::PrivateUse,
+            G::Unassigned => UnicodeCategory::Unassigned,
+            // `GeneralCategory` is marked `#[non_exhaustive]`; treat any
+            // future category as Unassigned (the most conservative choice,
+            // matching GNU's "not graphic/printable" fallback).
+            _ => UnicodeCategory::Unassigned,
+        }
+    }
+}
+
+/// Return the Unicode general category code for codepoint `c`, matching the
+/// integer values GNU stores in `unicode-category-table`.
+///
+/// Returns `None` for codepoints outside the Unicode scalar range (e.g. the
+/// eight-bit raw-byte range), mirroring GNU's `CHAR_TABLE_REF` returning nil
+/// (a non-fixnum) for which the graphic/printable predicates yield `false`.
+pub fn char_general_category(c: u32) -> Option<i64> {
+    let ch = char::from_u32(c)?;
+    Some(UnicodeCategory::from(unicode_general_category::get_general_category(ch)) as i64)
+}
+
 // ---------------------------------------------------------------------------
 // Raw-byte predicates and converters
 // ---------------------------------------------------------------------------

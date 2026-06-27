@@ -52,6 +52,7 @@ parking_lot.workspace = true
 malachite.workspace = true
 itoa.workspace = true
 unicode_names2.workspace = true
+unicode-general-category.workspace = true
 encoding_rs.workspace = true
 flate2.workspace = true
 rusqlite.workspace = true
