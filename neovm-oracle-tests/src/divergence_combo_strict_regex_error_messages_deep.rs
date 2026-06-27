@@ -9,6 +9,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r4_malformed_regex_error_messages_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-27:
+    // GNU Emacs: OK (nil "Unmatched [ or [^" "Invalid content of \\{\\}" nil nil nil "Unmatched [ or [^")
+    // Neomacs:   OK (nil "Unmatched [ or [^" nil nil nil nil "Unmatched [ or [^]")
+    // Malformed repeat \\{3,2\\} (min > max) is rejected by GNU Emacs as
+    // "Invalid content of \\{\\}" but silently accepted by Neomacs (compiled
+    // successfully, returns nil = no match). Neomacs does not validate repeat
+    // interval ranges. Other malformed patterns ([z-a], [:, [a-Z], \\?, \\+,
+    // [^]) agree.
     assert_oracle_parity(
         r##"
 (list (condition-case err (string-match "[z-a]" "text") (invalid-regexp (cadr err)) (error 'other))
