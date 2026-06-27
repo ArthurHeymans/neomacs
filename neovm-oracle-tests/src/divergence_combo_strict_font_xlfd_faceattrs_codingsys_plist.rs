@@ -7,13 +7,26 @@ use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-fn div_q4_font_xlfd_and_face_attributes() {
+fn div_q4_font_xlfd_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
-(let ((fs (font-spec :family "Monospace" :weight 'normal)))
-  (list (condition-case err (font-xlfd-name fs) (error (cons 'err (car err))))
-        (condition-case err (font-face-attributes fs) (error (cons 'err (car err))))))
+(font-xlfd-name (font-spec :family "Monospace" :weight 'normal))
+"##,
+    );
+}
+
+#[test]
+fn div_q4_font_face_attributes_weight_canonicalization() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-27:
+    // GNU Emacs: OK (:family "Monospace" :weight regular)
+    // Neomacs:   OK (:family "Monospace" :weight normal)
+    // font-face-attributes canonicalizes :weight 'normal to the canonical name
+    // 'regular in GNU Emacs; Neomacs returns the alias 'normal.
+    assert_oracle_parity(
+        r##"
+(font-face-attributes (font-spec :family "Monospace" :weight 'normal))
 "##,
     );
 }
