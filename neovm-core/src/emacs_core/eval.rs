@@ -13500,24 +13500,53 @@ impl Context {
                             "unlet",
                         );
                     }
-                    // Restore only if the buffer is still live.
+                    // Restore only if the buffer is still live AND the
+                    // variable is *still* buffer-local in that buffer.
                     // Mirrors GNU `do_one_unbind` SPECPDL_LET_LOCAL
-                    // arm at `eval.c:3838-3850`:
+                    // arm at `eval.c:3852-3863`:
+                    //     /* If this was a local binding, reset the value in
+                    //        the appropriate buffer, but only if that buffer's
+                    //        binding still exists.  */
                     //     if (!NILP (Flocal_variable_p (symbol, where)))
                     //       set_internal (symbol, old_value, where, UNBIND);
-                    if self.buffers.get(buffer_id).is_some() {
+                    //
+                    // The `Flocal_variable_p` guard is load-bearing: if the
+                    // local binding was eliminated *inside* the `let` body
+                    // (e.g. `kill-all-local-variables` killed a non-permanent
+                    // local), GNU does NOT restore the old value — the kill
+                    // wins. Without this guard neomacs resurrected the old
+                    // local value, leaking stale buffer-local state across a
+                    // major-mode switch (the org/derived-mode hook-loss path:
+                    // `delay-mode-hooks`/`delayed-mode-hooks` machinery relies
+                    // on KALV's reset surviving the surrounding `let`).
+                    use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
+                    let is_localized = self
+                        .obarray
+                        .get_by_id(sym_id)
+                        .map(|s| s.redirect() == SymbolRedirect::Localized)
+                        .unwrap_or(false);
+                    let still_local = match self.buffers.get(buffer_id) {
+                        None => false,
+                        Some(buf) => {
+                            if is_localized {
+                                let buf_val = Value::make_buffer(buffer_id);
+                                self.obarray.has_per_buffer_binding(
+                                    sym_id,
+                                    buf_val,
+                                    buf.local_var_alist,
+                                )
+                            } else {
+                                buf.has_buffer_local_by_sym_id(sym_id)
+                            }
+                        }
+                    };
+                    if still_local {
                         // Phase 10E: for LOCALIZED symbols, restore via
                         // set_internal_localized(UNBIND) targeting the
                         // saved buffer. This walks the buffer's alist
                         // and rewrites the cell's cdr in place,
                         // matching GNU's set_internal LOCALIZED arm
                         // and bypassing the legacy lisp_bindings path.
-                        use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
-                        let is_localized = self
-                            .obarray
-                            .get_by_id(sym_id)
-                            .map(|s| s.redirect() == SymbolRedirect::Localized)
-                            .unwrap_or(false);
                         if is_localized {
                             let buf_val = Value::make_buffer(buffer_id);
                             let alist = self

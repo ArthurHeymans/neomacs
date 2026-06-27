@@ -841,6 +841,132 @@ fn make_local_variable_after_compiled_preread_matches_gnu() {
 }
 
 #[test]
+fn derived_mode_grandparent_hook_fires() {
+    crate::test_utils::init_test_tracing();
+    // 2-level derived chain: vm-mode-a -> vm-mode-b -> text-mode.
+    // text-mode is the GRANDPARENT of vm-mode-a. Its hook must fire when
+    // vm-mode-a is invoked (org->outline->text symptom). GNU runs the
+    // accumulated hooks innermost-ancestor-first: (text b a).
+    let result = bootstrap_eval_all(
+        r#"(progn
+             (setq vm-grand-log nil)
+             (define-derived-mode vm-mode-b text-mode "VM-B")
+             (define-derived-mode vm-mode-a vm-mode-b "VM-A")
+             (with-temp-buffer
+               (let ((text-mode-hook (list (lambda () (push 'text vm-grand-log))))
+                     (vm-mode-b-hook (list (lambda () (push 'b vm-grand-log))))
+                     (vm-mode-a-hook (list (lambda () (push 'a vm-grand-log)))))
+                 (vm-mode-a)
+                 (list major-mode (nreverse vm-grand-log)))))"#,
+    );
+    assert_eq!(result[0], "OK (vm-mode-a (text b a))");
+}
+
+#[test]
+fn derived_mode_grandparent_hook_fires_real_outline_chain() {
+    crate::test_utils::init_test_tracing();
+    // Real bundled outline-mode (outline -> text), then a 2-level derived
+    // mode built on the REAL outline-mode so text-mode is the grandparent.
+    let real = bootstrap_eval_all(
+        r#"(progn
+             (require 'outline)
+             (setq vm-real-log nil)
+             (define-derived-mode vm-real-child outline-mode "VM-Real")
+             (with-temp-buffer
+               (let ((text-mode-hook (list (lambda () (push 'text vm-real-log))))
+                     (outline-mode-hook (list (lambda () (push 'outline vm-real-log))))
+                     (vm-real-child-hook (list (lambda () (push 'child vm-real-log)))))
+                 (vm-real-child)
+                 (list major-mode (nreverse vm-real-log)))))"#,
+    );
+    assert_eq!(real[0], "OK (vm-real-child (text outline child))");
+
+    // 1-level baseline (outline -> text): both hooks fire.
+    let real1 = bootstrap_eval_all(
+        r#"(progn
+             (require 'outline)
+             (setq vm-real1-log nil)
+             (with-temp-buffer
+               (let ((text-mode-hook (list (lambda () (push 'text vm-real1-log))))
+                     (outline-mode-hook (list (lambda () (push 'outline vm-real1-log)))))
+                 (outline-mode)
+                 (list major-mode (nreverse vm-real1-log)))))"#,
+    );
+    assert_eq!(real1[0], "OK (outline-mode (text outline))");
+}
+
+#[test]
+fn let_local_unbind_skips_restore_when_local_killed_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // ROOT-CAUSE unit test. A var made buffer-local, then `let`-bound,
+    // whose local binding is KILLED by `kill-all-local-variables` inside
+    // the let body. GNU `do_one_unbind` SPECPDL_LET_LOCAL only restores
+    // the old local value `if (!NILP (Flocal_variable_p (symbol, where)))`
+    // -- so a non-permanent var killed by KALV is left non-local with the
+    // default value; the kill wins. neomacs previously restored the old
+    // local value unconditionally, leaking stale buffer-local state.
+    //
+    // GNU 31.0.90 (emacs -Q --batch): (nil nil)
+    let div = bootstrap_eval_all(
+        r#"(progn
+             (defvar vm-div-var nil)
+             (with-temp-buffer
+               (make-local-variable 'vm-div-var)
+               (setq vm-div-var 'pre)
+               (let ((vm-div-var 'bound))
+                 (kill-all-local-variables))
+               (list (local-variable-p 'vm-div-var) vm-div-var)))"#,
+    );
+    assert_eq!(div[0], "OK (nil nil)");
+}
+
+#[test]
+fn let_local_unbind_restores_permanent_local_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // Counterpart to the above: for a PERMANENT-LOCAL var (the
+    // `delay-mode-hooks` shape), KALV preserves the local binding, so
+    // `Flocal_variable_p` stays true and the let-unbind DOES restore the
+    // pre-let local value. This must remain unchanged by the fix.
+    //
+    // GNU 31.0.90 (emacs -Q --batch): (t pre)
+    let divp = bootstrap_eval_all(
+        r#"(progn
+             (defvar vm-div-perm nil)
+             (put 'vm-div-perm 'permanent-local t)
+             (with-temp-buffer
+               (make-local-variable 'vm-div-perm)
+               (setq vm-div-perm 'pre)
+               (let ((vm-div-perm 'bound))
+                 (kill-all-local-variables))
+               (list (local-variable-p 'vm-div-perm) vm-div-perm)))"#,
+    );
+    assert_eq!(divp[0], "OK (t pre)");
+}
+
+#[test]
+fn delayed_mode_hooks_accumulator_not_resurrected_after_kill_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The exact org/derived-mode hook-loss mechanism. The non-permanent
+    // buffer-local accumulator `delayed-mode-hooks` is let-bound (as can
+    // happen on a deferred-org / mode-restart path), then a major-mode
+    // switch runs `kill-all-local-variables` which clears it. GNU leaves
+    // it non-local and nil; the buggy let-unbind resurrected a stale value
+    // which then corrupted the next `run-mode-hooks` flush (dropping the
+    // grandparent text-mode-hook).
+    //
+    // GNU 31.0.90 (emacs -Q --batch): (:after-let nil nil)
+    let res = bootstrap_eval_all(
+        r#"(with-temp-buffer
+             (make-local-variable 'delayed-mode-hooks)
+             (setq delayed-mode-hooks '(stale-hook))
+             (let ((delayed-mode-hooks '(let-bound)))
+               (kill-all-local-variables))
+             (list :after-let (local-variable-p 'delayed-mode-hooks) delayed-mode-hooks))"#,
+    );
+    assert_eq!(res[0], "OK (:after-let nil nil)");
+}
+
+#[test]
 fn make_local_variable_constant_and_keyword_payloads_match_oracle() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_all(
