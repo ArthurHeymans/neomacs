@@ -734,6 +734,9 @@ pub(crate) fn dispatch_builtin_without_eval_state(
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod replace_region_contents_test;
+
 // -----------------------------------------------------------------------
 // Wrapper functions for builtins that need tracing or non-standard access
 // -----------------------------------------------------------------------

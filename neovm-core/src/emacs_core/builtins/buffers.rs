@@ -1451,65 +1451,237 @@ pub(crate) fn builtin_ntake(args: Vec<Value>) -> EvalResult {
     }
 }
 
+/// A single change run from the minimal diff used by
+/// `replace-region-contents`: replace characters `[a_start, a_end)` of the
+/// destination region with characters `[b_start, b_end)` of the source.
+/// All indices are character indices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ReplaceRegionChangeRun {
+    pub(crate) a_start: usize,
+    pub(crate) a_end: usize,
+    pub(crate) b_start: usize,
+    pub(crate) b_end: usize,
+}
+
+/// Decode an Emacs-byte buffer/string slice into a vector of `(codepoint,
+/// byte_offset)` pairs.  `byte_offset` is the offset (within `bytes`) of each
+/// character; a final sentinel entry `(0, bytes.len())` is appended so callers
+/// can map a character index to its byte offset for `0..=len`.
+fn decode_chars_with_byte_offsets(bytes: &[u8]) -> Vec<(u32, usize)> {
+    let mut out = Vec::new();
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        out.push((code, pos));
+        pos += len.max(1);
+    }
+    out.push((0, bytes.len()));
+    out
+}
+
+/// Compute the minimal sequence of change runs transforming `a` into `b`,
+/// mirroring GNU's use of the Myers O(ND) difference algorithm (lib/diffseq.h,
+/// referenced from `Freplace_region_contents`).
+///
+/// `a` and `b` are the codepoint sequences of the destination region and the
+/// source.  The returned runs are in ascending order and cover only the
+/// differing portions; common prefix/suffix and matched interior characters are
+/// left untouched, so markers, point and overlays within them are preserved
+/// exactly as GNU does by issuing a `replace_range` only per changed run.
+pub(crate) fn replace_region_minimal_change_runs(
+    a: &[u32],
+    b: &[u32],
+) -> Vec<ReplaceRegionChangeRun> {
+    // Trim the common prefix.
+    let mut lo = 0usize;
+    while lo < a.len() && lo < b.len() && a[lo] == b[lo] {
+        lo += 1;
+    }
+    // Trim the common suffix.
+    let mut a_hi = a.len();
+    let mut b_hi = b.len();
+    while a_hi > lo && b_hi > lo && a[a_hi - 1] == b[b_hi - 1] {
+        a_hi -= 1;
+        b_hi -= 1;
+    }
+
+    let sub_a = &a[lo..a_hi];
+    let sub_b = &b[lo..b_hi];
+
+    // Myers O(ND) shortest-edit-script over the differing middle.  Walking the
+    // backtraced path yields the same minimal edit (and therefore the same
+    // change-run boundaries) as GNU's `compareseq` (lib/diffseq.h).
+    let raw = myers_edit_runs(sub_a, sub_b, lo, lo);
+
+    // Coalesce a deletion immediately followed by an insertion at the same
+    // point (and vice-versa) into a single replacement, matching GNU's
+    // back-to-front merge of contiguous deletion/insertion bits.
+    let mut runs: Vec<ReplaceRegionChangeRun> = Vec::with_capacity(raw.len());
+    for run in raw {
+        match runs.last_mut() {
+            Some(prev) if prev.a_end == run.a_start && prev.b_end == run.b_start => {
+                prev.a_end = run.a_end;
+                prev.b_end = run.b_end;
+            }
+            _ => runs.push(run),
+        }
+    }
+    runs
+}
+
+/// Compute the minimal edit runs transforming `a` into `b` using Myers' O(ND)
+/// algorithm with a recorded trace.  `a_off`/`b_off` are added to every emitted
+/// index so callers can diff a sub-slice while reporting absolute positions.
+///
+/// Runs are returned in ascending position order; pure deletions have
+/// `b_start == b_end`, pure insertions have `a_start == a_end`.  Adjacent
+/// single-character edits are emitted as separate runs (the caller coalesces
+/// truly-contiguous delete+insert pairs).
+fn myers_edit_runs(
+    a: &[u32],
+    b: &[u32],
+    a_off: usize,
+    b_off: usize,
+) -> Vec<ReplaceRegionChangeRun> {
+    let n = a.len() as isize;
+    let m = b.len() as isize;
+
+    if n == 0 && m == 0 {
+        return Vec::new();
+    }
+
+    // `v[k]` holds the furthest-reaching x on diagonal k for the current d.
+    // We snapshot `v` after each d so we can backtrack the path afterwards.
+    let max_d = (n + m) as usize;
+    let offset = (n + m) as isize; // index shift so k in [-(n+m), n+m] is >= 0.
+    let vsize = (2 * (n + m) + 1) as usize;
+    let mut v = vec![0isize; vsize];
+    let mut trace: Vec<Vec<isize>> = Vec::with_capacity(max_d + 1);
+
+    let mut found_d = 0usize;
+    'outer: for d in 0..=max_d as isize {
+        trace.push(v.clone());
+        let mut k = -d;
+        while k <= d {
+            // Decide whether we arrived here via an insertion (down) or a
+            // deletion (right).  Ties prefer deletion-from-the-left, matching
+            // the canonical Myers backtrack.
+            let mut x = if k == -d
+                || (k != d && v[(k - 1 + offset) as usize] < v[(k + 1 + offset) as usize])
+            {
+                v[(k + 1 + offset) as usize] // down (insertion)
+            } else {
+                v[(k - 1 + offset) as usize] + 1 // right (deletion)
+            };
+            let mut y = x - k;
+            // Follow the diagonal (snake) of equal elements.
+            while x < n && y < m && a[x as usize] == b[y as usize] {
+                x += 1;
+                y += 1;
+            }
+            v[(k + offset) as usize] = x;
+            if x >= n && y >= m {
+                found_d = d as usize;
+                break 'outer;
+            }
+            k += 2;
+        }
+    }
+
+    // Backtrack through the recorded traces to recover the edit runs.
+    let mut runs: Vec<ReplaceRegionChangeRun> = Vec::new();
+    let mut x = n;
+    let mut y = m;
+    for d in (1..=found_d as isize).rev() {
+        let vprev = &trace[d as usize];
+        let k = x - y;
+        let prev_k = if k == -d
+            || (k != d && vprev[(k - 1 + offset) as usize] < vprev[(k + 1 + offset) as usize])
+        {
+            k + 1 // came from a down move (insertion)
+        } else {
+            k - 1 // came from a right move (deletion)
+        };
+        let prev_x = vprev[(prev_k + offset) as usize];
+        let prev_y = prev_x - prev_k;
+
+        // Skip the trailing snake (matched diagonal) — those characters are
+        // unchanged and must not be part of any run.
+        while x > prev_x && y > prev_y {
+            x -= 1;
+            y -= 1;
+        }
+
+        // The single edit step between (prev_x, prev_y) and (x, y).
+        if x == prev_x {
+            // Insertion of b[prev_y] (down move): a stays, b advances.
+            runs.push(ReplaceRegionChangeRun {
+                a_start: a_off + x as usize,
+                a_end: a_off + x as usize,
+                b_start: b_off + prev_y as usize,
+                b_end: b_off + y as usize,
+            });
+        } else {
+            // Deletion of a[prev_x] (right move): a advances, b stays.
+            runs.push(ReplaceRegionChangeRun {
+                a_start: a_off + prev_x as usize,
+                a_end: a_off + x as usize,
+                b_start: b_off + y as usize,
+                b_end: b_off + y as usize,
+            });
+        }
+        x = prev_x;
+        y = prev_y;
+    }
+
+    runs.reverse();
+    runs
+}
+
 /// `(replace-buffer-contents SOURCE &optional MAX-SECS MAX-COSTS)` -> t
 pub(crate) fn builtin_replace_buffer_contents(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("replace-buffer-contents", &args, 1, 3)?;
+    // GNU 31's `replace-buffer-contents` (subr.el) is a thin wrapper:
+    //   (replace-region-contents (point-min) (point-max) (get-buffer source)
+    //                            max-secs max-costs)
+    // Delegating keeps the minimal (Myers-diff) non-destructive replacement,
+    // so markers, point, properties and overlays in the accessible portion
+    // outside the changed runs are preserved exactly as in GNU.
     let source_id = resolve_buffer_designator_allow_nil_current(eval, &args[0])?;
+    let source_buffer = match source_id {
+        Some(id) => Value::make_buffer(id),
+        None => Value::NIL,
+    };
 
-    let read_only_buffer_name = eval.buffers.current_buffer().and_then(|buf| {
-        if buffer_read_only_active(eval, buf) {
-            Some(buf.name_value())
-        } else {
-            None
+    let (point_min, point_max) = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (
+            buf.point_min_lisp_char_pos().as_i64(),
+            buf.point_max_lisp_char_pos().as_i64(),
+        )
+    };
+
+    let mut region_args = vec![
+        Value::fixnum(point_min),
+        Value::fixnum(point_max),
+        source_buffer,
+    ];
+    // Forward MAX-SECS / MAX-COSTS positionally so the optional behavior
+    // (immediate delete/insert fallback) matches GNU.
+    if let Some(max_secs) = args.get(1) {
+        region_args.push(*max_secs);
+        if let Some(max_costs) = args.get(2) {
+            region_args.push(*max_costs);
         }
-    });
-    if let Some(name) = read_only_buffer_name {
-        return Err(signal("buffer-read-only", vec![name]));
     }
 
-    let current_id = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .id;
-    let target_multibyte = eval
-        .buffers
-        .get(current_id)
-        .map(|buf| buf.get_multibyte())
-        .unwrap_or(true);
-    let source_text = source_id
-        .and_then(|id| {
-            eval.buffers.get(id).map(|buf| {
-                buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range())
-            })
-        })
-        .map(|text| buffer_insert_lisp_string_from_lisp_string(&text, target_multibyte))
-        .unwrap_or_else(|| lisp_string_from_buffer_bytes(Vec::new(), target_multibyte));
-
-    let old_full_range = eval
-        .buffers
-        .get(current_id)
-        .map(|buf| buf.full_emacs_byte_range())
-        .unwrap_or(EmacsByteRange::EMPTY);
-    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
-        &eval.buffers,
-        current_id,
-        old_full_range,
-    )?;
-    let change = TextChange::new(
-        old_range,
-        super::editfns::lisp_string_text_extent(&source_text),
-    );
-    super::editfns::signal_before_text_change(eval, change)?;
-    let _ = eval
-        .buffers
-        .replace_buffer_contents_lisp_string(current_id, &source_text);
-    super::editfns::signal_after_text_change(eval, change)?;
-
-    Ok(Value::T)
+    builtin_replace_region_contents(eval, region_args)
 }
 
 pub(crate) fn builtin_replace_region_contents(
@@ -1523,8 +1695,29 @@ pub(crate) fn builtin_replace_region_contents(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let start = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[1])?;
+
+    // GNU editfns.c `Freplace_region_contents`: if SOURCE is a function, call
+    // it with no arguments and the current buffer narrowed to BEG..END, and use
+    // its return value (a buffer or string) as the actual source.  This is
+    // wrapped in `save-excursion` + `save-restriction` so the narrowing and
+    // point are restored afterwards.  (This SOURCE form is deprecated in GNU.)
+    let mut source = args[2];
+    if super::types::builtin_functionp_1(eval, source)?.is_truthy() {
+        let count = eval.specpdl.len();
+        eval.record_save_excursion();
+        if let Some(state) = eval.buffers.save_current_restriction_state() {
+            eval.specpdl
+                .push(super::eval::SpecBinding::SaveRestriction { state });
+        }
+        let narrow_result =
+            builtin_narrow_to_region(eval, vec![Value::fixnum(start), Value::fixnum(end)])
+                .and_then(|_| eval.funcall_general(source, Vec::<Value>::new()));
+        let narrow_result = eval.unbind_to_with_result(count, narrow_result);
+        source = narrow_result?;
+    }
+
     let source_value =
-        replace_region_source_value_in_state(&mut eval.buffers, &args[2], current_id)?;
+        replace_region_source_value_in_state(&mut eval.buffers, &source, current_id)?;
 
     let read_only_buffer_name = eval.buffers.current_buffer().and_then(|buf| {
         if super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
@@ -1556,33 +1749,134 @@ pub(crate) fn builtin_replace_region_contents(
         current_id,
         byte_range,
     )?;
-    // Signal before the combined delete+insert operation.
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let source_pieces = collect_insert_pieces(&[source_value], target_multibyte)?;
-    let new_extent = insert_pieces_extent(&source_pieces);
+    let inherit = args.get(5).is_some_and(|value| value.is_truthy());
+
+    // GNU `Freplace_region_contents` falls back to a plain `delete-region` +
+    // `insert` when MAX-SECS or MAX-COSTS is exactly 0 (the comparison step is
+    // disabled).  Detect that here so callers retain the escape hatch.
+    let comparison_disabled = matches!(args.get(3), Some(v) if eq_fixnum_zero(v))
+        || matches!(args.get(4), Some(v) if eq_fixnum_zero(v));
+
+    // Decode the destination region (A) and the source (B) into codepoint
+    // sequences so we can compute a minimal edit.  The source is first
+    // converted into the destination buffer's representation so both sides use
+    // the same encoding.
+    let region_bytes = eval
+        .buffers
+        .get(current_id)
+        .map(|buf| buf.buffer_substring_bytes_range(byte_range))
+        .unwrap_or_default();
+    let source_string = source_value
+        .as_lisp_string()
+        .map(|ls| buffer_insert_lisp_string_from_lisp_string(ls, target_multibyte))
+        .unwrap_or_else(|| lisp_string_from_buffer_bytes(Vec::new(), target_multibyte));
+
+    let a_decoded = decode_chars_with_byte_offsets(&region_bytes);
+    let b_decoded = decode_chars_with_byte_offsets(source_string.as_bytes());
+    // Strip the trailing sentinel for the codepoint comparison.
+    let a_codes: Vec<u32> = a_decoded[..a_decoded.len() - 1]
+        .iter()
+        .map(|&(c, _)| c)
+        .collect();
+    let b_codes: Vec<u32> = b_decoded[..b_decoded.len() - 1]
+        .iter()
+        .map(|&(c, _)| c)
+        .collect();
+
+    // The diff machinery is not prepared for an empty side: just delete or
+    // insert wholesale.  This also covers the trivial cases GNU handles up
+    // front (both empty -> nothing to do).
+    if comparison_disabled || a_codes.is_empty() || b_codes.is_empty() {
+        let source_pieces = collect_insert_pieces(&[source_value], target_multibyte)?;
+        let new_extent = insert_pieces_extent(&source_pieces);
+        let change = TextChange::new(old_range, new_extent);
+        super::editfns::signal_before_text_change(eval, change)?;
+        let _ = eval
+            .buffers
+            .delete_buffer_measured_region(current_id, old_range);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, byte_range.start());
+        // The insert builtins already call signal hooks internally, but the
+        // surrounding before/after pair covers the whole replace operation.
+        // To avoid double-firing, we use insert_pieces_in_state directly.
+        insert_pieces_in_state(
+            &eval.obarray,
+            &[],
+            &mut eval.buffers,
+            source_pieces,
+            false,
+            inherit,
+        )?;
+        super::editfns::signal_after_text_change(eval, change)?;
+        return Ok(Value::T);
+    }
+
+    // Compute the minimal change runs (Myers O(ND), like GNU's compareseq).
+    let runs = replace_region_minimal_change_runs(&a_codes, &b_codes);
+    if runs.is_empty() {
+        // Buffers already identical within the region: nothing to do, and no
+        // markers/point are disturbed.  GNU returns t in this case.
+        return Ok(Value::T);
+    }
+
+    // Announce a single modification spanning the whole region, exactly like
+    // GNU which calls `prepare_to_modify_buffer` once and binds
+    // `inhibit-modification-hooks` while issuing the per-run replacements.
+    let new_extent = super::editfns::lisp_string_text_extent(&source_string);
     let change = TextChange::new(old_range, new_extent);
     super::editfns::signal_before_text_change(eval, change)?;
-    let _ = eval
-        .buffers
-        .delete_buffer_measured_region(current_id, old_range);
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, byte_range.start());
-    // The insert builtins already call signal hooks internally, but the
-    // surrounding before/after pair covers the whole replace operation.
-    // To avoid double-firing, we use insert_pieces_in_state directly.
-    let inherit = args.get(5).is_some_and(|value| value.is_truthy());
-    insert_pieces_in_state(
-        &eval.obarray,
-        &[],
-        &mut eval.buffers,
-        source_pieces,
-        false,
-        inherit,
-    )?;
+
+    let region_start = byte_range.start().get();
+    // Apply the change runs back-to-front so that earlier byte positions stay
+    // valid as we edit (mirrors GNU walking the change lists backwards).
+    for run in runs.iter().rev() {
+        let del_start = EmacsBytePos::new(region_start + a_decoded[run.a_start].1);
+        let del_end = EmacsBytePos::new(region_start + a_decoded[run.a_end].1);
+        let del_range = EmacsByteRange::new(del_start, del_end);
+
+        // Replacement text for this run: characters [b_start, b_end) of the
+        // source, sliced from the original SOURCE value so text properties are
+        // preserved.
+        let replacement = if run.b_start == run.b_end {
+            Value::string("")
+        } else {
+            super::strings::builtin_substring(vec![
+                source_value,
+                Value::fixnum(run.b_start as i64),
+                Value::fixnum(run.b_end as i64),
+            ])?
+        };
+        let pieces = collect_insert_pieces(&[replacement], target_multibyte)?;
+
+        let _ = eval
+            .buffers
+            .delete_buffer_emacs_byte_range(current_id, del_range);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, del_start);
+        if !pieces.is_empty() {
+            insert_pieces_in_state(
+                &eval.obarray,
+                &[],
+                &mut eval.buffers,
+                pieces,
+                false,
+                inherit,
+            )?;
+        }
+    }
+
     super::editfns::signal_after_text_change(eval, change)?;
 
     Ok(Value::T)
+}
+
+/// True when `value` is the fixnum 0 (used for GNU's MAX-SECS/MAX-COSTS == 0
+/// "disable comparison" fallback).
+fn eq_fixnum_zero(value: &Value) -> bool {
+    value.as_fixnum() == Some(0)
 }
 
 pub(crate) fn builtin_set_buffer_multibyte(
