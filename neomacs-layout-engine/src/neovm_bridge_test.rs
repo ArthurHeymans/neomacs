@@ -159,6 +159,104 @@ fn test_frame_params_from_neovm() {
     assert_eq!(fp.tab_bar_height, 0.0);
 }
 
+/// The window-params builder must resolve the special-display face colors from
+/// the face table instead of hardcoding them to 0. Without this, the
+/// escape-glyph / nobreak / glyphless / fill-column / trailing-whitespace colors
+/// never reach the renderer (the control-char escape-glyph merge in
+/// `resolve_source_item_layout_for_active_face` and the trailing-whitespace
+/// render state are gated on these fields being non-zero). Mirrors GNU's
+/// `merge_escape_glyph_face` etc. in xdisp.c.
+#[test]
+fn window_params_resolve_special_display_face_colors() {
+    // Pack R<<16 | G<<8 | B, matching `face_fg_pixel` / `NeoColor::from_pixel`.
+    fn pixel(r: u8, g: u8, b: u8) -> u32 {
+        (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
+    }
+
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*special*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+
+    // Define the special-display faces with distinct, known colors so each
+    // WindowParams field can be checked against a different value.
+    {
+        let table = evaluator.face_table_mut();
+
+        // escape-glyph: cyan-ish foreground (matches the GUI repro intent).
+        let mut escape = NeoFace::new("escape-glyph");
+        escape.foreground = Some(NeoColor::rgb(0x46, 0xD9, 0xFF));
+        table.define("escape-glyph", escape);
+
+        // nobreak-space inherits escape-glyph and sets no foreground of its
+        // own, so `resolve` must report the inherited escape-glyph color --
+        // exactly as faces.el defines it.
+        let mut nobreak = NeoFace::new("nobreak-space");
+        nobreak.inherit = Some(Value::symbol("escape-glyph"));
+        table.define("nobreak-space", nobreak);
+
+        let mut glyphless = NeoFace::new("glyphless-char");
+        glyphless.foreground = Some(NeoColor::rgb(0x80, 0x80, 0x80));
+        table.define("glyphless-char", glyphless);
+
+        let mut fci = NeoFace::new("fill-column-indicator");
+        fci.foreground = Some(NeoColor::rgb(0x33, 0x44, 0x55));
+        table.define("fill-column-indicator", fci);
+
+        // trailing-whitespace uses a *background* color.
+        let mut tw = NeoFace::new("trailing-whitespace");
+        tw.background = Some(NeoColor::rgb(0xFF, 0x00, 0x00));
+        table.define("trailing-whitespace", tw);
+    }
+
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+    let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
+    let window = frame.root_window.find(frame.selected_window).unwrap();
+
+    let params = window_params_from_neovm(
+        window,
+        buffer,
+        frame,
+        evaluator.obarray(),
+        evaluator.face_table(),
+        None,
+        true,
+        false,
+        Value::T,
+        Value::NIL,
+    )
+    .expect("leaf window params");
+
+    // Each field is non-zero and equals the packed pixel of its face color.
+    assert_eq!(
+        params.escape_glyph_fg,
+        pixel(0x46, 0xD9, 0xFF),
+        "escape-glyph foreground"
+    );
+    assert_ne!(params.escape_glyph_fg, 0);
+    assert_eq!(
+        params.nobreak_char_fg,
+        pixel(0x46, 0xD9, 0xFF),
+        "nobreak-space inherits escape-glyph foreground"
+    );
+    assert_eq!(
+        params.glyphless_char_fg,
+        pixel(0x80, 0x80, 0x80),
+        "glyphless-char foreground"
+    );
+    assert_eq!(
+        params.fill_column_indicator_fg,
+        pixel(0x33, 0x44, 0x55),
+        "fill-column-indicator foreground"
+    );
+    assert_eq!(
+        params.trailing_ws_bg,
+        pixel(0xFF, 0x00, 0x00),
+        "trailing-whitespace background"
+    );
+}
+
 #[test]
 fn frame_params_from_neovm_reads_window_divider_parameters() {
     let _runtime = neovm_core::emacs_core::Context::new();

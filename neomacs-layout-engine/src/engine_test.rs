@@ -4437,6 +4437,223 @@ fn layout_frame_rust_renders_buffer_control_chars_with_caret_notation() {
     assert_eq!(glyphs_logical_text(&text_row.glyphs[1]), "a^Ab");
 }
 
+/// GNU renders control-character substitute glyphs (`^A`, `\003`, ...) in a
+/// face that merges the `escape-glyph` face over the surrounding base face
+/// (`merge_escape_glyph_face` -> `merge_faces(w, Qescape_glyph, 0,
+/// it->face_id)`, xdisp.c:8372-8389). The single merged face id is stamped
+/// onto BOTH the `^` glyph and the caret letter (`dpvec_face_id`, xdisp.c:8663).
+///
+/// This test pins the RENDERED-glyph foreground (the guard the prior latent
+/// groundwork lacked): both `^` and `A` must resolve to the escape-glyph
+/// foreground, not the default text foreground, while the surrounding plain
+/// `a`/`b` keep the base face.
+#[test]
+fn layout_frame_rust_control_char_caret_uses_escape_glyph_foreground() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\u{0001}b\n");
+    }
+
+    // GNU's cyan-on-dark escape-glyph color (#46D9FF), used by the Doom GUI
+    // repro. Defined through the Lisp face machinery so it survives the
+    // per-frame face sync (`sync_runtime_faces_for_frame`) that layout runs.
+    let escape_fg = Color::from_pixel((0x46u32 << 16) | (0xD9u32 << 8) | 0xFFu32);
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-control-char-escape-glyph", 640, 160, buf_id);
+    // Window-system frame: GNU only paints escape-glyph faces in graphical
+    // redisplay; a TTY frame collapses many face distinctions.
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'escape-glyph :foreground \"#46D9FF\" (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "escape-glyph face must accept a foreground, got {results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    // The control char produced the caret "^A" (proves the ControlChar path ran).
+    assert!(
+        glyphs_logical_text(text_glyphs).contains("^A"),
+        "control char should render as ^A, got {:?}",
+        glyphs_logical_text(text_glyphs)
+    );
+
+    let caret = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: '^' }))
+        .expect("caret '^' glyph");
+    let caret_letter = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: 'A' }))
+        .expect("caret letter 'A' glyph");
+    let plain_a = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: 'a' }))
+        .expect("plain 'a' glyph");
+
+    // GNU stamps ONE merged face id on both substitute glyphs.
+    assert_eq!(
+        caret.face_id, caret_letter.face_id,
+        "the '^' and caret letter must share one escape-glyph-merged face id"
+    );
+    // ...and it is distinct from the surrounding base text face.
+    assert_ne!(
+        caret.face_id, plain_a.face_id,
+        "escape glyph must realize a separate face, not reuse the base text face"
+    );
+
+    // THE guard the prior groundwork lacked: the caret's RESOLVED foreground is
+    // the escape-glyph color, not the default text foreground.
+    let caret_face = state
+        .faces
+        .get(&caret.face_id)
+        .expect("escape-glyph face must be registered in the frame face table");
+    assert_eq!(
+        caret_face.foreground, escape_fg,
+        "caret '^' fg must be the escape-glyph foreground, got {:?}",
+        caret_face.foreground
+    );
+    let caret_letter_face = state
+        .faces
+        .get(&caret_letter.face_id)
+        .expect("escape-glyph face for caret letter");
+    assert_eq!(
+        caret_letter_face.foreground, escape_fg,
+        "caret letter 'A' fg must be the escape-glyph foreground"
+    );
+
+    // And it differs from the plain text face's foreground (override applied).
+    let base_face = state
+        .faces
+        .get(&plain_a.face_id)
+        .expect("base text face for 'a'");
+    assert_ne!(
+        caret_face.foreground, base_face.foreground,
+        "escape glyph fg must differ from the default text fg"
+    );
+}
+
+/// Sibling guard: ordinary (non-control) text glyphs keep the surrounding base
+/// face -- the escape-glyph merge must NOT leak onto normal characters.
+#[test]
+fn layout_frame_rust_normal_text_keeps_base_face_not_escape_glyph() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\u{0001}b\n");
+    }
+    {
+        let table = eval.face_table_mut();
+        let mut escape = neovm_core::face::Face::new("escape-glyph");
+        escape.foreground = Some(neovm_core::face::Color::rgb(0x46, 0xD9, 0xFF));
+        table.define("escape-glyph", escape);
+    }
+    let escape_fg = Color::from_pixel((0x46u32 << 16) | (0xD9u32 << 8) | 0xFFu32);
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-normal-text-base-face", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_fg = state
+        .faces
+        .get(&default_face_id)
+        .expect("default face")
+        .foreground;
+
+    for ch in ['a', 'b'] {
+        let glyph = text_glyphs
+            .iter()
+            .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: c } if c == ch))
+            .unwrap_or_else(|| panic!("plain '{ch}' glyph"));
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .unwrap_or_else(|| panic!("resolved face for '{ch}'"));
+        assert_eq!(
+            face.foreground, default_fg,
+            "normal text '{ch}' must keep the default base foreground, not escape-glyph"
+        );
+        assert_ne!(
+            face.foreground, escape_fg,
+            "normal text '{ch}' must NOT take the escape-glyph foreground"
+        );
+    }
+}
+
 #[test]
 fn layout_frame_rust_renders_line_prefix_through_row_builder() {
     let mut eval = Context::new();

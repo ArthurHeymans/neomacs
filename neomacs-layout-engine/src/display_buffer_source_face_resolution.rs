@@ -6,7 +6,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_id;
-use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
@@ -228,6 +228,24 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         item.face =
             RenderFaceRef::FaceId(render_face_ref_id(item.face, active_face_state.face_id()));
 
+        // GNU `merge_escape_glyph_face` (xdisp.c:8372-8389): a control char shown
+        // as `^A` paints in the `escape-glyph` face merged over the surrounding
+        // base face. Realize that merged face here, install it, and use it as the
+        // ACTIVE face for the append so `push_control_char` writes both `^` and
+        // the caret letter with the one merged face id (GNU's `dpvec_face_id`),
+        // and the row's face table picks up the realized face under that id.
+        if matches!(item.kind, DisplayItemKind::ControlChar { .. })
+            && let Some(merged) = self.merge_escape_glyph_active_face(
+                source_render,
+                face_ids,
+                row_geometry,
+                active_face_state,
+                item,
+            )
+        {
+            return merged;
+        }
+
         let Some(factor) = item
             .layout
             .height
@@ -262,6 +280,39 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         let metrics = resolved_active_face.metrics();
         row_geometry.include_row_extents(metrics.row_height(), metrics.ascent());
         resolved_active_face
+    }
+
+    /// Realize a face = the surrounding base (active) face merged with the
+    /// `escape-glyph` face, install it under a fresh id, set the control-char
+    /// item to that face, and return it as the active-face state. Returns `None`
+    /// when the merge changes nothing (no themed escape-glyph foreground), so
+    /// plain terminals keep the surrounding face exactly like GNU's no-op merge.
+    fn merge_escape_glyph_active_face(
+        &self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+        item: &mut DisplayItem,
+    ) -> Option<DisplayRowActiveFaceState> {
+        let base = active_face_state.resolved_face();
+        let merged = source_render.merge_named_face_over(base, "escape-glyph");
+        if merged.fg == base.fg && merged.use_default_foreground == base.use_default_foreground {
+            return None;
+        }
+        let face_id = face_ids.allocate();
+        item.face = RenderFaceRef::FaceId(face_id);
+        let resolved_active_face = source_render.resolve_and_install_measured_face(
+            self.measurement_policy,
+            face_id,
+            merged,
+            self.window_system,
+            self.window_metrics.char_width(),
+            self.window_metrics,
+        );
+        let metrics = resolved_active_face.metrics();
+        row_geometry.include_row_extents(metrics.row_height(), metrics.ascent());
+        Some(resolved_active_face)
     }
 }
 

@@ -8670,6 +8670,10 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     );
     let mut params = test_display_space_window_params();
     params.nobreak_char_fg = 0x00ff00;
+    // The special-char append no longer allocates a (discarded) policy face id.
+    // The escape-glyph / nobreak face merge is realized earlier, during active-
+    // face resolution (`resolve_source_item_layout_for_active_face`), so this
+    // append leaves the face-id allocator untouched.
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
@@ -8699,7 +8703,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     );
     assert_eq!(continuation, DisplaySourceAppendContinuation::Rendered);
     assert!(face_scan.should_resolve_at(1));
-    assert_eq!(policy_face_ids.finish(), 31);
+    assert_eq!(policy_face_ids.finish(), 30);
 
     assert_eq!(end_x, 16.0);
     assert_eq!(end_col, 2);

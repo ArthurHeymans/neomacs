@@ -410,16 +410,6 @@ impl DisplaySpecialSourceCharRequest {
     }
 }
 
-impl DisplaySourceSpecialDisplayKind {
-    fn should_allocate_policy_face(self, params: &WindowParams) -> bool {
-        match self {
-            Self::Control => params.escape_glyph_fg != 0,
-            Self::Nobreak => params.nobreak_char_fg != 0,
-            Self::Glyphless => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplaySourceSpecialCharPreparedAppend {
     kind: DisplaySourceSpecialDisplayKind,
@@ -450,14 +440,7 @@ impl DisplaySourceSpecialCharPreparedAppend {
         self.append_plan.display_item()
     }
 
-    fn prepare_append_policy(
-        &self,
-        params: &WindowParams,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplaySourceSpecialCharAppendPolicy {
-        if self.kind.should_allocate_policy_face(params) {
-            let _ = face_ids.allocate();
-        }
+    fn prepare_append_policy(&self) -> DisplaySourceSpecialCharAppendPolicy {
         DisplaySourceSpecialCharAppendPolicy {
             invalidate_face_after_append: self.kind.invalidates_face_after_append(),
         }
@@ -500,7 +483,11 @@ impl DisplaySourceSpecialCharPreparedAppend {
         face_ids: &mut FrameFaceIdAllocator,
         state: &mut TextRowSourceRenderState<'_>,
     ) -> Option<DisplaySourceSpecialCharAppendOutcome> {
-        let append_policy = self.prepare_append_policy(params, face_ids);
+        // The escape-glyph / nobreak face merge is realized earlier, in
+        // `resolve_source_item_layout_for_active_face`, so the special-char
+        // append no longer needs to allocate a policy face here.
+        let _ = (params, face_ids);
+        let append_policy = self.prepare_append_policy();
         let progress = context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             state,

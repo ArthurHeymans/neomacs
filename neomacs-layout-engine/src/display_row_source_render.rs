@@ -727,6 +727,21 @@ impl<'a> TextRowSourceRenderState<'a> {
         self.face_resolver.resolve_named_face(face_name)
     }
 
+    /// Merge a named face over a base resolved face, GNU
+    /// `merge_faces(w, <named-face>, 0, base_face_id)`: start from `base`'s full
+    /// attribute set, overlay only the attributes the named face specifies
+    /// (resolving its `:inherit` chain), and return the realized face. Returns
+    /// `base` unchanged when the named face contributes nothing.
+    pub(crate) fn merge_named_face_over(
+        &self,
+        base: &ResolvedFace,
+        face_name: &str,
+    ) -> ResolvedFace {
+        self.face_resolver
+            .resolve_face_value_over(base, &Value::symbol(face_name))
+            .unwrap_or_else(|| base.clone())
+    }
+
     pub(crate) fn default_face(&self) -> ResolvedFace {
         self.face_resolver.default_face().clone()
     }

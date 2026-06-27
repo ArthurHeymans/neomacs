@@ -386,17 +386,36 @@ fn frame_parameter_int(frame: &Frame, name: &str, default: i64) -> i64 {
         .unwrap_or(default)
 }
 
+/// Resolve a face's foreground as an Emacs packed pixel (`0x00RRGGBB`).
+///
+/// Mirrors the encoding GNU's display layer uses for face colors and
+/// matches `NeoColor::from_pixel` (R<<16 | G<<8 | B) which the consumers
+/// decode through. `resolve` follows `:inherit` chains, so faces like
+/// `nobreak-space` (`:inherit escape-glyph`) report the inherited color.
+/// `fallback` is returned when the face leaves its foreground unspecified.
+fn face_fg_pixel(face_table: &FaceTable, name: &str, fallback: u32) -> u32 {
+    face_table
+        .resolve(name)
+        .foreground
+        .map(|c| (c.r as u32) << 16 | (c.g as u32) << 8 | c.b as u32)
+        .unwrap_or(fallback)
+}
+
+/// Resolve a face's background as an Emacs packed pixel (`0x00RRGGBB`).
+///
+/// Sibling of [`face_fg_pixel`]; see it for the encoding and inheritance
+/// semantics.
+fn face_bg_pixel(face_table: &FaceTable, name: &str, fallback: u32) -> u32 {
+    face_table
+        .resolve(name)
+        .background
+        .map(|c| (c.r as u32) << 16 | (c.g as u32) << 8 | c.b as u32)
+        .unwrap_or(fallback)
+}
+
 /// Build `FrameParams` from a neovm-core `Frame`, reading default face
 /// colors from the face table.
 pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FrameParams {
-    fn face_fg_pixel(face_table: &FaceTable, name: &str, fallback: u32) -> u32 {
-        face_table
-            .resolve(name)
-            .foreground
-            .map(|c| (c.r as u32) << 16 | (c.g as u32) << 8 | c.b as u32)
-            .unwrap_or(fallback)
-    }
-
     // Read default face background from face table
     let default_face = face_table.get("default");
     let bg = default_face
@@ -1537,24 +1556,28 @@ pub fn window_params_from_neovm_with_font_sizing(
             0
         },
         show_trailing_whitespace: buffer_local_bool(buffer, "show-trailing-whitespace"),
-        trailing_ws_bg: 0,
+        trailing_ws_bg: face_bg_pixel(face_table, "trailing-whitespace", 0),
         fill_column_indicator: fill_column_indicator
             .map(|(column, _)| column)
             .unwrap_or(-1),
         fill_column_indicator_char: fill_column_indicator
             .map(|(_, character)| character)
             .unwrap_or('|'),
-        fill_column_indicator_fg: 0,
+        fill_column_indicator_fg: face_fg_pixel(face_table, "fill-column-indicator", 0),
         extra_line_spacing: match buffer_local_value(buffer, "line-spacing") {
             Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,
             Some(v) if v.is_float() => v.xfloat() as f32,
             _ => 0.0,
         },
         selective_display: buffer_selective_display(buffer),
-        escape_glyph_fg: 0,
+        escape_glyph_fg: face_fg_pixel(face_table, "escape-glyph", 0),
         nobreak_char_display: effective_nobreak_char_display(buffer, obarray),
-        nobreak_char_fg: 0,
-        glyphless_char_fg: 0,
+        // GNU merges `nobreak-space` for non-ASCII spaces (and `nobreak-hyphen`
+        // for hyphens) in highlight mode; `nobreak-space` inherits `escape-glyph`,
+        // so `resolve` yields the escape-glyph color when nobreak-space itself
+        // sets no foreground (xdisp.c:8594-8617, faces.el `nobreak-space`).
+        nobreak_char_fg: face_fg_pixel(face_table, "nobreak-space", 0),
+        glyphless_char_fg: face_fg_pixel(face_table, "glyphless-char", 0),
         wrap_prefix: Vec::new(),
         line_prefix: Vec::new(),
         left_margin_width: left_margin,
