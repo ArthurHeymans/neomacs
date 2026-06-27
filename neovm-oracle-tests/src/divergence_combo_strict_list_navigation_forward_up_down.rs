@@ -29,6 +29,12 @@ fn div_r1_list_navigation_forward_backward_up_down() {
 #[test]
 fn div_r1_backward_list_and_up_list_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-27:
+    // GNU Emacs: OK (15 15 scan-error)
+    // Neomacs:   ERR (wrong-type-argument symbolp (scan-error "Unbalanced parentheses" 15 1))
+    // up-list -1 on unbalanced parens signals wrong-type-argument in Neomacs
+    // instead of scan-error. The condition-case (scan-error ...) doesn't catch
+    // it, so the error propagates. In GNU, scan-error is caught cleanly.
     assert_oracle_parity(
         r##"
 (with-temp-buffer
