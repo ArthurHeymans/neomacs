@@ -1783,6 +1783,91 @@ fn overlays_in_empty_region_matches_gnu_boundary_rules() {
 }
 
 #[test]
+fn overlays_in_beg_greater_than_end_returns_nil_like_gnu() {
+    // GNU `overlays_in` (buffer.c) treats BEG > END as an empty region and
+    // returns no overlays (the interval-tree walk is empty and the first node
+    // breaks on `node->begin > end`). Unlike `make-overlay`/`move-overlay`,
+    // `overlays-in` must NOT swap the endpoints.
+    //   (with-temp-buffer (insert "abcdef") (make-overlay 2 5)
+    //                     (length (overlays-in 5 2)))  => 0   (GNU)
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(5)]).unwrap();
+
+    // BEG > END: every reversed range is empty.
+    for (beg, end) in [(5, 2), (6, 1), (4, 3)] {
+        let result =
+            builtin_overlays_in(&mut eval, vec![Value::fixnum(beg), Value::fixnum(end)]).unwrap();
+        assert!(
+            result.is_nil(),
+            "(overlays-in {beg} {end}) must be nil like GNU, got {result:?}"
+        );
+    }
+
+    // BEG == END and the normal BEG < END case still work.
+    let equal = builtin_overlays_in(&mut eval, vec![Value::fixnum(3), Value::fixnum(3)]).unwrap();
+    assert_eq!(list_to_vec(&equal).unwrap().len(), 1);
+    let forward = builtin_overlays_in(&mut eval, vec![Value::fixnum(2), Value::fixnum(5)]).unwrap();
+    assert_eq!(list_to_vec(&forward).unwrap().len(), 1);
+}
+
+#[test]
+fn get_char_property_coerces_non_fixnum_overlay_priority_to_zero_like_gnu() {
+    // GNU `make_sortvec_item` (buffer.c) only uses a priority value when it is a
+    // FIXNUM (or a cons of fixnums); any other priority (float, bignum, string,
+    // symbol) is treated as 0. So an overlay with a NON-fixnum priority loses to
+    // an overlay carrying a positive fixnum priority.
+    //   o1 priority 0 (fixnum) , o2 priority 1 (fixnum) -> face b   (GNU & neo)
+    //   o1 priority 1.5 (float->0), o2 priority 1       -> face b   (defined)
+    crate::test_utils::init_test_tracing();
+
+    // `p1_make`/`p2_make` build the priority values inside the same `Context`
+    // whose heap owns the resulting overlays, and we assert the winning face
+    // before that `Context` (and its heap) is dropped — returning a heap Value
+    // across `Context` boundaries would leave a dangling reference.
+    fn winning_face_is<F1, F2>(p1_make: F1, p2_make: F2, expected: &str)
+    where
+        F1: FnOnce() -> Value,
+        F2: FnOnce() -> Value,
+    {
+        let mut eval = eval_with_text("abcdef");
+        let o1 = builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(5)]).unwrap();
+        let o2 = builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(5)]).unwrap();
+        builtin_overlay_put(
+            &mut eval,
+            vec![o1, Value::symbol("face"), Value::symbol("a")],
+        )
+        .unwrap();
+        builtin_overlay_put(&mut eval, vec![o1, Value::symbol("priority"), p1_make()]).unwrap();
+        builtin_overlay_put(
+            &mut eval,
+            vec![o2, Value::symbol("face"), Value::symbol("b")],
+        )
+        .unwrap();
+        builtin_overlay_put(&mut eval, vec![o2, Value::symbol("priority"), p2_make()]).unwrap();
+        let face =
+            builtin_get_char_property(&mut eval, vec![Value::fixnum(3), Value::symbol("face")])
+                .unwrap();
+        assert!(
+            face.is_symbol_named(expected),
+            "expected face {expected}, got {face:?}"
+        );
+    }
+
+    // Control: both fixnum, 0 vs 1 -> higher (b) wins. Matches GNU.
+    winning_face_is(|| Value::fixnum(0), || Value::fixnum(1), "b");
+    // Float priority is coerced to 0 (the defined GNU contract), so it ties
+    // with priority 0 and loses to the fixnum-1 overlay -> face b.
+    winning_face_is(|| Value::make_float(1.5), || Value::fixnum(1), "b");
+    // A cons-of-fixnums priority is a defined high priority and wins.
+    winning_face_is(
+        || Value::cons(Value::fixnum(10), Value::fixnum(0)),
+        || Value::fixnum(5),
+        "a",
+    );
+}
+
+#[test]
 fn next_previous_overlay_change_boundaries() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("abcd");

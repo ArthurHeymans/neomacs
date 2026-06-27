@@ -3047,6 +3047,14 @@ pub(crate) fn builtin_overlays_in_in_buffers(
     expect_args("overlays-in", &args, 2)?;
     let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    // GNU `overlays_in` (buffer.c) treats BEG > END as an empty region: the
+    // interval-tree walk `[beg, search_end)` is empty and the very first node
+    // (whose `begin > end`) breaks the loop, so no overlays are returned.
+    // Unlike `make-overlay`/`move-overlay`, `overlays-in` must NOT swap the
+    // endpoints, so guard before the (swapping) clip helper.
+    if beg > end {
+        return Ok(Value::NIL);
+    }
     let buf_id = current_buffer_id_in_buffers(buffers)?;
     let buf = buffers
         .get(buf_id)
