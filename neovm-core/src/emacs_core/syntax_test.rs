@@ -742,6 +742,88 @@ fn scan_sexps_forward_brackets() {
     assert_eq!(pos, 7);
 }
 
+// -----------------------------------------------------------------------
+// Escape / char-quote joining the next char into a symbol sexp (GROUP=syntax-scan, bug A)
+//
+// GNU oracle (emacs-lisp-mode, `\` is escape, `?` is symbol):
+//   "foo\)bar baz", (forward-sexp 1) from point 1 -> point 9
+//   "?\(",          (forward-sexp 1) from point 1 -> point 4
+//   "foo\)bar baz", scan-sexps from 1 -> 9
+//   "foo\)bar baz", (backward-sexp) from point 9 -> point 1
+//   "foo\",         scan-sexps trailing escape -> scan-error
+// neomacs scan_sexps uses 0-based positions, so GNU N maps to neomacs N-1.
+// -----------------------------------------------------------------------
+
+/// Standard syntax table with `?` treated as a symbol constituent, matching
+/// emacs-lisp-mode where the GNU oracle examples were captured.
+fn elisp_like_table() -> SyntaxTable {
+    let mut table = SyntaxTable::new_standard();
+    table.modify_syntax_entry('?', SyntaxEntry::simple(SyntaxClass::Symbol));
+    table
+}
+
+#[test]
+fn scan_sexps_forward_absorbs_escaped_char_in_symbol() {
+    crate::test_utils::init_test_tracing();
+    // "foo\)bar baz" — the escaped `)` joins foo...bar into one symbol.
+    let buf = buf_with_text("foo\\)bar baz");
+    let table = SyntaxTable::new_standard();
+    let pos = scan_sexps(&buf, &table, 0, 1).unwrap();
+    assert_eq!(pos, 8); // GNU point 9 -> neomacs 8 (end of "foo\)bar")
+}
+
+#[test]
+fn scan_sexps_forward_symbol_then_escape() {
+    crate::test_utils::init_test_tracing();
+    // "?\(" — `?` is a symbol, `\` escapes `(` into the same symbol sexp.
+    let buf = buf_with_text("?\\(");
+    let table = elisp_like_table();
+    let pos = scan_sexps(&buf, &table, 0, 1).unwrap();
+    assert_eq!(pos, 3); // GNU point 4 -> neomacs 3
+}
+
+#[test]
+fn scan_sexps_backward_absorbs_escaped_char_in_symbol() {
+    crate::test_utils::init_test_tracing();
+    // Backward from after "foo\)bar" lands at the start of the symbol.
+    let buf = buf_with_text("foo\\)bar baz");
+    let table = SyntaxTable::new_standard();
+    let pos = scan_sexps(&buf, &table, 8, -1).unwrap();
+    assert_eq!(pos, 0); // GNU point 1 -> neomacs 0
+}
+
+#[test]
+fn scan_sexps_backward_symbol_then_escape() {
+    crate::test_utils::init_test_tracing();
+    let buf = buf_with_text("?\\(");
+    let table = elisp_like_table();
+    let pos = scan_sexps(&buf, &table, 3, -1).unwrap();
+    assert_eq!(pos, 0);
+}
+
+#[test]
+fn scan_sexps_trailing_escape_signals_error() {
+    crate::test_utils::init_test_tracing();
+    // "foo\" — symbol foo then a trailing escape with nothing to quote.
+    // GNU signals scan-error ("Unbalanced parentheses" 1 5).
+    let buf = buf_with_text("foo\\");
+    let table = SyntaxTable::new_standard();
+    let err = scan_sexps_with_options(&buf, &table, 0, 1, false, false).unwrap_err();
+    assert_eq!(err.message, "Unbalanced parentheses");
+    // last_good = GNU 1 -> char index 0; at = GNU 5 -> char index 4 (EOB).
+    assert_eq!(err.last_good, 0);
+    assert_eq!(err.at, 4);
+}
+
+#[test]
+fn scan_sexps_lone_escape_forward_signals_error() {
+    crate::test_utils::init_test_tracing();
+    // A lone escape at the very start (nothing absorbed yet) also errors.
+    let buf = buf_with_text("\\");
+    let table = SyntaxTable::new_standard();
+    assert!(scan_sexps_with_options(&buf, &table, 0, 1, false, false).is_err());
+}
+
 #[test]
 fn scan_sexps_string_with_escape() {
     crate::test_utils::init_test_tracing();

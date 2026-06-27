@@ -1747,6 +1747,31 @@ impl ScanListError {
     }
 }
 
+/// Returns true if the character at char index `idx` is quoted, i.e. it is
+/// preceded by an odd number of escape/char-quote characters.  Mirrors GNU
+/// `char_quoted` in syntax.c.
+fn char_quoted_at(
+    buf: &Buffer,
+    chars: &BufferChars,
+    idx: usize,
+    start_bound: usize,
+    table: &SyntaxTable,
+    honor_properties: bool,
+) -> bool {
+    let mut pos = idx;
+    let mut quoted = false;
+    while pos > start_bound {
+        pos -= 1;
+        let c = chars.char_at(pos);
+        let class = effective_syntax_entry_for_abs_char(buf, table, c, pos, honor_properties).class;
+        if !matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
+            break;
+        }
+        quoted = !quoted;
+    }
+    quoted
+}
+
 /// Scan one sexp forward from char index `start`.
 fn scan_sexp_forward(
     buf: &Buffer,
@@ -1864,29 +1889,37 @@ fn scan_sexp_forward(
             }
             Ok(idx + 1) // past closing delim
         }
-        SyntaxClass::Word | SyntaxClass::Symbol => {
-            // Scan over a symbol/word sexp.
-            while idx < len
-                && matches!(
-                    effective_syntax_entry_for_abs_char(
-                        buf,
-                        table,
-                        chars.char_at(idx),
-                        idx,
-                        honor_properties,
-                    )
-                    .class,
-                    SyntaxClass::Word | SyntaxClass::Symbol
-                )
-            {
+        SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Escape | SyntaxClass::CharQuote => {
+            // Scan over a symbol/word sexp.  An escape/char-quote at the start
+            // (e.g. `\(`, or `\` joining the next char into the word) consumes
+            // the following character and continues into the symbol body, just
+            // like GNU's scan_lists Sescape/Scharquote fallthrough.
+            if matches!(syn, SyntaxClass::Escape | SyntaxClass::CharQuote) {
+                // The escape itself is at `idx`; advance past it.
+                idx += 1;
+                if idx >= len {
+                    // Trailing escape with no char to quote: unbalanced.
+                    return Err(ScanListError::unbalanced(start, idx));
+                }
+                // Consume the quoted character.
                 idx += 1;
             }
-            Ok(idx)
-        }
-        SyntaxClass::Escape | SyntaxClass::CharQuote => {
-            // Escape + next char form one sexp.
-            idx += 1;
-            if idx < len {
+            // Continue absorbing the rest of the word/symbol, honoring escapes.
+            while idx < len {
+                let c = chars.char_at(idx);
+                let s =
+                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+                match s {
+                    SyntaxClass::Escape | SyntaxClass::CharQuote => {
+                        // Skip the escape char, then the quoted char below.
+                        idx += 1;
+                        if idx >= len {
+                            return Err(ScanListError::unbalanced(start, idx));
+                        }
+                    }
+                    SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Quote => {}
+                    _ => break,
+                }
                 idx += 1;
             }
             Ok(idx)
@@ -1937,7 +1970,17 @@ fn scan_sexp_backward(
     idx -= 1; // move to the character we're examining
     let ch = chars.char_at(idx);
     let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
-    let syn = syn_entry.class;
+    let mut syn = syn_entry.class;
+
+    // Quoting turns anything except a comment-ender into a word character.
+    // Mirrors GNU scan_lists: if the char we landed on is quoted (preceded by
+    // an escape), step back past the escape and treat the pair as a word.
+    if syn != SyntaxClass::EndComment
+        && char_quoted_at(buf, chars, idx, start_bound, table, honor_properties)
+    {
+        idx -= 1;
+        syn = SyntaxClass::Word;
+    }
 
     match syn {
         SyntaxClass::Close => {
@@ -2019,27 +2062,33 @@ fn scan_sexp_backward(
             }
             Ok(idx)
         }
-        SyntaxClass::Word | SyntaxClass::Symbol => {
-            // Scan backward over word/symbol chars.
-            while idx > start_bound
-                && matches!(
-                    effective_syntax_entry_for_abs_char(
-                        buf,
-                        table,
-                        chars.char_at(idx - 1),
-                        idx - 1,
-                        honor_properties,
-                    )
-                    .class,
-                    SyntaxClass::Word | SyntaxClass::Symbol
-                )
-            {
+        SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Escape | SyntaxClass::CharQuote => {
+            // Scan backward over a word/symbol sexp, honoring escapes/char-quotes
+            // that join the following char into the symbol.  Mirrors GNU
+            // scan_lists' backward Sword/Ssymbol/Sescape/Scharquote loop.
+            while idx > start_bound {
+                let prev = idx - 1;
+                let c1 = chars.char_at(prev);
+                let c1_class =
+                    effective_syntax_entry_for_abs_char(buf, table, c1, prev, honor_properties)
+                        .class;
+                // Don't allow a comment-end to be quoted.
+                if c1_class == SyntaxClass::EndComment {
+                    break;
+                }
+                let quoted = char_quoted_at(buf, chars, prev, start_bound, table, honor_properties);
+                if quoted {
+                    // The previous char is escaped: step back past it now, so the
+                    // following `idx -= 1` lands on the escape character.
+                    idx -= 1;
+                } else if !matches!(
+                    c1_class,
+                    SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Quote
+                ) {
+                    break;
+                }
                 idx -= 1;
             }
-            Ok(idx)
-        }
-        SyntaxClass::Escape | SyntaxClass::CharQuote => {
-            // The escape char itself is a sexp.
             Ok(idx)
         }
         SyntaxClass::Math => {
