@@ -11,6 +11,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q5_font_weight_canonicalization_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Divergence surfaced 2026-06-27:
+    // GNU Emacs: OK ((:weight bold) (:weight light) (:weight black) (:weight extra-bold) (:weight semi-light) (:weight medium))
+    // Neomacs:   OK ((:weight bold) (:weight light) (:weight heavy) (:weight ultra-bold) (:weight semi-light) (:weight medium))
+    // font-face-attributes weight canonicalization diverges: GNU maps 'heavy to
+    // 'black and 'ultra-bold to 'extra-bold (canonical names), Neomacs keeps
+    // the aliases. (Same root cause as 'normal→'regular in batch 90.)
+    // bold/light/semi-light/medium match.
     assert_oracle_parity(
         r##"
 (list (font-face-attributes (font-spec :weight 'bold))
