@@ -1,0 +1,36 @@
+//! Strict combo oracle probes, batch 101: regex validation edge cases —
+//! repeat intervals (\\{0,0\\}, \\{,3\\}, \\{999999\\}, \\{1,0\\}),
+//! backreferences to non-existent groups (\\1, \\3), and zero-repetition.
+//!
+//! Tests are parity locks unless annotated with a surfaced divergence.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_r5_regex_repeat_interval_edge_validation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case err (string-match "a\\{0,0\\}" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "a\\{,3\\}" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "a\\{0\\}" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "a\\{1,0\\}" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "a\\{5,3\\}" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "a\\{999999\\}" "text") (invalid-regexp (cadr err)) (error 'other)))
+"##,
+    );
+}
+
+#[test]
+fn div_r5_regex_backref_to_nonexistent_group() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case err (string-match "\\1" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "\\3" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "\\(a\\)\\2" "text") (invalid-regexp (cadr err)) (error 'other))
+      (condition-case err (string-match "\\(a\\)\\1" "a") (invalid-regexp (cadr err)) (error 'other)))
+"##,
+    );
+}
