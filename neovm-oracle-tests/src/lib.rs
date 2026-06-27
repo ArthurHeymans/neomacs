@@ -2296,6 +2296,7 @@ mod divergence_combo_sort_marker_overlay_undo;
 mod divergence_combo_stdlib;
 mod divergence_combo_stress;
 mod divergence_combo_stress_overlay_regex_undo;
+mod divergence_combo_strict_advice_macrolet_formatseconds;
 mod divergence_combo_strict_arith_float_time_syntax;
 mod divergence_combo_strict_char_float_defstruct_misc;
 mod divergence_combo_strict_chartab_syntax_time_quoting;
