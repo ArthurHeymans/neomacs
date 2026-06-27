@@ -275,24 +275,135 @@ fn current_unix_timestamp() -> i64 {
         .unwrap_or(0)
 }
 
-/// Format a broken-down time according to a strftime-like format string.
-fn format_numeric_zone_offset(offset_secs: i64) -> String {
-    let sign = if offset_secs < 0 { '-' } else { '+' };
-    let abs_secs = offset_secs.abs();
-    if abs_secs % 60 == 0 {
-        let total_minutes = abs_secs / 60;
-        format!("{}{:02}{:02}", sign, total_minutes / 60, total_minutes % 60)
-    } else {
-        format!(
-            "{}{:02}{:02}{:02}",
-            sign,
-            abs_secs / 3600,
-            (abs_secs % 3600) / 60,
-            abs_secs % 60
-        )
-    }
+/// Padding style for a strftime numeric field. Mirrors GNU `enum pad_style`
+/// (`lib/strftime.c`): the flag characters `_`/`-`/`+`/`0` select these, and
+/// `ZERO_PAD` is the default that each directive may override.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pad {
+    Zero,       // ZERO_PAD: directive default; turns into AlwaysZero (or SpacePad)
+    SpacePad,   // SPACE_PAD: `_` flag
+    NoPad,      // NO_PAD: `-` flag (suppresses padding *and* the field width)
+    SignPad,    // SIGN_PAD: `+` flag
+    AlwaysZero, // ALWAYS_ZERO_PAD: `0` flag
 }
 
+/// State accumulated while parsing one `%`-directive's leading flags/width.
+struct DirectiveFlags {
+    pad: Pad,
+    to_uppcase: bool,
+    change_case: bool,
+    /// Field width, or -1 when unspecified (GNU's `width = -1`).
+    width: i64,
+}
+
+/// Format a single broken-down numeric field exactly like GNU's
+/// `do_number_sign_and_padding` block. `digits` is the directive's default
+/// minimum width, `value` the number, `negative`/`always_sign` control the
+/// emitted sign, and `tz_colon_mask` inserts ':' before selected digits for the
+/// `%:z` family (bit i set => ':' before the i'th digit, counting from the
+/// least-significant digit).
+fn do_number(
+    result: &mut String,
+    flags: &DirectiveFlags,
+    digits: i64,
+    value: i64,
+    negative: bool,
+    always_sign: bool,
+    mut tz_colon_mask: u32,
+) {
+    // Build the digit string (with embedded colons) right-to-left.
+    let mut uval = (value as i128).unsigned_abs();
+    let mut buf: Vec<char> = Vec::new();
+    loop {
+        if tz_colon_mask & 1 != 0 {
+            buf.push(':');
+        }
+        tz_colon_mask >>= 1;
+        buf.push((b'0' + (uval % 10) as u8) as char);
+        uval /= 10;
+        if uval == 0 && tz_colon_mask == 0 {
+            break;
+        }
+    }
+    buf.reverse();
+    let number: String = buf.into_iter().collect();
+    // GNU sets `number_digits = number_bytes`, i.e. it counts the embedded
+    // ':' separators toward the field width (see `do_number_sign_and_padding`).
+    let number_digits = number.chars().count() as i64;
+
+    // GNU: `if (pad == ZERO_PAD) pad = ALWAYS_ZERO_PAD;` then default width.
+    let pad = if flags.pad == Pad::Zero {
+        Pad::AlwaysZero
+    } else {
+        flags.pad
+    };
+    let width = if flags.width < 0 { digits } else { flags.width };
+
+    let sign_char = if negative {
+        Some('-')
+    } else if always_sign {
+        Some('+')
+    } else {
+        None
+    };
+    let shortage = width - i64::from(sign_char.is_some()) - number_digits;
+    let padding = if pad == Pad::NoPad || shortage <= 0 {
+        0
+    } else {
+        shortage
+    };
+
+    let pad_char = if pad == Pad::AlwaysZero || pad == Pad::SignPad {
+        '0'
+    } else {
+        ' '
+    };
+    if let Some(sign) = sign_char {
+        if pad == Pad::SpacePad {
+            // Space padding goes before the sign.
+            for _ in 0..padding {
+                result.push(' ');
+            }
+            result.push(sign);
+        } else {
+            result.push(sign);
+            for _ in 0..padding {
+                result.push(pad_char);
+            }
+        }
+    } else {
+        for _ in 0..padding {
+            result.push(pad_char);
+        }
+    }
+    result.push_str(&number);
+}
+
+/// Emit a text field, applying the GNU `cpy`/`width_add` rules: pad on the left
+/// to `width` (space-padded; `NoPad` suppresses width entirely) and apply the
+/// requested case folding.
+fn do_text(result: &mut String, flags: &DirectiveFlags, to_lowcase: bool, s: &str) {
+    let text: String = if to_lowcase {
+        s.to_lowercase()
+    } else if flags.to_uppcase {
+        s.to_uppercase()
+    } else {
+        s.to_string()
+    };
+    let n = text.chars().count() as i64;
+    let w = if flags.pad == Pad::NoPad || flags.width < 0 {
+        0
+    } else {
+        flags.width
+    };
+    for _ in n..w {
+        result.push(' ');
+    }
+    result.push_str(&text);
+}
+
+/// Format a broken-down time according to a strftime-like format string,
+/// mirroring GNU's `__strftime_internal` (`lib/strftime.c`).
 fn format_time(
     fmt: &str,
     tm: &BrokenDownTime,
@@ -305,282 +416,379 @@ fn format_time(
     let chars: Vec<char> = fmt.chars().collect();
     let mut i = 0;
 
-    while i < chars.len() {
-        if chars[i] == '%' {
-            i += 1;
-            if i >= chars.len() {
-                result.push('%');
-                break;
-            }
-
-            // Parse strftime flags: '-' (no pad), '_' (space pad), '0' (zero
-            // pad = default), '^' (upcase), '#' (swap case). The 'E'/'O' locale
-            // modifiers and a numeric field width are accepted; the width is
-            // significant only for the `%N' directive (see below).
-            let mut suppress_pad = false;
-            let mut space_pad = false;
-            let mut upcase = false;
-            let mut swapcase = false;
-            let mut field_width: i64 = 0;
-            while i < chars.len() {
-                match chars[i] {
-                    '-' => suppress_pad = true,
-                    '_' => space_pad = true,
-                    '^' => upcase = true,
-                    '#' => swapcase = true,
-                    '0' | 'E' | 'O' => {}
-                    c if c.is_ascii_digit() => {
-                        field_width = field_width
-                            .saturating_mul(10)
-                            .saturating_add((c as i64) - ('0' as i64));
-                    }
-                    _ => break,
-                }
-                i += 1;
-            }
-
-            if i >= chars.len() {
-                result.push('%');
-                break;
-            }
-
-            let piece_start = result.len();
-            match chars[i] {
-                '%' => result.push('%'),
-                'Y' => result.push_str(&format!("{:04}", tm.year)),
-                'y' => result.push_str(&format!("{:02}", tm.year % 100)),
-                'C' => result.push_str(&format!("{:02}", tm.year / 100)),
-                'G' | 'g' | 'V' => {
-                    let (iso_year, iso_week) = iso_week_year_and_number(tm);
-                    match chars[i] {
-                        'G' => {
-                            if suppress_pad {
-                                result.push_str(&iso_year.to_string());
-                            } else {
-                                result.push_str(&format!("{:04}", iso_year));
-                            }
-                        }
-                        'g' => {
-                            let short_year = iso_year.rem_euclid(100);
-                            if suppress_pad {
-                                result.push_str(&short_year.to_string());
-                            } else {
-                                result.push_str(&format!("{:02}", short_year));
-                            }
-                        }
-                        _ => {
-                            if suppress_pad {
-                                result.push_str(&iso_week.to_string());
-                            } else {
-                                result.push_str(&format!("{:02}", iso_week));
-                            }
-                        }
-                    }
-                }
-                'm' => {
-                    if suppress_pad {
-                        result.push_str(&tm.month.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", tm.month));
-                    }
-                }
-                'd' => {
-                    if suppress_pad {
-                        result.push_str(&tm.day.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", tm.day));
-                    }
-                }
-                'e' => result.push_str(&format!("{:2}", tm.day)),
-                'H' => {
-                    if suppress_pad {
-                        result.push_str(&tm.hour.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", tm.hour));
-                    }
-                }
-                'k' => result.push_str(&format!("{:2}", tm.hour)),
-                'I' => {
-                    let h12 = if tm.hour == 0 {
-                        12
-                    } else if tm.hour > 12 {
-                        tm.hour - 12
-                    } else {
-                        tm.hour
-                    };
-                    if suppress_pad {
-                        result.push_str(&h12.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", h12));
-                    }
-                }
-                'l' => {
-                    let h12 = if tm.hour == 0 {
-                        12
-                    } else if tm.hour > 12 {
-                        tm.hour - 12
-                    } else {
-                        tm.hour
-                    };
-                    result.push_str(&format!("{:2}", h12));
-                }
-                'M' => {
-                    if suppress_pad {
-                        result.push_str(&tm.minute.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", tm.minute));
-                    }
-                }
-                'S' => {
-                    if suppress_pad {
-                        result.push_str(&tm.second.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", tm.second));
-                    }
-                }
-                's' => result.push_str(&timestamp.to_string()),
-                'A' => result.push_str(DAY_NAMES[tm.weekday as usize % 7]),
-                'a' => result.push_str(DAY_ABBREVS[tm.weekday as usize % 7]),
-                'B' => result.push_str(MONTH_NAMES[(tm.month as usize).saturating_sub(1) % 12]),
-                'b' | 'h' => {
-                    result.push_str(MONTH_ABBREVS[(tm.month as usize).saturating_sub(1) % 12])
-                }
-                'p' => result.push_str(if tm.hour < 12 { "AM" } else { "PM" }),
-                'P' => result.push_str(if tm.hour < 12 { "am" } else { "pm" }),
-                'Z' => result.push_str(zone_name),
-                'z' => result.push_str(&format_numeric_zone_offset(zone_offset_secs)),
-                'N' => {
-                    // GNU extension (lib/strftime.c case L_('N')): subsecond
-                    // count. The optional field width selects how many of the
-                    // 9 nanosecond digits to emit; the default (and `%9N') is
-                    // 9. Widths < 9 keep the leading digits (e.g. `%3N' = ms,
-                    // `%6N' = us); widths > 9 zero-pad on the right (`%12N').
-                    let width = if field_width <= 0 { 9 } else { field_width } as usize;
-                    let digits9 = format!("{:09}", nanos.clamp(0, 999_999_999));
-                    if width <= 9 {
-                        result.push_str(&digits9[..width]);
-                    } else {
-                        result.push_str(&digits9);
-                        result.extend(std::iter::repeat_n('0', width - 9));
-                    }
-                }
-                'j' => {
-                    if suppress_pad {
-                        result.push_str(&(tm.yearday + 1).to_string());
-                    } else {
-                        result.push_str(&format!("{:03}", tm.yearday + 1));
-                    }
-                }
-                'u' => {
-                    // ISO weekday: 1=Monday .. 7=Sunday
-                    let iso_wd = if tm.weekday == 0 { 7 } else { tm.weekday };
-                    result.push_str(&iso_wd.to_string());
-                }
-                'w' => result.push_str(&tm.weekday.to_string()),
-                'n' => result.push('\n'),
-                't' => result.push('\t'),
-                'R' => result.push_str(&format!("{:02}:{:02}", tm.hour, tm.minute)),
-                'T' => {
-                    result.push_str(&format!("{:02}:{:02}:{:02}", tm.hour, tm.minute, tm.second))
-                }
-                'F' => result.push_str(&format!("{:04}-{:02}-{:02}", tm.year, tm.month, tm.day)),
-                'D' => result.push_str(&format!(
-                    "{:02}/{:02}/{:02}",
-                    tm.month,
-                    tm.day,
-                    tm.year % 100
-                )),
-                'U' => {
-                    // Week number of the year (Sunday as first day), 00-53
-                    let wnum = (tm.yearday + 7 - tm.weekday) / 7;
-                    if suppress_pad {
-                        result.push_str(&wnum.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", wnum));
-                    }
-                }
-                'W' => {
-                    // Week number of the year (Monday as first day), 00-53
-                    let monday_weekday = if tm.weekday == 0 { 6 } else { tm.weekday - 1 };
-                    let wnum = (tm.yearday + 7 - monday_weekday) / 7;
-                    if suppress_pad {
-                        result.push_str(&wnum.to_string());
-                    } else {
-                        result.push_str(&format!("{:02}", wnum));
-                    }
-                }
-                'c' => {
-                    // Preferred date and time representation (C locale):
-                    // equivalent to "%a %b %e %H:%M:%S %Y"
-                    result.push_str(DAY_ABBREVS[tm.weekday as usize % 7]);
-                    result.push(' ');
-                    result.push_str(MONTH_ABBREVS[(tm.month as usize).saturating_sub(1) % 12]);
-                    result.push_str(&format!(
-                        " {:2} {:02}:{:02}:{:02} {:04}",
-                        tm.day, tm.hour, tm.minute, tm.second, tm.year
-                    ));
-                }
-                'x' => {
-                    // Preferred date representation (C locale): "%m/%d/%y"
-                    result.push_str(&format!(
-                        "{:02}/{:02}/{:02}",
-                        tm.month,
-                        tm.day,
-                        tm.year % 100
-                    ));
-                }
-                'X' => {
-                    // Preferred time representation (C locale): "%H:%M:%S"
-                    result.push_str(&format!("{:02}:{:02}:{:02}", tm.hour, tm.minute, tm.second));
-                }
-                other => {
-                    // Unknown directive -- emit as-is.
-                    result.push('%');
-                    if suppress_pad {
-                        result.push('-');
-                    }
-                    result.push(other);
-                }
-            }
-            // Apply the post-conversion flags to the piece just produced.
-            if space_pad || upcase || swapcase {
-                let piece = result.split_off(piece_start);
-                let piece = if space_pad {
-                    // Re-pad a zero-padded numeric field with spaces.
-                    let trimmed = piece.trim_start_matches('0');
-                    let kept = if trimmed.is_empty() { "0" } else { trimmed };
-                    format!("{}{}", " ".repeat(piece.len() - kept.len()), kept)
-                } else {
-                    piece
-                };
-                let piece = if upcase {
-                    piece.to_uppercase()
-                } else if swapcase {
-                    piece.chars().map(swap_ascii_case).collect()
-                } else {
-                    piece
-                };
-                result.push_str(&piece);
-            }
-            i += 1;
+    // 12-hour clock value used by %I/%l/%r.
+    let h12 = |hour: u32| -> i64 {
+        if hour == 0 {
+            12
+        } else if hour > 12 {
+            (hour - 12) as i64
         } else {
+            hour as i64
+        }
+    };
+    // Render a subformat (e.g. %r -> "%I:%M:%S %p") with no inherited flags,
+    // honoring an inherited upcase from the `^` flag the way GNU does.
+    let subformat = |sub: &str, upcase: bool| -> String {
+        let s = format_time(sub, tm, timestamp, zone_offset_secs, zone_name, nanos);
+        if upcase { s.to_uppercase() } else { s }
+    };
+
+    while i < chars.len() {
+        if chars[i] != '%' {
             result.push(chars[i]);
             i += 1;
+            continue;
         }
+
+        let percent = i;
+        i += 1;
+
+        // GNU: parse the flag characters `_ - + 0 ^ #` (any order, repeated).
+        let mut flags = DirectiveFlags {
+            pad: Pad::Zero,
+            to_uppcase: false,
+            change_case: false,
+            width: -1,
+        };
+        while i < chars.len() {
+            match chars[i] {
+                '_' => flags.pad = Pad::SpacePad,
+                '-' => flags.pad = Pad::NoPad,
+                '+' => flags.pad = Pad::SignPad,
+                '0' => flags.pad = Pad::AlwaysZero,
+                '^' => flags.to_uppcase = true,
+                '#' => flags.change_case = true,
+                _ => break,
+            }
+            i += 1;
+        }
+
+        // GNU: parse an optional decimal field width.
+        if i < chars.len() && chars[i].is_ascii_digit() {
+            let mut w: i64 = 0;
+            while i < chars.len() && chars[i].is_ascii_digit() {
+                w = w
+                    .saturating_mul(10)
+                    .saturating_add((chars[i] as i64) - ('0' as i64));
+                i += 1;
+            }
+            flags.width = w;
+        }
+
+        // GNU: skip the `E`/`O` locale modifiers (no alternate reps here).
+        if i < chars.len() && (chars[i] == 'E' || chars[i] == 'O') {
+            i += 1;
+        }
+
+        if i >= chars.len() {
+            // GNU "% at end of format": emit the literal text from `%`.
+            result.extend(chars[percent..].iter());
+            break;
+        }
+
+        let fc = chars[i];
+
+        // GNU: `:`, `::`, `:::` are valid only just before `z`.
+        if fc == ':' {
+            let mut colons = 0usize;
+            while i + colons < chars.len() && chars[i + colons] == ':' {
+                colons += 1;
+            }
+            if i + colons < chars.len() && chars[i + colons] == 'z' {
+                emit_tz_offset(&mut result, &flags, zone_offset_secs, colons as u32);
+                i += colons + 1;
+                continue;
+            }
+            // Not a valid `%:z`: echo the directive verbatim (bad_format).
+            result.extend(chars[percent..=i].iter());
+            i += 1;
+            continue;
+        }
+
+        match fc {
+            '%' => {
+                // GNU `bad_percent`: a bare "%%" only — flags before it are
+                // echoed literally.
+                if i - 1 != percent {
+                    result.extend(chars[percent..=i].iter());
+                } else {
+                    result.push('%');
+                }
+            }
+            // ---- Numeric directives (routed through do_number) -------------
+            'Y' => do_number(&mut result, &flags, 4, tm.year, tm.year < 0, false, 0),
+            'y' => do_number(
+                &mut result,
+                &flags,
+                2,
+                tm.year.rem_euclid(100),
+                false,
+                false,
+                0,
+            ),
+            'C' => do_number(
+                &mut result,
+                &flags,
+                2,
+                tm.year.div_euclid(100),
+                tm.year < 0,
+                false,
+                0,
+            ),
+            'G' | 'g' | 'V' => {
+                let (iso_year, iso_week) = iso_week_year_and_number(tm);
+                match fc {
+                    'G' => do_number(&mut result, &flags, 4, iso_year, iso_year < 0, false, 0),
+                    'g' => do_number(
+                        &mut result,
+                        &flags,
+                        2,
+                        iso_year.rem_euclid(100),
+                        false,
+                        false,
+                        0,
+                    ),
+                    _ => do_number(&mut result, &flags, 2, iso_week as i64, false, false, 0),
+                }
+            }
+            'm' => do_number(&mut result, &flags, 2, tm.month as i64, false, false, 0),
+            'd' => do_number(&mut result, &flags, 2, tm.day as i64, false, false, 0),
+            'e' => {
+                // %e is space-padded by default.
+                let mut f = rebuild(&flags);
+                if f.pad == Pad::Zero {
+                    f.pad = Pad::SpacePad;
+                }
+                do_number(&mut result, &f, 2, tm.day as i64, false, false, 0);
+            }
+            'H' => do_number(&mut result, &flags, 2, tm.hour as i64, false, false, 0),
+            'k' => {
+                let mut f = rebuild(&flags);
+                if f.pad == Pad::Zero {
+                    f.pad = Pad::SpacePad;
+                }
+                do_number(&mut result, &f, 2, tm.hour as i64, false, false, 0);
+            }
+            'I' => do_number(&mut result, &flags, 2, h12(tm.hour), false, false, 0),
+            'l' => {
+                let mut f = rebuild(&flags);
+                if f.pad == Pad::Zero {
+                    f.pad = Pad::SpacePad;
+                }
+                do_number(&mut result, &f, 2, h12(tm.hour), false, false, 0);
+            }
+            'M' => do_number(&mut result, &flags, 2, tm.minute as i64, false, false, 0),
+            'S' => do_number(&mut result, &flags, 2, tm.second as i64, false, false, 0),
+            's' => do_number(&mut result, &flags, 1, timestamp, timestamp < 0, false, 0),
+            'j' => do_number(
+                &mut result,
+                &flags,
+                3,
+                tm.yearday as i64 + 1,
+                false,
+                false,
+                0,
+            ),
+            'u' => {
+                let iso_wd = if tm.weekday == 0 {
+                    7
+                } else {
+                    tm.weekday as i64
+                };
+                do_number(&mut result, &flags, 1, iso_wd, false, false, 0);
+            }
+            'w' => do_number(&mut result, &flags, 1, tm.weekday as i64, false, false, 0),
+            'U' => {
+                let wnum = (tm.yearday + 7 - tm.weekday) / 7;
+                do_number(&mut result, &flags, 2, wnum as i64, false, false, 0);
+            }
+            'W' => {
+                let monday_weekday = if tm.weekday == 0 { 6 } else { tm.weekday - 1 };
+                let wnum = (tm.yearday + 7 - monday_weekday) / 7;
+                do_number(&mut result, &flags, 2, wnum as i64, false, false, 0);
+            }
+            'q' => do_number(
+                &mut result,
+                &flags,
+                1,
+                (((tm.month as i64 - 1) * 11) >> 5) + 1,
+                false,
+                false,
+                0,
+            ),
+            // ---- Time-zone offset (%z; the %:z family handled above) -------
+            'z' => emit_tz_offset(&mut result, &flags, zone_offset_secs, 0),
+            // ---- Text directives (routed through do_text) ------------------
+            'A' => {
+                let f = with_change_case_upcase(&flags);
+                do_text(&mut result, &f, false, DAY_NAMES[tm.weekday as usize % 7]);
+            }
+            'a' => {
+                let f = with_change_case_upcase(&flags);
+                do_text(&mut result, &f, false, DAY_ABBREVS[tm.weekday as usize % 7]);
+            }
+            'B' => {
+                let f = with_change_case_upcase(&flags);
+                do_text(
+                    &mut result,
+                    &f,
+                    false,
+                    MONTH_NAMES[(tm.month as usize).saturating_sub(1) % 12],
+                );
+            }
+            'b' | 'h' => {
+                let f = with_change_case_upcase(&flags);
+                do_text(
+                    &mut result,
+                    &f,
+                    false,
+                    MONTH_ABBREVS[(tm.month as usize).saturating_sub(1) % 12],
+                );
+            }
+            'p' => {
+                // `#` flag => lowercase for %p.
+                let lower = flags.change_case;
+                do_text(
+                    &mut result,
+                    &flags,
+                    lower,
+                    if tm.hour < 12 { "AM" } else { "PM" },
+                );
+            }
+            'P' => {
+                // %P is always lowercased; `^`/`#` cannot upcase it.
+                do_text(
+                    &mut result,
+                    &flags,
+                    true,
+                    if tm.hour < 12 { "AM" } else { "PM" },
+                );
+            }
+            'Z' => {
+                // `#` flag => lowercase for %Z.
+                let lower = flags.change_case;
+                do_text(&mut result, &flags, lower, zone_name);
+            }
+            'n' => do_text(&mut result, &flags, false, "\n"),
+            't' => do_text(&mut result, &flags, false, "\t"),
+            'N' => {
+                // GNU extension: subsecond digits. The field width selects how
+                // many of the 9 nanosecond digits to emit; default 9.
+                let width = if flags.width <= 0 { 9 } else { flags.width } as usize;
+                let digits9 = format!("{:09}", nanos.clamp(0, 999_999_999));
+                if width <= 9 {
+                    result.push_str(&digits9[..width]);
+                } else {
+                    result.push_str(&digits9);
+                    result.extend(std::iter::repeat_n('0', width - 9));
+                }
+            }
+            // ---- Compound (subformat) directives ---------------------------
+            'R' => result.push_str(&subformat("%H:%M", flags.to_uppcase)),
+            'T' | 'X' => result.push_str(&subformat("%H:%M:%S", flags.to_uppcase)),
+            'r' => result.push_str(&subformat("%I:%M:%S %p", flags.to_uppcase)),
+            'F' => result.push_str(&subformat("%Y-%m-%d", flags.to_uppcase)),
+            'D' | 'x' => result.push_str(&subformat("%m/%d/%y", flags.to_uppcase)),
+            'c' => result.push_str(&subformat("%a %b %e %H:%M:%S %Y", flags.to_uppcase)),
+            other => {
+                // GNU `bad_format`: echo the directive verbatim, including `%`,
+                // flags and width.
+                result.extend(chars[percent..i].iter());
+                result.push(other);
+            }
+        }
+        i += 1;
     }
 
     result
 }
 
-/// Swap the case of an ASCII letter (used by the strftime `#` flag); other
-/// characters are returned unchanged.
-fn swap_ascii_case(c: char) -> char {
-    if c.is_ascii_uppercase() {
-        c.to_ascii_lowercase()
-    } else if c.is_ascii_lowercase() {
-        c.to_ascii_uppercase()
-    } else {
-        c
+/// Clone a `DirectiveFlags`. Used where a directive needs to override a default
+/// (e.g. `%e`/`%k`/`%l` space-pad) without mutating the shared parse result.
+fn rebuild(f: &DirectiveFlags) -> DirectiveFlags {
+    DirectiveFlags {
+        pad: f.pad,
+        to_uppcase: f.to_uppcase,
+        change_case: f.change_case,
+        width: f.width,
+    }
+}
+
+/// For text directives where the `#` (change_case) flag means "upcase" (e.g.
+/// `%a`, `%A`, `%b`, `%B`): return flags with `to_uppcase` forced when `#` set.
+fn with_change_case_upcase(f: &DirectiveFlags) -> DirectiveFlags {
+    let mut out = rebuild(f);
+    if out.change_case {
+        out.to_uppcase = true;
+    }
+    out
+}
+
+/// Emit the `%z`/`%:z`/`%::z`/`%:::z` time-zone offset, mirroring GNU's
+/// `do_z_conversion` switch on the number of colons.
+fn emit_tz_offset(result: &mut String, flags: &DirectiveFlags, offset_secs: i64, colons: u32) {
+    let diff = offset_secs;
+    let negative = diff < 0;
+    let abs = diff.abs();
+    let hour_diff = abs / 3600;
+    let min_diff = abs / 60 % 60;
+    let sec_diff = abs % 60;
+    // GNU's mask: bit i set => insert ':' before the i'th digit (from the
+    // least-significant digit). 04 (octal) and 024 (octal) for %:z / %::z.
+    match colons {
+        0 => do_number(
+            result,
+            flags,
+            5,
+            hour_diff * 100 + min_diff,
+            negative,
+            true,
+            0,
+        ),
+        1 => do_number(
+            result,
+            flags,
+            6,
+            hour_diff * 100 + min_diff,
+            negative,
+            true,
+            0o04,
+        ),
+        2 => do_number(
+            result,
+            flags,
+            9,
+            hour_diff * 10000 + min_diff * 100 + sec_diff,
+            negative,
+            true,
+            0o24,
+        ),
+        _ => {
+            // colons == 3: +hh if possible, else +hh:mm, else +hh:mm:ss.
+            if sec_diff != 0 {
+                do_number(
+                    result,
+                    flags,
+                    9,
+                    hour_diff * 10000 + min_diff * 100 + sec_diff,
+                    negative,
+                    true,
+                    0o24,
+                );
+            } else if min_diff != 0 {
+                do_number(
+                    result,
+                    flags,
+                    6,
+                    hour_diff * 100 + min_diff,
+                    negative,
+                    true,
+                    0o04,
+                );
+            } else {
+                do_number(result, flags, 3, hour_diff, negative, true, 0);
+            }
+        }
     }
 }
 // ---------------------------------------------------------------------------

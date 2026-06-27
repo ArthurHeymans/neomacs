@@ -457,3 +457,76 @@ fn broken_down_2024() {
     assert_eq!(tm.minute, 30);
     assert_eq!(tm.second, 45);
 }
+
+// ===================================================================
+// format-time-string directive parser parity with GNU nstrftime
+// (lib/strftime.c). Fixed time 1625402096 = 2021-07-04 12:34:56 UTC,
+// a Sunday. Each expected value was captured from GNU Emacs --batch.
+// ===================================================================
+
+fn fts(fmt: &str) -> String {
+    builtin_format_time_string(vec![
+        Value::string(fmt),
+        Value::fixnum(1625402096),
+        Value::T,
+    ])
+    .unwrap()
+    .as_utf8_str()
+    .unwrap()
+    .to_string()
+}
+
+#[test]
+fn format_time_string_r_directive_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // %r expands to the 12-hour clock with AM/PM (C-locale "%I:%M:%S %p").
+    assert_eq!(fts("%r"), "12:34:56 PM");
+}
+
+#[test]
+fn format_time_string_colon_z_family_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // UTC offset rendered with colon separators.
+    assert_eq!(fts("%z"), "+0000");
+    assert_eq!(fts("%:z"), "+00:00");
+    assert_eq!(fts("%::z"), "+00:00:00");
+    assert_eq!(fts("%:::z"), "+00");
+}
+
+#[test]
+fn format_time_string_width_and_pad_flags_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    // Field width with zero/space padding on numeric directives.
+    assert_eq!(fts("%010Y"), "0000002021");
+    assert_eq!(fts("%6m"), "000007");
+    assert_eq!(fts("%08H"), "00000012");
+    assert_eq!(fts("%03e"), "004");
+    assert_eq!(fts("%_3d"), "  4");
+    // `-` flag suppresses both padding and the field width.
+    assert_eq!(fts("%-3S"), "56");
+    assert_eq!(fts("%5S"), "00056");
+    assert_eq!(fts("%_5S"), "   56");
+    // `-` removes the default zero-padding.
+    assert_eq!(fts("%-m"), "7");
+    assert_eq!(fts("%-d"), "4");
+    // Width applies to text directives too (space-padded on the left).
+    assert_eq!(fts("%3p"), " PM");
+}
+
+#[test]
+fn format_time_string_hash_case_flag_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // `#` uppercases text directives (NOT a per-char case swap), and
+    // lowercases %p / %Z.
+    assert_eq!(fts("%#a"), "SUN");
+    assert_eq!(fts("%#A"), "SUNDAY");
+    assert_eq!(fts("%#b"), "JUL");
+    assert_eq!(fts("%#B"), "JULY");
+    assert_eq!(fts("%#p"), "pm");
+    assert_eq!(fts("%#Z"), "gmt");
+    // `^` uppercases.
+    assert_eq!(fts("%^a"), "SUN");
+    assert_eq!(fts("%^p"), "PM");
+    // %P is always lowercase even with `^`.
+    assert_eq!(fts("%^P"), "pm");
+}
