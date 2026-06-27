@@ -658,24 +658,7 @@ pub(crate) fn builtin_max(eval: &mut super::eval::Context, args: Vec<Value>) -> 
 
 pub(crate) fn builtin_max_slice(eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     expect_min_args("max", args, 1)?;
-    let mut best_num = expect_number_or_marker_f64_eval(eval, &args[0])?;
-    let mut best_value = args[0];
-    for a in &args[1..] {
-        let n = expect_number_or_marker_f64_eval(eval, a)?;
-        if n > best_num {
-            best_num = n;
-            best_value = *a;
-        }
-    }
-    match best_value.kind() {
-        ValueKind::Fixnum(_) | ValueKind::Float | ValueKind::Veclike(VecLikeType::Bignum) => {
-            Ok(best_value)
-        }
-        _ if best_value.is_marker() => Ok(Value::fixnum(
-            super::marker::marker_position_as_int_eval(eval, &best_value)?,
-        )),
-        _ => unreachable!("max winner must be numeric"),
-    }
+    minmax_driver(eval, args, NumCmp::Gt)
 }
 
 pub(crate) fn builtin_min(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -684,24 +667,40 @@ pub(crate) fn builtin_min(eval: &mut super::eval::Context, args: Vec<Value>) -> 
 
 pub(crate) fn builtin_min_slice(eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     expect_min_args("min", args, 1)?;
-    let mut best_num = expect_number_or_marker_f64_eval(eval, &args[0])?;
-    let mut best_value = args[0];
+    minmax_driver(eval, args, NumCmp::Lt)
+}
+
+/// Mirrors GNU `minmax_driver` (`src/data.c:3461`). Folds the args with
+/// `arithcompare` against the running accumulator: if `arithcompare(val,
+/// accum)` satisfies `cmp` the accumulator becomes `val`; otherwise, if
+/// `val` is a NaN, it propagates as the result (a NaN never compares
+/// greater/less, so it would otherwise be silently dropped). Markers are
+/// coerced to their integer position; every other arg is returned
+/// unchanged (so `(max 1 2.0 3)` stays the integer `3`, matching GNU).
+fn minmax_driver(eval: &super::eval::Context, args: &[Value], cmp: NumCmp) -> EvalResult {
+    let coerce = |v: &Value| -> Result<Value, Flow> {
+        if super::marker::is_marker(v) {
+            Ok(Value::fixnum(super::marker::marker_position_as_int_eval(
+                eval, v,
+            )?))
+        } else {
+            // Validate it is a number (signals otherwise).
+            expect_number_or_marker_eval(eval, v)?;
+            Ok(*v)
+        }
+    };
+
+    let mut accum = coerce(&args[0])?;
     for a in &args[1..] {
-        let n = expect_number_or_marker_f64_eval(eval, a)?;
-        if n < best_num {
-            best_num = n;
-            best_value = *a;
+        let val = coerce(a)?;
+        let ord = arithcompare(eval, &val, &accum)?;
+        if cmp_passes(ord, cmp) {
+            accum = val;
+        } else if val.is_float() && val.xfloat().is_nan() {
+            return Ok(val);
         }
     }
-    match best_value.kind() {
-        ValueKind::Fixnum(_) | ValueKind::Float | ValueKind::Veclike(VecLikeType::Bignum) => {
-            Ok(best_value)
-        }
-        _ if best_value.is_marker() => Ok(Value::fixnum(
-            super::marker::marker_position_as_int_eval(eval, &best_value)?,
-        )),
-        _ => unreachable!("min winner must be numeric"),
-    }
+    Ok(accum)
 }
 
 /// `(abs ARG)` — mirrors GNU `Fabs` (`src/floatfns.c`).
@@ -1015,28 +1014,35 @@ fn arithcompare(
 ) -> Result<Option<std::cmp::Ordering>, Flow> {
     use std::cmp::Ordering;
 
-    // Float on either side: if the other side is a bignum we still
-    // get an exact answer via Integer::partial_cmp<f64>; for
-    // fixnums and floats, fall back to f64 comparison.
+    // Float on either side. GNU `arithcompare` compares a float against
+    // an integer (fixnum OR bignum) EXACTLY — it never coerces the
+    // integer to a double first (data.c:2734-2758 / 2777-2795 /
+    // 2760-2770 / 2818-2829). We mirror that by comparing the exact
+    // `Integer` against the `f64` via `Integer::partial_cmp<f64>`, which
+    // accounts for the float's fractional part and any magnitude beyond
+    // 2^53. Only float-vs-float falls back to native f64 comparison.
     if a.is_float() || b.is_float() {
-        if let Some(big) = a.as_bignum() {
-            let f = expect_number_or_marker_f64_eval(eval, b)?;
+        // a is the float side, b is the integer-or-marker side.
+        if a.is_float() && !b.is_float() {
+            let f = a.xfloat();
             if f.is_nan() {
                 return Ok(None);
             }
-            return Ok(big.partial_cmp(&f));
+            let bi = integer_or_marker_to_big(eval, b)?;
+            // We have bi.partial_cmp(f); reverse to get a.cmp(b).
+            return Ok(bi.partial_cmp(&f).map(|o| o.reverse()));
         }
-        if let Some(big) = b.as_bignum() {
-            let f = expect_number_or_marker_f64_eval(eval, a)?;
+        // b is the float side, a is the integer-or-marker side.
+        if b.is_float() && !a.is_float() {
+            let f = b.xfloat();
             if f.is_nan() {
                 return Ok(None);
             }
-            // Reverse since we asked big.cmp(f).
-            return Ok(big.partial_cmp(&f).map(|o| o.reverse()));
+            let ai = integer_or_marker_to_big(eval, a)?;
+            return Ok(ai.partial_cmp(&f));
         }
-        let af = expect_number_or_marker_f64_eval(eval, a)?;
-        let bf = expect_number_or_marker_f64_eval(eval, b)?;
-        return Ok(af.partial_cmp(&bf));
+        // Both are floats.
+        return Ok(a.xfloat().partial_cmp(&b.xfloat()));
     }
 
     // Both operands are integer-or-marker. Stay on i64 if neither is
@@ -1048,33 +1054,32 @@ fn arithcompare(
     }
 
     // Bignum-aware integer compare.
-    let ai = match a.kind() {
-        ValueKind::Fixnum(n) => Integer::from(n),
-        ValueKind::Veclike(VecLikeType::Bignum) => a.as_bignum().unwrap().clone(),
-        _ if super::marker::is_marker(a) => {
-            Integer::from(super::marker::marker_position_as_int_eval(eval, a)?)
-        }
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("number-or-marker-p"), *a],
-            ));
-        }
-    };
-    let bi = match b.kind() {
-        ValueKind::Fixnum(n) => Integer::from(n),
-        ValueKind::Veclike(VecLikeType::Bignum) => b.as_bignum().unwrap().clone(),
-        _ if super::marker::is_marker(b) => {
-            Integer::from(super::marker::marker_position_as_int_eval(eval, b)?)
-        }
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("number-or-marker-p"), *b],
-            ));
-        }
-    };
+    let ai = integer_or_marker_to_big(eval, a)?;
+    let bi = integer_or_marker_to_big(eval, b)?;
     Ok(Some(ai.cmp(&bi)))
+}
+
+/// Materialize an exact integer (fixnum, bignum, or marker position) as
+/// a `malachite::Integer`. Signals `number-or-marker-p` for anything
+/// else (including floats — callers must handle the float side first).
+/// Used by `arithcompare` so integer-vs-float comparisons stay exact
+/// instead of lowering the integer through `f64` (GNU `arithcompare`,
+/// data.c:2734-2845).
+fn integer_or_marker_to_big(
+    eval: &super::super::eval::Context,
+    v: &Value,
+) -> Result<Integer, Flow> {
+    match v.kind() {
+        ValueKind::Fixnum(n) => Ok(Integer::from(n)),
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(v.as_bignum().unwrap().clone()),
+        _ if super::marker::is_marker(v) => Ok(Integer::from(
+            super::marker::marker_position_as_int_eval(eval, v)?,
+        )),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("number-or-marker-p"), *v],
+        )),
+    }
 }
 
 fn cmp_passes(ord: Option<std::cmp::Ordering>, op: NumCmp) -> bool {
@@ -1769,3 +1774,7 @@ pub(crate) fn builtin_isnan(args: Vec<Value>) -> EvalResult {
         )),
     }
 }
+
+#[cfg(test)]
+#[path = "arithmetic_minmax_compare_test.rs"]
+mod arithmetic_minmax_compare_test;
