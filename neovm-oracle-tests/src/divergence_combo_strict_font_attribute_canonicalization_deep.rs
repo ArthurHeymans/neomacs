@@ -1,0 +1,54 @@
+//! Strict combo oracle probes, batch 91: font attribute canonicalization deep
+//! dive — weight/slant/width via font-face-attributes for bold/light/heavy/
+//! italic/oblique/condensed/expanded. The 'normal→'regular weight gap was
+//! surfaced in batch 90; these probe whether other attributes also diverge.
+//!
+//! Tests are parity locks unless annotated with a surfaced divergence.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_q5_font_weight_canonicalization_variants() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (font-face-attributes (font-spec :weight 'bold))
+      (font-face-attributes (font-spec :weight 'light))
+      (font-face-attributes (font-spec :weight 'heavy))
+      (font-face-attributes (font-spec :weight 'ultra-bold))
+      (font-face-attributes (font-spec :weight 'semi-light))
+      (font-face-attributes (font-spec :weight 'medium)))
+"##,
+    );
+}
+
+#[test]
+fn div_q5_font_slant_and_width_canonicalization() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (font-face-attributes (font-spec :slant 'italic))
+      (font-face-attributes (font-spec :slant 'oblique))
+      (font-face-attributes (font-spec :slant 'normal))
+      (font-face-attributes (font-spec :width 'condensed))
+      (font-face-attributes (font-spec :width 'expanded))
+      (font-face-attributes (font-spec :width 'normal)))
+"##,
+    );
+}
+
+#[test]
+fn div_q5_font_numeric_attributes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (font-face-attributes (font-spec :weight 100))
+      (font-face-attributes (font-spec :weight 400))
+      (font-face-attributes (font-spec :weight 700))
+      (font-face-attributes (font-spec :weight 900))
+      (font-face-attributes (font-spec :slant 0))
+      (font-face-attributes (font-spec :slant 200)))
+"##,
+    );
+}
