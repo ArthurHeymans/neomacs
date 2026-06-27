@@ -367,6 +367,41 @@ fn process_file_runs_in_default_directory_like_gnu() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn process_file_expands_tilde_in_default_directory_like_gnu() {
+    // Regression: a buffer visiting a file under $HOME has an abbreviated
+    // default-directory like "~/foo/" (GNU abbreviates it identically). The
+    // subprocess cwd must be EXPANDED (~ -> $HOME) before chdir, mirroring GNU's
+    // encode_current_directory (callproc.c); otherwise the OS cannot chdir to a
+    // literal "~" and the subprocess silently runs in the wrong directory. This
+    // broke diff-hl/git-gutter, whose `git ls-files` failed with status 128
+    // "not a git repository" because git ran in $HOME instead of the repo.
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let home = std::env::var("HOME").expect("HOME set");
+    let unique = format!("neomacs-tilde-cwd-test-{}", std::process::id());
+    let abs = format!("{home}/{unique}");
+    std::fs::create_dir_all(&abs).expect("create test dir under HOME");
+    let rendered = eval_one(&format!(
+        r#"(let ((default-directory "~/{unique}/"))
+             (with-temp-buffer
+               (process-file "{sh}" nil t nil "-c" "pwd")
+               (buffer-string)))"#
+    ));
+    let _ = std::fs::remove_dir_all(&abs);
+    // The subprocess must run in the EXPANDED dir: pwd reports an absolute path
+    // containing the unique subdir, never a literal "~" and never the $HOME
+    // fallback (which would lack the unique subdir).
+    assert!(
+        rendered.contains(&unique),
+        "subprocess should run in the expanded ~/{unique}, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains('~'),
+        "subprocess cwd must be expanded, not a literal ~: {rendered}"
+    );
+}
+
 // -- ProcessManager unit tests ------------------------------------------
 
 #[test]

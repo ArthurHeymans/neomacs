@@ -303,7 +303,15 @@ fn fallback_subprocess_directory() -> Option<PathBuf> {
 pub(super) fn subprocess_default_directory(eval: &super::eval::Context) -> Option<PathBuf> {
     let default_dir =
         super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)?;
-    let path = super::fileio::lisp_file_name_to_path_buf(&default_dir);
+    // GNU's encode_current_directory (callproc.c) runs default-directory through
+    // Fexpand_file_name before the subprocess chdir. A buffer visiting a file under
+    // $HOME has an abbreviated default-directory like "~/foo/" (GNU abbreviates it
+    // identically); the OS chdir cannot resolve a literal "~", so without expanding
+    // it here every subprocess (git/grep/lsp/compile) silently runs in the wrong
+    // directory -- is_dir() fails on the literal "~/foo", falling back to $HOME, and
+    // e.g. `git ls-files` then fails with "not a git repository".
+    let expanded = super::fileio::expand_file_name_lisp(&default_dir, None);
+    let path = super::fileio::lisp_file_name_to_path_buf(&expanded);
     if path.is_dir() {
         Some(path)
     } else {
