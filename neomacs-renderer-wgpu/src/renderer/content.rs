@@ -15,7 +15,7 @@ use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelG
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
-use neomacs_display_protocol::face::{BoxType, Face};
+use neomacs_display_protocol::face::{BoxType, Face, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
@@ -698,8 +698,8 @@ impl WgpuRenderer {
                     let ul_y = baseline_y + ul_pos;
                     let line_thickness = ul_thick.max(1.0);
 
-                    match underline {
-                        1 => {
+                    match UnderlineStyle::from_gnu_code(*underline).unwrap_or_default() {
+                        UnderlineStyle::Line => {
                             // Single solid line
                             self.add_rect(
                                 &mut decoration_vertices,
@@ -710,7 +710,7 @@ impl WgpuRenderer {
                                 ul_color,
                             );
                         }
-                        2 => {
+                        UnderlineStyle::Wave => {
                             // Wave underline
                             let amplitude: f32 = 2.0;
                             let wavelength: f32 = 8.0;
@@ -731,7 +731,7 @@ impl WgpuRenderer {
                                 cx += seg_w;
                             }
                         }
-                        3 => {
+                        UnderlineStyle::Double => {
                             // Double line
                             self.add_rect(
                                 &mut decoration_vertices,
@@ -750,7 +750,7 @@ impl WgpuRenderer {
                                 ul_color,
                             );
                         }
-                        4 => {
+                        UnderlineStyle::Dotted => {
                             // Dotted
                             let mut cx = gx;
                             while cx < gx + *width {
@@ -766,7 +766,7 @@ impl WgpuRenderer {
                                 cx += line_thickness + 2.0;
                             }
                         }
-                        5 => {
+                        UnderlineStyle::Dashed => {
                             // Dashed
                             let mut cx = gx;
                             while cx < gx + *width {
@@ -782,7 +782,10 @@ impl WgpuRenderer {
                                 cx += 7.0;
                             }
                         }
-                        _ => {
+                        // None reaches here only for an out-of-range code (the
+                        // `*underline > 0` guard excludes a real None): fall back
+                        // to a single solid line.
+                        UnderlineStyle::None => {
                             self.add_rect(
                                 &mut decoration_vertices,
                                 gx,

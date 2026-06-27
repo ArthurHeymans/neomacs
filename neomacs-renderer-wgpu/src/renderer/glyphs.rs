@@ -2851,8 +2851,9 @@ impl WgpuRenderer {
                                 let ul_y = baseline_y + ul_pos;
                                 let line_thickness = ul_thick.max(1.0);
 
-                                match underline {
-                                    1 => {
+                                match UnderlineStyle::from_gnu_code(*underline).unwrap_or_default()
+                                {
+                                    UnderlineStyle::Line => {
                                         // Single solid line
                                         self.add_rect(
                                             &mut decoration_vertices,
@@ -2863,7 +2864,7 @@ impl WgpuRenderer {
                                             ul_color,
                                         );
                                     }
-                                    2 => {
+                                    UnderlineStyle::Wave => {
                                         // Wave: smooth sine wave underline
                                         let amplitude: f32 = 2.0;
                                         let wavelength: f32 = 8.0;
@@ -2885,7 +2886,7 @@ impl WgpuRenderer {
                                             cx += seg_w;
                                         }
                                     }
-                                    3 => {
+                                    UnderlineStyle::Double => {
                                         // Double line
                                         self.add_rect(
                                             &mut decoration_vertices,
@@ -2904,7 +2905,7 @@ impl WgpuRenderer {
                                             ul_color,
                                         );
                                     }
-                                    4 => {
+                                    UnderlineStyle::Dotted => {
                                         // Dots (dot size = thickness, gap = 2px)
                                         let mut cx = *x;
                                         while cx < *x + *width {
@@ -2920,7 +2921,7 @@ impl WgpuRenderer {
                                             cx += line_thickness + 2.0;
                                         }
                                     }
-                                    5 => {
+                                    UnderlineStyle::Dashed => {
                                         // Dashes (4px with 3px gap)
                                         let mut cx = *x;
                                         while cx < *x + *width {
@@ -2936,8 +2937,10 @@ impl WgpuRenderer {
                                             cx += 7.0;
                                         }
                                     }
-                                    _ => {
-                                        // Fallback: single line
+                                    // None reaches here only for an out-of-range
+                                    // code (the `*underline > 0` guard excludes a
+                                    // real None): fall back to a single line.
+                                    UnderlineStyle::None => {
                                         self.add_rect(
                                             &mut decoration_vertices,
                                             *x,
