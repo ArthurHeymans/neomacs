@@ -12,10 +12,11 @@ fn div_p1_org_export_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity_with_load(
         r##"
-(with-temp-buffer
-  (org-mode)
-  (insert "* Heading\nText with [[https://example.com][a link]].\n")
-  (org-export-as 'html))
+(replace-regexp-in-string "\\borg[0-9a-f]\\{6,\\}\\b" "orgID"
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Heading\nText with [[https://example.com][a link]].\n")
+    (org-export-as 'html)))
 "##,
         &["org/org.el", "org/ox.el", "org/ox-html.el"],
     );
@@ -26,10 +27,11 @@ fn div_p1_org_export_html_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity_with_load(
         r##"
-(with-temp-buffer
-  (org-mode)
-  (insert "* Data\n| A | B |\n| 1 | 2 |\n")
-  (org-export-as 'html))
+(replace-regexp-in-string "\\borg[0-9a-f]\\{6,\\}\\b" "orgID"
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Data\n| A | B |\n| 1 | 2 |\n")
+    (org-export-as 'html)))
 "##,
         &["org/org.el", "org/ox.el", "org/ox-html.el"],
     );
