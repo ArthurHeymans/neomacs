@@ -26,10 +26,11 @@ fn div_p2_org_export_markdown() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity_with_load(
         r##"
-(with-temp-buffer
-  (org-mode)
-  (insert "* Heading\nText with [[https://example.com][link]].\n- item one\n- item two\n")
-  (org-export-as 'md))
+(replace-regexp-in-string "\\borg[0-9a-f]\\{6,\\}\\b" "orgID"
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Heading\nText with [[https://example.com][link]].\n- item one\n- item two\n")
+    (org-export-as 'md)))
 "##,
         &["org/org.el", "org/ox.el", "org/ox-md.el"],
     );
