@@ -1042,6 +1042,39 @@ impl LayoutEngine {
                 .expect("frame display state just set");
             let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
                 std::collections::HashMap::new();
+            // Snapshot the resolved Face for every face_id each window's rows
+            // reference, from THIS frame's faces table. The fast paths reuse these
+            // rows verbatim carrying their prior-frame face_ids, but the next
+            // frame's faces table is rebuilt from scratch (counter reset to
+            // SENTINEL, faces cleared), so a replay MUST re-register these
+            // (face_id -> Face) pairs and reserve their id range against the chrome
+            // re-walk — else the reused glyphs resolve to a missing/wrong face at
+            // render (face-id collision audit fix).
+            let mut window_face_snapshots: std::collections::HashMap<
+                DisplayWindowId,
+                std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+            > = frame_state
+                .window_matrices
+                .iter()
+                .map(|entry| {
+                    let wid = DisplayWindowId::new(entry.window_id as i64);
+                    let mut faces = std::collections::HashMap::new();
+                    for row in &entry.matrix.rows {
+                        for area in &row.glyphs {
+                            for g in area {
+                                if let std::collections::hash_map::Entry::Vacant(slot) =
+                                    faces.entry(g.face_id)
+                                {
+                                    if let Some(face) = frame_state.faces.get(&g.face_id) {
+                                        slot.insert(face.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (wid, faces)
+                })
+                .collect();
             for entry in &mut frame_state.window_matrices {
                 let window_id = DisplayWindowId::new(entry.window_id as i64);
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
@@ -1159,6 +1192,7 @@ impl LayoutEngine {
                             validity: MatrixValidity::Valid,
                             damage,
                             display_snapshot,
+                            faces: window_face_snapshots.remove(&window_id).unwrap_or_default(),
                         },
                     );
                 }
@@ -1211,18 +1245,14 @@ impl LayoutEngine {
         params: &WindowParams,
         evaluator: &neovm_core::emacs_core::Context,
     ) -> Option<CursorOnlyReplay> {
-        // Restrict the cursor-only fast path to the SELECTED window. The render
-        // cursor branch handles BOTH cursor styles correctly (replay.cursor_style
-        // is hollow for a non-selected window), so the blocker to extending this
-        // to non-selected windows is NOT the cursor — it is cross-window FACE-ID
-        // consistency: a reused window carries face_ids allocated in a PRIOR frame,
-        // while a co-resident window re-laid this frame allocates fresh face_ids;
-        // the multi-window golden caught the resulting face_id divergence (24 vs
-        // 23). Extending non-selected reuse requires making reused face_ids stable
-        // / re-registered against the current frame's face table first.
-        if !params.selected {
-            return None;
-        }
+        // The cursor-only fast path applies to ANY window. The render cursor branch
+        // handles both styles (replay.cursor_style is hollow for a non-selected
+        // window), and the reused rows' faces are re-registered + their id range
+        // reserved at render time, so a non-selected window co-resident with a
+        // re-laid window no longer corrupts face resolution (the face-id collision
+        // audit fix). The dominant multi-window win: a non-selected window that did
+        // not change reuses its body verbatim instead of full-rebuilding when
+        // another window is edited.
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, evaluator);

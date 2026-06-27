@@ -1744,7 +1744,13 @@ enum GlyphKindTrace {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GlyphTrace {
     kind: GlyphKindTrace,
-    face_id: u32,
+    // The RESOLVED face content (id normalized away), not the opaque per-frame
+    // face_id. The rendered output uses the face the id resolves to; the id is an
+    // allocation artifact that legitimately differs between frames (e.g. a fast
+    // path re-registers reused faces + reserves their id range, shifting the
+    // walk's fresh ids). Resolving also catches a face_id MISSING from the frame
+    // faces table (the face-id collision bug) as "UNREGISTERED".
+    face: String,
     charpos: usize,
     bidi_level: u8,
     wide: bool,
@@ -1755,7 +1761,10 @@ struct GlyphTrace {
 }
 
 impl GlyphTrace {
-    fn from_glyph(glyph: &Glyph) -> Self {
+    fn from_glyph(
+        glyph: &Glyph,
+        faces: &std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+    ) -> Self {
         let kind = match &glyph.glyph_type {
             GlyphType::Char { ch } => GlyphKindTrace::Char(*ch),
             GlyphType::Composite { text } => GlyphKindTrace::Composite(text.to_string()),
@@ -1765,7 +1774,15 @@ impl GlyphTrace {
         };
         Self {
             kind,
-            face_id: glyph.face_id,
+            face: faces
+                .get(&glyph.face_id)
+                .map(|f| {
+                    // Compare CONTENT — normalize the allocation-dependent Face.id.
+                    let mut f = f.clone();
+                    f.id = 0;
+                    format!("{f:?}")
+                })
+                .unwrap_or_else(|| format!("UNREGISTERED#{}", glyph.face_id)),
             charpos: glyph.charpos,
             bidi_level: glyph.bidi_level,
             wide: glyph.wide,
@@ -1797,7 +1814,10 @@ struct RowTrace {
 }
 
 impl RowTrace {
-    fn from_row(row: &GlyphRow) -> Self {
+    fn from_row(
+        row: &GlyphRow,
+        faces: &std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+    ) -> Self {
         Self {
             role: row.role,
             enabled: row.enabled,
@@ -1814,9 +1834,18 @@ impl RowTrace {
             start_charpos: row.start_charpos,
             end_charpos: row.end_charpos,
             glyph_areas: [
-                row.glyphs[0].iter().map(GlyphTrace::from_glyph).collect(),
-                row.glyphs[1].iter().map(GlyphTrace::from_glyph).collect(),
-                row.glyphs[2].iter().map(GlyphTrace::from_glyph).collect(),
+                row.glyphs[0]
+                    .iter()
+                    .map(|g| GlyphTrace::from_glyph(g, faces))
+                    .collect(),
+                row.glyphs[1]
+                    .iter()
+                    .map(|g| GlyphTrace::from_glyph(g, faces))
+                    .collect(),
+                row.glyphs[2]
+                    .iter()
+                    .map(|g| GlyphTrace::from_glyph(g, faces))
+                    .collect(),
             ],
         }
     }
@@ -1945,7 +1974,7 @@ fn window_layout_trace(
             .rows
             .iter()
             .filter(|row| row.enabled)
-            .map(RowTrace::from_row)
+            .map(|row| RowTrace::from_row(row, &state.faces))
             .collect(),
         points: display_snapshot.points.clone(),
         output_rows: display_snapshot.rows.clone(),
@@ -4448,12 +4477,12 @@ fn trace_mode_line_text(trace: &BackendLayoutTrace) -> String {
     trace_rows_for_role(trace, GlyphRowRole::ModeLine).join("")
 }
 
-fn trace_text_face_ids(trace: &BackendLayoutTrace) -> Vec<u32> {
+fn trace_text_faces(trace: &BackendLayoutTrace) -> Vec<String> {
     trace
         .matrix_rows
         .iter()
         .filter(|row| row.role == GlyphRowRole::Text)
-        .flat_map(|row| row.glyph_areas[1].iter().map(|glyph| glyph.face_id))
+        .flat_map(|row| row.glyph_areas[1].iter().map(|glyph| glyph.face.clone()))
         .collect()
 }
 
@@ -6102,7 +6131,7 @@ fn implemented_text_backends_match_redisplay_fontification_after_edit() {
         baseline.after_props
     );
     assert!(
-        !trace_text_face_ids(&baseline.before_layout).is_empty(),
+        !trace_text_faces(&baseline.before_layout).is_empty(),
         "baseline should emit text glyphs with face ids"
     );
 
@@ -14214,5 +14243,120 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
             ks.sort_unstable();
             ks
         }
+    );
+}
+
+/// REGRESSION (face-id collision audit, 2026-06-27): the incremental fast paths
+/// install retained body rows VERBATIM carrying prior-frame face_ids, but the
+/// frame faces table is rebuilt from scratch each frame. For a MULTI-FACE
+/// (font-locked/propertized) body those face_ids are never re-registered, so at
+/// render `resolved_face` misses and falls back to white-fg. The byte-identical
+/// goldens miss it (they compare integer face_ids, not the resolved face). This
+/// asserts every reused body glyph's face_id is present in the frame faces table.
+#[test]
+fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(20);
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+    // Distinct :face per several lines BEFORE the warm pass, so the props tick is
+    // stable and a later bare point move takes the cursor-only fast path.
+    for (i, color) in ["red", "green", "blue", "magenta", "cyan"].iter().enumerate() {
+        let start = i * 24 + 3;
+        let end = start + 8;
+        eval.eval_str(&format!(
+            "(put-text-property {start} {end} 'face '(:foreground \"{color}\"))"
+        ))
+        .expect("put-text-property");
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id); // warm (allocates multi-face ids)
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buf");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(60));
+    }
+    engine.layout_frame_rust(&mut eval, frame_id); // measured -> cursor-only
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "expected the cursor-only fast path to fire"
+    );
+    let state = engine.last_frame_display_state.as_ref().expect("state");
+    let faces = &state.faces;
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|e| e.window_id == win.0)
+        .expect("window");
+    let mut missing: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut total = 0usize;
+    for row in entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|r| r.enabled && r.role == GlyphRowRole::Text)
+    {
+        for g in row.glyphs[1].iter() {
+            total += 1;
+            if !faces.contains_key(&g.face_id) {
+                missing.insert(g.face_id);
+            }
+        }
+    }
+    let mut keys: Vec<u32> = faces.keys().copied().collect();
+    keys.sort_unstable();
+    assert!(
+        missing.is_empty(),
+        "cursor-only reused MULTI-FACE body references face_ids absent from the frame \
+         faces table: missing={missing:?}, faces_keys={keys:?}, total_body_glyphs={total}"
+    );
+}
+
+/// The face-id collision fix re-registers a reused window's faces, which UNBLOCKS
+/// reuse of a fully-unchanged NON-selected window: a redisplay where nothing
+/// changed must reuse BOTH windows via cursor-only (no-change), not just the
+/// selected one. Without non-selected reuse this would be 1 (the perf win is the
+/// non-selected windows no longer full-rebuilding every frame).
+#[test]
+fn non_selected_unchanged_window_reuses_via_cursor_only() {
+    let mut eval = Context::new();
+    let left = eval.buffer_manager().current_buffer().expect("buf").id();
+    eval.buffer_manager_mut()
+        .get_mut(left)
+        .expect("left")
+        .insert(&"(left line)\n".repeat(30));
+    let right = eval.buffer_manager_mut().create_buffer("*r-reuse*");
+    eval.buffer_manager_mut()
+        .get_mut(right)
+        .expect("right")
+        .insert(&"(right line)\n".repeat(30));
+    // `insert` leaves point at buffer end (off-screen → cursor-only bails on the
+    // missing cursor row); reset both to the top so each window's point sits in
+    // its visible body and both windows are cursor-only eligible.
+    for b in [left, right] {
+        eval.buffer_manager_mut()
+            .get_mut(b)
+            .expect("buf")
+            .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+    }
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("mw-reuse", 800, 600, left);
+    let lw = eval.frame_manager().get(frame).expect("frame").selected_window;
+    eval.frame_manager_mut()
+        .split_window(
+            frame,
+            lw,
+            neovm_core::window::SplitDirection::Horizontal,
+            right,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split");
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame); // warm
+    engine.layout_frame_rust(&mut eval, frame); // nothing changed
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        2,
+        "both the selected and the non-selected unchanged window must reuse via cursor-only"
     );
 }

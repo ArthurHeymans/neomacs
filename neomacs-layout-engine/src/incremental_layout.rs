@@ -13,6 +13,7 @@
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
 use crate::types::{LineWrapMode, WindowParams};
+use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphRow};
@@ -268,6 +269,13 @@ pub struct RetainedWindowMatrix {
     /// replays its body half verbatim, re-decorating only the cursor; the
     /// position fields are unchanged because the visible region did not move.
     pub display_snapshot: neovm_core::window::WindowDisplaySnapshot,
+    /// Resolved `Face` for every `face_id` this window's retained rows reference.
+    /// Face ids are allocated per-frame from a counter reset to SENTINEL each
+    /// frame, and the frame faces table is rebuilt from scratch; a fast path that
+    /// installs these rows verbatim must RE-REGISTER these faces into the new
+    /// frame's table (and reserve their id range against the chrome re-walk), or
+    /// the reused glyphs resolve to the wrong/missing face at render time.
+    pub faces: std::collections::HashMap<u32, Face>,
 }
 
 /// Everything the cursor-only fast path (Phase 1) needs to replay a window
@@ -297,6 +305,10 @@ pub struct CursorOnlyReplay {
     pub new_cursor_row_index: usize,
     /// Cursor style carried over from the retained pass.
     pub cursor_style: CursorStyle,
+    /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
+    /// into the current frame's faces table before the rows are installed. See
+    /// [`RetainedWindowMatrix::faces`].
+    pub faces: std::collections::HashMap<u32, Face>,
 }
 
 /// Reuse plan for the pure-scroll fast path (Phase 2): the overlapping retained
@@ -341,6 +353,10 @@ pub struct ScrollReplay {
     /// `reused_rows`. When false (scroll, above-only edit) the walk runs to the
     /// window bottom as usual.
     pub bound_walk: bool,
+    /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
+    /// into the current frame's faces table before the rows are installed. See
+    /// [`RetainedWindowMatrix::faces`].
+    pub faces: std::collections::HashMap<u32, Face>,
 }
 
 impl RetainedWindowMatrix {
@@ -432,6 +448,7 @@ impl RetainedWindowMatrix {
             new_point,
             new_cursor_row_index,
             cursor_style: cursor_style.unwrap_or(CursorStyle::FilledBox),
+            faces: self.faces.clone(),
         })
     }
 
@@ -535,6 +552,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
+            faces: self.faces.clone(),
         })
     }
 
@@ -691,6 +709,7 @@ impl RetainedWindowMatrix {
                     new_point: curr.point,
                     cursor_style,
                     bound_walk: true,
+                    faces: self.faces.clone(),
                 });
             }
         }
@@ -708,6 +727,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
+            faces: self.faces.clone(),
         })
     }
 }
@@ -847,6 +867,7 @@ mod scroll_classifier_tests {
                 points: Vec::new(),
                 rows: Vec::new(),
             },
+            faces: std::collections::HashMap::new(),
         }
     }
 

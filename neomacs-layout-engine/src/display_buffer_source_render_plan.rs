@@ -524,6 +524,26 @@ impl BufferSourceOutputSetup {
                 .collect();
 
             let (mut output, evaluator) = output.into_parts();
+            // Re-register the reused rows' faces under their prior-frame face_ids:
+            // this frame's faces table was rebuilt from scratch and lacks them, so
+            // without this the reused glyphs resolve to the wrong/missing face at
+            // render. Reserve their id range so the chrome re-walk (which shares
+            // `face_ids`, reset to SENTINEL) allocates NON-colliding ids. Must run
+            // before `face_ids` is borrowed by the chrome render services below.
+            // (Face-id collision audit fix.)
+            let mut max_reused_face_id: Option<u32> = None;
+            for (id, face) in &replay.faces {
+                output.builder().install_output_frame_state(
+                    crate::display_output_install_request::OutputFrameStateInstallRequest::face(
+                        *id,
+                        face.clone(),
+                    ),
+                );
+                max_reused_face_id = Some(max_reused_face_id.map_or(*id, |m| m.max(*id)));
+            }
+            if let Some(max) = max_reused_face_id {
+                face_ids.reserve_after(max);
+            }
             let mut render_services =
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
 
@@ -624,7 +644,7 @@ impl BufferSourceOutputSetup {
                 ));
 
             // Chrome is always re-walked (mode/header/tab lines are point-dependent).
-            render_window_chrome_rows(
+            let measured_chrome_heights = render_window_chrome_rows(
                 output.reborrow(),
                 &mut output_emitter,
                 evaluator,
@@ -633,6 +653,7 @@ impl BufferSourceOutputSetup {
             );
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
+                measured_chrome_heights,
                 hit_data,
                 display_snapshots,
             );
@@ -669,6 +690,15 @@ impl BufferSourceOutputSetup {
         // (shifted) above them, splice the snapshots, re-decorate the cursor, and
         // re-walk chrome. Byte-identical to a full rebuild of the scrolled window.
         if let Some(scroll) = scroll {
+            // Reserve the reused rows' prior-frame face_id range BEFORE the partial
+            // walk + chrome allocate from `face_ids` (reset to SENTINEL), so their
+            // fresh ids do not collide with the reused glyphs' ids. The faces
+            // themselves are re-registered after into_parts below. (Face-id
+            // collision audit fix; the reused rows carry prior-frame face_ids that
+            // this frame's freshly-built faces table otherwise lacks.)
+            if let Some(max) = scroll.faces.keys().copied().max() {
+                face_ids.reserve_after(max);
+            }
             let (mut output_emitter, _post_loop) = walk_setup.begin_render_body_and_tail(
                 self.begin_request,
                 &mut output,
@@ -689,6 +719,17 @@ impl BufferSourceOutputSetup {
                 buf_access,
             );
             let (mut output, evaluator) = output.into_parts();
+            // Re-register the reused rows' faces under their prior-frame face_ids
+            // (the id range was reserved above, so these do not collide with the
+            // walk/chrome allocations). (Face-id collision audit fix.)
+            for (id, face) in &scroll.faces {
+                output.builder().install_output_frame_state(
+                    crate::display_output_install_request::OutputFrameStateInstallRequest::face(
+                        *id,
+                        face.clone(),
+                    ),
+                );
+            }
             let mut render_services =
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
 
@@ -776,7 +817,7 @@ impl BufferSourceOutputSetup {
                 );
             }
 
-            render_window_chrome_rows(
+            let measured_chrome_heights = render_window_chrome_rows(
                 output.reborrow(),
                 &mut output_emitter,
                 evaluator,
@@ -802,6 +843,7 @@ impl BufferSourceOutputSetup {
             hit_rows.sort_by(|a, b| a.y_start.total_cmp(&b.y_start));
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
+                measured_chrome_heights,
                 hit_data,
                 display_snapshots,
             );
