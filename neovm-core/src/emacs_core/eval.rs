@@ -10538,8 +10538,22 @@ impl Context {
                 if let Some(idx) = success_handler_idx {
                     let handler = handlers_vec[idx];
                     let bind_var = !var.is_nil();
+                    // Mirror the error-handler arm: bind VAR lexically when
+                    // lexical binding is in effect and VAR is not special, else
+                    // dynamically (GNU condition-case binds the :success var the
+                    // same way it binds an error handler's var).
+                    let use_lexical_binding = bind_var
+                        && self.lexical_binding()
+                        && !is_runtime_dynamically_special(&self.obarray, var_id)
+                        && !self.lexenv_declares_special_cached_in(self.lexenv, var_id);
                     let specpdl_count = self.specpdl.len();
-                    if bind_var {
+                    if use_lexical_binding {
+                        self.specpdl.push(SpecBinding::LexicalEnv {
+                            old_lexenv: self.lexenv,
+                        });
+                        let binding = Value::make_cons(lexenv_binding_symbol_value(var_id), value);
+                        self.lexenv = Value::make_cons(binding, self.lexenv);
+                    } else if bind_var {
                         self.specbind(var_id, value);
                     }
                     let result = self.sf_progn_value(handler.cons_cdr());
