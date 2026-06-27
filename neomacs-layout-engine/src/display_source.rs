@@ -480,8 +480,14 @@ impl DisplaySourceStepItem {
         let mut chars = text.chars();
         chars.next()?;
         chars.next()?;
+        // Exclude any char that needs a precluster Special substitute (newline,
+        // CR, tab, and every nobreak space/hyphen GNU highlights). Such chars
+        // must break the multi-char fast path so they get their own single-char
+        // item -- their nobreak face is keyed on the per-item source char.
         text.chars()
-            .all(|ch| !matches!(ch, '\n' | '\r' | '\t' | '\u{00A0}' | '\u{00AD}'))
+            .all(|ch| {
+                !matches!(ch, '\n' | '\r' | '\t') && !nonascii_space_p(ch) && !nonascii_hyphen_p(ch)
+            })
             .then_some(text)
     }
 
@@ -1310,13 +1316,40 @@ impl DisplaySourceNaturalMeasurementRequest {
     }
 }
 
+/// GNU `nonascii_space_p` (xdisp.c:8526, `blankp (c)`): a non-ASCII char in the
+/// Unicode Zs (separator, space) category. nbsp U+00A0 is the common case; we
+/// also accept the other fixed-width Zs spaces GNU highlights.
+pub(crate) fn nonascii_space_p(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{00A0}' // NO-BREAK SPACE
+            | '\u{1680}' // OGHAM SPACE MARK
+            | '\u{2000}'
+            ..='\u{200A}' // EN QUAD .. HAIR SPACE
+            | '\u{202F}' // NARROW NO-BREAK SPACE
+            | '\u{205F}' // MEDIUM MATHEMATICAL SPACE
+            | '\u{3000}' // IDEOGRAPHIC SPACE
+    )
+}
+
+/// GNU `nonascii_hyphen_p` (xdisp.c:8527): SOFT_HYPHEN, HYPHEN or
+/// NON_BREAKING_HYPHEN (character.h:71-75).
+pub(crate) fn nonascii_hyphen_p(ch: char) -> bool {
+    matches!(ch, '\u{00AD}' | '\u{2010}' | '\u{2011}')
+}
+
 impl DisplaySourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
-        let text = match (display_policy, ch) {
-            (1, '\u{00A0}') => " ",
-            (1, '\u{00AD}') => "-",
-            (2, '\u{00A0}') => "\\ ",
-            (2, '\u{00AD}') => "\\-",
+        // GNU `get_next_display_element` (xdisp.c:8594-8643): in highlight mode
+        // (`nobreak-char-display` == t == policy 1) the substitute is the ASCII
+        // space/hyphen painted in the merged nobreak-space/nobreak-hyphen face;
+        // in escape mode (any other non-nil == policy 2) it is the `\`-prefixed
+        // form painted in escape-glyph. Both rely on the precluster Special path.
+        let text = match display_policy {
+            1 if nonascii_space_p(ch) => " ",
+            1 if nonascii_hyphen_p(ch) => "-",
+            2 if nonascii_space_p(ch) => "\\ ",
+            2 if nonascii_hyphen_p(ch) => "\\-",
             _ => return None,
         };
         Some(Self::SourceMappedText { text: text.into() })

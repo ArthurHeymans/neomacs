@@ -13,6 +13,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{BoxFaceRowState, FaceScanCheckpoint};
+use crate::display_source::{nonascii_hyphen_p, nonascii_space_p};
 use crate::display_source_resolver::{
     DisplaySourceFaceBasis, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
@@ -216,6 +217,48 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
     }
 }
 
+/// The original buffer source char of a display item plus the active
+/// `nobreak-char-display` policy, threaded into face resolution so the nbsp /
+/// nobreak-hyphen highlight branch can be keyed on the unsubstituted char.
+///
+/// GNU `get_next_display_element` reads `Vnobreak_char_display` with the
+/// window's buffer current and classifies the raw `it->c`; we mirror that with
+/// the original `source_step_char` (not the post-substitution `SourceMappedText`
+/// item), so dpvec replacement-string `SourceMappedText` items -- which never
+/// carry an nbsp/hyphen source char -- are untouched.
+#[derive(Clone, Copy)]
+pub(crate) struct DisplaySourceNobreakHint {
+    source_char: char,
+    nobreak_char_display: i32,
+}
+
+impl DisplaySourceNobreakHint {
+    pub(crate) fn new(source_char: char, nobreak_char_display: i32) -> Self {
+        Self {
+            source_char,
+            nobreak_char_display,
+        }
+    }
+
+    /// The merge face name for highlight mode (`nobreak-char-display` == t == 1),
+    /// or `None` when this char does not get highlighted there. Escape mode
+    /// (policy 2) and off (policy 0) return `None`: in escape mode the
+    /// `\`-prefixed substitute is painted by the existing escape-glyph machinery
+    /// on the Special path, and off displays the char as-is.
+    fn highlight_face_name(self) -> Option<&'static str> {
+        if self.nobreak_char_display != 1 {
+            return None;
+        }
+        if nonascii_space_p(self.source_char) {
+            Some("nobreak-space")
+        } else if nonascii_hyphen_p(self.source_char) {
+            Some("nobreak-hyphen")
+        } else {
+            None
+        }
+    }
+}
+
 impl BufferSourceItemLayoutResolutionContext<'_> {
     pub(crate) fn resolve_source_item_layout_for_active_face(
         &self,
@@ -224,6 +267,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
         item: &mut DisplayItem,
+        nobreak_hint: DisplaySourceNobreakHint,
     ) -> DisplayRowActiveFaceState {
         item.face =
             RenderFaceRef::FaceId(render_face_ref_id(item.face, active_face_state.face_id()));
@@ -235,12 +279,37 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         // the caret letter with the one merged face id (GNU's `dpvec_face_id`),
         // and the row's face table picks up the realized face under that id.
         if matches!(item.kind, DisplayItemKind::ControlChar { .. })
-            && let Some(merged) = self.merge_escape_glyph_active_face(
+            && let Some(merged) = self.merge_named_active_face(
                 source_render,
                 face_ids,
                 row_geometry,
                 active_face_state,
                 item,
+                "escape-glyph",
+            )
+        {
+            return merged;
+        }
+
+        // GNU `get_next_display_element` (xdisp.c:8594-8617): in highlight mode
+        // (`nobreak-char-display` == t) a non-ASCII space / nobreak hyphen is
+        // shown via its ASCII substitute painted in the `nobreak-space` /
+        // `nobreak-hyphen` face MERGED over the surrounding base face. Unlike a
+        // control char, nbsp/hyphen reach here as a plain `TextRun` item (they
+        // classify as `Text`), so the branch is keyed on the ORIGINAL source char
+        // (threaded via `nobreak_hint`), NOT `item.kind` -- this keeps display
+        // table (dpvec) `SourceMappedText` substitutions and normal text
+        // untouched. The substitute glyph itself is produced later on the
+        // precluster Special path; merging the active face here makes that
+        // append pick up the merged face id (mirrors the escape-glyph hook).
+        if let Some(face_name) = nobreak_hint.highlight_face_name()
+            && let Some(merged) = self.merge_named_active_face(
+                source_render,
+                face_ids,
+                row_geometry,
+                active_face_state,
+                item,
+                face_name,
             )
         {
             return merged;
@@ -282,21 +351,24 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         resolved_active_face
     }
 
-    /// Realize a face = the surrounding base (active) face merged with the
-    /// `escape-glyph` face, install it under a fresh id, set the control-char
-    /// item to that face, and return it as the active-face state. Returns `None`
-    /// when the merge changes nothing (no themed escape-glyph foreground), so
-    /// plain terminals keep the surrounding face exactly like GNU's no-op merge.
-    fn merge_escape_glyph_active_face(
+    /// Realize a face = the surrounding base (active) face merged with the named
+    /// face (GNU `merge_faces (w, <face>, 0, base_face_id)`), install it under a
+    /// fresh id, set the item to that face, and return it as the active-face
+    /// state. Returns `None` when the merge changes nothing (no themed
+    /// foreground), so plain terminals keep the surrounding face exactly like
+    /// GNU's no-op merge. Shared by the escape-glyph (control char) and
+    /// nobreak-space/nobreak-hyphen (nbsp/hyphen) hooks.
+    fn merge_named_active_face(
         &self,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
         item: &mut DisplayItem,
+        face_name: &str,
     ) -> Option<DisplayRowActiveFaceState> {
         let base = active_face_state.resolved_face();
-        let merged = source_render.merge_named_face_over(base, "escape-glyph");
+        let merged = source_render.merge_named_face_over(base, face_name);
         if merged.fg == base.fg && merged.use_default_foreground == base.use_default_foreground {
             return None;
         }

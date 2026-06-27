@@ -4654,6 +4654,267 @@ fn layout_frame_rust_normal_text_keeps_base_face_not_escape_glyph() {
     }
 }
 
+/// GNU `get_next_display_element` (xdisp.c:8594-8603) merges the `nobreak-space`
+/// face over the surrounding base face for a non-ASCII space (e.g. nbsp U+00A0)
+/// when `nobreak-char-display` is `t` (the default), painting the substitute
+/// glyph in the merged face -- `merge_faces (it->w, Qnobreak_space, 0,
+/// it->face_id)`. `nobreak-space` inherits `escape-glyph`, so when escape-glyph
+/// carries a themed foreground the nbsp glyph resolves to it.
+///
+/// This pins the RENDERED-glyph foreground: the nbsp substitute must resolve to
+/// the (escape-glyph-inherited) nobreak-space foreground, distinct from the
+/// surrounding base face -- while an adjacent NORMAL space keeps the base face.
+#[test]
+fn layout_frame_rust_nbsp_uses_nobreak_space_foreground() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // `a`, normal space, nbsp, `c`. The normal space is the base-face control
+        // case; the nbsp must get the nobreak-space face.
+        buf.insert("a \u{00A0}c\n");
+    }
+
+    // GNU's cyan-on-dark escape-glyph color (#46D9FF). `nobreak-space` inherits
+    // escape-glyph, so the nbsp glyph must resolve to this color WITHOUT
+    // nobreak-space setting its own foreground -- proving the `:inherit` chain
+    // flows through `merge_named_face_over`. Defined through the Lisp face
+    // machinery so it survives the per-frame face sync.
+    let nbsp_fg = Color::from_pixel((0x46u32 << 16) | (0xD9u32 << 8) | 0xFFu32);
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-nbsp-nobreak-space", 640, 160, buf_id);
+    // Window-system frame: GNU only paints nobreak faces in graphical redisplay.
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    // Set escape-glyph's foreground and wire `nobreak-space :inherit
+    // escape-glyph` (faces.el's defface, which the bare test context does not
+    // load). The nbsp glyph must then resolve to the escape-glyph color WITHOUT
+    // nobreak-space setting its own foreground -- proving the `:inherit` chain
+    // flows through `merge_named_face_over`.
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'escape-glyph :foreground \"#46D9FF\" (selected-frame))\
+         (internal-set-lisp-face-attribute 'nobreak-space :inherit 'escape-glyph (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "escape-glyph/nobreak-space faces must accept attributes, got {results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_fg = state
+        .faces
+        .get(&default_face_id)
+        .expect("default face")
+        .foreground;
+
+    // In highlight mode the nbsp substitute renders as a space glyph, so there
+    // are two `' '` glyphs: the literal space (base face) and the nbsp substitute
+    // (nobreak-space face). Distinguish them by resolved foreground, not by char.
+    let space_glyphs: Vec<&Glyph> = text_glyphs
+        .iter()
+        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: ' ' }))
+        .collect();
+    assert_eq!(
+        space_glyphs.len(),
+        2,
+        "expected one literal space and one nbsp substitute space, got {:?}",
+        glyphs_logical_text(text_glyphs)
+    );
+
+    let mut nbsp_glyph = None;
+    let mut normal_space_glyph = None;
+    for glyph in &space_glyphs {
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .expect("resolved face for space glyph");
+        if face.foreground == nbsp_fg {
+            nbsp_glyph = Some(*glyph);
+        } else if face.foreground == default_fg {
+            normal_space_glyph = Some(*glyph);
+        }
+    }
+
+    let nbsp_glyph = nbsp_glyph.expect(
+        "exactly one space glyph (the nbsp substitute) must resolve to the nobreak-space \
+         (escape-glyph-inherited) foreground",
+    );
+    let normal_space_glyph =
+        normal_space_glyph.expect("the literal space must keep the default base foreground");
+
+    // The nbsp realized a SEPARATE face id, not the base/default face reused.
+    assert_ne!(
+        nbsp_glyph.face_id, normal_space_glyph.face_id,
+        "nbsp must realize a separate nobreak-space face, not reuse the base text face"
+    );
+    assert_ne!(
+        nbsp_glyph.face_id, default_face_id,
+        "nbsp face must not be the default face id"
+    );
+
+    // The surrounding plain text `a`/`c` keep the base foreground.
+    for ch in ['a', 'c'] {
+        let glyph = text_glyphs
+            .iter()
+            .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: c } if c == ch))
+            .unwrap_or_else(|| panic!("plain '{ch}' glyph"));
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .unwrap_or_else(|| panic!("resolved face for '{ch}'"));
+        assert_eq!(
+            face.foreground, default_fg,
+            "normal text '{ch}' must keep the default base foreground, not nobreak-space"
+        );
+        assert_ne!(
+            face.foreground, nbsp_fg,
+            "normal text '{ch}' must NOT take the nobreak-space foreground"
+        );
+    }
+}
+
+/// Sibling guard for the nobreak hyphens. GNU treats SOFT_HYPHEN (U+00AD),
+/// HYPHEN (U+2010) and NON_BREAKING_HYPHEN (U+2011) via
+/// `merge_faces (it->w, Qnobreak_hyphen, 0, it->face_id)` (xdisp.c:8608-8617).
+/// The substitute renders as `-`; it must resolve to the nobreak-hyphen
+/// foreground, distinct from a normal `-`/base text.
+#[test]
+fn layout_frame_rust_nobreak_hyphen_uses_nobreak_hyphen_foreground() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // `x`, normal hyphen, non-breaking hyphen U+2011, `y`.
+        buf.insert("x-\u{2011}y\n");
+    }
+
+    let hyphen_fg = Color::from_pixel((0x12u32 << 16) | (0x34u32 << 8) | 0x56u32);
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-nobreak-hyphen", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'nobreak-hyphen :foreground \"#123456\" (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "nobreak-hyphen face must accept a foreground, got {results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_fg = state
+        .faces
+        .get(&default_face_id)
+        .expect("default face")
+        .foreground;
+
+    // Two `-` glyphs: literal hyphen (base) and the U+2011 substitute (nobreak).
+    let hyphen_glyphs: Vec<&Glyph> = text_glyphs
+        .iter()
+        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: '-' }))
+        .collect();
+    assert_eq!(
+        hyphen_glyphs.len(),
+        2,
+        "expected one literal hyphen and one U+2011 substitute, got {:?}",
+        glyphs_logical_text(text_glyphs)
+    );
+
+    let mut nobreak_glyph = None;
+    let mut normal_hyphen_glyph = None;
+    for glyph in &hyphen_glyphs {
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .expect("resolved face for hyphen glyph");
+        if face.foreground == hyphen_fg {
+            nobreak_glyph = Some(*glyph);
+        } else if face.foreground == default_fg {
+            normal_hyphen_glyph = Some(*glyph);
+        }
+    }
+
+    let nobreak_glyph = nobreak_glyph
+        .expect("the U+2011 substitute hyphen must resolve to the nobreak-hyphen foreground");
+    let normal_hyphen_glyph =
+        normal_hyphen_glyph.expect("the literal hyphen must keep the default base foreground");
+
+    assert_ne!(
+        nobreak_glyph.face_id, normal_hyphen_glyph.face_id,
+        "U+2011 must realize a separate nobreak-hyphen face, not reuse the base text face"
+    );
+}
+
 #[test]
 fn layout_frame_rust_renders_line_prefix_through_row_builder() {
     let mut eval = Context::new();

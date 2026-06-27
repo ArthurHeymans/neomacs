@@ -1,7 +1,9 @@
 //! Buffer source item rendering orchestration.
 
 use crate::display_buffer_source_char_render::BufferSourceCharRenderRequest;
-use crate::display_buffer_source_face_resolution::BufferSourceItemLayoutResolutionContext;
+use crate::display_buffer_source_face_resolution::{
+    BufferSourceItemLayoutResolutionContext, DisplaySourceNobreakHint,
+};
 use crate::display_buffer_source_item_append::BufferSourceRowAppendContext;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
@@ -279,6 +281,13 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             overlay_context,
         } = state;
         let mut source_render = source_render;
+        // The unsubstituted buffer char + active nobreak policy, used by the
+        // nbsp / nobreak-hyphen highlight branch in face resolution. Captured
+        // before the mutable `item_mut()` borrow below.
+        let nobreak_hint = DisplaySourceNobreakHint::new(
+            source_item.source_step_char().ch(),
+            self.params.nobreak_char_display,
+        );
         let active_face_state = self
             .layout_resolution_context
             .resolve_source_item_layout_for_active_face(
@@ -287,6 +296,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 row_geometry,
                 self.active_face_state,
                 source_item.item_mut(),
+                nobreak_hint,
             );
         let buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
             buffer,
