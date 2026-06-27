@@ -21,17 +21,25 @@ use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_walk_state::FaceScanCheckpoint;
+use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_output_install_request::OutputFrameArtifactInstallRequest;
+use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
+use crate::hit_test::HitRow;
 use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindowFinishState};
 use crate::font_metrics::FontMetricsService;
+use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
-use crate::window_output::render_window_chrome_rows;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::FaceFillItem;
+use crate::window_output::{
+    TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
+    record_text_window_display_range, render_window_chrome_rows,
+};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
+use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
-use neovm_core::window::{FrameId, WindowId};
+use neovm_core::window::{FrameId, WindowCursorKind, WindowCursorSnapshot, WindowId};
 
 pub(crate) struct BufferSourceOutputSetup {
     begin_request: TextWindowBeginRequest,
@@ -87,6 +95,95 @@ pub(crate) struct BufferSourceDefaultFacePlan {
     metrics: DisplayRowFallbackMetrics,
     measurement_policy: DisplayRowMeasurementPolicy,
 }
+
+/// Re-decorate a window's cursor for the current point on an already-installed
+/// grid row (Phase 2 scroll fast path). Reads the row geometry from the grid,
+/// resolves the visual column, and writes the cursor onto the matrix row + the
+/// window snapshot + the frame phys-cursor artifact. Mirrors the Phase 1
+/// cursor-only branch but sources the row from the grid (the cursor may land in a
+/// reused or a newly-exposed row).
+#[allow(clippy::too_many_arguments)]
+fn decorate_window_cursor(
+    output: &mut TextWindowOutputTarget<'_>,
+    output_emitter: &mut WindowOutputEmitter,
+    window_id: u64,
+    cursor_row: usize,
+    point: usize,
+    style: CursorStyle,
+    text_area_left: f32,
+    window_top: f32,
+    char_w: f32,
+    default_height: f32,
+    default_ascent: f32,
+) {
+    let (row_pixel_y, row_height, row_ascent, cursor_width) =
+        match output.builder().current_window_row(cursor_row) {
+            Some(row) => {
+                let mut width = char_w;
+                for glyph in &row.glyphs[GlyphArea::Text.index()] {
+                    if glyph.charpos == point {
+                        width = glyph.pixel_width;
+                        break;
+                    }
+                }
+                (row.pixel_y, row.height_px, row.ascent_px, width)
+            }
+            None => (0.0, default_height, default_ascent, char_w),
+        };
+    let window_id_i64 = window_id as i64;
+    let mut cursor = PhysCursor {
+        window_id: DisplayWindowId::new(window_id_i64),
+        charpos: point,
+        row: cursor_row,
+        col: 0,
+        slot_id: DisplaySlotId {
+            window_id: DisplayWindowId::new(window_id_i64),
+            row: cursor_row as u32,
+            col: 0,
+        },
+        x: text_area_left,
+        y: window_top + row_pixel_y,
+        width: cursor_width,
+        height: row_height,
+        ascent: row_ascent,
+        style,
+        color: Color::BLACK,
+        cursor_fg: Color::BLACK,
+    };
+    if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+        .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
+    {
+        placement.apply_to(&mut cursor);
+    }
+    cursor.x = text_area_left + cursor.col as f32 * char_w;
+    let live = WindowCursorSnapshot {
+        kind: match cursor.style {
+            CursorStyle::FilledBox => WindowCursorKind::FilledBox,
+            CursorStyle::Hollow => WindowCursorKind::HollowBox,
+            CursorStyle::Bar(_) => WindowCursorKind::Bar,
+            CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
+        },
+        x: (cursor.x - text_area_left).round() as i64,
+        y: (cursor.y - window_top).round() as i64,
+        width: cursor.width.round() as i64,
+        height: cursor.height.round() as i64,
+        ascent: cursor.ascent.round() as i64,
+        row: cursor.row as i64,
+        col: i64::from(cursor.col),
+    };
+    output_emitter.set_phys_cursor(live);
+    output
+        .builder()
+        .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
+            cursor.row,
+            cursor.col,
+            cursor.style,
+        ));
+    output
+        .builder()
+        .install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
+}
+
 impl BufferSourceOutputSetup {
     pub(crate) fn from_window_geometry(
         frame_id: FrameId,
@@ -287,6 +384,8 @@ impl BufferSourceOutputSetup {
         reserve_right_border_col: bool,
         text: &'a [u8],
         buf_access: &RustBufferAccess<'buf, B>,
+        cursor_only: Option<CursorOnlyReplay>,
+        scroll: Option<ScrollReplay>,
     ) -> BufferSourceRenderAttemptOutcome
     where
         B: LayoutBufferView,
@@ -374,6 +473,178 @@ impl BufferSourceOutputSetup {
             source.accessible_end_emacs_byte(),
         );
 
+        // --- Phase 1 cursor-only fast path ---
+        //
+        // Point moved but every other layout input + the neovm-core invalidation
+        // ticks are unchanged: install the retained body rows verbatim instead of
+        // walking the buffer, re-decorate only the cursor, and fall through to the
+        // SAME chrome + finish path. The output is byte-identical to a full
+        // rebuild (honest layering, spec §4.6) — the win is skipping fontify /
+        // shaping / measurement for the body.
+        if let Some(replay) = cursor_only {
+            let mut output_emitter = output.begin_text_window_output(self.begin_request);
+
+            // Capture the point glyph's metrics from the new cursor row before the
+            // rows are moved into the grid (fall back to the window face metrics
+            // when point is at EOL / on hidden text with no glyph of its own).
+            // Cursor height/ascent are ROW metrics (`height_px`/`ascent_px`); only
+            // the width comes from the point glyph's advance. Fall back to the
+            // window face metrics when point is at EOL / on hidden text.
+            let mut cursor_width = geometry.char_width;
+            let mut cursor_height = geometry.char_height;
+            let mut cursor_ascent = window_metrics.ascent();
+            let mut cursor_row_pixel_y = 0.0_f32;
+            for (idx, row) in &replay.body_rows {
+                if *idx == replay.new_cursor_row_index {
+                    cursor_row_pixel_y = row.pixel_y;
+                    cursor_height = row.height_px;
+                    cursor_ascent = row.ascent_px;
+                    for glyph in &row.glyphs[GlyphArea::Text.index()] {
+                        if glyph.charpos == replay.new_point as usize {
+                            cursor_width = glyph.pixel_width;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Reconstruct the per-row hit-test map from the retained rows (row
+            // geometry + buffer span — point-independent). `charpos_end` is one
+            // past the row's last position, matching the body walk.
+            let hit_rows: Vec<HitRow> = replay
+                .body_rows
+                .iter()
+                .filter(|(_, row)| row.displays_text)
+                .map(|(_, row)| HitRow {
+                    y_start: row.pixel_y,
+                    y_end: row.pixel_y + row.height_px,
+                    charpos_start: row.start_charpos as i64,
+                    charpos_end: row.end_charpos as i64 + 1,
+                })
+                .collect();
+
+            let (mut output, evaluator) = output.into_parts();
+            let mut render_services =
+                ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
+
+            // Install retained body rows verbatim (already bidi-finalized), with
+            // the prior cursor decoration stripped — the new cursor is set below.
+            for (idx, row) in replay.body_rows {
+                let mut row = row;
+                row.cursor_col = None;
+                row.cursor_type = None;
+                output.builder().install_finalized_output_row(idx, row);
+            }
+
+            // Seed the emitter's point-independent body half, then publish the
+            // (unchanged) redisplay positions for the mode-line chrome.
+            output_emitter.seed_cursor_only_body(replay.body_row_snapshots, replay.points);
+            let mut redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
+                &output_emitter,
+                tail_context.window_start,
+                source.text_start_byte(),
+                0,
+            );
+            // Cursor-only does not walk (byte_idx = 0 above), so from_output_rows
+            // leaves window_end_byte at text_start_byte. Re-derive it from the
+            // (correct) window_end char so the published byte companion matches a
+            // full rebuild instead of defaulting to the buffer top.
+            {
+                let end_char0 = redisplay_positions
+                    .window_end
+                    .to_one_based_usize()
+                    .saturating_sub(1) as i64;
+                redisplay_positions.window_end_byte = neovm_core::buffer::EmacsBytePos::new(
+                    buf_access.charpos_to_bytepos(end_char0) as usize,
+                );
+            }
+            record_text_window_display_range(
+                output.reborrow(),
+                redisplay_positions.display_range(output_window_id),
+            );
+            publish_request.publish(evaluator, redisplay_positions);
+
+            // Re-decorate the cursor at the (possibly unchanged) point: resolve its
+            // column on the installed rows, stamp it on the matrix row + the window
+            // snapshot. `replay.cursor_style` carries the retained style — a filled
+            // box for the selected window, a hollow box for a non-selected one — so
+            // this same block produces the correct cursor for BOTH.
+            let window_id_i64 = output_window_id as i64;
+            let mut cursor = PhysCursor {
+                window_id: DisplayWindowId::new(window_id_i64),
+                charpos: replay.new_point as usize,
+                row: replay.new_cursor_row_index,
+                col: 0,
+                slot_id: DisplaySlotId {
+                    window_id: DisplayWindowId::new(window_id_i64),
+                    row: replay.new_cursor_row_index as u32,
+                    col: 0,
+                },
+                x: walk_setup.text_area_left,
+                y: walk_setup.window_top + cursor_row_pixel_y,
+                width: cursor_width,
+                height: cursor_height,
+                ascent: cursor_ascent,
+                style: replay.cursor_style,
+                color: Color::BLACK,
+                cursor_fg: Color::BLACK,
+            };
+            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+                .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
+            {
+                placement.apply_to(&mut cursor);
+            }
+            let char_w = geometry.char_width.max(1.0);
+            cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
+            let live = WindowCursorSnapshot {
+                kind: match cursor.style {
+                    CursorStyle::FilledBox => WindowCursorKind::FilledBox,
+                    CursorStyle::Hollow => WindowCursorKind::HollowBox,
+                    CursorStyle::Bar(_) => WindowCursorKind::Bar,
+                    CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
+                },
+                x: (cursor.x - walk_setup.text_area_left).round() as i64,
+                y: (cursor.y - walk_setup.window_top).round() as i64,
+                width: cursor.width.round() as i64,
+                height: cursor.height.round() as i64,
+                ascent: cursor.ascent.round() as i64,
+                row: cursor.row as i64,
+                col: i64::from(cursor.col),
+            };
+            output_emitter.set_phys_cursor(live);
+            output
+                .builder()
+                .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
+                    cursor.row, cursor.col, cursor.style,
+                ));
+            output
+                .builder()
+                .install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(
+                    cursor,
+                ));
+
+            // Chrome is always re-walked (mode/header/tab lines are point-dependent).
+            render_window_chrome_rows(
+                output.reborrow(),
+                &mut output_emitter,
+                evaluator,
+                chrome_request,
+                render_services.reborrow(),
+            );
+            tail_context.finish_and_install(
+                TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
+                hit_data,
+                display_snapshots,
+            );
+            drop(render_services);
+            *frame_face_id_counter = face_ids.finish();
+            return BufferSourceRenderAttemptOutcome::Finished {
+                redisplay_positions,
+                cursor_only: true,
+                scroll_reused_rows: None,
+            };
+        }
+
         let mut line_numbers = local_display_policy.initial_line_numbers(
             buf_access,
             tail_context.window_start,
@@ -390,6 +661,159 @@ impl BufferSourceOutputSetup {
         );
         let mut active_face_state =
             DisplayRowActiveFaceState::new(default_face.face().clone(), default_measured_face);
+        // --- Phase 2 pure-scroll fast path ---
+        //
+        // render_into overrode the geometry so THIS walk lays ONLY the
+        // newly-exposed rows (at matrix indices [exposed_row_base..]); the source
+        // reads from exposed_start_charpos. We then install the reused rows
+        // (shifted) above them, splice the snapshots, re-decorate the cursor, and
+        // re-walk chrome. Byte-identical to a full rebuild of the scrolled window.
+        if let Some(scroll) = scroll {
+            let (mut output_emitter, _post_loop) = walk_setup.begin_render_body_and_tail(
+                self.begin_request,
+                &mut output,
+                font_metrics,
+                face_resolver,
+                &mut face_ids,
+                &mut line_numbers,
+                &mut face_scan,
+                &mut active_face_state,
+                row_prelude_context,
+                loop_context,
+                face_resolution,
+                &tail_context,
+                text,
+                params,
+                overlay_text_row,
+                buffer,
+                buf_access,
+            );
+            let (mut output, evaluator) = output.into_parts();
+            let mut render_services =
+                ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
+
+            // Redisplay positions: window_end is the LAST visible row.
+            //  - SCROLL: reused rows sit ABOVE the exposed (bottom) rows, so the
+            //    last visible row is the last EXPOSED row — compute BEFORE the
+            //    reused rows are spliced in out of visual order.
+            //  - BELOW-REUSE (bound_walk): reused rows sit BELOW the exposed
+            //    (edited) line, so the last visible row is the last reused-below
+            //    row — compute AFTER they are spliced into the emitter.
+            let scroll_positions = (!scroll.bound_walk).then(|| {
+                TextWindowRedisplayPositions::from_output_rows(
+                    &output_emitter,
+                    scroll.new_window_start,
+                    source.text_start_byte(),
+                    walk_setup.byte_idx,
+                )
+            });
+
+            // Install the reused (shifted, already-finalized) rows and splice
+            // their snapshots/points into the emitter.
+            let reused_count = scroll.reused_rows.len();
+            for (idx, row) in &scroll.reused_rows {
+                output.builder().install_finalized_output_row(*idx, row.clone());
+            }
+            output_emitter.push_reused_body(scroll.reused_row_snapshots, scroll.reused_points);
+            output_emitter.normalize_body_start_cols();
+
+            let mut redisplay_positions = scroll_positions.unwrap_or_else(|| {
+                TextWindowRedisplayPositions::from_output_rows(
+                    &output_emitter,
+                    scroll.new_window_start,
+                    source.text_start_byte(),
+                    walk_setup.byte_idx,
+                )
+            });
+            if scroll.bound_walk {
+                // The bounded walk's `byte_idx` stops at the edited line, so the
+                // from_output_rows window_end_byte points there, not at the last
+                // reused-below row. Re-derive it from the (correct) window_end
+                // char so the published byte companion matches a full rebuild.
+                let end_char0 = redisplay_positions
+                    .window_end
+                    .to_one_based_usize()
+                    .saturating_sub(1) as i64;
+                redisplay_positions.window_end_byte = neovm_core::buffer::EmacsBytePos::new(
+                    buf_access.charpos_to_bytepos(end_char0) as usize,
+                );
+            }
+
+            // Finalize the exposed rows (reused rows are already finalized), then
+            // publish the corrected positions for the mode-line chrome.
+            let _ = walk_setup.install_body(
+                output.reborrow(),
+                &mut output_emitter,
+                render_services.reborrow(),
+                &tail_context,
+            );
+            record_text_window_display_range(
+                output.reborrow(),
+                redisplay_positions.display_range(output_window_id),
+            );
+            publish_request.publish(evaluator, redisplay_positions);
+
+            // The partial walk decorated a spurious cursor at its pinned point;
+            // clear it, then re-decorate for the REAL moved point (which may sit
+            // in a reused OR a newly-exposed row); skipped when point is off-screen.
+            output.builder().clear_current_window_cursors();
+            if let Some(cursor_row) = output
+                .builder()
+                .find_current_window_text_row(scroll.new_point as usize)
+            {
+                decorate_window_cursor(
+                    &mut output,
+                    &mut output_emitter,
+                    output_window_id,
+                    cursor_row,
+                    scroll.new_point as usize,
+                    scroll.cursor_style,
+                    walk_setup.text_area_left,
+                    walk_setup.window_top,
+                    geometry.char_width,
+                    geometry.char_height,
+                    window_metrics.ascent(),
+                );
+            }
+
+            render_window_chrome_rows(
+                output.reborrow(),
+                &mut output_emitter,
+                evaluator,
+                chrome_request,
+                render_services.reborrow(),
+            );
+
+            // Hit map: the walk produced the exposed rows' hit; reconstruct the
+            // reused rows' hit from their shifted geometry.
+            let mut hit_rows = std::mem::take(&mut walk_setup.hit_rows);
+            for (_, row) in &scroll.reused_rows {
+                if row.displays_text {
+                    hit_rows.push(HitRow {
+                        y_start: row.pixel_y,
+                        y_end: row.pixel_y + row.height_px,
+                        charpos_start: row.start_charpos as i64,
+                        charpos_end: row.end_charpos as i64 + 1,
+                    });
+                }
+            }
+            // The walk produced exposed rows then we appended reused rows; restore
+            // top-to-bottom (y-ascending) order to match a full rebuild.
+            hit_rows.sort_by(|a, b| a.y_start.total_cmp(&b.y_start));
+            tail_context.finish_and_install(
+                TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
+                hit_data,
+                display_snapshots,
+            );
+            drop(render_services);
+            *frame_face_id_counter = face_ids.finish();
+            return BufferSourceRenderAttemptOutcome::Finished {
+                redisplay_positions,
+                cursor_only: false,
+                scroll_reused_rows: Some(reused_count),
+            };
+        }
+
         let (output_emitter, post_loop) = walk_setup.begin_render_body_and_tail(
             self.begin_request,
             &mut output,
@@ -528,6 +952,8 @@ impl BufferSourceOutputSetup {
         *frame_face_id_counter = face_ids.finish();
         BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,
+            cursor_only: false,
+            scroll_reused_rows: None,
         }
     }
 }

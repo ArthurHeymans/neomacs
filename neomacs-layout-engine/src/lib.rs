@@ -97,6 +97,7 @@ pub(crate) mod glyph_advance;
 pub(crate) mod glyph_row_writer;
 pub mod gui_chrome;
 pub mod hit_test;
+pub mod incremental_layout;
 pub mod mock_frame;
 pub mod neovm_bridge;
 pub mod tty_menu_bar;

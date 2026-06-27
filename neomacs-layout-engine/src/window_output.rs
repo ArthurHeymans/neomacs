@@ -1038,6 +1038,55 @@ impl WindowOutputEmitter {
         }
     }
 
+    /// Seed the body half of this emitter from a prior clean pass (Phase 1
+    /// cursor-only replay), in place of walking the buffer. `rows` are the
+    /// retained body [`DisplayRowSnapshot`]s and `points` the retained per-span
+    /// display points — both are point-INDEPENDENT (they describe where glyphs
+    /// render, not where the cursor is), so they replay verbatim. Chrome rows
+    /// are appended afterward by the normal chrome path, and the cursor is set
+    /// separately for the moved point.
+    pub(crate) fn seed_cursor_only_body(
+        &mut self,
+        rows: Vec<DisplayRowSnapshot>,
+        points: Vec<DisplayPointSnapshot>,
+    ) {
+        self.rows = rows;
+        self.points = points;
+    }
+
+    /// Append reused (Phase 2 scroll) body rows + points to the emitter, on top
+    /// of the newly-exposed rows the partial walk produced. `finish_snapshot`
+    /// sorts rows by index and points by buffer position, so insertion order does
+    /// not matter. No `row_metrics` are added (reused grid rows are installed
+    /// already-finalized, so the exposed-row finalize pass must not touch them).
+    pub(crate) fn push_reused_body(
+        &mut self,
+        rows: Vec<DisplayRowSnapshot>,
+        points: Vec<DisplayPointSnapshot>,
+    ) {
+        self.rows.extend(rows);
+        self.points.extend(points);
+    }
+
+    /// Normalize the body rows' `start_col` to the emitter's carry convention
+    /// (each row starts at the previous row's end column; the top body row at 0).
+    /// The Phase 2 partial walk produces a fresh row 0 for the exposed span and
+    /// reused rows carry their old positions' values, so the boundary rows need
+    /// this fix-up for byte-identity with a full rebuild.
+    pub(crate) fn normalize_body_start_cols(&mut self) {
+        let mut body: Vec<&mut DisplayRowSnapshot> = self
+            .rows
+            .iter_mut()
+            .filter(|row| row.start_buffer_pos.is_some())
+            .collect();
+        body.sort_by_key(|row| row.row);
+        let mut prev_end: i64 = 0;
+        for row in body {
+            row.start_col = prev_end;
+            prev_end = row.end_col;
+        }
+    }
+
     pub(crate) fn display_point_len(&self) -> usize {
         self.points.len()
     }

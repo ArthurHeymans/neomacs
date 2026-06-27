@@ -217,6 +217,36 @@ impl OutputWindowBuildState {
         }
     }
 
+    /// Install a complete, already bidi-finalized row into the current window
+    /// grid verbatim (Phase 1 cursor-only replay). See
+    /// [`OutputWindowRowGrid::install_finalized_row`].
+    pub(crate) fn install_finalized_window_row(&mut self, row: usize, source: GlyphRow) {
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.install_finalized_row(row, source);
+        }
+    }
+
+    /// Find the current window's buffer-text row containing `charpos` (Phase 2
+    /// scroll cursor re-decorate).
+    pub(crate) fn find_current_window_text_row(&self, charpos: usize) -> Option<usize> {
+        self.current_row_grid
+            .as_ref()?
+            .find_text_row_for_charpos(charpos)
+    }
+
+    /// Read a row from the current window grid.
+    pub(crate) fn current_window_row(&self, row: usize) -> Option<&GlyphRow> {
+        self.current_row_grid.as_ref()?.row(row)
+    }
+
+    /// Strip cursor decoration from every row of the current window grid
+    /// (Phase 2 scroll cursor re-decorate).
+    pub(crate) fn clear_current_window_cursors(&mut self) {
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.clear_all_cursors();
+        }
+    }
+
     fn begin_current_row(&mut self, begin: OutputRowBeginRequest) {
         self.current_row = begin.row;
         if let Some(grid) = self.current_row_grid.as_mut() {
@@ -322,6 +352,18 @@ impl OutputWindowRowGrid {
         self.matrix.rows.get(row)
     }
 
+    /// Find the enabled buffer-text row whose `[start_charpos, end_charpos]`
+    /// contains `charpos` (the Phase 2 scroll cursor re-decorate target). Returns
+    /// `None` when point is not on a visible text row (e.g. scrolled off-screen).
+    pub(crate) fn find_text_row_for_charpos(&self, charpos: usize) -> Option<usize> {
+        self.matrix.rows.iter().position(|row| {
+            row.enabled
+                && row.displays_text
+                && row.start_charpos <= charpos
+                && charpos <= row.end_charpos
+        })
+    }
+
     pub(crate) fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
         self.matrix.rows.get_mut(row)
     }
@@ -341,6 +383,16 @@ impl OutputWindowRowGrid {
         for row in &mut self.matrix.rows {
             f(row, ncols);
         }
+    }
+
+    /// Strip cursor decoration from every row (Phase 2 scroll: the partial walk
+    /// decorates a spurious cursor at its pinned point; the real cursor is set
+    /// afterward).
+    pub(crate) fn clear_all_cursors(&mut self) {
+        self.edit_rows_with_matrix_cols(|row, _| {
+            row.cursor_col = None;
+            row.cursor_type = None;
+        });
     }
 
     pub(crate) fn write_row_metrics(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
@@ -369,6 +421,24 @@ impl OutputWindowRowGrid {
             return;
         };
         *row = source;
+    }
+
+    /// Install a complete, ALREADY bidi-finalized (visual-order) row verbatim
+    /// and mark it finalized so a later [`Self::finalize_row`] is a true no-op.
+    ///
+    /// The cursor-only fast path (Phase 1) replays rows captured from a prior
+    /// clean pass — those glyphs were reordered to visual order at install, so
+    /// re-finalizing them would double-reverse an RTL row. Unlike `replace_row`
+    /// (which clears the finalized flag for the normal install→finalize flow),
+    /// this sets it.
+    pub(crate) fn install_finalized_row(&mut self, row: usize, source: GlyphRow) {
+        let Some(slot) = self.row_mut(row) else {
+            return;
+        };
+        *slot = source;
+        if let Some(flag) = self.finalized_rows.get_mut(row) {
+            *flag = true;
+        }
     }
 
     pub(crate) fn begin_row(&mut self, begin: OutputRowBeginRequest) {
@@ -441,6 +511,9 @@ impl OutputWindowGridEntry {
             pixel_bounds: self.pixel_bounds,
             text_pixel_bounds: self.text_pixel_bounds,
             selected: self.selected,
+            // Per-row damage is filled in by the engine commit (which knows the
+            // window's fast-path class); empty here = "not yet computed".
+            damage: Vec::new(),
         }
     }
 }

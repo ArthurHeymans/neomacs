@@ -61,6 +61,10 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::fontconfig::FontSizing;
+use crate::incremental_layout::{
+    CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
+    RetainedWindowMatrix, RowDamage, ScrollReplay,
+};
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -197,6 +201,34 @@ pub struct LayoutEngine {
     /// [`BasicFaceId::SENTINEL`] so dynamic face IDs never collide
     /// with the fixed basic-face slots (0–19).
     pub(crate) frame_face_id_counter: u32,
+    /// Per-window retained layout, owned across cycles (incremental-layout
+    /// Phase 0a). Committed at the accepted `break` only; NOT read yet — the
+    /// engine still rebuilds every window every cycle. The container a later
+    /// phase reuses rows out of.
+    retained_window_matrices: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix>,
+    /// Windows that took the Phase 1 cursor-only fast path this frame (their body
+    /// rows were reused, not relaid). Populated as each window is laid out, read
+    /// by the commit path to attribute rows to `reused_rows` and classify the
+    /// window `CursorOnly`. Reset per frame.
+    cursor_only_window_ids: std::collections::HashSet<DisplayWindowId>,
+    /// Windows that took the Phase 2 pure-scroll fast path this frame, mapped to
+    /// `(reused_shifted_row_count, dvpos)`. Read by the commit path to attribute
+    /// rows + classify `Scroll` + emit `RowDamage::ReusedShifted`.
+    scroll_window_ids: std::collections::HashMap<DisplayWindowId, (usize, f32)>,
+    /// Windows that took the Phase 3 localized-edit fast path this frame, mapped
+    /// to their reused (verbatim, above-the-edit) row count. Read by the commit
+    /// path to attribute rows + classify `Edit`.
+    edit_window_ids: std::collections::HashMap<DisplayWindowId, usize>,
+    /// Phase 3 below-reuse switch (default true). The localized edit fast path
+    /// reuses the rows BELOW the dirty span too (charpos-shifted, same pixel_y),
+    /// relaying ONLY the edited line — but ONLY for a simple insert that provably
+    /// keeps the edited line one row (the ASCII gate in `build_edit_replay` + the
+    /// width gate in `edit_replay`); a newline/tab/wide/wrapping insert or a
+    /// delete falls back to above-only. Settable for tests.
+    allow_below_reuse: bool,
+    /// Instrumentation from the most recent `layout_frame_rust` pass: the
+    /// relaid-row-count gate metric (spec §7). Reset per frame.
+    layout_stats: LayoutStats,
 }
 
 impl LayoutEngine {
@@ -300,6 +332,12 @@ impl LayoutEngine {
             frame_output: FrameOutputOwner::new(),
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
+            retained_window_matrices: std::collections::HashMap::new(),
+            cursor_only_window_ids: std::collections::HashSet::new(),
+            scroll_window_ids: std::collections::HashMap::new(),
+            edit_window_ids: std::collections::HashMap::new(),
+            allow_below_reuse: true,
+            layout_stats: LayoutStats::default(),
         }
     }
 
@@ -322,6 +360,12 @@ impl LayoutEngine {
             frame_output: FrameOutputOwner::new(),
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
+            retained_window_matrices: std::collections::HashMap::new(),
+            cursor_only_window_ids: std::collections::HashSet::new(),
+            scroll_window_ids: std::collections::HashMap::new(),
+            edit_window_ids: std::collections::HashMap::new(),
+            allow_below_reuse: true,
+            layout_stats: LayoutStats::default(),
         }
     }
 
@@ -358,6 +402,16 @@ impl LayoutEngine {
         self.font_sizing = font_sizing;
     }
 
+    /// Instrumentation from the most recent `layout_frame_rust` pass.
+    ///
+    /// THE gate metric for the incremental-layout phases: a phase ships only
+    /// when its bench cases prove the win on relaid-row-count, not wall-time
+    /// alone (spec §7). Phase 0a always reports a full rebuild (every body row
+    /// relaid, zero reused, all windows `Full`).
+    pub fn last_layout_stats(&self) -> &LayoutStats {
+        &self.layout_stats
+    }
+
     /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
     ///
     /// This is the Rust-native alternative to `layout_frame()` which reads from
@@ -368,6 +422,15 @@ impl LayoutEngine {
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
     ) {
+        // Incremental-layout instrumentation (Phase 0a): start each frame from
+        // a clean slate; populated as the accepted frame is committed below.
+        self.layout_stats = LayoutStats::default();
+        // Phase 1/2: forget which windows took an incremental fast path last
+        // frame; repopulated as windows are laid out this frame.
+        self.cursor_only_window_ids.clear();
+        self.scroll_window_ids.clear();
+        self.edit_window_ids.clear();
+
         // The font service can exist on the engine even while laying out a
         // terminal frame in tests. Match GNU's redisplay split: window-system
         // frames use realized font pixels, terminal frames stay on cell
@@ -448,7 +511,7 @@ impl LayoutEngine {
         let mut mini_resize_attempted = false;
         let mut tab_bar_resize_attempted = false;
 
-        let (frame_params, curr_window_infos) = loop {
+        let (frame_params, curr_window_infos, retained_keys) = loop {
             // Collect window and frame params from neovm-core
             let (frame_params, window_params_list) =
                 match super::neovm_bridge::collect_layout_params_with_font_sizing(
@@ -463,6 +526,20 @@ impl LayoutEngine {
                         return;
                     }
                 };
+
+            // Snapshot each window's layout inputs for the incremental-layout
+            // retained key (Phase 0a). Built by reference before the params are
+            // consumed by layout below; only the accepted iteration's snapshot
+            // escapes via the `break`, so a resize-retry `continue` discards it.
+            let retained_keys: Vec<(DisplayWindowId, RetainedWindowKey)> = window_params_list
+                .iter()
+                .map(|p| {
+                    (
+                        DisplayWindowId::new(p.window_id),
+                        RetainedWindowKey::from_params(p, evaluator),
+                    )
+                })
+                .collect();
 
             // --- Fontification pass ---
             // Run fontification for each window's visible region BEFORE the
@@ -562,7 +639,42 @@ impl LayoutEngine {
                 .map(|params| params.bounds.y + params.bounds.height)
                 .fold(0.0_f32, f32::max);
 
-            for params in &window_params_list {
+            // --- Phase A (single-threaded gather, spec §4.5) ---
+            //
+            // Classify each window's incremental fast path UP FRONT, before any
+            // window is laid out — reading the previous frame's retained matrices
+            // (untouched until this frame's commit) + the evaluator. This is also
+            // the multi-window-same-buffer ordering guarantee (every window of a
+            // buffer is classified before any reset), and the seam the
+            // (feature-flagged) window parallelism builds on: Phase B below
+            // positions windows from these plans. Today Phase B is single-threaded
+            // and the output is identical to building each plan inline.
+            let window_plans: Vec<(Option<CursorOnlyReplay>, Option<ScrollReplay>, bool)> =
+                window_params_list
+                    .iter()
+                    .map(|params| {
+                        let cursor_only = self.build_cursor_only_replay(params, evaluator);
+                        let mut is_edit = false;
+                        let scroll = if cursor_only.is_none() {
+                            if let Some(scroll) = self.build_scroll_replay(params, evaluator) {
+                                Some(scroll)
+                            } else if let Some(edit) = self.build_edit_replay(params, evaluator) {
+                                is_edit = true;
+                                Some(edit)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        (cursor_only, scroll, is_edit)
+                    })
+                    .collect();
+
+            // --- Phase B (per-window layout; single-threaded today) ---
+            for (params, (cursor_only_replay, scroll_replay, is_edit)) in
+                window_params_list.iter().zip(window_plans)
+            {
                 tracing::debug!(
                     "layout window: id={} buf={} bounds=({:.0},{:.0},{:.0},{:.0}) mini={} selected={} mode_line_h={:.0}",
                     params.window_id,
@@ -604,6 +716,9 @@ impl LayoutEngine {
                     &face_resolver,
                     window_geometry.reserve_terminal_right_border_col,
                     MAX_WINDOW_VISIBILITY_RETRIES,
+                    cursor_only_replay,
+                    scroll_replay,
+                    is_edit,
                 );
 
                 if let Some(info) = self.latest_output_window_info(params.window_id) {
@@ -774,7 +889,7 @@ impl LayoutEngine {
 
             self.render_frame_output_hints(&curr_window_infos, &frame_params);
 
-            break (frame_params, curr_window_infos);
+            break (frame_params, curr_window_infos, retained_keys);
         };
 
         let mut frame_display_state = self.finish_frame_output(&frame_params);
@@ -910,6 +1025,163 @@ impl LayoutEngine {
         }
 
         self.last_frame_display_state = Some(frame_display_state);
+
+        // --- Incremental-layout commit (Phase 0a) ---
+        //
+        // Populate the relaid-row-count gate metric and retain each accepted
+        // window's matrix. We are past the accepted `break`, so this never runs
+        // on a resize-retry `continue`. Phase 0a always full-rebuilds: every
+        // enabled row is `relaid`, every window is classified `Full`, and the
+        // retained matrices are written but NOT read (no fast path exists yet).
+        {
+            let key_map: std::collections::HashMap<DisplayWindowId, RetainedWindowKey> =
+                retained_keys.into_iter().collect();
+            let frame_state = self
+                .last_frame_display_state
+                .as_mut()
+                .expect("frame display state just set");
+            let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
+                std::collections::HashMap::new();
+            for entry in &mut frame_state.window_matrices {
+                let window_id = DisplayWindowId::new(entry.window_id as i64);
+                let cursor_only = self.cursor_only_window_ids.contains(&window_id);
+                let scroll_reused = self.scroll_window_ids.get(&window_id).copied();
+                let edit_reused = self.edit_window_ids.get(&window_id).copied();
+                // Fast paths classify body vs chrome by ROLE (they reuse the
+                // buffer-text `Text` rows and re-walk all chrome roles); a full
+                // rebuild counts by the `mode_line` flag (the Phase 0a baseline).
+                let role_based = cursor_only || scroll_reused.is_some() || edit_reused.is_some();
+                let mut enabled_body = 0usize;
+                let mut enabled_chrome = 0usize;
+                for row in &entry.matrix.rows {
+                    if !row.enabled {
+                        continue;
+                    }
+                    let is_chrome = if role_based {
+                        RetainedWindowMatrix::is_chrome_role(row.role)
+                    } else {
+                        row.mode_line
+                    };
+                    if is_chrome {
+                        enabled_chrome += 1;
+                    } else {
+                        enabled_body += 1;
+                    }
+                }
+                self.layout_stats.relaid_chrome_rows += enabled_chrome;
+                if cursor_only {
+                    // Body rows were reused verbatim (0 relaid); chrome re-walked.
+                    self.layout_stats.reused_rows += enabled_body;
+                    self.layout_stats.record_window_class(LayoutClass::CursorOnly);
+                } else if let Some((reused, _dvpos)) = scroll_reused {
+                    // Overlapping rows reused shifted; the rest were newly exposed
+                    // and walked.
+                    let reused = reused.min(enabled_body);
+                    self.layout_stats.reused_shifted_rows += reused;
+                    self.layout_stats.relaid_body_rows += enabled_body - reused;
+                    self.layout_stats.record_window_class(LayoutClass::Scroll);
+                } else if let Some(reused) = edit_reused {
+                    // Rows above the edit reused verbatim; the dirty line + below
+                    // were relaid.
+                    let reused = reused.min(enabled_body);
+                    self.layout_stats.reused_rows += reused;
+                    self.layout_stats.relaid_body_rows += enabled_body - reused;
+                    self.layout_stats.record_window_class(LayoutClass::Edit);
+                } else {
+                    self.layout_stats.relaid_body_rows += enabled_body;
+                    self.layout_stats.record_window_class(LayoutClass::Full);
+                }
+
+                // Phase 5 (#44) per-row damage, parallel to matrix.rows. The fast
+                // paths reuse the FIRST `reused` enabled body rows (cursor-only
+                // reuses all); chrome + disabled + relaid body rows are `New`.
+                {
+                    let mut damage = Vec::with_capacity(entry.matrix.rows.len());
+                    let mut body_seen = 0usize;
+                    for row in &entry.matrix.rows {
+                        let is_chrome = if role_based {
+                            RetainedWindowMatrix::is_chrome_role(row.role)
+                        } else {
+                            row.mode_line
+                        };
+                        if !row.enabled || is_chrome {
+                            damage.push(RowDamage::New);
+                            continue;
+                        }
+                        let d = if cursor_only {
+                            RowDamage::Reused
+                        } else if let Some((reused, dvpos)) = scroll_reused {
+                            if body_seen < reused {
+                                RowDamage::ReusedShifted { dvpos }
+                            } else {
+                                RowDamage::New
+                            }
+                        } else if let Some(reused) = edit_reused {
+                            if body_seen < reused {
+                                RowDamage::Reused
+                            } else {
+                                RowDamage::New
+                            }
+                        } else {
+                            RowDamage::New
+                        };
+                        damage.push(d);
+                        body_seen += 1;
+                    }
+                    entry.damage = damage;
+                }
+
+                // Probe-pass exclusion: a window that laid out <=1 enabled row
+                // is the scroll-off hazard (spec §4.1); never retain it as a
+                // clean reusable matrix.
+                if enabled_body + enabled_chrome <= 1 {
+                    continue;
+                }
+                if let Some(key) = key_map.get(&window_id) {
+                    // The window's display snapshot (point-independent body rows
+                    // + per-span display points) is needed to replay this window
+                    // on a later cursor-only pass. A retained window without one
+                    // cannot be reused, so skip retention if it is missing.
+                    let Some(display_snapshot) = self
+                        .display_snapshots
+                        .iter()
+                        .find(|snapshot| snapshot.window_id.0 == entry.window_id)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+                    let damage = vec![RowDamage::New; entry.matrix.rows.len()];
+                    retained.insert(
+                        window_id,
+                        RetainedWindowMatrix {
+                            matrix: entry.matrix.clone(),
+                            key: key.clone(),
+                            validity: MatrixValidity::Valid,
+                            damage,
+                            display_snapshot,
+                        },
+                    );
+                }
+            }
+            self.retained_window_matrices = retained;
+
+            // Phase 3 redisplay ACK: reset each laid-out buffer's unchanged-region
+            // accumulator at the committed (accepted) break — NEVER on a
+            // retry/`continue` (which would under-invalidate, spec §6). From here
+            // the accumulated dirty span is the edits the NEXT frame must relay.
+            let mut acked: std::collections::HashSet<u64> = std::collections::HashSet::new();
+            for key in key_map.values() {
+                if acked.insert(key.buffer_id) {
+                    if let Some(buffer) = evaluator
+                        .buffer_manager()
+                        .get(neovm_core::buffer::BufferId(key.buffer_id))
+                    {
+                        buffer.reset_unchanged_region();
+                    }
+                }
+            }
+        }
+
         self.prev_window_infos = curr_window_infos;
 
         let snapshots = std::mem::take(&mut self.display_snapshots);
@@ -928,6 +1200,90 @@ impl LayoutEngine {
     /// Note: fontification (jit-lock / font-lock) is triggered by
     /// `layout_frame_rust()` before this function is called, so text
     /// properties are already up-to-date when we read them here.
+    /// Phase 1: if this window's previous-frame matrix can be reused with only
+    /// the cursor re-decorated (point moved, every other layout input and the
+    /// neovm-core invalidation ticks unchanged, cursor row structurally simple),
+    /// return the replay bundle; else `None` (→ full rebuild). Reads the retained
+    /// matrix from the *previous* frame (committed at the prior frame's accepted
+    /// break; never overwritten until this frame's commit).
+    fn build_cursor_only_replay(
+        &self,
+        params: &WindowParams,
+        evaluator: &neovm_core::emacs_core::Context,
+    ) -> Option<CursorOnlyReplay> {
+        // Restrict the cursor-only fast path to the SELECTED window. The render
+        // cursor branch handles BOTH cursor styles correctly (replay.cursor_style
+        // is hollow for a non-selected window), so the blocker to extending this
+        // to non-selected windows is NOT the cursor — it is cross-window FACE-ID
+        // consistency: a reused window carries face_ids allocated in a PRIOR frame,
+        // while a co-resident window re-laid this frame allocates fresh face_ids;
+        // the multi-window golden caught the resulting face_id divergence (24 vs
+        // 23). Extending non-selected reuse requires making reused face_ids stable
+        // / re-registered against the current frame's face table first.
+        if !params.selected {
+            return None;
+        }
+        let window_id = DisplayWindowId::new(params.window_id);
+        let prev = self.retained_window_matrices.get(&window_id)?;
+        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        prev.cursor_only_replay(&curr_key)
+    }
+
+    /// Phase 2: if this window's previous-frame matrix can be reused after a
+    /// whole-row scroll (overlapping rows shifted, only newly-exposed rows
+    /// walked), return the scroll replay; else `None`. Selected window only, for
+    /// the same reason as [`Self::build_cursor_only_replay`].
+    fn build_scroll_replay(
+        &self,
+        params: &WindowParams,
+        evaluator: &neovm_core::emacs_core::Context,
+    ) -> Option<ScrollReplay> {
+        if !params.selected {
+            return None;
+        }
+        let window_id = DisplayWindowId::new(params.window_id);
+        let prev = self.retained_window_matrices.get(&window_id)?;
+        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        prev.scroll_replay(&curr_key)
+    }
+
+    /// Phase 3: if this window's previous-frame matrix can be reused after a
+    /// localized (plain) edit — reuse the rows above the dirty span verbatim and
+    /// re-walk only the dirty line + below — return the replay (a [`ScrollReplay`]
+    /// with `dvpos = 0`); else `None`. Reads the accumulated dirty char span from
+    /// the buffer. Selected window only.
+    fn build_edit_replay(
+        &self,
+        params: &WindowParams,
+        evaluator: &neovm_core::emacs_core::Context,
+    ) -> Option<ScrollReplay> {
+        if !params.selected {
+            return None;
+        }
+        let window_id = DisplayWindowId::new(params.window_id);
+        let prev = self.retained_window_matrices.get(&window_id)?;
+        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        let buffer = evaluator
+            .buffer_manager()
+            .get(neovm_core::buffer::BufferId(params.buffer_id))?;
+        let (dirty_start, dirty_end) = buffer.changed_char_range()?;
+        // Below-reuse SAFETY GATE: only a simple insert — every inserted char is
+        // printable ASCII (graphic or space) — keeps the edited line one logical
+        // line of char_width glyphs, which is what makes the rows-below reuse
+        // (shift charpos, keep pixel_y) sound. A newline/tab/wide char (or a
+        // delete, dirty_end == dirty_start) escalates to above-only. Combined with
+        // edit_replay's monospace + width check this proves no row-structure change.
+        let simple_insert = self.allow_below_reuse
+            && dirty_end > dirty_start
+            && (dirty_start..dirty_end).all(|cp| {
+                let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                    neovm_core::buffer::CharPos0::new(cp as usize),
+                );
+                matches!(buffer.char_at_emacs_byte_pos(byte), Some(c) if c.is_ascii_graphic() || c == ' ')
+            });
+        prev.edit_replay(&curr_key, dirty_start, simple_insert)
+    }
+
     fn layout_window_rust(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
@@ -937,8 +1293,17 @@ impl LayoutEngine {
         face_resolver: &super::neovm_bridge::FaceResolver,
         reserve_right_border_col: bool,
         remaining_visibility_retries: usize,
+        // Phase A (gather) classified this window's incremental fast path against
+        // the *original* params (before any echo-buffer swap below), reading the
+        // same retained key the predicate was snapshotted from. Phase B (here)
+        // consumes the plan inside the render path in place of the body walk.
+        // `is_edit` only steers the commit-path stats classification.
+        cursor_only_replay: Option<CursorOnlyReplay>,
+        scroll_replay: Option<ScrollReplay>,
+        is_edit: bool,
     ) {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
+        let scroll_dvpos = scroll_replay.as_ref().map(|replay| replay.dvpos).unwrap_or(0.0);
         // GNU `with_echo_area_buffer` (xdisp.c:12904): an inactive mini-window
         // displays the echo-area buffer (whose contents `set_message_1` mirrored
         // the current message into), NOT the ordinary buffer attached to the
@@ -1019,6 +1384,8 @@ impl LayoutEngine {
             ),
             &mut self.text_buf,
             remaining_visibility_retries,
+            cursor_only_replay,
+            scroll_replay,
         );
 
         let redisplay_positions = match render_outcome {
@@ -1027,6 +1394,9 @@ impl LayoutEngine {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
                 retry_params.window_end = 0;
+                // A visibility retry re-flows the window from a new window_start,
+                // so the Phase A fast-path plan (snapshotted against the original
+                // window_start) no longer applies — re-lay from scratch.
                 self.layout_window_rust(
                     evaluator,
                     frame_id,
@@ -1035,12 +1405,32 @@ impl LayoutEngine {
                     face_resolver,
                     reserve_right_border_col,
                     remaining_visibility_retries.saturating_sub(1),
+                    None,
+                    None,
+                    false,
                 );
                 return;
             }
             BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
-            } => redisplay_positions,
+                cursor_only,
+                scroll_reused_rows,
+            } => {
+                if cursor_only {
+                    self.cursor_only_window_ids
+                        .insert(DisplayWindowId::new(params.window_id));
+                }
+                if let Some(reused) = scroll_reused_rows {
+                    let window_id = DisplayWindowId::new(params.window_id);
+                    if is_edit {
+                        self.edit_window_ids.insert(window_id, reused);
+                    } else {
+                        self.scroll_window_ids
+                            .insert(window_id, (reused, scroll_dvpos));
+                    }
+                }
+                redisplay_positions
+            }
         };
 
         tracing::debug!(

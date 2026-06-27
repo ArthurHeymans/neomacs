@@ -66,6 +66,8 @@ where
         context: BufferSourceRenderAttemptContext<'_, '_>,
         text_buf: &mut Vec<u8>,
         remaining_visibility_retries: usize,
+        cursor_only: Option<crate::incremental_layout::CursorOnlyReplay>,
+        scroll: Option<crate::incremental_layout::ScrollReplay>,
     ) -> BufferSourceRenderAttemptOutcome {
         let Self {
             frame_id,
@@ -124,7 +126,7 @@ where
             .max(1.0) as usize
         };
         let BufferWindowGeometryPlan {
-            geometry,
+            mut geometry,
             line_number_columns,
         } = BufferWindowGeometryRequest::new(
             params,
@@ -137,8 +139,40 @@ where
         .with_max_mini_window_rows(max_mini_window_rows)
         .into_window_plan(&local_display_policy, &buf_access);
 
-        let text_source = BufferWindowSourceRequest::from_window_params(params, geometry.max_rows)
-            .read_into(&buf_access, text_buf);
+        // Phase 2 pure-scroll: lay ONLY the newly-exposed rows. Start the body
+        // walk at the exposed region (`text_y` + first row index); the unchanged
+        // `visibility_bottom_y` caps it at the window bottom — exactly the
+        // newly-exposed row count. Chrome geometry is left intact (the mode-line
+        // re-walks at the full-window bottom). The source reads from
+        // `exposed_start_charpos` so its text slice + byte indices align with the
+        // walk, while the published positions later use the real window_start.
+        let scroll_source_params;
+        let source_params: &WindowParams = if let Some(scroll) = &scroll {
+            geometry.text_y = params.bounds.y + scroll.exposed_text_y;
+            geometry.display_text_row_base = scroll.exposed_row_base;
+            // Phase 3 below-reuse: BOUND the walk to the edited line only — the
+            // rows below it are reused (charpos-shifted) and supplied as reused
+            // rows. Without this the walk would run to the window bottom and
+            // overwrite the reused-below rows (no CPU saving + wrong positions).
+            if scroll.bound_walk {
+                geometry.max_rows = scroll.exposed_row_count;
+            }
+            let mut p = params.clone();
+            p.window_start = scroll.exposed_start_charpos;
+            // Pin the source's point to the exposed region so its scroll-to-point
+            // heuristic does NOT pull window_start back toward the real point
+            // (which lives in the already-laid reused rows). The real cursor is
+            // re-decorated after the walk; the walk's spurious cursor is cleared.
+            p.point = scroll.exposed_start_charpos;
+            scroll_source_params = p;
+            &scroll_source_params
+        } else {
+            params
+        };
+
+        let text_source =
+            BufferWindowSourceRequest::from_window_params(source_params, geometry.max_rows)
+                .read_into(&buf_access, text_buf);
         let bytes_read = text_source.bytes_read();
         let text = if bytes_read > 0 {
             &text_buf[..bytes_read]
@@ -164,7 +198,11 @@ where
         // window_start to point — which then PERSISTS and corrupts the real (tall)
         // window. Pairs with the forward-scroll guard in
         // `BufferWindowSourceRequest::should_forward_scroll_without_layout`.
-        let remaining_visibility_retries = if geometry.max_rows <= 1 && !params.is_minibuffer() {
+        let remaining_visibility_retries = if scroll.is_some()
+            || (geometry.max_rows <= 1 && !params.is_minibuffer())
+        {
+            // Phase 2 consumes the authoritative post-scroll window_start; never
+            // re-derive scrolling via a visibility retry.
             0
         } else {
             remaining_visibility_retries
@@ -219,6 +257,8 @@ where
             reserve_right_border_col,
             text,
             &buf_access,
+            cursor_only,
+            scroll,
         )
     }
 }

@@ -493,10 +493,36 @@ impl GlyphMatrix {
     }
 }
 
+/// Per-row layout provenance for incremental redisplay (spec §4.6). Carried as a
+/// side `Vec` parallel to `GlyphMatrix::rows` (NOT a `GlyphRow` field, to keep
+/// glyph serialization stable). The render-side damage compositor (Phase 5)
+/// reads it to skip `Reused` rows and area-blit `ReusedShifted` rows; until that
+/// lands it is informational only.
+#[derive(Clone, Copy, Debug, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub enum RowDamage {
+    /// Row was laid out from scratch this cycle.
+    #[default]
+    New,
+    /// Row was reused verbatim from the retained matrix at the same `pixel_y`.
+    Reused,
+    /// Row was reused but shifted by a uniform vertical delta (scroll).
+    ReusedShifted { dvpos: f32 },
+}
+
+impl RowDamage {
+    /// Whether this row had to be laid out from scratch this cycle.
+    pub fn is_relaid(self) -> bool {
+        matches!(self, RowDamage::New)
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WindowMatrixEntry {
     pub window_id: u64,
     pub matrix: GlyphMatrix,
+    /// Per-row damage parallel to `matrix.rows` (spec §4.6 / Phase 5). Empty
+    /// when not computed; otherwise one entry per row.
+    pub damage: Vec<RowDamage>,
     /// Frame-relative bounds of the whole Emacs window area owned by
     /// this matrix, including margins/fringes and chrome rows.
     pub pixel_bounds: Rect,

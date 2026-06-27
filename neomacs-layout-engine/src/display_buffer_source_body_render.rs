@@ -350,7 +350,7 @@ impl BufferSourceWalkSetup {
         )
     }
 
-    fn install_body(
+    pub(crate) fn install_body(
         &mut self,
         output: TextWindowOutputTarget<'_>,
         output_emitter: &mut WindowOutputEmitter,

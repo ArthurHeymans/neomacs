@@ -226,6 +226,7 @@ fn frame_display_state_add_window_matrix() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
         selected: true,
@@ -259,6 +260,7 @@ fn state_with_text(text: &str) -> FrameDisplayState {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         selected: true,
@@ -307,6 +309,7 @@ fn materialize_emits_tab_line_row_at_window_top() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: win,
         text_pixel_bounds: text_area,
         selected: true,
@@ -377,6 +380,7 @@ fn materialize_right_aligns_reversed_row() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         selected: true,
@@ -563,6 +567,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         selected: true,
@@ -640,6 +645,7 @@ fn materialize_pixel_positions_from_grid() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
         text_pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
         selected: true,
@@ -702,6 +708,7 @@ fn materialize_preserves_char_bidi_level() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
         selected: true,
@@ -736,6 +743,7 @@ fn materialize_preserves_stretch_bidi_level() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         selected: true,
@@ -771,6 +779,7 @@ fn materialize_uses_explicit_row_metrics() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
         text_pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
         selected: true,
@@ -812,6 +821,7 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
         selected: true,
@@ -866,6 +876,7 @@ fn materialize_disabled_rows_are_skipped() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
         selected: true,
@@ -897,6 +908,7 @@ fn materialize_padding_glyphs_are_skipped() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         selected: true,
@@ -939,6 +951,7 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         selected: true,
@@ -987,6 +1000,7 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
         selected: true,
@@ -1034,6 +1048,7 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         text_pixel_bounds: Rect::new(8.0, 0.0, 64.0, 16.0),
         selected: true,
@@ -1215,6 +1230,7 @@ fn materialize_stretch_glyph() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         selected: true,
@@ -1246,6 +1262,7 @@ fn materialize_uses_explicit_stretch_geometry() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
         text_pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
         selected: true,
@@ -1356,6 +1373,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: win,
         text_pixel_bounds: text_area,
         selected: true,

@@ -52,6 +52,13 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
     },
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
+        /// Whether this window took the Phase 1 cursor-only fast path (body rows
+        /// reused verbatim) rather than a full body walk.
+        cursor_only: bool,
+        /// `Some(reused_row_count)` when this window took the Phase 2 pure-scroll
+        /// fast path (that many overlapping rows reused shifted; only the
+        /// newly-exposed rows walked); `None` otherwise.
+        scroll_reused_rows: Option<usize>,
     },
 }
 

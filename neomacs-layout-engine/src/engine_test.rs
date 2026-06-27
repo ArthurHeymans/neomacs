@@ -1874,6 +1874,12 @@ struct BackendLayoutTrace {
     visible_span: Option<WindowVisibleBufferSpan>,
     window_start: LispCharPos1,
     window_point: LispCharPos1,
+    /// GNU `w->window_end_pos` (offset of the last displayed char from Z) — the
+    /// published `window-end`. Validated so a fast path that mis-derives it (e.g.
+    /// a bounded walk that no longer reaches the last visible row) is caught.
+    window_end_pos: usize,
+    /// GNU `w->window_end_bytepos` (byte companion of `window_end_pos`).
+    window_end_bytepos: usize,
     hit: Option<WindowHitTrace>,
 }
 
@@ -1882,8 +1888,23 @@ fn selected_window_layout_trace(
     engine: &LayoutEngine,
     frame_id: neovm_core::window::FrameId,
 ) -> BackendLayoutTrace {
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    window_layout_trace(eval, engine, frame_id, selected)
+}
+
+/// Like [`selected_window_layout_trace`] but for an ARBITRARY window — used by
+/// multi-window goldens to verify a NON-selected window's output byte-for-byte.
+fn window_layout_trace(
+    eval: &Context,
+    engine: &LayoutEngine,
+    frame_id: neovm_core::window::FrameId,
+    selected_window: neovm_core::window::WindowId,
+) -> BackendLayoutTrace {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
-    let selected_window = frame.selected_window;
     let state = engine
         .last_frame_display_state
         .as_ref()
@@ -1896,13 +1917,15 @@ fn selected_window_layout_trace(
     let display_snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let (window_start, window_point) =
+    let (window_start, window_point, window_end_pos, window_end_bytepos) =
         match frame.find_window(selected_window).expect("selected window") {
             neovm_core::window::Window::Leaf {
                 window_start,
                 point,
+                window_end_pos,
+                window_end_bytepos,
                 ..
-            } => (*window_start, *point),
+            } => (*window_start, *point, *window_end_pos, *window_end_bytepos),
             other => panic!("expected leaf window, got {other:?}"),
         };
     let hit = unsafe {
@@ -1930,6 +1953,8 @@ fn selected_window_layout_trace(
         visible_span: display_snapshot.visible_buffer_span(),
         window_start,
         window_point,
+        window_end_pos,
+        window_end_bytepos,
         hit,
     }
 }
@@ -2032,7 +2057,581 @@ fn layout_bench_warm() {
         engine.layout_frame_rust(&mut eval, frame_id);
         best = best.min(t.elapsed());
     }
-    panic!("BENCH layout_frame_rust 1000x700 (~120-line buffer, GUI): warm {best:?} cold {cold:?}");
+    // Incremental-layout gate metric (Phase 0a): a warm repaint still relays
+    // every body row and reuses none — the full-rebuild floor a keystroke pays.
+    let stats = engine.last_layout_stats().clone();
+    let shape_calls = engine
+        .font_metrics
+        .as_ref()
+        .map(|m| m.shape_calls())
+        .unwrap_or(0);
+    panic!(
+        "BENCH layout_frame_rust 1000x700 (~120-line buffer, GUI): warm {best:?} cold {cold:?} \
+         | relaid_body={} relaid_chrome={} reused={} reused_shifted={} full_windows={} \
+         shape_calls_total={}",
+        stats.relaid_body_rows,
+        stats.relaid_chrome_rows,
+        stats.reused_rows,
+        stats.reused_shifted_rows,
+        stats.full_windows,
+        shape_calls,
+    );
+}
+
+/// Phase 0a baseline (incremental-layout gate). With no fast path wired yet,
+/// every layout cycle is a full rebuild: even a no-op repaint relays every body
+/// row and reuses none. This pins that baseline so the Phase 1+ fast paths have
+/// a relaid-row-count to beat, and so a later phase that silently regresses to
+/// full-rebuild is caught by the same metric (spec §7 overarching NO-GO).
+#[test]
+fn phase0a_layout_stats_reports_full_rebuild_baseline() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    insert_fragmented_current_buffer_text(&mut eval, &text);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("p0a-baseline", 800, 600, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    // A single COLD layout (no retained matrix yet) is always a full rebuild —
+    // every body row is laid from scratch, no reuse machinery applies. (A warm
+    // no-op repaint now takes the no-change cursor-only path; see
+    // `no_change_relayout_reuses_verbatim`.)
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let body_rows: usize = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .window_matrices
+        .iter()
+        .flat_map(|entry| entry.matrix.rows.iter())
+        .filter(|row| row.enabled && !row.mode_line)
+        .count();
+    assert!(
+        body_rows > 0,
+        "expected the buffer to lay out some body rows"
+    );
+
+    let stats = engine.last_layout_stats();
+    assert_eq!(
+        stats.relaid_body_rows, body_rows,
+        "Phase 0a relays every body row every cycle (full rebuild)"
+    );
+    assert_eq!(stats.reused_rows, 0, "no reuse machinery exists yet");
+    assert_eq!(
+        stats.reused_shifted_rows, 0,
+        "no reuse machinery exists yet"
+    );
+    assert!(
+        stats.full_windows >= 1 && stats.total_windows() == stats.full_windows,
+        "every window is classified Full in Phase 0a (got {stats:?})"
+    );
+}
+
+/// One incremental-relayout measurement: the instrumentation of the SECOND
+/// layout pass (the one an interactive keystroke pays), plus that pass's
+/// shaping-call delta and the body/chrome row totals present in the final
+/// matrix. Produced by [`measure_incremental_relayout`].
+#[derive(Debug, Clone)]
+struct IncrCaseMeasurement {
+    stats: crate::incremental_layout::LayoutStats,
+    total_body_rows: usize,
+    total_chrome_rows: usize,
+    shape_calls_delta: usize,
+}
+
+/// The incremental-layout bench harness. Warm the engine on `frame_id` (which
+/// establishes the retained matrices), record the shaping-call count, apply
+/// `perturb`, lay out again, and capture the instrumentation of that second
+/// pass. The second pass is what a keystroke pays, so its relaid-row-count is
+/// the number each fast path (Phases 1-3) must drive down — and the metric a
+/// silent regression to full-rebuild would expose (spec §5, §7).
+fn measure_incremental_relayout(
+    engine: &mut LayoutEngine,
+    eval: &mut Context,
+    frame_id: neovm_core::window::FrameId,
+    perturb: impl FnOnce(&mut Context),
+) -> IncrCaseMeasurement {
+    engine.layout_frame_rust(eval, frame_id); // warm: builds retained matrices
+    let shape_before = engine
+        .font_metrics
+        .as_ref()
+        .map(|m| m.shape_calls())
+        .unwrap_or(0);
+    perturb(eval);
+    engine.layout_frame_rust(eval, frame_id); // the measured (keystroke) pass
+    let shape_after = engine
+        .font_metrics
+        .as_ref()
+        .map(|m| m.shape_calls())
+        .unwrap_or(0);
+    let stats = engine.last_layout_stats().clone();
+    let (mut total_body_rows, mut total_chrome_rows) = (0usize, 0usize);
+    for entry in &engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .window_matrices
+    {
+        for row in &entry.matrix.rows {
+            if !row.enabled {
+                continue;
+            }
+            if row.mode_line {
+                total_chrome_rows += 1;
+            } else {
+                total_body_rows += 1;
+            }
+        }
+    }
+    IncrCaseMeasurement {
+        stats,
+        total_body_rows,
+        total_chrome_rows,
+        shape_calls_delta: shape_after.saturating_sub(shape_before),
+    }
+}
+
+/// Fresh editing context with `text` in the current buffer (gap backend, point
+/// at beginning), plus a GUI frame whose selected window starts at BOB. Returns
+/// the frame id, buffer id, and selected window id for perturbation.
+fn incr_editing_frame(
+    text: &str,
+    width: u32,
+    height: u32,
+) -> (
+    Context,
+    neovm_core::window::FrameId,
+    BufferId,
+    neovm_core::window::WindowId,
+) {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    insert_fragmented_current_buffer_text(&mut eval, text);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+    }
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("incr-bench", width, height, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+    (eval, frame_id, buf_id, selected_window)
+}
+
+/// Phase 1 — CURSOR MOVE takes the cursor-only fast path. A bare point move (no
+/// scroll, no text change, no tick movement) reuses the retained body rows
+/// verbatim instead of re-laying them: the selected window is classified
+/// `CursorOnly`, its body rows are `reused_rows` (not `relaid_body_rows`), and
+/// chrome is always re-walked. Was the Phase 0a full-rebuild baseline.
+#[test]
+fn phase1_cursor_move_is_cursor_only() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+    assert!(m.total_body_rows > 0, "expected body rows laid out");
+    // Exactly the selected content window took the cursor-only fast path; the
+    // minibuffer is probe-excluded from retention so it stays Full.
+    assert_eq!(
+        m.stats.cursor_only_windows, 1,
+        "selected window took the cursor-only fast path (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_rows > 0,
+        "cursor-only reuses retained body rows (got {:?})",
+        m.stats
+    );
+    // Conservation: every enabled body row in the final matrix is either reused
+    // verbatim or relaid from scratch.
+    assert_eq!(
+        m.stats.reused_rows + m.stats.relaid_body_rows,
+        m.total_body_rows,
+        "body rows conserved across reuse/relayout (got {:?})",
+        m.stats
+    );
+    // The selected window relaid ZERO body rows; any residual relaid body rows
+    // belong to the probe-excluded minibuffer only.
+    assert!(
+        m.stats.relaid_body_rows < m.total_body_rows,
+        "cursor-only drives relaid body rows below the full-rebuild total (got {:?})",
+        m.stats
+    );
+}
+
+/// Phase 1 GOLDEN — the cursor-only fast path output must be BYTE-IDENTICAL to a
+/// full rebuild of the same post-move state (honest layering, spec §4.6: all
+/// glyphs still emitted; only the layout-CPU is saved). Compares the full window
+/// trace — matrix glyphs, cursor decoration, display points, snapshot rows,
+/// phys-cursor, visible span, and hit-test rows.
+#[test]
+fn phase1_cursor_move_matches_full_rebuild_golden() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+
+    // Reference: a fresh engine lays out the MOVED state from scratch (no
+    // retained matrix → full rebuild).
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    // Incremental: warm at point 0, move to 10, second pass takes cursor-only.
+    let (mut eval, frame_id, buf_id, _wi) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "expected the measured pass to take the cursor-only fast path"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    assert_eq!(
+        incremental, reference,
+        "cursor-only output must be byte-identical to a full rebuild"
+    );
+}
+
+/// Phase 1 — an OVERLAY change (hl-line / show-paren / region) co-moving with
+/// the cursor MUST bail to a full rebuild: the overlay tick moved, so the
+/// retained rows are no longer trustworthy. This is the invalidation-completeness
+/// guarantee (spec §3) — silently staying cursor-only here would ship stale rows.
+#[test]
+fn phase1_overlay_change_bails_to_full() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // Use the Lisp `make-overlay` builtin (the path hl-line / show-paren take)
+        // so the overlay tick is bumped, exactly as real code does.
+        eval.eval_str("(overlay-put (make-overlay 1 24) 'face 'highlight)")
+            .expect("make-overlay");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+    assert_eq!(
+        m.stats.cursor_only_windows, 0,
+        "overlay tick moved → must NOT take the cursor-only fast path (got {:?})",
+        m.stats
+    );
+    assert_eq!(m.stats.reused_rows, 0, "overlay change forces a full rebuild");
+}
+
+/// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
+/// cursor MUST bail: the props tick moved (the soundness hazard of spec §3, where
+/// a non-fontify text-property write would otherwise be invisible to redisplay).
+#[test]
+fn phase1_put_text_property_bails_to_full() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str("(put-text-property 1 6 'face 'bold)")
+            .expect("put-text-property");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+    assert_eq!(
+        m.stats.cursor_only_windows, 0,
+        "props tick moved → must NOT take the cursor-only fast path (got {:?})",
+        m.stats
+    );
+    assert_eq!(m.stats.reused_rows, 0, "text-property change forces a full rebuild");
+}
+
+/// Phase 1 — a face-attribute change (theme load / `set-face-attribute`) co-moving
+/// with the cursor MUST bail: `face_change_count` moved, mutating pixels with no
+/// buffer tick (spec §3: the per-glyph hash cannot backstop face-content drift).
+#[test]
+fn phase1_face_attribute_change_bails_to_full() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(
+            "(internal-set-lisp-face-attribute 'default :foreground \"red\" (selected-frame))",
+        )
+        .expect("set-face-attribute");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+    assert_eq!(
+        m.stats.cursor_only_windows, 0,
+        "face_change_count moved → must NOT take the cursor-only fast path (got {:?})",
+        m.stats
+    );
+}
+
+/// Set the selected window's `window_start` (1-based) and point (0-based byte).
+fn scroll_window_to(
+    eval: &mut Context,
+    frame_id: neovm_core::window::FrameId,
+    selected_window: neovm_core::window::WindowId,
+    buf_id: BufferId,
+    window_start_1based: i64,
+    point_byte: usize,
+) {
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_byte));
+    }
+    let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+    let window = frame
+        .find_window_mut(selected_window)
+        .expect("selected window");
+    if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+        *window_start = LispCharPos1::new(window_start_1based);
+    }
+}
+
+/// Phase 2 — a whole-row SCROLL takes the pure-scroll fast path: the overlapping
+/// rows are reused shifted (`reused_shifted_rows`), only the newly-exposed rows
+/// are walked, and chrome is re-walked. Was the Phase 0a full-rebuild baseline.
+#[test]
+fn phase2_scroll_is_pure_scroll() {
+    let line = "(defun f (a b) (+ a b))\n"; // 24 bytes incl newline
+    let text = line.repeat(80);
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // Scroll down 5 whole lines, point following into the visible region.
+        scroll_window_to(
+            eval,
+            frame_id,
+            selected_window,
+            buf_id,
+            5 * line.len() as i64 + 1,
+            7 * line.len(),
+        );
+    });
+    assert!(m.total_body_rows > 0, "expected body rows laid out");
+    assert_eq!(
+        m.stats.scroll_windows, 1,
+        "selected window took the pure-scroll fast path (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_shifted_rows > 0,
+        "pure-scroll reuses overlapping rows shifted (got {:?})",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.reused_shifted_rows + m.stats.relaid_body_rows,
+        m.total_body_rows,
+        "every body row is reused-shifted or newly relaid (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows < m.total_body_rows,
+        "most rows reused; only the newly-exposed ones relaid (got {:?})",
+        m.stats
+    );
+}
+
+/// Phase 2 GOLDEN — the pure-scroll output must be BYTE-IDENTICAL to a full
+/// rebuild of the same scrolled state (reused-shifted rows + newly-exposed rows
+/// + re-walked chrome + cursor).
+#[test]
+fn phase2_scroll_matches_full_rebuild_golden() {
+    let line = "(defun f (a b) (+ a b))\n";
+    let text = line.repeat(80);
+    let new_window_start = 5 * line.len() as i64 + 1;
+    let point_byte = 7 * line.len();
+
+    // Reference: fresh engine lays out the scrolled state from scratch.
+    let (mut eval_ref, frame_ref, buf_ref, win_ref) = incr_editing_frame(&text, 800, 600);
+    scroll_window_to(
+        &mut eval_ref,
+        frame_ref,
+        win_ref,
+        buf_ref,
+        new_window_start,
+        point_byte,
+    );
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    // Incremental: warm, scroll, second pass takes the pure-scroll path.
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    scroll_window_to(&mut eval, frame_id, win, buf_id, new_window_start, point_byte);
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().scroll_windows,
+        1,
+        "expected the measured pass to take the pure-scroll fast path"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    assert_eq!(
+        incremental, reference,
+        "pure-scroll output must be byte-identical to a full rebuild"
+    );
+}
+
+/// Phase 2 — a PARTIAL-ROW scroll (window_start not on a retained row boundary)
+/// must bail to a full rebuild: the uniform row shift only applies to whole-row
+/// scrolls.
+#[test]
+fn phase2_partial_row_scroll_bails_to_full() {
+    let line = "(defun f (a b) (+ a b))\n";
+    let text = line.repeat(80);
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // window_start mid-line (not a row boundary).
+        scroll_window_to(
+            eval,
+            frame_id,
+            selected_window,
+            buf_id,
+            5 * line.len() as i64 + 4,
+            7 * line.len(),
+        );
+    });
+    assert_eq!(
+        m.stats.scroll_windows, 0,
+        "partial-row scroll must NOT take the pure-scroll fast path (got {:?})",
+        m.stats
+    );
+    assert_eq!(m.stats.reused_shifted_rows, 0);
+}
+
+/// Phase 0a baseline — SINGLE-CHAR INSERT in a FONT-LOCKED buffer. The
+/// `fontification-functions` hook re-applies `font-lock-face` over the edited
+/// region during layout (a `put-text-property` that bumps NO tick today — the
+/// soundness hazard of spec §3). Phase 0a relays everything; Phase 3 (gated on
+/// per-span fontify reporting, §0b) is what narrows this — and `shape_calls`
+/// rising here is exactly the re-shaping a font-locked edit pays.
+#[test]
+fn phase0a_baseline_fontlocked_edit_is_full_rebuild() {
+    let text = "alpha beta gamma delta epsilon zeta\n".repeat(30);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 480, 400);
+    eval.eval_str(
+        r#"
+        (setq neomacs-test-fontify-face 'font-lock-keyword-face)
+        (setq fontification-functions
+              (list (lambda (start)
+                      (let ((end (min (point-max) (+ start 80))))
+                        (put-text-property start end 'fontified t)
+                        (put-text-property start end 'font-lock-face
+                                           neomacs-test-fontify-face)))))
+        "#,
+    )
+    .expect("install fontification hook");
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(6));
+        buffer.insert("x");
+    });
+    assert!(m.total_body_rows > 0, "expected body rows laid out");
+    assert_eq!(
+        m.stats.relaid_body_rows, m.total_body_rows,
+        "Phase 0a: font-locked edit is a full rebuild (got {:?})",
+        m.stats
+    );
+    assert_eq!(m.stats.edit_windows, 0, "no localized-edit fast path yet");
+    // The inserted glyph forces at least one new shaping call on the measured
+    // pass; the warm-cache rest is reused. This is the n_shape_calls delta the
+    // harness tracks so Phase 3 can prove its diff-cost ≪ relayout-cost.
+    assert!(
+        m.shape_calls_delta >= 1,
+        "expected the inserted glyph to shape at least once (delta {})",
+        m.shape_calls_delta
+    );
+}
+
+/// Phase 0a baseline — MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an
+/// edit relays BOTH fully today. This is the case the multi-window race fix
+/// (spec §4.2) must keep sound once the fast paths land: each window diffs from
+/// its own retained tick. Phase 0a just pins that both are `Full`.
+#[test]
+fn phase0a_baseline_multi_window_same_buffer_is_full_rebuild() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    eval.frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+        buffer.insert("z");
+    });
+    assert!(
+        m.stats.full_windows >= 2,
+        "both same-buffer windows full-rebuild in Phase 0a (got {:?})",
+        m.stats
+    );
+    assert_eq!(m.stats.reused_rows, 0, "no reuse machinery yet");
+    assert_eq!(
+        m.stats.total_windows(),
+        m.stats.full_windows,
+        "every window is classified Full in Phase 0a (got {:?})",
+        m.stats
+    );
+    let _ = m.total_chrome_rows; // tracked for later phases (chrome always re-walked)
 }
 
 fn backend_layout_trace_with_buffer_setup(
@@ -13159,5 +13758,461 @@ fn window_info_carries_buffer_name_and_faces_carry_lisp_names() {
             .values()
             .map(|f| (f.id, f.lisp_name.clone()))
             .collect::<Vec<_>>()
+    );
+}
+
+/// Phase 3 — a PLAIN (non-font-locked) edit takes the localized-edit fast path:
+/// the rows ABOVE the edit are reused verbatim and only the edited line + the
+/// rows below it are re-walked.
+#[test]
+fn phase3_plain_edit_is_localized() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // Plain insert on line 10 (no fontification → props tick unchanged).
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10 * 24 + 5));
+        buffer.insert("x");
+    });
+    assert!(m.total_body_rows > 0, "expected body rows laid out");
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "selected window took the localized-edit fast path (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_rows > 0,
+        "rows above the edit reused verbatim (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows > 0,
+        "the edited line + rows below relaid (got {:?})",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.reused_rows + m.stats.relaid_body_rows,
+        m.total_body_rows,
+        "body rows conserved (got {:?})",
+        m.stats
+    );
+}
+
+/// Phase 3 GOLDEN — localized-edit output must be BYTE-IDENTICAL to a full
+/// rebuild of the same edited state.
+#[test]
+fn phase3_plain_edit_matches_full_rebuild_golden() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert("x");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, buf_id, _wi) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert("x");
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "expected the measured pass to take the localized-edit fast path"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    assert_eq!(
+        incremental, reference,
+        "localized-edit output must be byte-identical to a full rebuild"
+    );
+}
+
+/// Phase 5 (#44) — the fast paths emit per-row `RowDamage` parallel to the
+/// matrix rows: cursor-only reuses every body row (`Reused`), scroll marks its
+/// reused rows `ReusedShifted{dvpos}`, and a full rebuild is all `New`.
+#[test]
+fn phase5_fast_paths_emit_row_damage() {
+    use neomacs_display_protocol::glyph_matrix::RowDamage;
+
+    fn selected_damage(
+        engine: &LayoutEngine,
+        win: neovm_core::window::WindowId,
+    ) -> (Vec<RowDamage>, Vec<GlyphRowRole>) {
+        let state = engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("display state");
+        let entry = state
+            .window_matrices
+            .iter()
+            .find(|e| e.window_id == win.0)
+            .expect("selected window matrix");
+        assert_eq!(
+            entry.damage.len(),
+            entry.matrix.rows.len(),
+            "damage is parallel to matrix rows"
+        );
+        (
+            entry.damage.clone(),
+            entry.matrix.rows.iter().map(|r| r.role).collect(),
+        )
+    }
+
+    // --- cursor-only: all body rows Reused ---
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(engine.last_layout_stats().cursor_only_windows, 1);
+    let (damage, roles) = selected_damage(&engine, win);
+    let mut reused_body = 0;
+    for (dmg, role) in damage.iter().zip(&roles) {
+        if *role == GlyphRowRole::Text {
+            assert_eq!(*dmg, RowDamage::Reused, "cursor-only body row is Reused");
+            reused_body += 1;
+        }
+    }
+    assert!(reused_body > 0, "expected reused body rows");
+
+    // --- scroll: reused rows ReusedShifted with a nonzero dvpos ---
+    let line = "(defun f (a b) (+ a b))\n";
+    let big = line.repeat(80);
+    let (mut eval2, frame2, buf2, win2) = incr_editing_frame(&big, 800, 600);
+    let mut engine2 = LayoutEngine::new();
+    engine2.layout_frame_rust(&mut eval2, frame2);
+    scroll_window_to(
+        &mut eval2,
+        frame2,
+        win2,
+        buf2,
+        5 * line.len() as i64 + 1,
+        7 * line.len(),
+    );
+    engine2.layout_frame_rust(&mut eval2, frame2);
+    assert_eq!(engine2.last_layout_stats().scroll_windows, 1);
+    let (damage2, _roles2) = selected_damage(&engine2, win2);
+    assert!(
+        damage2
+            .iter()
+            .any(|d| matches!(d, RowDamage::ReusedShifted { dvpos } if *dvpos != 0.0)),
+        "scroll emits ReusedShifted rows with a nonzero dvpos"
+    );
+}
+
+/// Phase 3 below-reuse (full GNU try_window_id) — a single-line edit that does
+/// not change the row structure relays ONLY the edited line: the rows above are
+/// reused verbatim AND the rows below are reused with a charpos shift (same
+/// pixel_y). So relaid_body_rows is ~1, not "edited line + everything below".
+///
+/// (Enabled via the engine's `allow_below_reuse` opt-in; production default is
+/// off until the render-side post-walk validation lands.)
+#[test]
+fn phase3_below_reuse_relays_only_edited_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.allow_below_reuse = true;
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // Plain single-char insert mid-line on line 10 (no newline, no wrap).
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10 * 24 + 5));
+        buffer.insert("x");
+    });
+    assert_eq!(m.stats.edit_windows, 1, "took the edit fast path (got {:?})", m.stats);
+    assert!(
+        m.stats.relaid_body_rows <= 2,
+        "below-reuse relays only the edited line, not the rows below it (got {:?})",
+        m.stats
+    );
+}
+
+/// Phase 3 below-reuse GOLDEN — relaying only the edited line + reusing the rows
+/// below (charpos-shifted) must be BYTE-IDENTICAL to a full rebuild of the same
+/// edited state.
+#[test]
+fn phase3_below_reuse_matches_full_rebuild_golden() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert("x");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, buf_id, _wi) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.allow_below_reuse = true;
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert("x");
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(engine.last_layout_stats().edit_windows, 1, "took the edit fast path");
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    assert_eq!(
+        incremental, reference,
+        "below-reuse output must be byte-identical to a full rebuild"
+    );
+}
+
+/// Drive a warm→edit→measured pass with below-reuse ENABLED (the default),
+/// assert the output is byte-identical to a full rebuild of the edited state,
+/// and return the measured stats. Used by the below-reuse safety-bail tests.
+fn below_reuse_bail_golden_stats(insert_text: &str) -> LayoutStats {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert(insert_text);
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, buf_id, _wi) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new(); // allow_below_reuse defaults to true
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert(insert_text);
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    assert_eq!(
+        incremental, reference,
+        "edit must be byte-identical to a full rebuild (below-reuse must bail safely)"
+    );
+    engine.last_layout_stats().clone()
+}
+
+/// A newline insert changes the line count, so below-reuse (which keeps the rows
+/// below at the same pixel_y) MUST bail to above-only — caught by the ASCII gate.
+#[test]
+fn phase3_below_reuse_bails_on_newline_insert() {
+    let stats = below_reuse_bail_golden_stats("\n");
+    assert_eq!(stats.edit_windows, 1, "still the edit fast path (got {stats:?})");
+    assert!(
+        stats.relaid_body_rows > 2,
+        "above-only (not below-reuse, which would relay ~1) — got {stats:?}"
+    );
+}
+
+/// A long ASCII insert that wraps the edited line changes the row structure, so
+/// below-reuse MUST bail to above-only — caught by the width gate.
+#[test]
+fn phase3_below_reuse_bails_on_wrapping_insert() {
+    let stats = below_reuse_bail_golden_stats(&"x".repeat(100));
+    assert_eq!(stats.edit_windows, 1, "still the edit fast path (got {stats:?})");
+    assert!(
+        stats.relaid_body_rows > 2,
+        "above-only (not below-reuse) — got {stats:?}"
+    );
+}
+
+/// A window whose layout inputs did not change AT ALL (point included) must
+/// reuse its retained body verbatim — 0 relaid body rows — instead of
+/// full-rebuilding. This is the multi-window win: editing one window leaves the
+/// others untouched, so they should cost nothing. (No-change cursor-only.)
+#[test]
+fn no_change_relayout_reuses_verbatim() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, _buf, _win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |_eval| {
+        // Nothing changes between the warm and measured passes.
+    });
+    assert_eq!(
+        m.stats.cursor_only_windows, 1,
+        "the unchanged main window reuses verbatim via the cursor-only path (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_rows >= 30,
+        "the main window's body is reused, not relaid (got {:?})",
+        m.stats
+    );
+    // The only body rows relaid are the 1-row minibuffer (excluded from
+    // retention as a probe-pass hazard); the 36-row main window relays nothing.
+    assert!(
+        m.stats.relaid_body_rows <= 1,
+        "the unchanged main window's 36 body rows are no longer relaid (got {:?})",
+        m.stats
+    );
+}
+
+/// No-change cursor-only must be BYTE-IDENTICAL to a full rebuild of the same
+/// (unchanged) state.
+#[test]
+fn no_change_relayout_matches_full_rebuild_golden() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval_ref, frame_ref, _br, _wr) = incr_editing_frame(&text, 800, 600);
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _bi, _wi) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id); // warm
+    engine.layout_frame_rust(&mut eval, frame_id); // measured: nothing changed
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "unchanged window took the no-change cursor-only path"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    assert_eq!(incremental, reference, "no-change must be byte-identical to a full rebuild");
+}
+
+/// Multi-window cross-window correctness (adversarial-review dimension D6): in a
+/// split frame on two DIFFERENT buffers, editing one buffer must leave BOTH
+/// windows' output byte-identical to a full rebuild — the edited window via its
+/// fast path, the other via full rebuild, with no cross-window corruption.
+#[test]
+fn multi_window_edit_matches_full_rebuild_for_both_windows() {
+    fn setup() -> (
+        Context,
+        neovm_core::window::FrameId,
+        BufferId,
+        neovm_core::window::WindowId,
+        neovm_core::window::WindowId,
+    ) {
+        let mut eval = Context::new();
+        let left_buf = eval
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        {
+            let buf = eval.buffer_manager_mut().get_mut(left_buf).expect("left");
+            buf.insert(&"(left line xx)\n".repeat(40));
+        }
+        let right_buf = eval.buffer_manager_mut().create_buffer("*right-incr*");
+        {
+            let buf = eval.buffer_manager_mut().get_mut(right_buf).expect("right");
+            buf.insert(&"(right line yy)\n".repeat(40));
+        }
+        let frame_id = eval
+            .frame_manager_mut()
+            .create_frame("multi-golden", 800, 600, left_buf);
+        let left_window = eval
+            .frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .selected_window;
+        let right_window = eval
+            .frame_manager_mut()
+            .split_window(
+                frame_id,
+                left_window,
+                neovm_core::window::SplitDirection::Horizontal,
+                right_buf,
+                None,
+                neovm_core::window::SplitPlacement::AfterTarget,
+            )
+            .expect("split");
+        (eval, frame_id, left_buf, left_window, right_window)
+    }
+    let edit_at = 5 * 15 + 4;
+
+    // Reference: full rebuild of the edited state.
+    let (mut eval_ref, frame_ref, left_ref, lw_ref, rw_ref) = setup();
+    {
+        let buf = eval_ref.buffer_manager_mut().get_mut(left_ref).expect("left");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buf.insert("x");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let ref_left = window_layout_trace(&eval_ref, &ref_engine, frame_ref, lw_ref);
+    let ref_right = window_layout_trace(&eval_ref, &ref_engine, frame_ref, rw_ref);
+
+    // Incremental: warm, edit the left buffer, measured.
+    let (mut eval, frame_id, left_buf, lw, rw) = setup();
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(left_buf).expect("left");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buf.insert("x");
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let inc_left = window_layout_trace(&eval, &engine, frame_id, lw);
+    let inc_right = window_layout_trace(&eval, &engine, frame_id, rw);
+
+    assert_eq!(inc_left, ref_left, "edited window must be byte-identical to a full rebuild");
+    assert_eq!(
+        inc_right, ref_right,
+        "the OTHER window must be byte-identical (no cross-window corruption)"
+    );
+}
+
+/// DIAGNOSTIC: the goldens compare matrix face_ids but not the frame faces table.
+/// Verify that the cursor-only fast path's reused body glyphs reference face_ids
+/// that ARE registered in the (per-frame-cleared) frame faces table — otherwise
+/// the renderer cannot resolve them (a latent dangling-face bug the goldens miss).
+#[test]
+fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, _buf, win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id); // warm (registers faces)
+    engine.layout_frame_rust(&mut eval, frame_id); // no-change cursor-only
+    assert_eq!(engine.last_layout_stats().cursor_only_windows, 1, "expected cursor-only");
+    let state = engine.last_frame_display_state.as_ref().expect("state");
+    let faces = &state.faces;
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|e| e.window_id == win.0)
+        .expect("window");
+    let mut missing: Vec<u32> = Vec::new();
+    for row in entry.matrix.rows.iter().filter(|r| r.enabled) {
+        for area in row.glyphs.iter() {
+            for g in area.iter() {
+                if !faces.contains_key(&g.face_id) {
+                    missing.push(g.face_id);
+                }
+            }
+        }
+    }
+    missing.sort_unstable();
+    missing.dedup();
+    assert!(
+        missing.is_empty(),
+        "cursor-only reused body uses face_ids NOT in the frame faces table: {missing:?} \
+         (faces table has ids {:?})",
+        {
+            let mut ks: Vec<u32> = faces.keys().copied().collect();
+            ks.sort_unstable();
+            ks
+        }
     );
 }

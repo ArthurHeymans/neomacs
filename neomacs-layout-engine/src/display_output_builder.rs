@@ -155,6 +155,29 @@ impl DisplayOutputBuilder {
             .install_row_lifecycle(request, self.frame_state.phys_cursor_mut());
     }
 
+    /// Install an already-finalized (visual-order) row into the current window
+    /// grid verbatim, marking it finalized so it is not bidi-reordered again.
+    /// Used by the Phase 1 cursor-only fast path to replay retained body rows.
+    pub(crate) fn install_finalized_output_row(&mut self, row: usize, source: GlyphRow) {
+        self.window_state.install_finalized_window_row(row, source);
+    }
+
+    /// Find the current window's buffer-text row containing `charpos` (Phase 2
+    /// scroll cursor re-decorate target).
+    pub(crate) fn find_current_window_text_row(&self, charpos: usize) -> Option<usize> {
+        self.window_state.find_current_window_text_row(charpos)
+    }
+
+    /// Read a row from the current window grid.
+    pub(crate) fn current_window_row(&self, row: usize) -> Option<&GlyphRow> {
+        self.window_state.current_window_row(row)
+    }
+
+    /// Strip cursor decoration from every row of the current window grid.
+    pub(crate) fn clear_current_window_cursors(&mut self) {
+        self.window_state.clear_current_window_cursors();
+    }
+
     #[cfg(test)]
     pub(crate) fn begin_output_row(&mut self, row: usize, role: GlyphRowRole, mode_line: bool) {
         self.install_output_row_lifecycle(OutputRowLifecycleRequest::begin(row, role, mode_line));
