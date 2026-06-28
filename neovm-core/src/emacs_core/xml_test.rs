@@ -211,6 +211,226 @@ fn libxml_parse_xml_region_discards_only_toplevel_comments() {
 }
 
 #[test]
+fn libxml_parse_xml_region_resolves_declared_namespace_prefixes() {
+    crate::test_utils::init_test_tracing();
+
+    // GNU/libxml2 strips a *declared* prefix from element and attribute names,
+    // drops the `xmlns:*` declaration itself, but keeps an *undeclared* prefix
+    // (`b:`) verbatim. Oracle:
+    //   (root nil (item ((b:x . "1")) "ns"))
+    assert_eq!(
+        parse_xml_region(
+            br#"<a:root xmlns:a="urn:a"><a:item b:x="1">ns</a:item></a:root>"#,
+            false
+        )
+        .unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("item"),
+                Value::list(vec![Value::cons(Value::symbol("b:x"), Value::string("1"))]),
+                Value::string("ns"),
+            ]),
+        ])
+    );
+
+    // When both `a` and `b` are declared, both prefixes are stripped. Oracle:
+    //   (root nil (item ((x . "1")) "ns"))
+    assert_eq!(
+        parse_xml_region(
+            br#"<a:root xmlns:a="urn:a" xmlns:b="urn:b"><a:item b:x="1">ns</a:item></a:root>"#,
+            false
+        )
+        .unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("item"),
+                Value::list(vec![Value::cons(Value::symbol("x"), Value::string("1"))]),
+                Value::string("ns"),
+            ]),
+        ])
+    );
+}
+
+#[test]
+fn libxml_parse_xml_region_strips_builtin_xml_prefix_and_default_ns() {
+    crate::test_utils::init_test_tracing();
+
+    // The reserved `xml` prefix is always declared, so `xml:lang` -> `lang`.
+    // Oracle: (root ((lang . "en")) (item nil "x"))
+    assert_eq!(
+        parse_xml_region(br#"<root xml:lang="en"><item>x</item></root>"#, false).unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::list(vec![Value::cons(
+                Value::symbol("lang"),
+                Value::string("en")
+            )]),
+            Value::list(vec![Value::symbol("item"), Value::NIL, Value::string("x")]),
+        ])
+    );
+
+    // A default-namespace declaration (`xmlns`) is dropped from the attribute
+    // list but does not strip any prefix; unprefixed attributes are unchanged.
+    // Oracle: (root ((attr . "v")) (item ((k . "w")) "x"))
+    assert_eq!(
+        parse_xml_region(
+            br#"<root xmlns="urn:d" attr="v"><item k="w">x</item></root>"#,
+            false
+        )
+        .unwrap(),
+        Value::list(vec![
+            Value::symbol("root"),
+            Value::list(vec![Value::cons(Value::symbol("attr"), Value::string("v"))]),
+            Value::list(vec![
+                Value::symbol("item"),
+                Value::list(vec![Value::cons(Value::symbol("k"), Value::string("w"))]),
+                Value::string("x"),
+            ]),
+        ])
+    );
+}
+
+#[test]
+fn libxml_parse_html_region_strips_self_closing_void_tag_slash() {
+    crate::test_utils::init_test_tracing();
+
+    // The `tl` crate leaves the trailing `/` in `<hr/>`'s tag name; libxml2
+    // never does. With the implicit html/body wrapper this matches GNU exactly.
+    // Oracle: (html nil (body nil (div nil (hr nil))))
+    let parsed = parse_html_region(br#"<div><hr/></div>"#, false).unwrap();
+    let expected = Value::list(vec![
+        Value::symbol("html"),
+        Value::NIL,
+        Value::list(vec![
+            Value::symbol("body"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("div"),
+                Value::NIL,
+                Value::list(vec![Value::symbol("hr"), Value::NIL]),
+            ]),
+        ]),
+    ]);
+    assert_eq!(parsed, expected);
+}
+
+/// Build `(html nil CHILDREN...)`.
+fn html(children: Vec<Value>) -> Value {
+    let mut v = vec![Value::symbol("html"), Value::NIL];
+    v.extend(children);
+    Value::list(v)
+}
+
+/// Build `(body nil CHILDREN...)`.
+fn body(children: Vec<Value>) -> Value {
+    let mut v = vec![Value::symbol("body"), Value::NIL];
+    v.extend(children);
+    Value::list(v)
+}
+
+#[test]
+fn libxml_parse_html_region_wraps_fragment_in_html_body() {
+    crate::test_utils::init_test_tracing();
+
+    // Bare fragment gets the implicit html/body wrapper.
+    // Oracle: (html nil (body nil (p nil "hi")))
+    assert_eq!(
+        parse_html_region(br#"<p>hi</p>"#, false).unwrap(),
+        html(vec![body(vec![Value::list(vec![
+            Value::symbol("p"),
+            Value::NIL,
+            Value::string("hi"),
+        ])])])
+    );
+
+    // Bare text. Oracle: (html nil (body nil "hello"))
+    assert_eq!(
+        parse_html_region(br#"hello"#, false).unwrap(),
+        html(vec![body(vec![Value::string("hello")])])
+    );
+
+    // Multiple body nodes. Oracle: (html nil (body nil (p nil "a") (p nil "b")))
+    assert_eq!(
+        parse_html_region(br#"<p>a</p><p>b</p>"#, false).unwrap(),
+        html(vec![body(vec![
+            Value::list(vec![Value::symbol("p"), Value::NIL, Value::string("a")]),
+            Value::list(vec![Value::symbol("p"), Value::NIL, Value::string("b")]),
+        ])])
+    );
+}
+
+#[test]
+fn libxml_parse_html_region_routes_head_elements_and_transitions_to_body() {
+    crate::test_utils::init_test_tracing();
+
+    // A leading <title> is routed into <head>, the <p> into <body>.
+    // Oracle: (html nil (head nil (title nil "T")) (body nil (p nil "b")))
+    let head_title = Value::list(vec![
+        Value::symbol("head"),
+        Value::NIL,
+        Value::list(vec![Value::symbol("title"), Value::NIL, Value::string("T")]),
+    ]);
+    assert_eq!(
+        parse_html_region(br#"<title>T</title><p>b</p>"#, false).unwrap(),
+        Value::list(vec![
+            Value::symbol("html"),
+            Value::NIL,
+            head_title.clone(),
+            body(vec![Value::list(vec![
+                Value::symbol("p"),
+                Value::NIL,
+                Value::string("b"),
+            ])]),
+        ])
+    );
+
+    // An explicit <head> is unwrapped, not double-nested.
+    // Oracle (same shape): (html nil (head nil (title nil "T")) (body nil (p nil "b")))
+    assert_eq!(
+        parse_html_region(br#"<head><title>T</title></head><p>b</p>"#, false).unwrap(),
+        Value::list(vec![
+            Value::symbol("html"),
+            Value::NIL,
+            head_title,
+            body(vec![Value::list(vec![
+                Value::symbol("p"),
+                Value::NIL,
+                Value::string("b"),
+            ])]),
+        ])
+    );
+
+    // Once body content (text) appears, a later <title> stays in the body.
+    // Oracle: (html nil (body nil "hi" (title nil "T")))
+    assert_eq!(
+        parse_html_region(br#"hi<title>T</title>"#, false).unwrap(),
+        html(vec![body(vec![
+            Value::string("hi"),
+            Value::list(vec![Value::symbol("title"), Value::NIL, Value::string("T"),]),
+        ])])
+    );
+
+    // Only head content: libxml2 emits no <body>.
+    // Oracle: (html nil (head nil (title nil "T")))
+    assert_eq!(
+        parse_html_region(br#"<title>T</title>"#, false).unwrap(),
+        Value::list(vec![
+            Value::symbol("html"),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("head"),
+                Value::NIL,
+                Value::list(vec![Value::symbol("title"), Value::NIL, Value::string("T"),]),
+            ]),
+        ])
+    );
+}
+
+#[test]
 fn zlib_available_p_returns_true() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

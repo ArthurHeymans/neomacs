@@ -81,6 +81,44 @@ fn read_region_bytes(
 // Top-level with comments: (top nil children...)
 // ---------------------------------------------------------------------------
 
+/// Tracks XML namespace prefixes declared along the open-element chain so that
+/// element/attribute qnames can be resolved the way libxml2 does: a declared
+/// prefix (or the built-in `xml`) is stripped, leaving only the local name,
+/// while an *undeclared* prefix is kept verbatim. The set of prefixes is the
+/// union over every open ancestor element, so a prefix declared on an ancestor
+/// stays in scope for descendants and goes out of scope when that ancestor's
+/// end tag is reached.
+#[derive(Default)]
+struct NamespaceScopes {
+    /// One frame per currently-open element, each holding the prefixes that
+    /// element declared (`xmlns:PREFIX`). Empty string means a default
+    /// (`xmlns`) declaration, which never affects qname resolution.
+    frames: Vec<Vec<String>>,
+}
+
+impl NamespaceScopes {
+    /// `xml` is reserved/predeclared, so a prefix is "declared" if it is `xml`
+    /// or appears in any open element's declaration set.
+    fn prefix_declared(&self, prefix: &str) -> bool {
+        prefix == "xml"
+            || self
+                .frames
+                .iter()
+                .any(|frame| frame.iter().any(|p| p == prefix))
+    }
+
+    /// Resolve a qname: strip the prefix iff it is a declared namespace prefix,
+    /// otherwise return the qname unchanged.
+    fn resolve(&self, qname: &str) -> String {
+        match qname.split_once(':') {
+            Some((prefix, local)) if !prefix.is_empty() && self.prefix_declared(prefix) => {
+                local.to_string()
+            }
+            _ => qname.to_string(),
+        }
+    }
+}
+
 /// Parse region using quick-xml and return Elisp parse tree.
 fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     use quick_xml::Reader;
@@ -93,17 +131,30 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     let mut stack: Vec<(String, Vec<Value>, Vec<Value>)> = Vec::new();
     let mut top_level: Vec<Value> = Vec::new();
     let mut has_top_level_comments = false;
+    let mut scopes = NamespaceScopes::default();
 
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).into_owned();
-                let attrs = parse_xml_attributes(e.attributes());
+                // Push this element's namespace declarations before resolving
+                // its own qname, so a prefix declared and used on the same
+                // element (`<p:root xmlns:p=...>`) resolves correctly.
+                scopes.frames.push(collect_ns_declarations(e.attributes()));
+                let name = e.name();
+                let raw_tag = String::from_utf8_lossy(name.as_ref());
+                let tag = scopes.resolve(raw_tag.as_ref());
+                let attrs = parse_xml_attributes(e.attributes(), &scopes);
                 stack.push((tag, attrs, Vec::new()));
             }
             Ok(Event::Empty(ref e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).into_owned();
-                let attrs = parse_xml_attributes(e.attributes());
+                // Empty elements open and close immediately; their declarations
+                // only scope their own qname/attributes, so push/resolve/pop.
+                scopes.frames.push(collect_ns_declarations(e.attributes()));
+                let name = e.name();
+                let raw_tag = String::from_utf8_lossy(name.as_ref());
+                let tag = scopes.resolve(raw_tag.as_ref());
+                let attrs = parse_xml_attributes(e.attributes(), &scopes);
+                scopes.frames.pop();
                 let node = make_element_node(&tag, attrs, Vec::new());
                 if let Some((_, _, children)) = stack.last_mut() {
                     children.push(node);
@@ -112,6 +163,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 }
             }
             Ok(Event::End(_)) => {
+                scopes.frames.pop();
                 if let Some((tag, attrs, children)) = stack.pop() {
                     let node = make_element_node(&tag, attrs, children);
                     if let Some((_, _, parent_children)) = stack.last_mut() {
@@ -188,11 +240,41 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     }
 }
 
-/// Parse XML attributes into a list of dotted pairs.
-fn parse_xml_attributes(attrs: quick_xml::events::attributes::Attributes<'_>) -> Vec<Value> {
+/// Collect the namespace-prefix declarations on a single element: every
+/// `xmlns:PREFIX="..."` contributes `PREFIX`, and a bare `xmlns="..."`
+/// contributes the empty string (a default namespace, which is recorded but
+/// never strips a prefix). Matches libxml2, which consumes these as namespace
+/// nodes rather than ordinary attributes.
+fn collect_ns_declarations(attrs: quick_xml::events::attributes::Attributes<'_>) -> Vec<String> {
+    let mut decls = Vec::new();
+    for attr in attrs.flatten() {
+        let key = attr.key.as_ref();
+        if key == b"xmlns" {
+            decls.push(String::new());
+        } else if let Some(prefix) = key.strip_prefix(b"xmlns:") {
+            decls.push(String::from_utf8_lossy(prefix).into_owned());
+        }
+    }
+    decls
+}
+
+/// Parse XML attributes into a list of dotted pairs. Namespace-declaration
+/// attributes (`xmlns`, `xmlns:*`) are dropped, and any remaining attribute
+/// name carrying a declared namespace prefix is resolved to its local name —
+/// reproducing the property list libxml2 hands to GNU's `make_dom`.
+fn parse_xml_attributes(
+    attrs: quick_xml::events::attributes::Attributes<'_>,
+    scopes: &NamespaceScopes,
+) -> Vec<Value> {
     let mut result = Vec::new();
     for attr in attrs.flatten() {
-        let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+        let key = attr.key.as_ref();
+        // Drop namespace declarations; they are not ordinary attributes.
+        if key == b"xmlns" || key.starts_with(b"xmlns:") {
+            continue;
+        }
+        let raw_key = String::from_utf8_lossy(key);
+        let key = scopes.resolve(raw_key.as_ref());
         let val = attr
             .unescape_value()
             .map(|value| value.into_owned())
@@ -223,6 +305,24 @@ fn make_element_node(tag: &str, attrs: Vec<Value>, children: Vec<Value>) -> Valu
 // HTML parsing via tl crate
 // ---------------------------------------------------------------------------
 
+/// A converted top-level HTML node, tagged with its element name (if it is an
+/// element) so the HTML5 document wrapper can classify it as head vs body.
+struct TopNode {
+    /// The lowercase element name, or `None` for text/comment nodes.
+    tag: Option<String>,
+    value: Value,
+}
+
+/// HTML elements that belong in `<head>` when they appear before any body
+/// content, matching how libxml2's HTML parser routes them. Notably `noscript`
+/// is *not* here: libxml2 places it in `<body>` in this fragment context.
+fn is_head_element(tag: &str) -> bool {
+    matches!(
+        tag,
+        "head" | "title" | "base" | "link" | "meta" | "style" | "script"
+    )
+}
+
 /// Parse region as HTML using tl and return Elisp parse tree.
 fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     let input = String::from_utf8_lossy(data);
@@ -230,11 +330,11 @@ fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     let parser = dom.parser();
     let handles = dom.children();
 
-    let mut nodes = Vec::new();
+    let mut nodes: Vec<TopNode> = Vec::new();
     for handle in handles {
         let node = handle.get(parser)?;
-        if let Some(val) = convert_tl_node(node, parser, discard_comments) {
-            nodes.push(val);
+        if let Some(top) = convert_tl_top_node(node, parser, discard_comments) {
+            nodes.push(top);
         }
     }
 
@@ -242,17 +342,122 @@ fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
         return Some(Value::NIL);
     }
 
-    if nodes.len() == 1 {
-        return Some(nodes.into_iter().next().unwrap());
+    // libxml2's HTML parser performs full HTML5 tree construction, implicitly
+    // creating the <html>/<head>/<body> document structure. The `tl` crate
+    // returns the fragment verbatim, so reconstruct that wrapper here.
+    wrap_html_document(nodes)
+}
+
+/// Reconstruct libxml2's implicit `<html>`/`<head>`/`<body>` document structure
+/// around a parsed HTML fragment.
+///
+/// Faithfully covered (verified against GNU): bare fragments, plain text,
+/// `head`-routed elements (`title`/`meta`/`link`/`base`/`style`/`script`),
+/// an explicit `<head>`, and the head→body transition once body content
+/// appears. A fragment that already has a single `<html>` root, or that carries
+/// top-level comments, is left as libxml2's lighter handling would *not*
+/// rewrite it the same way, so those keep the pre-existing pass-through /
+/// `(top ...)` behavior rather than risk a wrong wrap.
+fn wrap_html_document(nodes: Vec<TopNode>) -> Option<Value> {
+    let has_html_root = nodes.len() == 1 && nodes[0].tag.as_deref() == Some("html");
+    let has_top_comment = nodes
+        .iter()
+        .any(|n| n.tag.is_none() && is_comment_node(&n.value));
+
+    if has_html_root || has_top_comment {
+        // Risky to rewrite faithfully — preserve previous behavior.
+        let values: Vec<Value> = nodes.into_iter().map(|n| n.value).collect();
+        if values.len() == 1 {
+            return Some(values.into_iter().next().unwrap());
+        }
+        return Some(Value::list(
+            std::iter::once(Value::symbol("top"))
+                .chain(std::iter::once(Value::NIL))
+                .chain(values)
+                .collect(),
+        ));
     }
 
-    // Multiple top-level nodes — wrap in (top nil children...), matching GNU.
-    Some(Value::list(
-        std::iter::once(Value::symbol("top"))
-            .chain(std::iter::once(Value::NIL))
-            .chain(nodes)
-            .collect(),
-    ))
+    // Partition top-level nodes into the head and body sections, honoring the
+    // head→body transition: once body content appears, later head-type
+    // elements stay in the body (matching libxml2).
+    let mut head: Vec<Value> = Vec::new();
+    let mut body: Vec<Value> = Vec::new();
+    let mut seen_body_content = false;
+
+    for node in nodes {
+        match node.tag.as_deref() {
+            Some("head") => {
+                // Unwrap an explicit <head>, merging its children into head.
+                head.extend(element_children(&node.value));
+            }
+            Some("body") => {
+                seen_body_content = true;
+                body.extend(element_children(&node.value));
+            }
+            Some(tag) if !seen_body_content && is_head_element(tag) => {
+                head.push(node.value);
+            }
+            _ => {
+                seen_body_content = true;
+                body.push(node.value);
+            }
+        }
+    }
+
+    // (html nil [head nil HEAD...] (body nil BODY...))
+    let has_head = !head.is_empty();
+    let has_body = !body.is_empty();
+    let mut html_children: Vec<Value> = vec![Value::symbol("html"), Value::NIL];
+    if has_head {
+        let mut head_node = vec![Value::symbol("head"), Value::NIL];
+        head_node.extend(head);
+        html_children.push(Value::list(head_node));
+    }
+    // libxml2 omits <body> only when there is exclusively head content.
+    if has_body || !has_head {
+        let mut body_node = vec![Value::symbol("body"), Value::NIL];
+        body_node.extend(body);
+        html_children.push(Value::list(body_node));
+    }
+    Some(Value::list(html_children))
+}
+
+/// Convert a top-level `tl` node, capturing its element tag (lowercased) so the
+/// HTML document wrapper can classify it. Returns `None` for nodes that convert
+/// to nothing (e.g. blank text or a discarded comment).
+fn convert_tl_top_node(
+    node: &tl::Node,
+    parser: &tl::Parser,
+    discard_comments: bool,
+) -> Option<TopNode> {
+    let value = convert_tl_node(node, parser, discard_comments)?;
+    let tag = match node {
+        tl::Node::Tag(element) => {
+            let raw_tag = element.name().as_utf8_str();
+            let name = raw_tag.strip_suffix('/').unwrap_or(raw_tag.as_ref());
+            Some(name.to_ascii_lowercase())
+        }
+        _ => None,
+    };
+    Some(TopNode { tag, value })
+}
+
+/// Is `value` a `(comment ...)` element node?
+fn is_comment_node(value: &Value) -> bool {
+    super::value::list_to_vec(value)
+        .and_then(|items| items.first().copied())
+        .and_then(|head| head.as_symbol_name())
+        .is_some_and(|name| name == "comment")
+}
+
+/// Return the children of an element node `(tag attrs child...)` (i.e. drop the
+/// leading tag symbol and attribute list).
+fn element_children(value: &Value) -> Vec<Value> {
+    match super::value::list_to_vec(value) {
+        Some(items) if items.len() > 2 => items[2..].to_vec(),
+        _ => Vec::new(),
+    }
 }
 
 fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool) -> Option<Value> {
@@ -278,7 +483,11 @@ fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool)
             }
         }
         tl::Node::Tag(element) => {
-            let tag = element.name().as_utf8_str();
+            // The `tl` crate leaves the trailing `/` of an XHTML-style
+            // self-closing tag (`<hr/>`, `<rect/>`) in the tag name.
+            // libxml2's HTML parser never does that, so strip it to match GNU.
+            let raw_tag = element.name().as_utf8_str();
+            let tag = raw_tag.strip_suffix('/').unwrap_or(raw_tag.as_ref());
             let attrs = convert_tl_attributes(element.attributes());
             let children = element.children();
             let children_handles = children.top();
@@ -289,7 +498,7 @@ fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool)
                     child_values.push(val);
                 }
             }
-            Some(make_element_node(tag.as_ref(), attrs, child_values))
+            Some(make_element_node(tag, attrs, child_values))
         }
     }
 }
