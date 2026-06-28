@@ -262,12 +262,17 @@ fn is_print_circle_candidate(value: &Value, print_gensym: bool) -> bool {
     match value.kind() {
         ValueKind::Cons => true,
         ValueKind::Veclike(VecLikeType::Vector) => {
-            // Non-empty vectors only
-            value.as_vector_data().map_or(false, |v| !v.is_empty())
+            // GNU's VECTORP excludes bool-vectors (a distinct pseudovector).
+            // neomacs builds bool-vectors as tagged plain vectors, so filter
+            // them out explicitly here. Non-empty vectors only.
+            !super::chartable::is_bool_vector(value)
+                && value.as_vector_data().map_or(false, |v| !v.is_empty())
         }
         ValueKind::Veclike(VecLikeType::Record) => true,
         ValueKind::Veclike(VecLikeType::HashTable) => true,
         ValueKind::Veclike(VecLikeType::Obarray) => true,
+        ValueKind::Veclike(VecLikeType::CharTable) => true,
+        ValueKind::Veclike(VecLikeType::SubCharTable) => true,
         ValueKind::Veclike(VecLikeType::Lambda) => true,
         ValueKind::Veclike(VecLikeType::Macro) => true,
         ValueKind::Veclike(VecLikeType::ByteCode) => true,
@@ -302,6 +307,8 @@ fn object_identity_key(value: &Value) -> Option<u64> {
         | ValueKind::Veclike(VecLikeType::Vector)
         | ValueKind::Veclike(VecLikeType::Record)
         | ValueKind::Veclike(VecLikeType::HashTable)
+        | ValueKind::Veclike(VecLikeType::CharTable)
+        | ValueKind::Veclike(VecLikeType::SubCharTable)
         | ValueKind::String
         | ValueKind::Veclike(VecLikeType::Lambda)
         | ValueKind::Veclike(VecLikeType::Macro)
