@@ -6375,13 +6375,19 @@ fn transpose_regions_moves_text_properties_and_markers_like_gnu() {
 #[test]
 fn pure_dispatch_unicode_value_placeholder_cluster_matches_compat_contracts() {
     crate::test_utils::init_test_tracing();
+    // unencodable-char-position is no longer a nil-returning placeholder: it now
+    // validates its region like GNU. In the pure-dispatch path (no buffer) the
+    // requested region 1..2 is out of range, so it signals args-out-of-range
+    // rather than silently returning nil.
     let unencodable = dispatch_builtin_pure(
         "unencodable-char-position",
         vec![Value::fixnum(1), Value::fixnum(2), Value::symbol("utf-8")],
     )
-    .expect("builtin unencodable-char-position should resolve")
-    .expect("builtin unencodable-char-position should evaluate");
-    assert!(unencodable.is_nil());
+    .expect("builtin unencodable-char-position should resolve");
+    assert!(
+        unencodable.is_err(),
+        "unencodable-char-position should signal on an out-of-range region, got {unencodable:?}"
+    );
 
     let unicode_table = dispatch_builtin_pure(
         "unicode-property-table-internal",

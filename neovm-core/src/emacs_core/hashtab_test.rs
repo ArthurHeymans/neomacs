@@ -304,14 +304,19 @@ fn sxhash_float_matches_oracle_fixnum_values() {
 }
 
 #[test]
-fn unintern_accepts_single_argument_for_initial_obarray() {
+fn unintern_with_nil_obarray_targets_initial_obarray() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     eval.obarray_mut().intern("vm-unintern-single");
     assert!(eval.obarray().intern_soft("vm-unintern-single").is_some());
 
-    let removed = builtin_unintern(&mut eval, vec![Value::string("vm-unintern-single")])
-        .expect("unintern should accept one argument");
+    // GNU `unintern` requires the OBARRAY arg (arity 2,2); a nil OBARRAY targets
+    // the default/initial obarray.
+    let removed = builtin_unintern(
+        &mut eval,
+        vec![Value::string("vm-unintern-single"), Value::NIL],
+    )
+    .expect("unintern with nil obarray should target the initial obarray");
 
     assert_eq!(removed, Value::T);
     assert!(eval.obarray().intern_soft("vm-unintern-single").is_none());
@@ -326,7 +331,7 @@ fn unintern_symbol_argument_removes_only_the_exact_symbol() {
     let uninterned = intern_uninterned(name);
     eval.obarray_mut().ensure_interned_global_id(canonical);
 
-    let removed_shadow = builtin_unintern(&mut eval, vec![Value::symbol(uninterned)])
+    let removed_shadow = builtin_unintern(&mut eval, vec![Value::symbol(uninterned), Value::NIL])
         .expect("unintern should accept uninterned symbol argument");
     assert!(removed_shadow.is_nil());
     assert!(
@@ -334,7 +339,7 @@ fn unintern_symbol_argument_removes_only_the_exact_symbol() {
         "uninterned shadow must not remove canonical namesake"
     );
 
-    let removed_canonical = builtin_unintern(&mut eval, vec![Value::symbol(canonical)])
+    let removed_canonical = builtin_unintern(&mut eval, vec![Value::symbol(canonical), Value::NIL])
         .expect("unintern should remove exact canonical symbol");
     assert_eq!(removed_canonical, Value::T);
     assert!(eval.obarray().intern_soft(name).is_none());
@@ -349,7 +354,7 @@ fn intern_after_unintern_allocates_fresh_symbol_like_gnu() {
         .obarray_mut()
         .intern_lisp_string(&LispString::from_utf8(name));
 
-    let removed = builtin_unintern(&mut eval, vec![Value::from_sym_id(original)])
+    let removed = builtin_unintern(&mut eval, vec![Value::from_sym_id(original), Value::NIL])
         .expect("unintern should remove exact canonical symbol");
     assert_eq!(removed, Value::T);
 
@@ -370,7 +375,7 @@ fn unintern_missing_string_does_not_intern_new_canonical_symbol() {
     let missing = "vm-unintern-missing-6f20e7c2-c0d2-4d63-b337-93ac7fe9a6bd";
     assert!(lookup_interned(missing).is_none());
 
-    let removed = builtin_unintern(&mut eval, vec![Value::string(missing)])
+    let removed = builtin_unintern(&mut eval, vec![Value::string(missing), Value::NIL])
         .expect("unintern should return nil for missing names");
 
     assert!(removed.is_nil());
