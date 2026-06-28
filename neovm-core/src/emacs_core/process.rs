@@ -3717,6 +3717,36 @@ pub(crate) fn signal_process_io(action: &str, target: Option<&str>, err: std::io
     signal(file_error_symbol(err.kind()), data)
 }
 
+/// GNU `report_file_error (STRING, FILENAME)` (callproc.c/fileio.c) for a
+/// subprocess file-open/IO failure: signal a file-error-family condition whose
+/// DATA is `(STRING STRERROR FILENAME)`, deriving the error SYMBOL and the bare
+/// `strerror` string (no Rust "(os error N)" suffix) from the underlying
+/// `errno`.  Use this instead of `signal_process_io` whenever the failing
+/// operation has a Lisp filename to report — GNU always includes it.
+#[cfg(unix)]
+pub(crate) fn signal_process_file_error(
+    action: &str,
+    filename: Value,
+    err: std::io::Error,
+) -> Flow {
+    let errno = err.raw_os_error().unwrap_or(libc::EIO);
+    signal_file_errno(action, filename, errno)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn signal_process_file_error(
+    action: &str,
+    filename: Value,
+    err: std::io::Error,
+) -> Flow {
+    let mut data = vec![
+        Value::string(action),
+        Value::string(err.to_string()),
+        filename,
+    ];
+    signal(file_error_symbol(err.kind()), data)
+}
+
 /// The bare strerror string for an errno, matching GNU's `emacs_strerror`
 /// (e.g. ENOENT -> "No such file or directory").  Rust's
 /// `io::Error::to_string()` appends "(os error N)", which GNU never emits, so

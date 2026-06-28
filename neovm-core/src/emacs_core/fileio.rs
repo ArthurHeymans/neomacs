@@ -3056,7 +3056,7 @@ fn file_writable_path(path: &Path) -> bool {
     }
 }
 
-fn file_accessible_directory_path(path: &Path) -> bool {
+pub(crate) fn file_accessible_directory_path(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
     }

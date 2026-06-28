@@ -379,6 +379,132 @@ fn configure_subprocess_current_dir(eval: &super::eval::Context, command: &mut C
     }
 }
 
+/// The `default-directory` value GNU's `get_current_directory` reads from
+/// `BVAR (current_buffer, directory)`.  A `(let ((default-directory ...)) ...)`
+/// dynamically rebinds the buffer-local slot, so prefer the dynamically-visible
+/// value (let-aware) and fall back to the buffer-local/global value.
+fn subprocess_curdir_lisp(eval: &super::eval::Context) -> Option<LispString> {
+    let visible = eval.visible_variable_value_or_nil("default-directory");
+    if let Some(string) = visible.as_lisp_string() {
+        return Some(string.clone());
+    }
+    super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
+}
+
+/// GNU `get_current_directory (true)` (callproc.c): make sure the child will be
+/// able to `chdir` into `default-directory` *before* spawning, and signal
+/// `(file-missing "Setting current directory" "No such file or directory" DIR)`
+/// (via `report_file_error ("Setting current directory", curdir)`) when it is an
+/// inaccessible local directory.  Returns the validated, expanded path to use as
+/// the child's working directory (or None to inherit the editor's cwd).
+///
+/// Mirroring GNU exactly: the directory is first run through
+/// `unhandled-file-name-directory`; if that is nil the directory is a remote /
+/// handled location that cannot be made the OS cwd, so GNU substitutes `~` and
+/// performs no accessibility check (we keep neomacs's `$HOME` fallback).  Only a
+/// *local* directory is expanded and validated, and only that case can signal.
+fn validate_subprocess_current_directory(
+    eval: &mut super::eval::Context,
+) -> Result<Option<PathBuf>, Flow> {
+    let Some(curdir) = subprocess_curdir_lisp(eval) else {
+        return Ok(None);
+    };
+
+    // `dir = Funhandled_file_name_directory (curdir)`; nil => remote/handled.
+    let unhandled = super::fileio::builtin_unhandled_file_name_directory_eval(
+        eval,
+        vec![Value::heap_string(curdir.clone())],
+    )?;
+    if unhandled.is_nil() {
+        // Remote/handled directory: GNU uses "~" and does not validate.
+        return Ok(fallback_subprocess_directory());
+    }
+    let unhandled_lisp = unhandled
+        .as_lisp_string()
+        .cloned()
+        .unwrap_or_else(|| curdir.clone());
+
+    // `dir = expand_and_dir_to_file (dir)` then
+    // `if (! file_accessible_directory_p (encoded_dir)) report_file_error (...)`.
+    let expanded = super::fileio::expand_file_name_lisp(&unhandled_lisp, None);
+    let path = super::fileio::lisp_file_name_to_path_buf(&expanded);
+    match accessible_directory_errno(&path) {
+        None => Ok(Some(path)),
+        Some(errno) => {
+            // report_file_error ("Setting current directory", curdir): the
+            // un-encoded `default-directory` value the user supplied, with the
+            // errno-derived condition + strerror (ENOENT -> file-missing /
+            // "No such file or directory", EACCES -> permission-denied, ...).
+            Err(super::process::signal_file_errno(
+                "Setting current directory",
+                Value::heap_string(curdir),
+                errno,
+            ))
+        }
+    }
+}
+
+/// GNU `file_accessible_directory_p` (fileio.c): a directory DIR is accessible
+/// iff `access ("DIR/.", F_OK)` succeeds, which requires every component of DIR
+/// to be a searchable directory.  Return `None` on success, otherwise the errno
+/// GNU's `report_file_error` would turn into the signalled condition (ENOENT,
+/// EACCES, ENOTDIR, ...).
+#[cfg(unix)]
+fn accessible_directory_errno(path: &std::path::Path) -> Option<libc::c_int> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut bytes = path.as_os_str().as_bytes().to_vec();
+    // Append "/." (GNU appends "/./" to dodge a macOS bug; "/." is enough on
+    // Linux and keeps the errno identical).
+    if bytes.last() != Some(&b'/') {
+        bytes.push(b'/');
+    }
+    bytes.push(b'.');
+    let Ok(c_path) = std::ffi::CString::new(bytes) else {
+        return Some(libc::ENOENT);
+    };
+    if unsafe { libc::access(c_path.as_ptr(), libc::F_OK) } == 0 {
+        None
+    } else {
+        Some(
+            std::io::Error::last_os_error()
+                .raw_os_error()
+                .unwrap_or(libc::ENOENT),
+        )
+    }
+}
+
+#[cfg(not(unix))]
+fn accessible_directory_errno(path: &std::path::Path) -> Option<libc::c_int> {
+    if super::fileio::file_accessible_directory_path(path) {
+        None
+    } else if path.exists() {
+        Some(libc::EACCES)
+    } else {
+        Some(libc::ENOENT)
+    }
+}
+
+/// Expand a relative INFILE against `default-directory` like GNU
+/// `Fcall_process`'s `Fexpand_file_name (args[1], get_current_directory (false))`
+/// (callproc.c:327).  Without this a bare relative INFILE ("foo.txt") is resolved
+/// against the editor's process cwd instead of the buffer's `default-directory`.
+fn expand_subprocess_infile(
+    eval: &mut super::eval::Context,
+    infile: Option<LispString>,
+) -> Result<Option<LispString>, Flow> {
+    let Some(infile) = infile else {
+        return Ok(None);
+    };
+    let base = subprocess_curdir_lisp(eval)
+        .map(Value::heap_string)
+        .unwrap_or(Value::NIL);
+    let expanded =
+        super::fileio::builtin_expand_file_name(eval, vec![Value::heap_string(infile), base])?;
+    Ok(Some(
+        super::builtins::expect_lisp_string(&expanded)?.clone(),
+    ))
+}
+
 /// Build the child process environment from the dynamically-bound
 /// `process-environment`, mirroring GNU's `make_environment_block`
 /// (callproc.c). `process-environment` is seeded from the parent OS
@@ -580,22 +706,29 @@ fn write_output_target_in_state(
             insert_process_output_in_state(buffers, destination, &text)
         }
         OutputTarget::File(path) => {
+            // GNU opens the `(:file DEST)` output file at spawn time with
+            // O_CREAT|O_TRUNC and reports a failure as
+            // `report_file_errno ("Opening process output file", output_file, ...)`
+            // (callproc.c:570/591) — the DATA list carries the filename and a bare
+            // strerror.  neomacs writes the captured output here instead, but mirrors
+            // GNU's operation string + filename so the signalled error data matches.
+            let file_error = |e: std::io::Error| {
+                super::process::signal_process_file_error(
+                    "Opening process output file",
+                    Value::heap_string(path.clone()),
+                    e,
+                )
+            };
             let path_buf = lisp_string_to_output_path(path);
             if append {
                 let mut file = OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(&path_buf)
-                    .map_err(|e| {
-                        super::process::signal_process_io("Writing process output", None, e)
-                    })?;
-                file.write_all(output).map_err(|e| {
-                    super::process::signal_process_io("Writing process output", None, e)
-                })
+                    .map_err(file_error)?;
+                file.write_all(output).map_err(file_error)
             } else {
-                std::fs::write(&path_buf, output).map_err(|e| {
-                    super::process::signal_process_io("Writing process output", None, e)
-                })
+                std::fs::write(&path_buf, output).map_err(file_error)
             }
         }
     }
@@ -656,7 +789,14 @@ fn configure_call_process_stdin(
         }
         Some(path) => {
             let file = std::fs::File::open(lisp_string_to_output_path(path)).map_err(|e| {
-                super::process::signal_process_io("Opening process input file", None, e)
+                // GNU `report_file_error ("Opening process input file", infile)`
+                // (callproc.c:340): the DATA list ends with the (expanded)
+                // filename, and the strerror text carries no Rust "(os error N)".
+                super::process::signal_process_file_error(
+                    "Opening process input file",
+                    Value::heap_string(path.clone()),
+                    e,
+                )
             })?;
             command.stdin(Stdio::from(file));
             Ok(())
@@ -697,6 +837,13 @@ fn run_process_command_in_state(
     cmd_args: &[LispString],
 ) -> EvalResult {
     let destination_spec = parse_call_process_destination(&mut eval.buffers, destination)?;
+    // GNU `Fcall_process`: validate the cwd via `get_current_directory` (signals
+    // "Setting current directory" for an inaccessible local dir) and expand a
+    // relative INFILE against `default-directory`, both *before* spawning. The cwd
+    // check happens first because GNU expands INFILE against
+    // `get_current_directory (false)`, which itself validates the directory.
+    let subprocess_dir = validate_subprocess_current_directory(eval)?;
+    let infile = expand_subprocess_infile(eval, infile)?;
     let program_os = resolve_call_process_program(eval, program)?;
     let cmd_args_os = cmd_args
         .iter()
@@ -706,7 +853,9 @@ fn run_process_command_in_state(
     if destination_spec.no_wait {
         let mut command = new_child_command(&program_os);
         command.args(&cmd_args_os).stdout(Stdio::null());
-        configure_subprocess_current_dir(eval, &mut command);
+        if let Some(dir) = &subprocess_dir {
+            command.current_dir(dir);
+        }
         configure_subprocess_environment(eval, &mut command);
         configure_call_process_stdin(&mut command, infile.as_ref())?;
         match destination_spec.stderr {
@@ -744,7 +893,9 @@ fn run_process_command_in_state(
         .args(&cmd_args_os)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    configure_subprocess_current_dir(eval, &mut command);
+    if let Some(dir) = &subprocess_dir {
+        command.current_dir(dir);
+    }
     configure_subprocess_environment(eval, &mut command);
     configure_call_process_stdin(&mut command, infile.as_ref())?;
     let output = command
@@ -944,7 +1095,21 @@ fn builtin_call_process_region_impl(
     expect_min_args("call-process-region", &args, 3)?;
     let program = super::builtins::expect_lisp_string(&args[2])?.clone();
     let program_os = resolve_call_process_program(eval, &program)?;
-    let subprocess_dir = subprocess_default_directory(eval);
+    // GNU `Fcall_process_region` delegates the chdir to `Fcall_process`, so the
+    // same `get_current_directory` validation applies: signal "Setting current
+    // directory" for an inaccessible local `default-directory` before any work.
+    let subprocess_dir = validate_subprocess_current_directory(eval)?;
+    // Bug 10 (GNU `Fcall_process_region`): when DELETE is set GNU removes the
+    // region with `Fdelete_region`/`del_range`, whose `prepare_to_modify_buffer`
+    // runs `barf_if_buffer_read_only` first — so a read-only buffer signals
+    // `(buffer-read-only BUFFER)` *before* the region is touched. Mirror that by
+    // checking now (only the integer/marker + whole-buffer delete cases reach
+    // `Fdelete_region`; a string START with DELETE errors with `wrong-type` like
+    // GNU below and never deletes).
+    let delete = args.len() > 3 && args[3].is_truthy();
+    if delete && !args[0].is_string() {
+        super::editfns::ensure_current_buffer_writable_in_state(&eval.obarray, &[], &eval.buffers)?;
+    }
     // Capture the (possibly let-bound) `process-environment` before we take a
     // mutable borrow of the buffers; the child env is built from it just like
     // GNU's `make_environment_block`.
@@ -969,7 +1134,6 @@ fn builtin_call_process_region_impl(
 
     let buffers = &mut eval.buffers;
 
-    let delete = args.len() > 3 && args[3].is_truthy();
     let destination = if args.len() > 4 {
         &args[4]
     } else {
@@ -1250,6 +1414,10 @@ fn parse_output_lines(stdout: &[u8]) -> Value {
 #[cfg(test)]
 #[path = "callproc_raw_bytes_test.rs"]
 mod raw_bytes_tests;
+
+#[cfg(test)]
+#[path = "callproc_working_dir_infile_test.rs"]
+mod working_dir_infile_tests;
 
 #[cfg(all(test, unix))]
 mod child_isolation_tests {
