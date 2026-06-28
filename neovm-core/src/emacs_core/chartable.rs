@@ -666,6 +666,27 @@ fn char_table_extra_slot_value(table: &Value, idx: usize) -> Option<Value> {
     (idx < extra_count).then(|| vec[CT_EXTRA_START + idx])
 }
 
+fn set_char_table_extra_slot(table: &Value, idx: usize, value: Value) {
+    if !is_char_table(table) {
+        return;
+    }
+    if table.is_char_table() {
+        let _ = table.with_char_table_mut(|obj| {
+            if let Some(slot) = obj.extras.ensure_owned().get_mut(idx) {
+                *slot = value;
+            }
+        });
+        return;
+    }
+    let extra_count = char_table_extra_count(table.as_vector_data().unwrap());
+    if idx >= extra_count {
+        return;
+    }
+    table.with_vector_data_mut(|vec| {
+        store_value_atomic(&mut vec[CT_EXTRA_START + idx], value);
+    });
+}
+
 fn is_char_code_property_table(table: &Value) -> bool {
     if !is_char_table(table) {
         return false;
@@ -2981,6 +3002,96 @@ pub(crate) fn builtin_get_unicode_property_internal(args: Vec<Value>) -> EvalRes
         ValueKind::Fixnum(_) => Err(invalid_unicode_property_table()),
         _ => Ok(value),
     }
+}
+
+/// Encode VALUE as an element of TABLE whose elements are characters.
+///
+/// Mirrors GNU's `uniprop_encode_value_character` (chartab.c): nil is allowed,
+/// otherwise the value must be a valid character; a non-character signals
+/// `(wrong-type-argument integerp VALUE)`.
+fn encode_uniprop_value_character(value: Value) -> Result<Value, Flow> {
+    if value.is_nil() {
+        return Ok(value);
+    }
+    match value.kind() {
+        ValueKind::Fixnum(n) if (0..=MAX_CHAR).contains(&n) => Ok(value),
+        _ => Err(wrong_type("integerp", &value)),
+    }
+}
+
+/// Encode VALUE as an element of TABLE that uses run-length compression.
+///
+/// Mirrors GNU's `uniprop_encode_value_run_length` (chartab.c): the value must
+/// already appear in the value vector (extra slot 4); a value not found signals
+/// `(wrong-type-argument "Unicode property value" VALUE)`.  The stored element
+/// is the fixnum index into the value vector.
+fn encode_uniprop_value_run_length(table: Value, value: Value) -> Result<Value, Flow> {
+    let value_table = char_table_extra_slot_value(&table, 4)
+        .filter(|v| v.is_vector())
+        .and_then(|v| v.as_vector_data());
+    let found =
+        value_table.and_then(|values| values.iter().position(|entry| eq_value(entry, &value)));
+    match found {
+        Some(index) => Ok(Value::fixnum(index as i64)),
+        None => Err(signal(
+            "wrong-type-argument",
+            vec![Value::string("Unicode property value"), value],
+        )),
+    }
+}
+
+/// Encode VALUE as an element of TABLE that uses run-length compression and
+/// contains numbers as elements.
+///
+/// Mirrors GNU's `uniprop_encode_value_numeric` (chartab.c): the value must be a
+/// fixnum (`(wrong-type-argument fixnump VALUE)` otherwise); the stored element
+/// is its fixnum index into the value vector (extra slot 4), appending the value
+/// to that vector if it is not already present.
+fn encode_uniprop_value_numeric(table: Value, value: Value) -> Result<Value, Flow> {
+    let _ = expect_fixnump(&value)?;
+    let mut value_table: Vec<Value> = char_table_extra_slot_value(&table, 4)
+        .filter(|v| v.is_vector())
+        .and_then(|v| v.as_vector_data())
+        .map(|values| values.to_vec())
+        .unwrap_or_default();
+    if let Some(index) = value_table.iter().position(|entry| eq_value(entry, &value)) {
+        return Ok(Value::fixnum(index as i64));
+    }
+    let index = value_table.len();
+    value_table.push(value);
+    set_char_table_extra_slot(&table, 4, Value::vector(value_table));
+    Ok(Value::fixnum(index as i64))
+}
+
+/// `(put-unicode-property-internal CHAR-TABLE CH VALUE)`.
+///
+/// Mirrors GNU's `Fput_unicode_property_internal` (chartab.c): validate and
+/// encode VALUE via the table's encoder (selected by extra slot 2), then store
+/// the encoded element with `CHAR_TABLE_SET`.  Returns nil.
+pub(crate) fn builtin_put_unicode_property_internal(args: Vec<Value>) -> EvalResult {
+    expect_args("put-unicode-property-internal", &args, 3)?;
+    let table = args[0];
+    let ch = expect_character(&args[1])?;
+    let value = args[2];
+
+    if !is_char_table(&table) {
+        return Err(wrong_type("char-table-p", &table));
+    }
+    if !is_char_code_property_table(&table) {
+        return Err(invalid_unicode_property_table());
+    }
+
+    // The encoder index lives in extra slot 2 (a fixnum or nil); nil and any
+    // out-of-range index mean "no encoding" (GNU's `uniprop_get_encoder`).
+    let encoded = match char_table_extra_slot_value(&table, 2).map(|v| v.kind()) {
+        Some(ValueKind::Fixnum(0)) => encode_uniprop_value_character(value)?,
+        Some(ValueKind::Fixnum(1)) => encode_uniprop_value_run_length(table, value)?,
+        Some(ValueKind::Fixnum(2)) => encode_uniprop_value_numeric(table, value)?,
+        _ => value,
+    };
+
+    ct_set_single(&table, ch, encoded);
+    Ok(Value::NIL)
 }
 
 // ---------------------------------------------------------------------------

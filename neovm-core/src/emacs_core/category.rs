@@ -86,6 +86,19 @@ fn is_category_letter(ch: char) -> bool {
     (CATEGORY_MIN as u8 as char..=CATEGORY_MAX as u8 as char).contains(&ch)
 }
 
+/// GNU's `CHECK_CATEGORY` (category.h): a category must be a fixnum in the
+/// printable ASCII range `0x20..=0x7E`; otherwise signal
+/// `(wrong-type-argument categoryp VALUE)`.
+fn check_category(value: &Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(c) if (CATEGORY_MIN..=CATEGORY_MAX).contains(&c) => Ok(c),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("categoryp"), *value],
+        )),
+    }
+}
+
 fn extract_char_opt(value: &Value, fn_name: &str) -> Result<Option<char>, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(super::builtins::character_code_to_rust_char(c)),
@@ -535,21 +548,26 @@ pub(crate) fn builtin_copy_category_table(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_make_category_set(args: Vec<Value>) -> EvalResult {
     expect_args("make-category-set", &args, 1)?;
 
-    let categories = match args[0].as_lisp_string() {
-        Some(string) => super::emacs_char::to_utf8_lossy(string.as_bytes()),
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), args[0]],
-            ));
-        }
+    let Some(string) = args[0].as_lisp_string() else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        ));
     };
 
+    // GNU's `Fmake_category_set` rejects multibyte strings outright, then walks
+    // the raw bytes of the unibyte string, validating each with `CHECK_CATEGORY`.
+    if string.is_multibyte() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Multibyte string in ‘make-category-set’")],
+        ));
+    }
+
     let mut bits = vec![Value::fixnum(0); 128];
-    for ch in categories.chars() {
-        if is_category_letter(ch) {
-            bits[ch as usize] = Value::fixnum(1);
-        }
+    for &byte in string.as_bytes() {
+        let category = check_category(&Value::fixnum(i64::from(byte)))?;
+        bits[category as usize] = Value::fixnum(1);
     }
 
     let mut vec = Vec::with_capacity(130);
@@ -680,16 +698,8 @@ pub(crate) fn builtin_define_category(
     expect_min_args("define-category", &args, 2)?;
     expect_max_args("define-category", &args, 3)?;
 
-    let category = extract_char(&args[0], "define-category")?;
-    if !is_category_letter(category) {
-        return Err(signal(
-            "error",
-            vec![Value::string(format!(
-                "Invalid category character '{}': must be ASCII graphic",
-                category
-            ))],
-        ));
-    }
+    let category_code = check_category(&args[0])?;
+    let category = char::from_u32(category_code as u32).expect("category in ASCII graphic range");
     let docstring = match args[1].kind() {
         ValueKind::String => args[1],
         _ => {

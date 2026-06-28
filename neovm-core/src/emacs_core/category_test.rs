@@ -261,3 +261,134 @@ fn define_category_preserves_raw_unibyte_docstring() {
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
 }
+
+// -----------------------------------------------------------------------
+// make-category-set / define-category validation (bug fix9-chartab-category #7)
+// -----------------------------------------------------------------------
+
+fn category_set_bit(set: &Value, idx: usize) -> bool {
+    set.as_vector_data()
+        .and_then(|v| v.get(2 + idx).copied())
+        .map(|v| v.as_fixnum() == Some(1))
+        .unwrap_or(false)
+}
+
+#[test]
+fn make_category_set_sets_bits_for_valid_categories() {
+    crate::test_utils::init_test_tracing();
+    let set = builtin_make_category_set(vec![Value::string("al")]).unwrap();
+    assert!(category_set_bit(&set, 'a' as usize));
+    assert!(category_set_bit(&set, 'l' as usize));
+    assert!(!category_set_bit(&set, 'b' as usize));
+}
+
+#[test]
+fn make_category_set_rejects_control_char() {
+    crate::test_utils::init_test_tracing();
+    // GNU's `Fmake_category_set` runs `CHECK_CATEGORY` on each byte; a control
+    // character (0x01) is outside `0x20..=0x7E`, so it signals
+    // `(wrong-type-argument categoryp 1)`.
+    let set = Value::heap_string(LispString::from_unibyte(vec![0x01]));
+    let err = builtin_make_category_set(vec![set]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("categoryp"), Value::fixnum(1)]);
+        }
+        other => panic!("expected wrong-type-argument categoryp, got {other:?}"),
+    }
+}
+
+#[test]
+fn make_category_set_rejects_multibyte_string() {
+    crate::test_utils::init_test_tracing();
+    // GNU signals `(error "Multibyte string in `make-category-set'")`.
+    let multibyte = Value::heap_string(LispString::from_utf8("中"));
+    assert!(multibyte.as_lisp_string().unwrap().is_multibyte());
+    let err = builtin_make_category_set(vec![multibyte]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Multibyte string in ‘make-category-set’")]
+            );
+        }
+        other => panic!("expected multibyte error signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn make_category_set_rejects_non_string() {
+    crate::test_utils::init_test_tracing();
+    let err = builtin_make_category_set(vec![Value::fixnum(0x20)]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data.first().and_then(|v| v.as_symbol_name()),
+                Some("stringp")
+            );
+        }
+        other => panic!("expected wrong-type-argument stringp, got {other:?}"),
+    }
+}
+
+#[test]
+fn define_category_symbol_signals_categoryp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = fresh_eval();
+    let table = builtin_make_category_table(vec![]).unwrap();
+    // GNU's `Fdefine_category` runs `CHECK_CATEGORY`, so a symbol (not a
+    // character) signals `(wrong-type-argument categoryp x)`.
+    let err = builtin_define_category(
+        &mut eval,
+        vec![Value::symbol("x"), Value::string("doc"), table],
+    )
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("categoryp"), Value::symbol("x")]
+            );
+        }
+        other => panic!("expected wrong-type-argument categoryp, got {other:?}"),
+    }
+}
+
+#[test]
+fn define_category_control_char_signals_categoryp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = fresh_eval();
+    let table = builtin_make_category_table(vec![]).unwrap();
+    let err = builtin_define_category(
+        &mut eval,
+        vec![Value::fixnum(1), Value::string("doc"), table],
+    )
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("categoryp"), Value::fixnum(1)]);
+        }
+        other => panic!("expected wrong-type-argument categoryp, got {other:?}"),
+    }
+}
+
+#[test]
+fn define_category_valid_char_still_defines() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = fresh_eval();
+    let table = builtin_make_category_table(vec![]).unwrap();
+    builtin_define_category(
+        &mut eval,
+        vec![Value::char('!'), Value::string("bang"), table],
+    )
+    .unwrap();
+    assert_eq!(
+        builtin_category_docstring(&mut eval, vec![Value::char('!'), table]).unwrap(),
+        Value::string("bang")
+    );
+}

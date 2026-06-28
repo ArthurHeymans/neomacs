@@ -1835,3 +1835,189 @@ fn maybe_unify_char_out_of_range_fixnum_is_identity() {
     let val = Value::fixnum(MAX_CHAR + 1);
     assert_eq!(maybe_unify_char(0x110000, &val), 0x110000);
 }
+
+// -----------------------------------------------------------------------
+// put-unicode-property-internal (bug fix9-chartab-category #2)
+// -----------------------------------------------------------------------
+
+/// Build a `general-category`-style run-length uniprop table: decoder (slot 1)
+/// and encoder (slot 2) are index 0/1, and slot 4 holds the value vector
+/// `[nil Lu Ll Lt]`.
+fn make_run_length_uniprop_table() -> Value {
+    let table =
+        make_char_table_with_extra_slots(Value::symbol("char-code-property-table"), Value::NIL, 5);
+    builtin_set_char_table_extra_slot(vec![
+        table,
+        Value::fixnum(0),
+        Value::symbol("general-category"),
+    ])
+    .unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(1), Value::fixnum(0)]).unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(2), Value::fixnum(1)]).unwrap();
+    builtin_set_char_table_extra_slot(vec![
+        table,
+        Value::fixnum(4),
+        Value::vector(vec![
+            Value::NIL,
+            Value::symbol("Lu"),
+            Value::symbol("Ll"),
+            Value::symbol("Lt"),
+        ]),
+    ])
+    .unwrap();
+    table
+}
+
+#[test]
+fn put_unicode_property_internal_run_length_round_trips() {
+    crate::test_utils::init_test_tracing();
+    let table = make_run_length_uniprop_table();
+
+    // GNU `put-char-code-property` -> `put-unicode-property-internal` encodes
+    // `Ll` to its index (2) in the value vector and stores it.
+    assert!(
+        builtin_put_unicode_property_internal(vec![
+            table,
+            Value::fixnum('B' as i64),
+            Value::symbol("Ll"),
+        ])
+        .unwrap()
+        .is_nil()
+    );
+
+    // The stored element is the raw fixnum index.
+    assert_eq!(ct_lookup(&table, 'B' as i64).unwrap(), Value::fixnum(2));
+
+    // get-unicode-property-internal decodes back to the symbol.
+    assert_eq!(
+        builtin_get_unicode_property_internal(vec![table, Value::fixnum('B' as i64)]).unwrap(),
+        Value::symbol("Ll")
+    );
+}
+
+#[test]
+fn put_unicode_property_internal_run_length_rejects_unknown_value() {
+    crate::test_utils::init_test_tracing();
+    let table = make_run_length_uniprop_table();
+
+    // GNU `uniprop_encode_value_run_length` signals
+    // `(wrong-type-argument "Unicode property value" VALUE)` for a value that is
+    // not present in the value vector.  Note the first datum is a *string*.
+    let err = builtin_put_unicode_property_internal(vec![
+        table,
+        Value::fixnum('B' as i64),
+        Value::symbol("ZZ"),
+    ])
+    .expect_err("unknown run-length value should signal");
+    match err {
+        Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                signal
+                    .data
+                    .first()
+                    .and_then(|v| v.as_lisp_string())
+                    .map(|s| crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes())),
+                Some("Unicode property value".to_string())
+            );
+            assert_eq!(signal.data.get(1).copied(), Some(Value::symbol("ZZ")));
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn put_unicode_property_internal_numeric_round_trips_and_rejects_non_fixnum() {
+    crate::test_utils::init_test_tracing();
+    let table =
+        make_char_table_with_extra_slots(Value::symbol("char-code-property-table"), Value::NIL, 5);
+    builtin_set_char_table_extra_slot(vec![
+        table,
+        Value::fixnum(0),
+        Value::symbol("numeric-value"),
+    ])
+    .unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(1), Value::fixnum(0)]).unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(2), Value::fixnum(2)]).unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(4), Value::vector(vec![])])
+        .unwrap();
+
+    // First number is appended to the value vector at index 0 and stored as 0.
+    builtin_put_unicode_property_internal(vec![
+        table,
+        Value::fixnum('B' as i64),
+        Value::fixnum(42),
+    ])
+    .unwrap();
+    assert_eq!(ct_lookup(&table, 'B' as i64).unwrap(), Value::fixnum(0));
+    assert_eq!(
+        char_table_extra_slot_value(&table, 4)
+            .and_then(|v| v.as_vector_data())
+            .map(|v| v.to_vec()),
+        Some(vec![Value::fixnum(42)])
+    );
+
+    // GNU `uniprop_encode_value_numeric` runs `CHECK_FIXNUM`, so a non-fixnum
+    // value signals `(wrong-type-argument fixnump VALUE)`.
+    let err = builtin_put_unicode_property_internal(vec![
+        table,
+        Value::fixnum('B' as i64),
+        Value::symbol("X"),
+    ])
+    .expect_err("non-fixnum numeric value should signal");
+    match err {
+        Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                signal.data.first().and_then(|v| v.as_symbol_name()),
+                Some("fixnump")
+            );
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn put_unicode_property_internal_character_encoder_rejects_non_char() {
+    crate::test_utils::init_test_tracing();
+    let table =
+        make_char_table_with_extra_slots(Value::symbol("char-code-property-table"), Value::NIL, 5);
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(0), Value::symbol("mirroring")])
+        .unwrap();
+    builtin_set_char_table_extra_slot(vec![table, Value::fixnum(2), Value::fixnum(0)]).unwrap();
+
+    // A valid character is stored verbatim (no value-vector indirection).
+    builtin_put_unicode_property_internal(vec![
+        table,
+        Value::fixnum('B' as i64),
+        Value::fixnum('b' as i64),
+    ])
+    .unwrap();
+    assert_eq!(
+        ct_lookup(&table, 'B' as i64).unwrap(),
+        Value::fixnum('b' as i64)
+    );
+
+    // GNU `uniprop_encode_value_character` signals
+    // `(wrong-type-argument integerp VALUE)` for a non-character.
+    assert_signal_symbol_and_predicate(
+        builtin_put_unicode_property_internal(vec![
+            table,
+            Value::fixnum('B' as i64),
+            Value::symbol("X"),
+        ]),
+        "wrong-type-argument",
+        "integerp",
+    );
+}
+
+#[test]
+fn put_unicode_property_internal_rejects_nil_char_table() {
+    crate::test_utils::init_test_tracing();
+    // GNU runs `CHECK_CHAR_TABLE` first.
+    assert_signal_symbol_and_predicate(
+        builtin_put_unicode_property_internal(vec![Value::NIL, Value::fixnum(0), Value::fixnum(1)]),
+        "wrong-type-argument",
+        "char-table-p",
+    );
+}

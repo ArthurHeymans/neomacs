@@ -5832,7 +5832,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "put-unicode-property-internal",
-        |_ctx, args| builtin_put_unicode_property_internal(args),
+        |_ctx, args| super::chartable::builtin_put_unicode_property_internal(args),
         3,
         Some(3),
     );

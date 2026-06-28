@@ -5672,13 +5672,21 @@ fn bootstrap_set_buffer_major_mode_runs_fundamental_mode_file_locals() {
 #[test]
 fn pure_dispatch_unicode_and_re_placeholders_match_compat_contracts() {
     crate::test_utils::init_test_tracing();
-    let unicode = dispatch_builtin_pure(
+    // GNU's `Fput_unicode_property_internal` runs `CHECK_CHAR_TABLE` first, so a
+    // nil CHAR-TABLE signals `(wrong-type-argument char-table-p nil)`.
+    let unicode_err = dispatch_builtin_pure(
         "put-unicode-property-internal",
         vec![Value::NIL, Value::fixnum(0), Value::fixnum(1)],
     )
     .expect("builtin put-unicode-property-internal should resolve")
-    .expect("builtin put-unicode-property-internal should evaluate");
-    assert!(unicode.is_nil());
+    .expect_err("nil char-table should signal wrong-type-argument");
+    match unicode_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("char-table-p"), Value::NIL]);
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
 
     let re_default = dispatch_builtin_pure("re--describe-compiled", vec![Value::string("x")])
         .expect("builtin re--describe-compiled should resolve")

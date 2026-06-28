@@ -2251,11 +2251,6 @@ pub(crate) fn builtin_set_buffer_redisplay(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_put_unicode_property_internal(args: Vec<Value>) -> EvalResult {
-    expect_args("put-unicode-property-internal", &args, 3)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_re_describe_compiled(args: Vec<Value>) -> EvalResult {
     expect_range_args("re--describe-compiled", &args, 1, 2)?;
     Ok(Value::NIL)
