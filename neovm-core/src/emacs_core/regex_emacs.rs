@@ -2078,7 +2078,12 @@ fn apply_posix_class(
         // GNU ISGRAPH for ASCII (c < 0x80): c > ' ' and not 0x7F, i.e.
         // 0x21..=0x7E.  High bytes go through the multibyte path only.
         "graph" => (0x21u8..=0x7E).collect(),
-        "cntrl" => (0x00u8..=0x1F).chain(std::iter::once(0x7F)).collect(),
+        // GNU `ISCNTRL(c)` is `((c) < ' ')` (regex-emacs.c:108), i.e. only
+        // 0x00..=0x1F.  DEL (0x7F) is NOT a control char for Emacs regexp
+        // `[[:cntrl:]]`, unlike the C-locale `iscntrl`.  Including 0x7F here
+        // made json.el's `(rx (in cntrl))` escape DEL as `` instead of
+        // emitting it literally (matching GNU `json-encode-string`).
+        "cntrl" => (0x00u8..=0x1F).collect(),
         "xdigit" => (b'0'..=b'9')
             .chain(b'A'..=b'F')
             .chain(b'a'..=b'f')

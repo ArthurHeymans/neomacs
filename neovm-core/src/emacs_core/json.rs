@@ -289,9 +289,14 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
         ValueKind::Float => {
             let f = value.xfloat();
             if f.is_nan() || f.is_infinite() {
+                // GNU `json_out_float` calls `signal_error ("JSON does not
+                // allow Inf or NaN", f)`, which signals a plain `error` whose
+                // data is `(MESSAGE FLOAT)` (signal_error wraps the non-list
+                // FLOAT in a one-element list).  Mirror that exactly rather
+                // than raising a neomacs-only json-serialize-error.
                 return Err(signal(
-                    JsonError::Serialize.symbol(),
-                    vec![Value::string("Not a finite number")],
+                    "error",
+                    vec![Value::string("JSON does not allow Inf or NaN"), *value],
                 ));
             }
             // Use neomacs's canonical float printer (the same dtoastr-based
@@ -572,14 +577,6 @@ fn json_utf8_decode_error(start: usize, end: usize) -> Flow {
     )
 }
 
-fn json_source_char_pos(input: &crate::heap_types::LispString, byte_pos: usize) -> usize {
-    if input.is_multibyte() {
-        crate::emacs_core::emacs_char::byte_to_char_pos(input.as_bytes(), byte_pos)
-    } else {
-        byte_pos
-    }
-}
-
 /// Parser state: a cursor over the input bytes.
 struct JsonParser<'a> {
     input: &'a [u8],
@@ -607,9 +604,19 @@ impl<'a> JsonParser<'a> {
         }
     }
 
-    /// Build a `(LINE nil POS)` signal at the current position, matching the
-    /// shape of GNU `json_signal_error`. LINE is the 1-based line number and
-    /// POS is the 0-based character offset of the cursor.
+    /// Build a `(LINE nil POS)` signal at the current cursor, matching the
+    /// shape and values of GNU `json_signal_error`
+    /// (src/json.c:json_signal_error).
+    ///
+    /// GNU computes `byte = input_current - input_begin`, then
+    /// `pos = string_byte_to_pos (byte)` (= `count_chars` for multibyte input,
+    /// raw byte offset otherwise) and `line = count_newlines (byte) + 1`.
+    /// Because every GNU read advances `input_current` *past* the byte it just
+    /// consumed before any error fires, POS is the character offset *after* the
+    /// offending character.  Our parser is peek-based, so each signalling site
+    /// advances the cursor over the offending char first and then calls this
+    /// (mirroring GNU's consume-then-signal order).  The LINE number is
+    /// deprecated upstream and provided only for compatibility.
     fn signal_at_pos(&self, kind: JsonError) -> Flow {
         let byte = self.pos.min(self.input.len());
         let line = self.input[..byte].iter().filter(|&&b| b == b'\n').count() as i64 + 1;
@@ -621,6 +628,56 @@ impl<'a> JsonParser<'a> {
                 Value::fixnum(self.source_char_pos() as i64),
             ],
         )
+    }
+
+    /// Read the next byte, advancing the cursor, mirroring GNU
+    /// `json_input_get`.  At end of input this signals `json-end-of-file`,
+    /// exactly like GNU's `json_input_get_slow_path` (src/json.c).
+    fn consume(&mut self) -> Result<u8, Flow> {
+        match self.input.get(self.pos).copied() {
+            Some(b) => {
+                self.pos += 1;
+                Ok(b)
+            }
+            None => Err(self.signal_at_pos(JsonError::EndOfFile)),
+        }
+    }
+
+    /// Read the next byte if one is available, advancing the cursor, mirroring
+    /// GNU `json_input_get_if_possible`.  Returns `None` at end of input.
+    fn consume_if_possible(&mut self) -> Option<u8> {
+        let b = self.input.get(self.pos).copied()?;
+        self.pos += 1;
+        Some(b)
+    }
+
+    /// Put back the last byte read by [`Self::consume`] /
+    /// [`Self::consume_if_possible`], mirroring GNU `json_input_put_back`.
+    fn put_back(&mut self) {
+        self.pos -= 1;
+    }
+
+    /// Skip whitespace and return the first non-whitespace byte, consuming it.
+    /// Mirrors GNU `json_skip_whitespace`: it reads through `json_input_get`,
+    /// so reaching end of input signals `json-end-of-file`.
+    fn skip_ws_consume(&mut self) -> Result<u8, Flow> {
+        loop {
+            let b = self.consume()?;
+            if !matches!(b, b' ' | b'\t' | b'\n' | b'\r') {
+                return Ok(b);
+            }
+        }
+    }
+
+    /// Skip whitespace and return the first non-whitespace byte, or `None` at
+    /// end of input.  Mirrors GNU `json_skip_whitespace_if_possible`.
+    fn skip_ws_if_possible(&mut self) -> Option<u8> {
+        loop {
+            let b = self.consume_if_possible()?;
+            if !matches!(b, b' ' | b'\t' | b'\n' | b'\r') {
+                return Some(b);
+            }
+        }
     }
 
     /// Enter one level of object/array nesting, signalling
@@ -657,126 +714,72 @@ impl<'a> JsonParser<'a> {
         }
     }
 
-    /// Skip whitespace.
-    fn skip_ws(&mut self) {
-        while let Some(b) = self.peek() {
-            if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
-                self.advance();
-            } else {
-                break;
+    /// Whether `c` may continue a `true`/`false`/`null` token, mirroring GNU
+    /// `json_is_token_char` (src/json.c).  Used so that e.g. `truer` is one
+    /// invalid token rather than `true` followed by `r`.
+    fn is_token_char(c: u8) -> bool {
+        c.is_ascii_alphanumeric() || c == b'-'
+    }
+
+    /// Parse a single top-level JSON value, mirroring GNU `json_parse`:
+    /// `json_parse_value (parser, json_skip_whitespace (parser))`.  Leading
+    /// whitespace is skipped via the consuming reader, so empty or
+    /// whitespace-only input signals `json-end-of-file`.
+    fn parse(&mut self) -> Result<Value, Flow> {
+        let c = self.skip_ws_consume()?;
+        self.parse_value(c)
+    }
+
+    /// Parse one JSON value whose first non-whitespace byte `c` has already
+    /// been consumed, mirroring GNU `json_parse_value`.
+    fn parse_value(&mut self, c: u8) -> Result<Value, Flow> {
+        match c {
+            b'"' => self.parse_string_value(),
+            b'{' => self.parse_object(),
+            b'[' => self.parse_array(),
+            b'-' | b'0'..=b'9' => self.parse_number(c),
+            b't' => self.parse_literal_token(b"rue", Value::T),
+            b'f' => self.parse_literal_token(b"alse", self.opts.false_object),
+            b'n' => self.parse_literal_token(b"ull", self.opts.null_object),
+            _ => Err(self.signal_at_pos(JsonError::Parse)),
+        }
+    }
+
+    /// Parse the remaining bytes of a `true`/`false`/`null` token (the leading
+    /// byte is already consumed) and ensure the token is not immediately
+    /// followed by another token char, mirroring GNU `json_parse_value`.
+    fn parse_literal_token(&mut self, rest: &[u8], value: Value) -> Result<Value, Flow> {
+        for &expected in rest {
+            if self.consume_if_possible() != Some(expected) {
+                return Err(self.signal_at_pos(JsonError::Parse));
             }
         }
-    }
-
-    /// Consume a specific byte, or signal error.
-    fn expect_byte(&mut self, expected: u8) -> Result<(), Flow> {
-        self.skip_ws();
-        match self.peek() {
-            Some(b) if b == expected => {
-                self.advance();
-                Ok(())
+        match self.consume_if_possible() {
+            Some(c2) if Self::is_token_char(c2) => Err(self.signal_at_pos(JsonError::Parse)),
+            Some(_) => {
+                self.put_back();
+                Ok(value)
             }
-            Some(b) => Err(signal(
-                JsonError::Parse.symbol(),
-                vec![Value::string(format!(
-                    "Expected '{}', got '{}' at position {}",
-                    expected as char, b as char, self.pos
-                ))],
-            )),
-            None => Err(signal(
-                JsonError::Parse.symbol(),
-                vec![Value::string(format!(
-                    "Unexpected end of input, expected '{}'",
-                    expected as char
-                ))],
-            )),
+            None => Ok(value),
         }
     }
 
-    /// Parse one JSON value.
-    fn parse_value(&mut self) -> Result<Value, Flow> {
-        self.skip_ws();
-        match self.peek() {
-            None => Err(signal(
-                JsonError::Parse.symbol(),
-                vec![Value::string("Unexpected end of input")],
-            )),
-            Some(b'"') => self.parse_string(),
-            Some(b'{') => self.parse_object(),
-            Some(b'[') => self.parse_array(),
-            Some(b't') => self.parse_true(),
-            Some(b'f') => self.parse_false(),
-            Some(b'n') => self.parse_null(),
-            Some(b) if b == b'-' || b.is_ascii_digit() => self.parse_number(),
-            Some(b) => Err(signal(
-                JsonError::Parse.symbol(),
-                vec![Value::string(format!(
-                    "Unexpected character '{}' at position {}",
-                    b as char, self.pos
-                ))],
-            )),
-        }
-    }
-
-    /// Parse `true`.
-    fn parse_true(&mut self) -> Result<Value, Flow> {
-        self.expect_literal(b"true")?;
-        Ok(Value::T)
-    }
-
-    /// Parse `false`.
-    fn parse_false(&mut self) -> Result<Value, Flow> {
-        self.expect_literal(b"false")?;
-        Ok(self.opts.false_object)
-    }
-
-    /// Parse `null`.
-    fn parse_null(&mut self) -> Result<Value, Flow> {
-        self.expect_literal(b"null")?;
-        Ok(self.opts.null_object)
-    }
-
-    /// Expect an exact byte sequence.
-    fn expect_literal(&mut self, literal: &[u8]) -> Result<(), Flow> {
-        for &expected in literal {
-            match self.peek() {
-                Some(b) if b == expected => self.advance(),
-                _ => {
-                    return Err(signal(
-                        JsonError::Parse.symbol(),
-                        vec![Value::string(format!(
-                            "Expected '{}' at position {}",
-                            std::str::from_utf8(literal).unwrap_or("?"),
-                            self.pos
-                        ))],
-                    ));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Parse a JSON string (opening `"` has not been consumed yet).
-    fn parse_string(&mut self) -> Result<Value, Flow> {
-        let s = self.parse_string_raw()?;
+    /// Parse a JSON string value; the opening `"` has already been consumed.
+    fn parse_string_value(&mut self) -> Result<Value, Flow> {
+        let s = self.parse_string_body()?;
         Ok(Value::string(s))
     }
 
-    /// Parse a JSON string and return the raw Rust String.
-    fn parse_string_raw(&mut self) -> Result<String, Flow> {
-        self.expect_byte(b'"')?;
+    /// Parse a JSON string body (the opening `"` has already been consumed)
+    /// and return the decoded Rust String.  Mirrors GNU `json_parse_string`,
+    /// which reads bytes through `json_input_get`, so a string left open at
+    /// end of input signals `json-end-of-file`.
+    fn parse_string_body(&mut self) -> Result<String, Flow> {
         let mut result = String::new();
         loop {
             match self.peek() {
                 None => {
-                    return Err(signal(
-                        JsonError::EndOfFile.symbol(),
-                        vec![
-                            Value::fixnum(1),
-                            Value::NIL,
-                            Value::fixnum(self.source_char_pos() as i64),
-                        ],
-                    ));
+                    return Err(self.signal_at_pos(JsonError::EndOfFile));
                 }
                 Some(b'"') => {
                     self.advance();
@@ -827,15 +830,16 @@ impl<'a> JsonParser<'a> {
                             // silent U+FFFD substitution.
                             if (0xD800..=0xDBFF).contains(&cp) {
                                 // High surrogate — must be followed by a
-                                // \uXXXX low surrogate.
-                                if self.peek() != Some(b'\\') {
+                                // \uXXXX low surrogate.  GNU reads the next two
+                                // bytes with `json_input_get` (which signals
+                                // json-end-of-file at end of input) and reports
+                                // the position just after the consumed byte.
+                                if self.consume()? != b'\\' {
                                     return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                                 }
-                                self.advance();
-                                if self.peek() != Some(b'u') {
+                                if self.consume()? != b'u' {
                                     return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                                 }
-                                self.advance();
                                 let low = self.parse_unicode_escape()?;
                                 if !(0xDC00..=0xDFFF).contains(&low) {
                                     return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
@@ -857,17 +861,14 @@ impl<'a> JsonParser<'a> {
                             }
                         }
                         Some(_) => {
+                            // GNU consumes the offending escape char via
+                            // `json_input_get` before signalling, so the
+                            // reported position is just after it.
+                            self.advance();
                             return Err(self.signal_at_pos(JsonError::EscapeSequence));
                         }
                         None => {
-                            return Err(signal(
-                                JsonError::EndOfFile.symbol(),
-                                vec![
-                                    Value::fixnum(1),
-                                    Value::NIL,
-                                    Value::fixnum(self.source_char_pos() as i64),
-                                ],
-                            ));
+                            return Err(self.signal_at_pos(JsonError::EndOfFile));
                         }
                     }
                 }
@@ -875,7 +876,10 @@ impl<'a> JsonParser<'a> {
                     if b < 0x20 {
                         // Unescaped control characters are not valid inside a
                         // JSON string (GNU marks 0x00-0x1F as non-plain in
-                        // `json_plain_char` and signals a parse error).
+                        // `json_plain_char` and signals a parse error).  GNU has
+                        // already consumed the byte (`json_input_get`), so the
+                        // position is just after it.
+                        self.advance();
                         return Err(self.signal_at_pos(JsonError::Parse));
                     } else if b < 0x80 {
                         self.advance();
@@ -913,62 +917,55 @@ impl<'a> JsonParser<'a> {
         }
     }
 
-    /// Parse 4 hex digits for a \uXXXX escape.
+    /// Parse the 4 hex digits of a `\uXXXX` escape, mirroring GNU
+    /// `json_parse_unicode`.  Each digit is read with the consuming reader, so
+    /// end of input signals `json-end-of-file` and a non-hex byte (consumed
+    /// first) signals `json-escape-sequence-error` at the position just after
+    /// it.
     fn parse_unicode_escape(&mut self) -> Result<u16, Flow> {
         let mut value: u16 = 0;
         for _ in 0..4 {
-            match self.peek() {
-                Some(b) if b.is_ascii_hexdigit() => {
-                    self.advance();
-                    let digit = match b {
-                        b'0'..=b'9' => (b - b'0') as u16,
-                        b'a'..=b'f' => (b - b'a' + 10) as u16,
-                        b'A'..=b'F' => (b - b'A' + 10) as u16,
-                        _ => unreachable!(),
-                    };
-                    value = value * 16 + digit;
-                }
-                _ => {
-                    return Err(self.signal_at_pos(JsonError::EscapeSequence));
-                }
-            }
+            let b = self.consume()?;
+            let digit = match b {
+                b'0'..=b'9' => (b - b'0') as u16,
+                b'a'..=b'f' => (b - b'a' + 10) as u16,
+                b'A'..=b'F' => (b - b'A' + 10) as u16,
+                _ => return Err(self.signal_at_pos(JsonError::EscapeSequence)),
+            };
+            value = value * 16 + digit;
         }
         Ok(value)
     }
 
-    /// Parse a JSON number.
-    fn parse_number(&mut self) -> Result<Value, Flow> {
-        let start = self.pos;
+    /// Parse a JSON number whose first byte `c` (a digit or `-`) has already
+    /// been consumed, mirroring GNU `json_parse_number`.
+    fn parse_number(&mut self, c: u8) -> Result<Value, Flow> {
+        // `c` was already consumed by the caller, so the literal starts one
+        // byte back.
+        let start = self.pos - 1;
         let mut is_float = false;
 
-        // Optional leading minus.
-        if self.peek() == Some(b'-') {
-            self.advance();
-        }
-
-        // Integer part.
-        match self.peek() {
-            Some(b'0') => {
-                self.advance();
-            }
-            Some(b) if (b'1'..=b'9').contains(&b) => {
-                self.advance();
-                while let Some(b) = self.peek() {
-                    if b.is_ascii_digit() {
-                        self.advance();
-                    } else {
-                        break;
-                    }
+        // After an optional leading minus, an integer part is required.
+        let first_digit = if c == b'-' {
+            match self.peek() {
+                Some(b) if b.is_ascii_digit() => {
+                    self.advance();
+                    b
                 }
+                _ => return Err(self.signal_at_pos(JsonError::Parse)),
             }
-            _ => {
-                return Err(signal(
-                    JsonError::Parse.symbol(),
-                    vec![Value::string(format!(
-                        "Invalid number at position {}",
-                        self.pos
-                    ))],
-                ));
+        } else {
+            c
+        };
+
+        // Integer part: a single 0, or 1-9 followed by more digits.
+        if first_digit != b'0' {
+            while let Some(b) = self.peek() {
+                if b.is_ascii_digit() {
+                    self.advance();
+                } else {
+                    break;
+                }
             }
         }
 
@@ -985,13 +982,7 @@ impl<'a> JsonParser<'a> {
                 }
             }
             if self.pos == frac_start {
-                return Err(signal(
-                    JsonError::Parse.symbol(),
-                    vec![Value::string(format!(
-                        "Expected digit after decimal point at position {}",
-                        self.pos
-                    ))],
-                ));
+                return Err(self.signal_at_pos(JsonError::Parse));
             }
         }
 
@@ -1011,13 +1002,7 @@ impl<'a> JsonParser<'a> {
                 }
             }
             if self.pos == exp_start {
-                return Err(signal(
-                    JsonError::Parse.symbol(),
-                    vec![Value::string(format!(
-                        "Expected digit in exponent at position {}",
-                        self.pos
-                    ))],
-                ));
+                return Err(self.signal_at_pos(JsonError::Parse));
             }
         }
 
@@ -1046,75 +1031,76 @@ impl<'a> JsonParser<'a> {
         }
     }
 
-    /// Parse a JSON array: `[` value { `,` value } `]`.
+    /// Parse a JSON array: the opening `[` has already been consumed.
+    /// Mirrors GNU `json_parse_array`.
     fn parse_array(&mut self) -> Result<Value, Flow> {
-        self.expect_byte(b'[')?;
-        self.enter_nesting()?;
-        self.skip_ws();
+        let mut c = self.skip_ws_consume()?;
         let mut items: Vec<Value> = Vec::new();
 
-        if self.peek() == Some(b']') {
-            self.advance();
-        } else {
+        if c != b']' {
+            // GNU only counts nesting depth for non-empty containers.
+            self.enter_nesting()?;
             loop {
-                let val = self.parse_value()?;
+                let val = self.parse_value(c)?;
                 items.push(val);
-                self.skip_ws();
-                match self.peek() {
-                    Some(b',') => {
-                        self.advance();
-                    }
-                    Some(b']') => {
-                        self.advance();
-                        break;
-                    }
-                    _ => {
-                        return Err(signal(
-                            JsonError::Parse.symbol(),
-                            vec![Value::string(format!(
-                                "Expected ',' or ']' at position {}",
-                                self.pos
-                            ))],
-                        ));
-                    }
+
+                c = self.skip_ws_consume()?;
+                if c == b']' {
+                    self.leave_nesting();
+                    break;
                 }
+                if c != b',' {
+                    return Err(self.signal_at_pos(JsonError::Parse));
+                }
+                c = self.skip_ws_consume()?;
             }
         }
 
-        self.leave_nesting();
         match self.opts.array_type {
             ArrayType::Vector => Ok(Value::vector(items)),
             ArrayType::List => Ok(Value::list(items)),
         }
     }
 
-    /// Parse a JSON object: `{` string `:` value { `,` string `:` value } `}`.
+    /// Parse a JSON object: the opening `{` has already been consumed.
+    /// Mirrors GNU `json_parse_object`.
     fn parse_object(&mut self) -> Result<Value, Flow> {
-        self.expect_byte(b'{')?;
-        self.enter_nesting()?;
-        self.skip_ws();
+        let c = self.skip_ws_consume()?;
 
-        let result = match self.opts.object_type {
-            ObjectType::HashTable => self.parse_object_hash_table(),
-            ObjectType::Alist => self.parse_object_alist(),
-            ObjectType::Plist => self.parse_object_plist(),
-        }?;
-        self.leave_nesting();
-        Ok(result)
+        match self.opts.object_type {
+            ObjectType::HashTable => self.parse_object_hash_table(c),
+            ObjectType::Alist => self.parse_object_alist(c),
+            ObjectType::Plist => self.parse_object_plist(c),
+        }
     }
 
-    fn parse_object_hash_table(&mut self) -> Result<Value, Flow> {
+    /// Read an object member: KEY string then `:` then value.  `c` is the
+    /// already-consumed first char of the key, which must be `"`.  Returns the
+    /// decoded key and the parsed value.  Mirrors GNU's per-member handling in
+    /// `json_parse_object` plus `json_parse_object_member_value`.
+    fn parse_object_member(&mut self, c: u8) -> Result<(String, Value), Flow> {
+        if c != b'"' {
+            return Err(self.signal_at_pos(JsonError::Parse));
+        }
+        let key = self.parse_string_body()?;
+        // ": value"
+        if self.skip_ws_consume()? != b':' {
+            return Err(self.signal_at_pos(JsonError::Parse));
+        }
+        let vc = self.skip_ws_consume()?;
+        let val = self.parse_value(vc)?;
+        Ok((key, val))
+    }
+
+    fn parse_object_hash_table(&mut self, mut c: u8) -> Result<Value, Flow> {
         let ht = Value::hash_table(HashTableTest::Equal);
-        if self.peek() == Some(b'}') {
-            self.advance();
+        if c == b'}' {
             return Ok(ht);
         }
+        self.enter_nesting()?;
 
         loop {
-            self.skip_ws();
-            let key = self.parse_string_raw()?;
-            self.expect_byte(b':')?;
-            let val = self.parse_value()?;
+            let (key, val) = self.parse_object_member(c)?;
 
             {
                 let key_val = Value::string(&key);
@@ -1130,107 +1116,67 @@ impl<'a> JsonParser<'a> {
                 });
             }
 
-            self.skip_ws();
-            match self.peek() {
-                Some(b',') => {
-                    self.advance();
-                }
-                Some(b'}') => {
-                    self.advance();
-                    break;
-                }
-                _ => {
-                    return Err(signal(
-                        JsonError::Parse.symbol(),
-                        vec![Value::string(format!(
-                            "Expected ',' or '}}' at position {}",
-                            self.pos
-                        ))],
-                    ));
-                }
+            c = self.skip_ws_consume()?;
+            if c == b'}' {
+                self.leave_nesting();
+                break;
             }
+            if c != b',' {
+                return Err(self.signal_at_pos(JsonError::Parse));
+            }
+            c = self.skip_ws_consume()?;
         }
 
         Ok(ht)
     }
 
-    fn parse_object_alist(&mut self) -> Result<Value, Flow> {
+    fn parse_object_alist(&mut self, mut c: u8) -> Result<Value, Flow> {
         let mut pairs: Vec<Value> = Vec::new();
-
-        if self.peek() == Some(b'}') {
-            self.advance();
+        if c == b'}' {
             return Ok(Value::NIL);
         }
+        self.enter_nesting()?;
 
         loop {
-            self.skip_ws();
-            let key = self.parse_string_raw()?;
-            self.expect_byte(b':')?;
-            let val = self.parse_value()?;
-
+            let (key, val) = self.parse_object_member(c)?;
             pairs.push(Value::cons(Value::symbol(key), val));
 
-            self.skip_ws();
-            match self.peek() {
-                Some(b',') => {
-                    self.advance();
-                }
-                Some(b'}') => {
-                    self.advance();
-                    break;
-                }
-                _ => {
-                    return Err(signal(
-                        JsonError::Parse.symbol(),
-                        vec![Value::string(format!(
-                            "Expected ',' or '}}' at position {}",
-                            self.pos
-                        ))],
-                    ));
-                }
+            c = self.skip_ws_consume()?;
+            if c == b'}' {
+                self.leave_nesting();
+                break;
             }
+            if c != b',' {
+                return Err(self.signal_at_pos(JsonError::Parse));
+            }
+            c = self.skip_ws_consume()?;
         }
 
         Ok(Value::list(pairs))
     }
 
-    fn parse_object_plist(&mut self) -> Result<Value, Flow> {
+    fn parse_object_plist(&mut self, mut c: u8) -> Result<Value, Flow> {
         let mut items: Vec<Value> = Vec::new();
-
-        if self.peek() == Some(b'}') {
-            self.advance();
+        if c == b'}' {
             return Ok(Value::NIL);
         }
+        self.enter_nesting()?;
 
         loop {
-            self.skip_ws();
-            let key = self.parse_string_raw()?;
-            self.expect_byte(b':')?;
-            let val = self.parse_value()?;
-
+            let (key, val) = self.parse_object_member(c)?;
             // Plist keys are keywords (symbols with leading colon).
             items.push(Value::keyword(format!(":{}", key)));
             items.push(val);
 
-            self.skip_ws();
-            match self.peek() {
-                Some(b',') => {
-                    self.advance();
-                }
-                Some(b'}') => {
-                    self.advance();
-                    break;
-                }
-                _ => {
-                    return Err(signal(
-                        JsonError::Parse.symbol(),
-                        vec![Value::string(format!(
-                            "Expected ',' or '}}' at position {}",
-                            self.pos
-                        ))],
-                    ));
-                }
+            c = self.skip_ws_consume()?;
+            if c == b'}' {
+                self.leave_nesting();
+                break;
             }
+            if c != b',' {
+                return Err(self.signal_at_pos(JsonError::Parse));
+            }
+            c = self.skip_ws_consume()?;
         }
 
         Ok(Value::list(items))
@@ -1250,7 +1196,14 @@ pub(crate) fn builtin_json_serialize(args: Vec<Value>) -> EvalResult {
     expect_min_args("json-serialize", &args, 1)?;
     let opts = parse_serialize_kwargs(&args, 1)?;
     let json = serialize_to_json(&args[0], &opts, 0)?;
-    Ok(Value::string(json))
+    // GNU `Fjson_serialize` returns `make_unibyte_string (jo.buf, jo.size)`:
+    // a UNIBYTE string of raw UTF-8 bytes (multibyte chars are emitted as
+    // their raw UTF-8 byte sequences, see `json_out_string`).  `json` already
+    // holds exactly those bytes (a Rust UTF-8 String), so wrap them unibyte
+    // rather than as a multibyte string.
+    Ok(Value::heap_string(
+        crate::heap_types::LispString::from_unibyte(json.into_bytes()),
+    ))
 }
 
 /// `(json-parse-string STRING &rest ARGS)` — parse a JSON string into a Lisp value.
@@ -1275,24 +1228,14 @@ pub(crate) fn builtin_json_parse_string(args: Vec<Value>) -> EvalResult {
     };
     let opts = parse_parse_kwargs(&args, 1)?;
     let mut parser = JsonParser::new(input.as_bytes(), input.is_multibyte(), opts);
-    parser.skip_ws();
-    if parser.pos >= parser.input.len() {
-        let p = json_source_char_pos(&input, parser.pos) as i64;
-        return Err(signal(
-            JsonError::EndOfFile.symbol(),
-            vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
-        ));
-    }
-    let result = parser.parse_value()?;
+    let result = parser.parse()?;
 
-    // Ensure there is no trailing non-whitespace.
-    parser.skip_ws();
-    if parser.pos < parser.input.len() {
-        let p = json_source_char_pos(&input, parser.pos) as i64 + 1;
-        return Err(signal(
-            JsonError::TrailingContent.symbol(),
-            vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
-        ));
+    // Ensure there is no trailing non-whitespace, mirroring GNU's
+    // `json_skip_whitespace_if_possible (&p) >= 0` check.  The trailing char
+    // is consumed before signalling, so the reported position is just after
+    // it.
+    if parser.skip_ws_if_possible().is_some() {
+        return Err(parser.signal_at_pos(JsonError::TrailingContent));
     }
 
     Ok(result)
@@ -1321,16 +1264,7 @@ pub(crate) fn builtin_json_parse_buffer(
     };
 
     let mut parser = JsonParser::new(input.as_bytes(), input.is_multibyte(), opts);
-    parser.skip_ws();
-    if parser.pos >= parser.input.len() {
-        let p = json_source_char_pos(&input, parser.pos) as i64;
-        return Err(signal(
-            JsonError::EndOfFile.symbol(),
-            vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
-        ));
-    }
-
-    let result = parser.parse_value()?;
+    let result = parser.parse()?;
     let new_point = point_base.add_len(EmacsByteLen::new(parser.pos));
     if let Some(current_id) = eval.buffers.current_buffer_id() {
         let _ = eval

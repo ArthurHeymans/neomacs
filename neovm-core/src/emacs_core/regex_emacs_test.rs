@@ -443,3 +443,44 @@ fn test_stacked_plus_requires_one() {
     let r = search_pattern("a++", "bbb", 0, false, &syn, 0).unwrap();
     assert!(r.is_none(), "a++ must not match a string with no a's");
 }
+
+#[test]
+fn cntrl_class_excludes_del_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // GNU `ISCNTRL(c)` is `((c) < ' ')` (regex-emacs.c:108), so `[[:cntrl:]]`
+    // matches only 0x00..=0x1F.  In particular it must NOT match DEL (0x7F),
+    // unlike the C-locale `iscntrl`.  This is the primitive behind json.el's
+    // `(rx (in cntrl))`, which controls whether `json-encode-string` escapes a
+    // character: DEL must pass through literally, only chars < 0x20 are escaped.
+
+    // 0x1F (unit separator) is a control char and must match.
+    assert!(
+        search_pattern("[[:cntrl:]]", "\u{1f}", 0, false, &syn, 0)
+            .unwrap()
+            .is_some(),
+        "[[:cntrl:]] must match 0x1F"
+    );
+    // 0x7F (DEL) is NOT a control char for Emacs regexp.
+    assert!(
+        search_pattern("[[:cntrl:]]", "\u{7f}", 0, false, &syn, 0)
+            .unwrap()
+            .is_none(),
+        "[[:cntrl:]] must NOT match DEL (0x7F)"
+    );
+    // The same holds when combined with other class members, mirroring the
+    // exact charset json.el compiles: `(rx (in ?\" ?\\ cntrl))`.
+    assert!(
+        search_pattern("[\"\\\\[:cntrl:]]", "\u{7f}", 0, false, &syn, 0)
+            .unwrap()
+            .is_none(),
+        "[\"\\\\[:cntrl:]] must NOT match DEL (0x7F)"
+    );
+    // A boundary check: 0x20 (space) is not a control char.
+    assert!(
+        search_pattern("[[:cntrl:]]", " ", 0, false, &syn, 0)
+            .unwrap()
+            .is_none(),
+        "[[:cntrl:]] must NOT match space"
+    );
+}

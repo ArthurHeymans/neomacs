@@ -1045,3 +1045,119 @@ fn parse_deeply_nested() {
     let result = builtin_json_parse_string(vec![Value::string(json)]);
     assert!(result.is_ok());
 }
+
+// -----------------------------------------------------------------------
+// GNU error-shape parity for json-parse-string (bug group native-json #4)
+//
+// GNU `json_signal_error` always signals the integer triple
+// `(LINE nil POS)`, never a human-readable string.  Premature end of input
+// must signal `json-end-of-file` (a subtype of json-parse-error), and POS
+// is the character offset of the cursor *after* the offending character was
+// consumed (e.g. `[1,2,]` reports the `]` at position 6).  Oracle values
+// below were produced with `emacs --batch`.
+// -----------------------------------------------------------------------
+
+/// Assert that parsing `input` signals condition `cond` with the GNU
+/// `(LINE nil POS)` integer triple, never a string message.
+fn assert_parse_signal(input: &str, cond: &str, line: i64, pos: i64) {
+    match builtin_json_parse_string(vec![Value::string(input)]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), cond, "condition for {input:?}");
+            assert_eq!(
+                sig.data,
+                vec![Value::fixnum(line), Value::NIL, Value::fixnum(pos)],
+                "error data for {input:?}",
+            );
+        }
+        other => panic!("expected {cond} signal for {input:?}, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_premature_eof_signals_json_end_of_file_with_triple() {
+    crate::test_utils::init_test_tracing();
+    // `{` opens an object then input ends; GNU: (json-end-of-file 1 nil 1).
+    assert_parse_signal("{", "json-end-of-file", 1, 1);
+    // Empty / whitespace-only input also reaches EOF while reading the value.
+    assert_parse_signal("", "json-end-of-file", 1, 0);
+    assert_parse_signal("  ", "json-end-of-file", 1, 2);
+    // EOF inside arrays and objects at various stages.
+    assert_parse_signal("[", "json-end-of-file", 1, 1);
+    assert_parse_signal("[1,2", "json-end-of-file", 1, 4);
+    assert_parse_signal("[1,", "json-end-of-file", 1, 3);
+    assert_parse_signal("{\"a\":1", "json-end-of-file", 1, 6);
+    assert_parse_signal("{\"a\":1,", "json-end-of-file", 1, 7);
+    // Unterminated string.
+    assert_parse_signal("\"ab", "json-end-of-file", 1, 3);
+}
+
+#[test]
+fn parse_error_data_is_integer_triple_with_one_based_position() {
+    crate::test_utils::init_test_tracing();
+    // Trailing comma: GNU reports the `]` at position 6, not a string.
+    assert_parse_signal("[1,2,]", "json-parse-error", 1, 6);
+    // A bare unexpected character is reported just past it.
+    assert_parse_signal("[x]", "json-parse-error", 1, 2);
+    assert_parse_signal("nul", "json-parse-error", 1, 3);
+    // Missing separators.
+    assert_parse_signal("[1,2 3]", "json-parse-error", 1, 6);
+    assert_parse_signal("{\"a\" 1}", "json-parse-error", 1, 6);
+    // Trailing content after a complete value (subtype of json-parse-error).
+    assert_parse_signal("[1,2] x", "json-trailing-content", 1, 7);
+}
+
+#[test]
+fn parse_error_position_counts_multibyte_chars_not_bytes() {
+    crate::test_utils::init_test_tracing();
+    // `é` is two bytes but one character; GNU's position is a character
+    // offset, so the bad `é` value is reported at position 2.
+    assert_parse_signal("[é,]", "json-parse-error", 1, 2);
+}
+
+// -----------------------------------------------------------------------
+// json-serialize returns a unibyte raw-UTF-8 string (bug group #5)
+// and rejects Inf/NaN with a plain `error` (bug group #6).
+// -----------------------------------------------------------------------
+
+#[test]
+fn serialize_returns_unibyte_raw_utf8_string() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (json-serialize ["é"]) is a 6-byte UNIBYTE string ["é"] where é
+    // is its raw 2-byte UTF-8 sequence, and multibyte-string-p is nil.
+    let value = Value::vector(vec![Value::string("é")]);
+    let result = builtin_json_serialize(vec![value]).unwrap();
+    let s = result
+        .as_lisp_string()
+        .expect("json-serialize must return a string");
+    assert!(
+        !s.is_multibyte(),
+        "json-serialize must return a unibyte string"
+    );
+    assert_eq!(
+        s.as_bytes(),
+        b"[\"\xc3\xa9\"]",
+        "expected raw UTF-8 bytes for [\"é\"]"
+    );
+    assert_eq!(s.as_bytes().len(), 6, "GNU reports length 6");
+}
+
+#[test]
+fn serialize_inf_and_nan_signal_plain_error_with_offending_float() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (json-serialize (/ 1.0 0.0)) =>
+    //   (error "JSON does not allow Inf or NaN" 1.0e+INF)
+    for f in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+        let float = Value::make_float(f);
+        match builtin_json_serialize(vec![float]) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "error", "condition for {f}");
+                assert_eq!(
+                    sig.data,
+                    vec![Value::string("JSON does not allow Inf or NaN"), float,],
+                    "error data for {f}",
+                );
+            }
+            other => panic!("expected plain error for {f}, got {other:?}"),
+        }
+    }
+}
