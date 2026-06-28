@@ -1351,6 +1351,14 @@ fn zone_rule_to_offset_name(rule: &ZoneRule, epoch_secs: i64) -> (i64, String) {
     }
 }
 
+/// Clamp a fixed zone offset (in seconds) to +/-24h. GNU routes an explicit
+/// numeric/named ZONE through libc `tzalloc`, which enforces this bound; the
+/// non-Unix fallback (which does not call libc) applies it directly.
+#[cfg(not(unix))]
+fn fixed_offset_clamped(offset: i64) -> i64 {
+    offset.clamp(-86_400, 86_400)
+}
+
 #[cfg(not(unix))]
 fn zone_rule_to_offset_name(rule: &ZoneRule, epoch_secs: i64) -> (i64, String) {
     match rule {
