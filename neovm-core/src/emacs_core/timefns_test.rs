@@ -1060,6 +1060,108 @@ fn builtin_set_time_zone_rule_invalid_spec() {
     reset_tz_rule();
 }
 
+/// GNU delegates an explicit numeric/named ZONE to libc `tzalloc` via a POSIX
+/// TZ string (`timefns.c` `tzlookup`), so the offset is clamped to +/-24h and a
+/// too-short/invalid abbreviation falls back to UTC. Every expectation below was
+/// captured from `emacs -Q --batch` (host-TZ-independent, since the ZONE is
+/// explicit).
+#[test]
+#[cfg(unix)]
+fn builtin_current_time_zone_validates_and_clamps_explicit_zone() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+
+    let t = Value::fixnum(1_700_000_000);
+    let named = |off: i64, name: &str| Value::list(vec![Value::fixnum(off), Value::string(name)]);
+
+    // (OFFSET NAME) with NAME shorter than 3 chars is invalid -> UTC fallback
+    // with the numeric "+00" abbreviation (libc empties the zone; GNU
+    // synthesizes "+00").
+    assert_eq!(
+        builtin_current_time_zone(vec![t, named(5400, "X")]).unwrap(),
+        Value::list(vec![Value::fixnum(0), Value::string("+00")]),
+    );
+
+    // A valid (>=3 char) NAME is kept; its offset still passes through libc.
+    assert_eq!(
+        builtin_current_time_zone(vec![t, named(5400, "ABC")]).unwrap(),
+        Value::list(vec![Value::fixnum(5400), Value::string("ABC")]),
+    );
+
+    // Named offset beyond +/-24h: the magnitude is clamped, the name retained.
+    assert_eq!(
+        builtin_current_time_zone(vec![t, named(90000, "ABC")]).unwrap(),
+        Value::list(vec![Value::fixnum(86400), Value::string("ABC")]),
+    );
+
+    // Integer offset clamped to [-86400, 86400]; the numeric abbreviation
+    // reflects the *requested* hour count ("+25"/"+48"), not the clamped one.
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::fixnum(-90000)]).unwrap(),
+        Value::list(vec![Value::fixnum(-86400), Value::string("-25")]),
+    );
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::fixnum(172800)]).unwrap(),
+        Value::list(vec![Value::fixnum(86400), Value::string("+48")]),
+    );
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::fixnum(86400)]).unwrap(),
+        Value::list(vec![Value::fixnum(86400), Value::string("+24")]),
+    );
+
+    // Sub-hour integer offsets format the full numeric abbreviation.
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::fixnum(5400)]).unwrap(),
+        Value::list(vec![Value::fixnum(5400), Value::string("+0130")]),
+    );
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::fixnum(3661)]).unwrap(),
+        Value::list(vec![Value::fixnum(3661), Value::string("+010101")]),
+    );
+
+    // A malformed POSIX TZ string falls back to UTC with the "+00" abbreviation
+    // (not the empty string libc reports).
+    assert_eq!(
+        builtin_current_time_zone(vec![t, Value::string("X1Y,J1,J365")]).unwrap(),
+        Value::list(vec![Value::fixnum(0), Value::string("+00")]),
+    );
+
+    reset_tz_rule();
+}
+
+/// `decode-time` with a too-short (OFFSET NAME) ZONE likewise falls back to UTC,
+/// so the broken-down time and UTCOFF use offset 0 (GNU reports hour 22, UTCOFF
+/// 0 for `(decode-time 1700000000 (list -18000 "E"))`).
+#[test]
+#[cfg(unix)]
+fn builtin_decode_time_short_named_zone_falls_back_to_utc() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+
+    let decoded = builtin_decode_time(vec![
+        Value::fixnum(1_700_000_000),
+        Value::list(vec![Value::fixnum(-18000), Value::string("E")]),
+    ])
+    .unwrap();
+    let items = list_to_vec(&decoded).unwrap();
+    assert_eq!(items[2].as_int(), Some(22)); // hour: UTC, not 17
+    assert_eq!(items[8].as_int(), Some(0)); // UTCOFF clamped to 0
+
+    // A valid named offset still applies normally.
+    let valid = builtin_decode_time(vec![
+        Value::fixnum(1_700_000_000),
+        Value::list(vec![Value::fixnum(-18000), Value::string("EST")]),
+    ])
+    .unwrap();
+    let valid_items = list_to_vec(&valid).unwrap();
+    assert_eq!(valid_items[2].as_int(), Some(17)); // hour: 22 - 5
+    assert_eq!(valid_items[8].as_int(), Some(-18000));
+
+    reset_tz_rule();
+}
+
 #[test]
 fn builtin_current_time_zone_with_zone_arg() {
     crate::test_utils::init_test_tracing();

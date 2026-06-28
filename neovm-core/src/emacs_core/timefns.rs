@@ -1070,6 +1070,111 @@ fn format_fixed_offset_name(offset_secs: i64) -> String {
     }
 }
 
+/// GNU's numeric-zone abbreviation, synthesized when libc reports an empty
+/// zone name (`Fcurrent_time_zone`, `src/timefns.c:1937`). Unlike
+/// `format_fixed_offset_name`, an offset of 0 yields the numeric `"+00"` rather
+/// than `"GMT"`, and the sign always reflects the (already clamped) offset.
+fn numeric_zone_abbrev(offset: i64) -> String {
+    let hour = offset / 3600;
+    let min_sec = offset % 3600;
+    let mut buf = String::new();
+    buf.push(if offset < 0 { '-' } else { '+' });
+    buf.push_str(&format!("{:02}", hour.abs()));
+    if min_sec != 0 {
+        let amin_sec = min_sec.abs();
+        let min = amin_sec / 60;
+        let sec = amin_sec % 60;
+        buf.push_str(&format!("{:02}", min));
+        if sec != 0 {
+            buf.push_str(&format!("{:02}", sec));
+        }
+    }
+    buf
+}
+
+/// Build the POSIX TZ string GNU's `tzlookup` hands to libc `tzalloc` for an
+/// explicit integer ZONE (`src/timefns.c:277`). The bracketed part is the
+/// numeric abbreviation `<+HH[MM[SS]]>`; the body is always `HH:MM:SS`. Note the
+/// POSIX body sign is inverted relative to the Emacs offset: a leading body sign
+/// is "time to add to local to reach UTC", so a *positive* (east-of-UTC) offset
+/// gets a "-" body and a negative offset an empty body — matching GNU's
+/// `&"-"[XFIXNUM (zone) < 0]`.
+fn tz_string_for_fixed_offset(offset: i64) -> String {
+    let abszone = offset.abs();
+    let hour = abszone / 3600;
+    let hour_remainder = abszone % 3600;
+    let min = hour_remainder / 60;
+    let sec = hour_remainder % 60;
+
+    // numzone packs HHMMSS to whatever precision the offset needs, matching
+    // GNU's prec/numzone construction.
+    let (prec, numzone) = if hour_remainder == 0 {
+        (2usize, hour)
+    } else if sec == 0 {
+        (4usize, 100 * hour + min)
+    } else {
+        (6usize, 100 * (100 * hour + min) + sec)
+    };
+    let signed_numzone = if offset < 0 { -numzone } else { numzone };
+    let body_sign = if offset < 0 { "" } else { "-" };
+    format!(
+        "<{:+0width$}>{}{}:{:02}:{:02}",
+        signed_numzone,
+        body_sign,
+        hour,
+        min,
+        sec,
+        // The `+` flag already counts toward the field width, so add 1 for it.
+        width = prec + 1,
+    )
+}
+
+/// Build GNU's POSIX TZ string for an explicit `(OFFSET NAME)` ZONE
+/// (`src/timefns.c:292`): `<NAME>` followed by the signed `HH:MM:SS` body. The
+/// body sign is inverted relative to the Emacs offset, exactly as for the
+/// integer case (`&"-"[XFIXNUM (zone) < 0]`).
+fn tz_string_for_named_offset(offset: i64, name: &str) -> String {
+    let abszone = offset.abs();
+    let hour = abszone / 3600;
+    let hour_remainder = abszone % 3600;
+    let min = hour_remainder / 60;
+    let sec = hour_remainder % 60;
+    let body_sign = if offset < 0 { "" } else { "-" };
+    format!("<{}>{}{}:{:02}:{:02}", name, body_sign, hour, min, sec)
+}
+
+/// Resolve an explicit numeric/named ZONE through libc exactly as GNU does:
+/// build the POSIX TZ string GNU's `tzlookup` would, then read back the
+/// clamped `tm_gmtoff` and validated `tm_zone`. libc clamps the offset to
+/// +/-24h and rejects abbreviations shorter than 3 characters (empty zone),
+/// for which GNU substitutes the numeric `+HH[MM[SS]]` abbreviation.
+#[cfg(unix)]
+fn fixed_zone_offset_name(tz_string: &str, epoch_secs: i64) -> (i64, String) {
+    let (offset, name) = with_tz_env(Some(tz_string), || {
+        let mut time_val: libc::time_t = epoch_secs as libc::time_t;
+        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+        let tm_ptr = unsafe { libc::localtime_r(&mut time_val as *mut _, &mut tm as *mut _) };
+        if tm_ptr.is_null() {
+            return (0i64, String::new());
+        }
+        let offset = tm.tm_gmtoff as i64;
+        let name = if tm.tm_zone.is_null() {
+            String::new()
+        } else {
+            unsafe { CStr::from_ptr(tm.tm_zone) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        (offset, name)
+    });
+    let name = if name.is_empty() {
+        numeric_zone_abbrev(offset)
+    } else {
+        name
+    };
+    (offset, name)
+}
+
 #[cfg(unix)]
 fn local_offset_name_at_epoch(epoch_secs: i64) -> (i64, String) {
     let mut time_val: libc::time_t = epoch_secs as libc::time_t;
@@ -1226,12 +1331,44 @@ fn effective_zone_rule(zone: Option<&Value>) -> Result<ZoneRule, Flow> {
     }
 }
 
+#[cfg(unix)]
 fn zone_rule_to_offset_name(rule: &ZoneRule, epoch_secs: i64) -> (i64, String) {
     match rule {
         ZoneRule::Local => local_offset_name_at_epoch(epoch_secs),
         ZoneRule::Utc => (0, "GMT".to_string()),
-        ZoneRule::FixedOffset(offset) => (*offset, format_fixed_offset_name(*offset)),
-        ZoneRule::FixedNamedOffset(offset, name) => (*offset, name.clone()),
+        // GNU `tzlookup` builds a POSIX TZ string and hands it to libc
+        // `tzalloc`; the resulting offset is therefore clamped to +/-24h and a
+        // too-short/invalid abbreviation falls back to UTC.
+        ZoneRule::FixedOffset(offset) => {
+            fixed_zone_offset_name(&tz_string_for_fixed_offset(*offset), epoch_secs)
+        }
+        ZoneRule::FixedNamedOffset(offset, name) => {
+            fixed_zone_offset_name(&tz_string_for_named_offset(*offset, name), epoch_secs)
+        }
+        ZoneRule::TzString(spec) => {
+            with_tz_env(Some(spec), || local_offset_name_at_epoch(epoch_secs))
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn zone_rule_to_offset_name(rule: &ZoneRule, epoch_secs: i64) -> (i64, String) {
+    match rule {
+        ZoneRule::Local => local_offset_name_at_epoch(epoch_secs),
+        ZoneRule::Utc => (0, "GMT".to_string()),
+        ZoneRule::FixedOffset(offset) => {
+            let clamped = fixed_offset_clamped(*offset);
+            (clamped, numeric_zone_abbrev(clamped))
+        }
+        ZoneRule::FixedNamedOffset(offset, name) => {
+            let clamped = fixed_offset_clamped(*offset);
+            // Short names are invalid: libc would fall back to UTC.
+            if name.chars().count() < 3 {
+                (0, numeric_zone_abbrev(0))
+            } else {
+                (clamped, name.clone())
+            }
+        }
         ZoneRule::TzString(spec) => {
             with_tz_env(Some(spec), || local_offset_name_at_epoch(epoch_secs))
         }
@@ -1254,17 +1391,47 @@ fn decode_time_for_zone(rule: &ZoneRule, epoch_secs: i64) -> Result<ZonedDecoded
             dst: Value::NIL,
             utcoff: 0,
         }),
-        ZoneRule::FixedOffset(offset) | ZoneRule::FixedNamedOffset(offset, _) => {
-            Ok(ZonedDecodedTime {
-                time: decode_epoch_secs(epoch_secs.saturating_add(*offset))?,
-                dst: Value::NIL,
-                utcoff: *offset,
-            })
+        // Mirror GNU: route the explicit numeric/named ZONE through libc so the
+        // offset (and the broken-down time it produces) is clamped to +/-24h
+        // and an invalid/too-short abbreviation falls back to UTC.
+        ZoneRule::FixedOffset(offset) => {
+            decode_time_for_fixed_zone(&tz_string_for_fixed_offset(*offset), *offset, epoch_secs)
         }
+        ZoneRule::FixedNamedOffset(offset, name) => decode_time_for_fixed_zone(
+            &tz_string_for_named_offset(*offset, name),
+            *offset,
+            epoch_secs,
+        ),
         ZoneRule::TzString(spec) => {
             with_tz_env(Some(spec), || local_decoded_time_at_epoch(epoch_secs))
         }
     }
+}
+
+/// Decode a time at an explicit numeric/named ZONE, honoring libc's clamping
+/// and short-name fallback. On Unix this defers to libc (`localtime_r` under
+/// the GNU-style TZ string); elsewhere it applies the clamp directly.
+#[cfg(unix)]
+fn decode_time_for_fixed_zone(
+    tz_string: &str,
+    _offset: i64,
+    epoch_secs: i64,
+) -> Result<ZonedDecodedTime, Flow> {
+    with_tz_env(Some(tz_string), || local_decoded_time_at_epoch(epoch_secs))
+}
+
+#[cfg(not(unix))]
+fn decode_time_for_fixed_zone(
+    _tz_string: &str,
+    offset: i64,
+    epoch_secs: i64,
+) -> Result<ZonedDecodedTime, Flow> {
+    let clamped = fixed_offset_clamped(offset);
+    Ok(ZonedDecodedTime {
+        time: decode_epoch_secs(epoch_secs.saturating_add(clamped))?,
+        dst: Value::NIL,
+        utcoff: clamped,
+    })
 }
 
 fn time_convert_default_hz(value: &Value) -> i64 {
@@ -1639,6 +1806,15 @@ pub(crate) fn builtin_current_time_zone(args: Vec<Value>) -> EvalResult {
     let rule = effective_zone_rule(args.get(1))?;
 
     let (offset, name) = zone_rule_to_offset_name(&rule, tm.secs);
+    // GNU `Fcurrent_time_zone` (`src/timefns.c:1935`): when the zone name comes
+    // back empty (e.g. an invalid/too-short abbreviation, or a malformed POSIX
+    // TZ string that libc rejects to UTC), substitute the numeric `+HH[MM[SS]]`
+    // abbreviation rather than reporting an empty string.
+    let name = if name.is_empty() {
+        numeric_zone_abbrev(offset)
+    } else {
+        name
+    };
     Ok(Value::list(vec![
         Value::fixnum(offset),
         Value::string(name),
