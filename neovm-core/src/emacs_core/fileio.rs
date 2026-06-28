@@ -230,16 +230,17 @@ fn expand_file_name_bytes_with_home(
 fn home_env_bytes() -> Option<Vec<u8>> {
     #[cfg(unix)]
     {
-        Some(std::env::var_os("HOME")?.as_bytes().to_vec())
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(home.as_bytes().to_vec());
+        }
+        current_user_home_bytes()
     }
     #[cfg(not(unix))]
     {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("APPDATA"))
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "C:/".to_string());
-        Some(home.into_bytes())
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(home.to_string_lossy().into_owned().into_bytes());
+        }
+        current_user_home_bytes()
     }
 }
 
@@ -302,6 +303,46 @@ fn user_homedir_bytes(user: &[u8]) -> Option<Vec<u8>> {
     {
         let _ = user;
         None
+    }
+}
+
+/// Home directory of the *current* user, mirroring GNU `get_homedir`'s fallback
+/// when `HOME` is unset (fileio.c): on Unix, `getpwnam` on $LOGNAME then $USER,
+/// else `getpwuid(getuid())`; on non-Unix, the OS-derived home where GNU
+/// `w32.c init_environment` puts HOME -- the roaming AppData folder
+/// (CSIDL_APPDATA == %APPDATA%), else %USERPROFILE%, else "C:/".
+fn current_user_home_bytes() -> Option<Vec<u8>> {
+    #[cfg(unix)]
+    {
+        for var in ["LOGNAME", "USER"] {
+            if let Some(user) = std::env::var_os(var) {
+                if let Some(home) = user_homedir_bytes(user.as_bytes()) {
+                    return Some(home);
+                }
+            }
+        }
+        let passwd = unsafe { libc::getpwuid(libc::getuid()) };
+        if passwd.is_null() {
+            return None;
+        }
+        let pw_dir = unsafe { (*passwd).pw_dir };
+        if pw_dir.is_null() {
+            return None;
+        }
+        let dir = unsafe { CStr::from_ptr(pw_dir) }.to_bytes();
+        if dir.is_empty() {
+            return None;
+        }
+        Some(dir.to_vec())
+    }
+
+    #[cfg(not(unix))]
+    {
+        let home = std::env::var_os("APPDATA")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "C:/".to_string());
+        Some(home.into_bytes())
     }
 }
 
@@ -1867,10 +1908,17 @@ pub(crate) fn expand_file_name_lisp(
 /// HOME for `expand-file-name`, as Emacs-internal-encoding bytes to feed the
 /// byte-native expansion core without a storage-String detour.
 fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
-    match super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")]) {
-        Ok(value) => value.as_lisp_string().map(|ls| ls.as_bytes().to_vec()),
-        Err(_) => None,
+    // GNU `get_homedir`: the HOME environment variable, else the current user's
+    // home directory (passwd entry on Unix, OS-derived on Windows). Without the
+    // fallback, a session with HOME unset -- e.g. a minimal Windows build env,
+    // where GNU relies on `init_environment` having set HOME -- leaves `~`
+    // unexpanded, so `directory-files "~"` fails at startup.
+    if let Ok(value) = super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")]) {
+        if let Some(ls) = value.as_lisp_string() {
+            return Some(ls.as_bytes().to_vec());
+        }
     }
+    current_user_home_bytes()
 }
 
 #[cfg(windows)]
