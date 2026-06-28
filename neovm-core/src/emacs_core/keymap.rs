@@ -2257,7 +2257,7 @@ pub(crate) fn resolve_active_key_binding(
     let lookup =
         lookup_key_in_keymaps_in_obarray_runtime(ctx, &active_maps, events, accept_default)?;
     let binding = if !lookup.is_nil() && !lookup.is_fixnum() {
-        key_binding_apply_remap_in_active_maps(&active_maps, lookup, no_remap)
+        key_binding_apply_remap_in_active_maps(ctx, &active_maps, lookup, no_remap)?
     } else if events.len() == 1 && is_plain_printable_emacs_event(&events[0]) {
         Value::symbol("self-insert-command")
     } else {
@@ -2599,24 +2599,52 @@ pub(crate) fn command_remapping_lookup_in_keymaps(
     None
 }
 
+/// Runtime twin of [`command_remapping_lookup_in_keymaps`] that resolves a
+/// menu-item `:filter` on the remap target via [`get_keyelt_runtime`] (GNU
+/// `get_keyelt` with autoload=true). Without this a `(menu-item "" nil :filter
+/// FN)` remap -- e.g. Doom's `cmds!` -- normalizes to its (nil) DEFN and the
+/// remap is dropped (so `[remap evil-record-macro]` -> `q` never reaches the
+/// real command).
+pub(crate) fn command_remapping_lookup_in_keymaps_runtime(
+    ctx: &mut Context,
+    keymaps: &[Value],
+    command: SymId,
+) -> Result<Option<Value>, Flow> {
+    for keymap in keymaps {
+        if !is_list_keymap(keymap) {
+            continue;
+        }
+        let Some(raw) = command_remapping_lookup_in_lisp_keymap(keymap, command) else {
+            continue;
+        };
+        let resolved = get_keyelt_runtime(ctx, raw, true)?;
+        let normalized = command_remapping_normalize_target(resolved);
+        if !normalized.is_nil() {
+            return Ok(Some(normalized));
+        }
+    }
+    Ok(None)
+}
+
 pub(crate) fn command_remapping_command_name(command: &Value) -> Option<SymId> {
     command.as_symbol_id()
 }
 
 pub(crate) fn key_binding_apply_remap_in_active_maps(
+    ctx: &mut Context,
     active_maps: &[Value],
     binding: Value,
     no_remap: bool,
-) -> Value {
+) -> EvalResult {
     if no_remap {
-        return binding;
+        return Ok(binding);
     }
     let Some(command_name) = binding.as_symbol_id() else {
-        return binding;
+        return Ok(binding);
     };
-    match command_remapping_lookup_in_keymaps(active_maps, command_name) {
-        Some(remapped) if !remapped.is_nil() => remapped,
-        _ => binding,
+    match command_remapping_lookup_in_keymaps_runtime(ctx, active_maps, command_name)? {
+        Some(remapped) if !remapped.is_nil() => Ok(remapped),
+        _ => Ok(binding),
     }
 }
 
