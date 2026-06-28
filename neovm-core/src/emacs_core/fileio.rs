@@ -216,16 +216,29 @@ fn expand_file_name_bytes_with_home(
     cleaned
 }
 
-/// Raw bytes of the `HOME` environment variable, byte-exact on Unix.
+/// Raw bytes of the home directory used for `~` expansion.
+///
+/// Unix: the `HOME` environment variable (byte-exact), or None if unset.
+///
+/// Windows: GNU `w32.c init_environment` guarantees HOME is set -- it keeps an
+/// existing HOME, else (when `C:/.emacs` is absent) defaults it to the roaming
+/// AppData folder via `SHGetFolderPath(CSIDL_APPDATA)` (the path the `APPDATA`
+/// env var holds), else `"C:/"`. (GNU also consults an Emacs-specific registry
+/// key, which we do not replicate.) Mirror that so `~` expands to a real
+/// directory: a Windows session that sets APPDATA/USERPROFILE but not HOME would
+/// otherwise leave `~` literal and `directory-files "~"` would fail at startup.
 fn home_env_bytes() -> Option<Vec<u8>> {
-    let home = std::env::var_os("HOME")?;
     #[cfg(unix)]
     {
-        Some(home.as_bytes().to_vec())
+        Some(std::env::var_os("HOME")?.as_bytes().to_vec())
     }
     #[cfg(not(unix))]
     {
-        Some(home.to_string_lossy().into_owned().into_bytes())
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("APPDATA"))
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "C:/".to_string());
+        Some(home.into_bytes())
     }
 }
 
