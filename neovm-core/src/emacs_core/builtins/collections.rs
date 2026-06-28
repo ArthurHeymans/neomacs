@@ -836,7 +836,52 @@ pub(crate) fn builtin_remhash_2(
     key_value: Value,
     table: Value,
 ) -> EvalResult {
+    if builtin_remhash_user_defined(eval, key_value, table)?.is_some() {
+        return Ok(Value::NIL);
+    }
     builtin_remhash_values(key_value, table, eval.symbols_with_pos_enabled)
+}
+
+fn builtin_remhash_user_defined(
+    eval: &mut super::eval::Context,
+    key_value: Value,
+    table: Value,
+) -> Result<Option<()>, Flow> {
+    let ValueKind::Veclike(VecLikeType::HashTable) = table.kind() else {
+        return Ok(None);
+    };
+    let ht_ref = table.as_hash_table().unwrap();
+    let Some((cmp_function, hash_function)) = table_user_defined_test(ht_ref) else {
+        return Ok(None);
+    };
+    check_mutable_hash_table(table)?;
+    let ht_snapshot = ht_ref.clone();
+    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
+    let mut existing_key = None;
+    for key in ht_snapshot.live_hash_keys_in_slot_order() {
+        if !ht_snapshot.data.contains_key(key) {
+            continue;
+        }
+        let candidate = hash_key_to_visible_value(&ht_snapshot, key);
+        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
+            continue;
+        }
+        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
+        {
+            existing_key = Some(key.clone());
+            break;
+        }
+    }
+
+    if let Some(storage_key) = existing_key {
+        let _ = table.with_hash_table_mut(|ht| {
+            if ht.data.remove(&storage_key).is_some() {
+                ht.key_snapshots.remove(&storage_key);
+                ht.note_hash_key_removed(&storage_key);
+            }
+        });
+    }
+    Ok(Some(()))
 }
 
 fn builtin_remhash_values(
@@ -875,7 +920,8 @@ pub(crate) fn builtin_clrhash(args: Vec<Value>) -> EvalResult {
                 ht.insertion_order.clear();
                 ht.clear_hash_slots();
             });
-            Ok(Value::NIL)
+            // Be compatible with GNU Emacs (and XEmacs): return the table.
+            Ok(args[0])
         }
         _ => Err(signal(
             "wrong-type-argument",

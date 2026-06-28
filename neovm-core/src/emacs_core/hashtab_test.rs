@@ -944,3 +944,109 @@ fn unintern_requires_obarray_argument() {
         .expect("two-arg unintern should succeed");
     assert!(two_arg.is_nil(), "absent symbol returns nil");
 }
+
+// GNU `Fclrhash` returns the cleared table itself (for XEmacs compatibility),
+// not nil.  `(eq (clrhash h) h)` must be t.
+#[test]
+fn clrhash_returns_the_hash_table_not_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = ctx
+        .eval_str("(let ((h (make-hash-table))) (puthash 'a 1 h) (eq (clrhash h) h))")
+        .expect("clrhash should evaluate");
+    assert!(
+        result.is_truthy(),
+        "clrhash must return the table arg so (eq (clrhash h) h) is t"
+    );
+}
+
+// GNU `remhash` dispatches its key lookup through the table's `cmpfn`, so a
+// table created with a user-defined `:test` removes the entry whose key the
+// custom comparator matches -- not just the literal `eq`/`eql`/`equal` key.
+// Here `(mod 17 7) == (mod 10 7) == 3`, so `(remhash 17 h)` must delete the
+// `10 -> ten` entry, leaving the table empty.
+#[test]
+fn remhash_dispatches_user_defined_test() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = ctx
+        .eval_str(
+            r#"(progn
+                 (define-hash-table-test 'mod7
+                   (lambda (a b) (= (mod a 7) (mod b 7)))
+                   (lambda (k) (mod k 7)))
+                 (let ((h (make-hash-table :test 'mod7)))
+                   (puthash 10 'ten h)
+                   (remhash 17 h)
+                   (list (gethash 10 h) (hash-table-count h))))"#,
+        )
+        .expect("remhash with user-defined test should evaluate");
+    let parts = list_to_vec(&result).expect("result is a proper list");
+    assert_eq!(parts.len(), 2);
+    assert!(
+        parts[0].is_nil(),
+        "remhash with custom test must have removed the 10->ten entry (got non-nil)"
+    );
+    assert_eq!(
+        parts[1].as_int(),
+        Some(0),
+        "hash-table-count must be 0 after the custom-test removal"
+    );
+}
+
+// The default `eq`/`eql`/`equal` remhash path must still work after teaching
+// remhash to dispatch user-defined tests.
+#[test]
+fn remhash_default_equal_test_still_works() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = ctx
+        .eval_str(
+            r#"(let ((h (make-hash-table :test 'equal)))
+                 (puthash "x" 1 h)
+                 (puthash "y" 2 h)
+                 (remhash "x" h)
+                 (list (gethash "x" h) (gethash "y" h) (hash-table-count h)))"#,
+        )
+        .expect("default-test remhash should evaluate");
+    let parts = list_to_vec(&result).expect("result is a proper list");
+    assert_eq!(parts.len(), 3);
+    assert!(parts[0].is_nil(), "removed key \"x\" must now be absent");
+    assert_eq!(parts[1].as_int(), Some(2), "untouched key \"y\" stays");
+    assert_eq!(parts[2].as_int(), Some(1), "exactly one entry remains");
+}
+
+// eq/eql default tests: remhash removes the matching key and leaves others.
+#[test]
+fn remhash_default_eq_eql_tests_still_work() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+
+    let eq_result = ctx
+        .eval_str(
+            r#"(let ((h (make-hash-table :test 'eq)))
+                 (puthash 'a 1 h)
+                 (puthash 'b 2 h)
+                 (remhash 'a h)
+                 (list (gethash 'a h) (gethash 'b h) (hash-table-count h)))"#,
+        )
+        .expect("eq remhash should evaluate");
+    let eq_parts = list_to_vec(&eq_result).expect("proper list");
+    assert!(eq_parts[0].is_nil());
+    assert_eq!(eq_parts[1].as_int(), Some(2));
+    assert_eq!(eq_parts[2].as_int(), Some(1));
+
+    let eql_result = ctx
+        .eval_str(
+            r#"(let ((h (make-hash-table :test 'eql)))
+                 (puthash 1.5 'a h)
+                 (puthash 2.5 'b h)
+                 (remhash 1.5 h)
+                 (list (gethash 1.5 h) (gethash 2.5 h) (hash-table-count h)))"#,
+        )
+        .expect("eql remhash should evaluate");
+    let eql_parts = list_to_vec(&eql_result).expect("proper list");
+    assert!(eql_parts[0].is_nil());
+    assert_eq!(eql_parts[1].as_symbol_name(), Some("b"));
+    assert_eq!(eql_parts[2].as_int(), Some(1));
+}
