@@ -21,6 +21,27 @@ fn bootstrap_eval(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
 }
 
+/// Render a builtin's `Result<Value, Flow>` the way `(condition-case e EXPR
+/// (error e))` followed by `prin1` would in Elisp: a success prints the value,
+/// a signal prints the error object `(SYMBOL . DATA)`. This lets behavioral
+/// tests assert against GNU Emacs `--batch` output byte-for-byte without
+/// depending on the (pdump-gated) bootstrap evaluator.
+fn condition_case_print(result: Result<Value, Flow>) -> String {
+    match result {
+        Ok(value) => crate::emacs_core::print::print_value(&value),
+        Err(Flow::Signal(sig)) => {
+            let symbol = Value::symbol(sig.symbol_name());
+            let err_obj = if let Some(raw) = sig.raw_data {
+                Value::cons(symbol, raw)
+            } else {
+                Value::cons(symbol, Value::list(sig.data.clone()))
+            };
+            crate::emacs_core::print::print_value(&err_obj)
+        }
+        Err(other) => panic!("expected signal or value, got {other:?}"),
+    }
+}
+
 fn assert_invalid_time_frequency(flow: Flow) {
     match flow {
         Flow::Signal(sig) => {
@@ -205,8 +226,20 @@ fn parse_time_list_four() {
 #[test]
 fn parse_time_bad_type() {
     crate::test_utils::init_test_tracing();
-    let result = parse_time(&Value::string("not a time"));
-    assert!(result.is_err());
+    // GNU `decode_lisp_time` signals `(error "Invalid time specification")` for a
+    // non-number/non-cons TIME value (e.g. a string), NOT `wrong-type-argument
+    // numberp`.
+    let err = parse_time(&Value::string("not a time")).expect_err("string is not a time");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|value| value.as_utf8_str()),
+                Some("Invalid time specification")
+            );
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -226,7 +259,7 @@ fn leap_years() {
 #[test]
 fn decode_epoch_zero() {
     crate::test_utils::init_test_tracing();
-    let dt = decode_epoch_secs(0);
+    let dt = decode_epoch_secs(0).unwrap();
     assert_eq!(dt.year, 1970);
     assert_eq!(dt.month, 1);
     assert_eq!(dt.day, 1);
@@ -241,7 +274,7 @@ fn decode_known_date() {
     crate::test_utils::init_test_tracing();
     // 2024-01-15 12:30:45 UTC -> epoch = 1705318245
     let epoch = encode_to_epoch_secs(45, 30, 12, 15, 1, 2024);
-    let dt = decode_epoch_secs(epoch);
+    let dt = decode_epoch_secs(epoch).unwrap();
     assert_eq!(dt.year, 2024);
     assert_eq!(dt.month, 1);
     assert_eq!(dt.day, 15);
@@ -254,7 +287,7 @@ fn decode_known_date() {
 fn encode_decode_roundtrip() {
     crate::test_utils::init_test_tracing();
     let epoch = encode_to_epoch_secs(30, 15, 10, 25, 6, 2023);
-    let dt = decode_epoch_secs(epoch);
+    let dt = decode_epoch_secs(epoch).unwrap();
     assert_eq!(dt.sec, 30);
     assert_eq!(dt.min, 15);
     assert_eq!(dt.hour, 10);
@@ -267,7 +300,7 @@ fn encode_decode_roundtrip() {
 fn encode_decode_roundtrip_leap_day() {
     crate::test_utils::init_test_tracing();
     let epoch = encode_to_epoch_secs(0, 0, 0, 29, 2, 2024);
-    let dt = decode_epoch_secs(epoch);
+    let dt = decode_epoch_secs(epoch).unwrap();
     assert_eq!(dt.day, 29);
     assert_eq!(dt.month, 2);
     assert_eq!(dt.year, 2024);
@@ -277,7 +310,7 @@ fn encode_decode_roundtrip_leap_day() {
 fn decode_y2k() {
     crate::test_utils::init_test_tracing();
     // 2000-01-01 00:00:00 UTC = 946684800
-    let dt = decode_epoch_secs(946_684_800);
+    let dt = decode_epoch_secs(946_684_800).unwrap();
     assert_eq!(dt.year, 2000);
     assert_eq!(dt.month, 1);
     assert_eq!(dt.day, 1);
@@ -1291,4 +1324,304 @@ fn time_convert_accepts_bignum_ticks_hz_for_all_forms() {
         "OK (1003201560221054835793619586101 . 562949953421312000000)"
     );
     assert_eq!(results[3], "OK (1782043952795673 . 1000000)");
+}
+
+// -----------------------------------------------------------------------
+// GROUP=timefns behavioral fixes (mirroring GNU src/timefns.c). Each output
+// below was captured from GNU Emacs 31 `--batch`.
+// -----------------------------------------------------------------------
+
+// NB: these behavioral tests call the builtins directly (not `bootstrap_eval`),
+// because the bootstrap evaluator is gated on a generated `.pdump` that a fresh
+// debug build lacks. `condition_case_print` renders the result/error object so
+// it can be compared byte-for-byte against GNU Emacs `--batch` output.
+
+const MOST_POSITIVE_FIXNUM: i64 = 2_305_843_009_213_693_951; // GNU 61-bit fixnum
+
+/// Bug #1: `(decode-time most-positive-fixnum t)` and `(decode-time 1e18 t)`
+/// used to hang (the year was found by an O(years) loop, ~7e13 iterations) and
+/// then return an out-of-range year. GNU's `gmtime_r`/`emacs_localtime_rz`
+/// fails for such inputs, so `decode-time` signals
+/// `(error "Specified time is not representable")`. The closed-form
+/// civil-from-days conversion plus the `tm_year`-range check reproduces that.
+#[test]
+fn decode_time_huge_input_signals_not_representable_no_hang() {
+    crate::test_utils::init_test_tracing();
+    // (decode-time most-positive-fixnum t)
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_int(MOST_POSITIVE_FIXNUM),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    // (decode-time 1e18 t)
+    assert_eq!(
+        condition_case_print(builtin_decode_time(
+            vec![Value::make_float(1e18), Value::T,]
+        )),
+        "(error \"Specified time is not representable\")"
+    );
+}
+
+/// Bug #2: the first out-of-range epoch second (year 2147485548, one past the
+/// largest representable `tm_year` = INT_MAX) signals; the last in-range second
+/// (year 2147485547-12-31 23:59:59 UTC) decodes; and the negative boundary
+/// behaves the same way. Matches GNU.
+#[test]
+fn decode_time_year_range_boundary_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_int(67_768_036_191_676_800),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_int(67_768_036_191_676_799),
+            Value::T,
+        ])),
+        "(59 59 23 31 12 2147485547 3 nil 0)"
+    );
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_int(-67_768_040_609_740_801),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_int(-67_768_040_609_740_800),
+            Value::T,
+        ])),
+        "(0 0 0 1 1 -2147481748 4 nil 0)"
+    );
+}
+
+/// The closed-form civil conversion must agree with the previous loop on
+/// ordinary dates, including negative epochs (pre-1970) and leap days.
+#[test]
+fn civil_from_days_matches_known_dates() {
+    crate::test_utils::init_test_tracing();
+    // 1970-01-01.
+    assert_eq!(civil_from_days(0), (1970, 1, 1));
+    // 2000-02-29 (leap day).
+    let leap = encode_to_epoch_secs(0, 0, 0, 29, 2, 2000) / 86400;
+    assert_eq!(civil_from_days(leap), (2000, 2, 29));
+    // 1969-12-31 (one day before epoch).
+    assert_eq!(civil_from_days(-1), (1969, 12, 31));
+    // 1900-01-01 (century, non-leap) — negative epoch.
+    let y1900 = encode_to_epoch_secs(0, 0, 0, 1, 1, 1900).div_euclid(86400);
+    assert_eq!(civil_from_days(y1900), (1900, 1, 1));
+}
+
+/// Bug #7: `encode-time` of a decoded-time list whose SECOND field is nil. GNU
+/// decodes SECOND with `decode_lisp_time`, where nil means the current time, so
+/// the call returns a `(TICKS . HZ)` value rather than signalling
+/// `(wrong-type-argument fixnump nil)`.
+#[test]
+fn encode_time_nil_second_returns_ticks_hz_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+    let result = builtin_encode_time(vec![Value::list(vec![
+        Value::NIL, // SECOND = nil -> current time
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::fixnum(1),
+        Value::fixnum(1),
+        Value::fixnum(1970),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+    ])])
+    .expect("nil SECOND is allowed");
+    // GNU returns (TICKS . HZ); the exact value depends on the current time, so
+    // just assert it is a (integer . positive-integer) cons. TICKS is a bignum
+    // here (now.secs * HZ), so accept fixnum-or-bignum via `value_to_integer`.
+    assert!(result.is_cons(), "expected (TICKS . HZ), got {result:?}");
+    assert!(
+        value_to_integer(&result.cons_car()).is_some(),
+        "TICKS must be an integer, got {:?}",
+        result.cons_car()
+    );
+    let hz = value_to_integer(&result.cons_cdr()).expect("HZ is an integer");
+    assert!(hz > Integer::from(0), "HZ must be positive, got {hz}");
+    reset_tz_rule();
+}
+
+/// Bug #7 (companion): a non-number, non-nil SECOND (e.g. a symbol) signals the
+/// `decode_lisp_time` error `(error "Invalid time specification")`, not
+/// `wrong-type-argument fixnump`.
+#[test]
+fn encode_time_symbol_second_signals_invalid_time_specification() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+    let result = builtin_encode_time(vec![Value::list(vec![
+        Value::symbol("foo"), // SECOND = symbol -> invalid time spec
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::fixnum(1),
+        Value::fixnum(1),
+        Value::fixnum(1970),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+    ])]);
+    assert_eq!(
+        condition_case_print(result),
+        "(error \"Invalid time specification\")"
+    );
+    reset_tz_rule();
+}
+
+/// Bugs #8-11: `encode-time` field-list validation walks the list cons-by-cons
+/// (`CHECK_CONS`), so a malformed list signals `(wrong-type-argument consp
+/// OFFENDING-CELL)` on the specific cell — not a blanket `listp` error.
+#[test]
+fn encode_time_field_list_reports_consp_per_cell_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+    // (encode-time 0)
+    assert_eq!(
+        condition_case_print(builtin_encode_time(vec![Value::fixnum(0)])),
+        "(wrong-type-argument consp 0)"
+    );
+    // (encode-time '(0 . 1000))
+    assert_eq!(
+        condition_case_print(builtin_encode_time(vec![Value::cons(
+            Value::fixnum(0),
+            Value::fixnum(1000),
+        )])),
+        "(wrong-type-argument consp 1000)"
+    );
+    // (encode-time '(0 0 0))
+    assert_eq!(
+        condition_case_print(builtin_encode_time(vec![Value::list(vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+        ])])),
+        "(wrong-type-argument consp nil)"
+    );
+    // (encode-time '(0 0 0 1 1 . 1970)) — improper list with a fixnum tail.
+    let improper = Value::cons(
+        Value::fixnum(0),
+        Value::cons(
+            Value::fixnum(0),
+            Value::cons(
+                Value::fixnum(0),
+                Value::cons(
+                    Value::fixnum(1),
+                    Value::cons(Value::fixnum(1), Value::fixnum(1970)),
+                ),
+            ),
+        ),
+    );
+    assert_eq!(
+        condition_case_print(builtin_encode_time(vec![improper])),
+        "(wrong-type-argument consp 1970)"
+    );
+    reset_tz_rule();
+}
+
+/// Bug #12: an invalid HZ/FORM passed to `time-convert` carries the offending
+/// value in the error data (GNU `invalid_hz`: `xsignal2 (Qerror, "Invalid time
+/// frequency", hz)`).
+#[test]
+fn time_convert_invalid_frequency_appends_offending_value_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // (time-convert 1 0)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::fixnum(1),
+            Value::fixnum(0),
+        ])),
+        "(error \"Invalid time frequency\" 0)"
+    );
+    // (time-convert 1 -5)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::fixnum(1),
+            Value::fixnum(-5),
+        ])),
+        "(error \"Invalid time frequency\" -5)"
+    );
+    // (time-convert 1 'bogus)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::fixnum(1),
+            Value::symbol("bogus"),
+        ])),
+        "(error \"Invalid time frequency\" bogus)"
+    );
+}
+
+/// Bug #13: a non-finite float TIME routes through the overflow/not-representable
+/// path, matching GNU `time_error (isnan ? EDOM : EOVERFLOW)`: ±inf signals
+/// "Specified time is not representable", NaN signals "Invalid time
+/// specification".
+#[test]
+fn time_convert_non_finite_float_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    // (time-convert 1.0e+INF t)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::make_float(f64::INFINITY),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    // (time-convert -1.0e+INF t)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::make_float(f64::NEG_INFINITY),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    // (time-convert 0.0e+NaN t)
+    assert_eq!(
+        condition_case_print(builtin_time_convert(vec![
+            Value::make_float(f64::NAN),
+            Value::T,
+        ])),
+        "(error \"Invalid time specification\")"
+    );
+    // (decode-time 1.0e+INF t) — the same overflow path via `parse_time`.
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::make_float(f64::INFINITY),
+            Value::T,
+        ])),
+        "(error \"Specified time is not representable\")"
+    );
+    reset_tz_rule();
+}
+
+/// Bugs #14/#15: a bad (non-number) TIME value signals a plain
+/// `(error "Invalid time specification")` via GNU's `time_spec_invalid` path —
+/// not a `wrong-type-argument numberp`. `time-to-days` shares the `decode-time`
+/// -> `parse_time` path exercised here.
+#[test]
+fn decode_time_bad_time_value_signals_invalid_time_specification() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+    // (decode-time "not-a-time" t)
+    assert_eq!(
+        condition_case_print(builtin_decode_time(vec![
+            Value::string("not-a-time"),
+            Value::T,
+        ])),
+        "(error \"Invalid time specification\")"
+    );
+    reset_tz_rule();
 }

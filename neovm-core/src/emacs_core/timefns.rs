@@ -395,10 +395,15 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
         ValueKind::Float => {
             let f = val.xfloat();
             if !f.is_finite() {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Invalid time specification")],
-                ));
+                // GNU `decode_lisp_time` (`src/timefns.c:1037`) routes a non-finite
+                // float through `time_error (isnan ? EDOM : EOVERFLOW)`: NaN ->
+                // "Invalid time specification", ±inf -> "Specified time is not
+                // representable".
+                return Err(if f.is_nan() {
+                    time_spec_invalid()
+                } else {
+                    time_error_overflow()
+                });
             }
             let (ticks, hz) = float_to_exact_ticks_hz(f)?;
             let hz_i64 = i64::try_from(&hz)
@@ -473,10 +478,11 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
                 exact_ticks_hz: None,
             })
         }
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("numberp"), *val],
-        )),
+        // GNU `decode_lisp_time` (`src/timefns.c:1041`) signals
+        // `time_spec_invalid` ("Invalid time specification") for any TIME value
+        // that is not nil/cons/integer/float (e.g. a string), NOT a
+        // `wrong-type-argument numberp`.
+        _ => Err(time_spec_invalid()),
     }
 }
 
@@ -627,7 +633,16 @@ fn decode_lisp_time(val: &Value) -> Result<DecodedLispTime, Flow> {
         ValueKind::Float => {
             let f = val.xfloat();
             if !f.is_finite() {
-                return Err(time_spec_invalid());
+                // GNU `decode_lisp_time` (`src/timefns.c:1037`):
+                // `time_error (isnan (d) ? EDOM : EOVERFLOW)`. EDOM (NaN) maps to
+                // `time_spec_invalid` ("Invalid time specification"); EOVERFLOW
+                // (±inf) maps to `time_overflow` ("Specified time is not
+                // representable").
+                return Err(if f.is_nan() {
+                    time_spec_invalid()
+                } else {
+                    time_error_overflow()
+                });
             }
             Ok(DecodedLispTime {
                 th: decode_float_time(f)?,
@@ -835,6 +850,10 @@ fn time_cmp(a: &Value, b: &Value) -> Result<std::cmp::Ordering, Flow> {
 // Date/time breakdown helpers (UTC only, no chrono)
 // ---------------------------------------------------------------------------
 
+/// Offset between a calendar year and glibc's `struct tm` `tm_year` field
+/// (GNU `TM_YEAR_BASE`): `tm_year = year - 1900`.
+const TM_YEAR_BASE: i64 = 1900;
+
 fn is_leap_year(year: i64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
@@ -884,10 +903,39 @@ struct ZonedDecodedTime {
     utcoff: i64,
 }
 
+/// Convert a count of days since the Unix epoch (1970-01-01) into a proleptic
+/// Gregorian `(year, month, day)`, in O(1). This is Howard Hinnant's
+/// `civil_from_days` algorithm <http://howardhinnant.github.io/date_algorithms.html>,
+/// which is the same closed form glibc's `__offtime`/`gmtime_r` uses; it
+/// replaces the previous O(years) year-counting loop that took ~7e13 iterations
+/// (and effectively hung) for inputs like `most-positive-fixnum`.
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    // Shift the epoch to 0000-03-01 so the leap day falls at the end of a
+    // 400-year era and the month arithmetic below is uniform.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097); // [0, 146096]
+    // Year-of-era, accounting for the 100-year and 400-year leap rules.
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11] (March-based month index)
+    let day = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let month = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let year = if month <= 2 { y + 1 } else { y };
+    (year, month, day)
+}
+
 /// Break epoch seconds into UTC date/time components.
-fn decode_epoch_secs(total_secs: i64) -> DecodedTime {
+///
+/// Returns an error (GNU `time_overflow`, "Specified time is not
+/// representable") when the resulting year is not representable as glibc's
+/// `tm_year` (an `int`); GNU's `emacs_localtime_rz`/`gmtime_r` fails the same
+/// way, so e.g. `(decode-time most-positive-fixnum t)` signals rather than
+/// returning an out-of-range year.
+fn decode_epoch_secs(total_secs: i64) -> Result<DecodedTime, Flow> {
     // Handle the time-of-day part
-    let mut days = total_secs.div_euclid(86400);
+    let days = total_secs.div_euclid(86400);
     let day_secs = total_secs.rem_euclid(86400);
 
     let sec = day_secs % 60;
@@ -898,44 +946,16 @@ fn decode_epoch_secs(total_secs: i64) -> DecodedTime {
     // dow: 0=Sunday
     let dow = ((days % 7) + 4).rem_euclid(7);
 
-    // Compute year, month, day from days since epoch.
-    let mut year: i64 = 1970;
-    if days >= 0 {
-        loop {
-            let dy = days_in_year(year);
-            if days < dy {
-                break;
-            }
-            days -= dy;
-            year += 1;
-        }
-    } else {
-        loop {
-            year -= 1;
-            let dy = days_in_year(year);
-            days += dy;
-            if days >= 0 {
-                break;
-            }
-        }
+    // Compute year, month, day from days since epoch via the closed form.
+    let (year, month, day) = civil_from_days(days);
+
+    // GNU `gmtime_r` stores the year in `tm_year` (= year - 1900) as an `int`,
+    // and fails (errno = EOVERFLOW) when it would not fit. Reproduce that limit.
+    if i32::try_from(year - TM_YEAR_BASE).is_err() {
+        return Err(time_error_overflow());
     }
 
-    // Now `days` is day-of-year (0-based).
-    let mut month: i64 = 1;
-    loop {
-        let dm = days_in_month(month, year);
-        if days < dm {
-            break;
-        }
-        days -= dm;
-        month += 1;
-        if month > 12 {
-            break;
-        }
-    }
-    let day = days + 1; // 1-based
-
-    DecodedTime {
+    Ok(DecodedTime {
         sec,
         min,
         hour,
@@ -943,7 +963,7 @@ fn decode_epoch_secs(total_secs: i64) -> DecodedTime {
         month,
         year,
         dow,
-    }
+    })
 }
 
 /// Encode date/time components to epoch seconds (UTC).
@@ -1109,7 +1129,7 @@ fn local_decoded_time_at_epoch(epoch_secs: i64) -> Result<ZonedDecodedTime, Flow
 
 #[cfg(not(unix))]
 fn local_decoded_time_at_epoch(epoch_secs: i64) -> Result<ZonedDecodedTime, Flow> {
-    let time = decode_epoch_secs(epoch_secs);
+    let time = decode_epoch_secs(epoch_secs)?;
     Ok(ZonedDecodedTime {
         time,
         dst: Value::NIL,
@@ -1230,13 +1250,13 @@ fn decode_time_for_zone(rule: &ZoneRule, epoch_secs: i64) -> Result<ZonedDecoded
     match rule {
         ZoneRule::Local => local_decoded_time_at_epoch(epoch_secs),
         ZoneRule::Utc => Ok(ZonedDecodedTime {
-            time: decode_epoch_secs(epoch_secs),
+            time: decode_epoch_secs(epoch_secs)?,
             dst: Value::NIL,
             utcoff: 0,
         }),
         ZoneRule::FixedOffset(offset) | ZoneRule::FixedNamedOffset(offset, _) => {
             Ok(ZonedDecodedTime {
-                time: decode_epoch_secs(epoch_secs.saturating_add(*offset)),
+                time: decode_epoch_secs(epoch_secs.saturating_add(*offset))?,
                 dst: Value::NIL,
                 utcoff: *offset,
             })
@@ -1348,19 +1368,17 @@ fn decode_encode_time_second(value: &Value) -> Result<(i64, i64, i64), Flow> {
     if let Some(n) = value.as_fixnum() {
         return Ok((n, 0, 1));
     }
-    // Reject the same shapes `CHECK_FIXNUM' would for a non-numeric scalar
-    // (e.g. nil, a symbol): only numbers and time lists/conses are valid.
-    let fixnump_error = || {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("fixnump"), *value],
-        )
-    };
+    // GNU `Fencode_time` decodes the SECOND field with `decode_lisp_time
+    // (secarg, CFORM_TICKS_HZ)` (`src/timefns.c:1736`), so it accepts every time
+    // form `decode_lisp_time` does: nil means the current time, numbers and time
+    // lists/conses decode normally, and any other value (a symbol, a string, ...)
+    // signals `time_spec_invalid` ("Invalid time specification") — NOT a
+    // `wrong-type-argument fixnump`.
     if !matches!(
         value.kind(),
-        ValueKind::Float | ValueKind::Cons | ValueKind::Veclike(_)
+        ValueKind::Nil | ValueKind::Float | ValueKind::Cons | ValueKind::Veclike(_)
     ) {
-        return Err(fixnump_error());
+        return Err(time_spec_invalid());
     }
     let parsed = parse_time_detailed(value)?;
     let hz = parsed.hz.max(1);
@@ -1380,9 +1398,11 @@ fn decode_encode_time_second(value: &Value) -> Result<(i64, i64, i64), Flow> {
             }
         }
     };
-    // `sec' becomes tm_sec, which GNU passes through CHECK_FIXNUM later.
-    if Value::make_int(sec).as_fixnum().is_none() {
-        return Err(fixnump_error());
+    // `sec' becomes `tm.tm_sec` via GNU `check_tm_member (sec, 0)`
+    // (`src/timefns.c:1752`), which requires it fit in an `int` and otherwise
+    // signals `time_overflow` ("Specified time is not representable").
+    if i32::try_from(sec).is_err() {
+        return Err(time_error_overflow());
     }
     Ok((sec, subsec_ticks.rem_euclid(hz), hz))
 }
@@ -1403,8 +1423,10 @@ fn encode_time_zone_offset(zone: &Value, approx_epoch_secs: i64) -> Result<i64, 
 // Pure builtins
 // ---------------------------------------------------------------------------
 
-fn invalid_time_frequency_error() -> Flow {
-    signal("error", vec![Value::string("Invalid time frequency")])
+/// GNU `invalid_hz` (`src/timefns.c:376`): `xsignal2 (Qerror, "Invalid time
+/// frequency", hz)`. The error data always carries the offending FORM/HZ value.
+fn invalid_time_frequency_error(hz: &Value) -> Flow {
+    signal("error", vec![Value::string("Invalid time frequency"), *hz])
 }
 
 fn current_time_list_enabled(eval: &Context) -> Result<bool, Flow> {
@@ -1423,7 +1445,7 @@ fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<Time
         }
         ValueKind::T => Ok(TimeConvertForm::InputHz),
         ValueKind::Fixnum(hz) if hz > 0 => Ok(TimeConvertForm::ExplicitHz(Integer::from(hz))),
-        ValueKind::Fixnum(_) => Err(invalid_time_frequency_error()),
+        ValueKind::Fixnum(_) => Err(invalid_time_frequency_error(form)),
         ValueKind::Veclike(VecLikeType::Bignum) => {
             let hz = form
                 .as_bignum()
@@ -1432,15 +1454,15 @@ fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<Time
             if hz > Integer::from(0) {
                 Ok(TimeConvertForm::ExplicitHz(hz))
             } else {
-                Err(invalid_time_frequency_error())
+                Err(invalid_time_frequency_error(form))
             }
         }
         ValueKind::Symbol(id) => match resolve_sym(id).parse::<TimeConvertSymbolForm>().ok() {
             Some(TimeConvertSymbolForm::List) => Ok(TimeConvertForm::List),
             Some(TimeConvertSymbolForm::Integer) => Ok(TimeConvertForm::Integer),
-            None => Err(invalid_time_frequency_error()),
+            None => Err(invalid_time_frequency_error(form)),
         },
-        _ => Err(invalid_time_frequency_error()),
+        _ => Err(invalid_time_frequency_error(form)),
     }
 }
 
@@ -1547,7 +1569,7 @@ pub(crate) fn builtin_current_time_string(args: Vec<Value>) -> EvalResult {
         parse_time(&args[0])?
     };
     let (offset_secs, _) = zone_offset_name_for_time(args.get(1), tm.secs)?;
-    let dt = decode_epoch_secs(tm.secs.saturating_add(offset_secs));
+    let dt = decode_epoch_secs(tm.secs.saturating_add(offset_secs))?;
 
     // Format: "Dow Mon DD HH:MM:SS YYYY"
     // Day of month is right-justified in a 2-char field (space-padded).
@@ -1582,30 +1604,62 @@ pub(crate) fn builtin_current_time_zone(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
+/// GNU `CHECK_CONS`: signal `(wrong-type-argument consp OBJ)` unless OBJ is a
+/// cons cell. Returns `(car, cdr)` for a valid cons.
+fn check_cons(obj: &Value) -> Result<(Value, Value), Flow> {
+    if obj.is_cons() {
+        Ok((obj.cons_car(), obj.cons_cdr()))
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("consp"), *obj],
+        ))
+    }
+}
+
 /// `(encode-time TIME &rest OBSOLESCENT-ARGUMENTS)` -> `(HIGH LOW)`
 pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
     // The SECOND field accepts any Lisp time value (GNU decodes it via
     // `decode_lisp_time'); its sub-second resolution carries into the result.
     let (sec, subsec_ticks, hz, min, hour, day, month, year, zone) = if args.len() == 1 {
-        let items = list_to_vec(&args[0])
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[0]]))?;
-        if items.len() < 6 {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("listp"), args[0]],
-            ));
+        // GNU `Fencode_time` (`src/timefns.c:1698`) walks the single list
+        // argument cons-by-cons: `for (i=0;i<6;i++) CHECK_CONS(tail)` then peels
+        // SECOND..YEAR off the head. A malformed tail therefore signals
+        // `(wrong-type-argument consp OFFENDING-CELL)` on the specific cell — not
+        // a `listp` error on the whole argument.
+        let a = args[0];
+        let mut tail = a;
+        for _ in 0..6 {
+            let (_, cdr) = check_cons(&tail)?;
+            tail = cdr;
         }
-        let (sec, subsec_ticks, hz) = decode_encode_time_second(&items[0])?;
+        let (secarg, a) = check_cons(&a)?;
+        let (minarg, a) = check_cons(&a)?;
+        let (hourarg, a) = check_cons(&a)?;
+        let (mdayarg, a) = check_cons(&a)?;
+        let (monarg, a) = check_cons(&a)?;
+        let (yeararg, a) = check_cons(&a)?;
+        // ZONE is the element after the IGNORED and DST fields, when present.
+        // GNU `CHECK_CONS`-walks them too, but we only need the ZONE value here.
+        let zone = if a.is_nil() {
+            Value::NIL
+        } else {
+            let (_ignored, a) = check_cons(&a)?;
+            let (_dstflag, a) = check_cons(&a)?;
+            let (zoneval, _) = check_cons(&a)?;
+            zoneval
+        };
+        let (sec, subsec_ticks, hz) = decode_encode_time_second(&secarg)?;
         (
             sec,
             subsec_ticks,
             hz,
-            require_fixnum_component(&items[1])?,
-            require_fixnum_component(&items[2])?,
-            require_fixnum_component(&items[3])?,
-            require_fixnum_component(&items[4])?,
-            require_fixnum_component(&items[5])?,
-            items.get(8).copied().unwrap_or(Value::NIL),
+            require_fixnum_component(&minarg)?,
+            require_fixnum_component(&hourarg)?,
+            require_fixnum_component(&mdayarg)?,
+            require_fixnum_component(&monarg)?,
+            require_fixnum_component(&yeararg)?,
+            zone,
         )
     } else if args.len() < 6 {
         return Err(signal(
