@@ -66,16 +66,16 @@ fn expand_file_name_with_home_inner(
     let expanded = if name.starts_with("~/") {
         if let Some(home) = home_override {
             format!("{}{}", home, &name[1..])
-        } else if let Some(home) = std::env::var_os("HOME") {
-            format!("{}{}", home.to_string_lossy(), &name[1..])
+        } else if let Some(home) = home_env_string() {
+            format!("{}{}", home, &name[1..])
         } else {
             name.to_string()
         }
     } else if name == "~" {
         if let Some(home) = home_override {
             home.to_string()
-        } else if let Some(home) = std::env::var_os("HOME") {
-            home.to_string_lossy().into_owned()
+        } else if let Some(home) = home_env_string() {
+            home
         } else {
             name.to_string()
         }
@@ -236,10 +236,17 @@ fn home_env_bytes() -> Option<Vec<u8>> {
     {
         let home = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("APPDATA"))
+            .or_else(|| std::env::var_os("USERPROFILE"))
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "C:/".to_string());
         Some(home.into_bytes())
     }
+}
+
+/// String form of [`home_env_bytes`] for the string-native `~` expansion path,
+/// so it honors the same Windows HOME fallback (APPDATA / USERPROFILE / "C:/").
+fn home_env_string() -> Option<String> {
+    home_env_bytes().map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Raw bytes of the current working directory, byte-exact on Unix.

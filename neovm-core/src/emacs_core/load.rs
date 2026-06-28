@@ -2679,11 +2679,28 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
     let source_dir = lisp_directory_name_from_host_path(project_root);
     let temporary_file_directory = lisp_directory_name_from_host_path(&std::env::temp_dir());
     let path_separator = if cfg!(windows) { ";" } else { ":" };
-    let process_environment = Value::list(
-        std::env::vars()
-            .map(|(name, value)| Value::string(format!("{name}={value}")))
-            .collect::<Vec<_>>(),
-    );
+    let process_environment = {
+        #[cfg_attr(not(windows), allow(unused_mut))]
+        let mut entries: Vec<(String, String)> = std::env::vars().collect();
+        // Mirror GNU `w32.c init_environment`: guarantee HOME is set on Windows,
+        // where the OS environment provides APPDATA/USERPROFILE but typically not
+        // HOME. Without it `getenv "HOME"` is nil and `~` never expands, so e.g.
+        // `directory-files "~"` fails fatally during startup. GNU defaults HOME to
+        // the roaming AppData folder (CSIDL_APPDATA == %APPDATA%), else "C:/".
+        #[cfg(windows)]
+        if !entries.iter().any(|(k, _)| k.eq_ignore_ascii_case("HOME")) {
+            let home = std::env::var("APPDATA")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| "C:/".to_string());
+            entries.push(("HOME".to_string(), home));
+        }
+        Value::list(
+            entries
+                .into_iter()
+                .map(|(name, value)| Value::string(format!("{name}={value}")))
+                .collect::<Vec<_>>(),
+        )
+    };
     {
         let obarray = eval.obarray_mut();
         obarray.make_special("initial-environment");
