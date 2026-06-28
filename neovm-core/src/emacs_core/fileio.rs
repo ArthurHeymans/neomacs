@@ -1923,7 +1923,14 @@ fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
 
 #[cfg(windows)]
 fn lisp_file_name_absolute_system_p(filename: &crate::heap_types::LispString) -> bool {
-    file_name_absolute_bytes_p(filename.as_bytes())
+    let bytes = filename.as_bytes();
+    // A tilde-prefixed name is "absolute" per `file-name-absolute-p` but still
+    // needs ~-expansion (cf. GNU `file_name_absolute_no_tilde_p`). If we treat it
+    // as already-resolved, `resolve_filename_lisp_in_state` returns `~` verbatim,
+    // so e.g. `directory-files "~"` (startup.el's init-file probe) opens a literal
+    // "~" and fails with "Opening directory ~". Exclude tilde, matching the Unix
+    // branch (which only treats a leading `/` as system-absolute).
+    bytes.first() != Some(&b'~') && file_name_absolute_bytes_p(bytes)
 }
 
 #[cfg(not(windows))]
