@@ -575,6 +575,11 @@ pub(crate) fn builtin_char_equal(eval: &mut super::eval::Context, args: Vec<Valu
     expect_args("char-equal", &args, 2)?;
     let left = expect_char_equal_code(&args[0])?;
     let right = expect_char_equal_code(&args[1])?;
+    // GNU `Fchar_equal` (`editfns.c:4406`): equal characters always match; with
+    // `case-fold-search` nil, only exact equality counts.
+    if left == right {
+        return Ok(Value::bool_val(true));
+    }
     let case_fold = super::misc_eval::dynamic_or_global_symbol_value_in_state(
         &eval.obarray,
         &[],
@@ -583,7 +588,20 @@ pub(crate) fn builtin_char_equal(eval: &mut super::eval::Context, args: Vec<Valu
     .map(|v| !v.is_nil())
     .unwrap_or(true);
     if !case_fold {
-        return Ok(Value::bool_val(left == right));
+        return Ok(Value::bool_val(false));
+    }
+    // GNU compares `downcase (i1) == downcase (i2)` using the current buffer's
+    // downcase table (`editfns.c:4440`). Consult a custom case table first, then
+    // fall through to the hardwired Unicode case-fold mapping.
+    let casetab = super::super::casetab::CaseTableOverride::for_current_buffer(eval)?;
+    if casetab.is_custom() {
+        let down_left = casetab
+            .map(super::super::casetab::CaseMap::Down, left)
+            .unwrap_or_else(|| downcase_char_code_emacs_compat(left));
+        let down_right = casetab
+            .map(super::super::casetab::CaseMap::Down, right)
+            .unwrap_or_else(|| downcase_char_code_emacs_compat(right));
+        return Ok(Value::bool_val(down_left == down_right));
     }
     match (char_equal_folded(left), char_equal_folded(right)) {
         (Some(a), Some(b)) => Ok(Value::bool_val(a == b)),

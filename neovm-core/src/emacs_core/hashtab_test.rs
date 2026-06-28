@@ -914,3 +914,33 @@ fn internal_hash_table_introspection_type_errors() {
     assert!(builtin_internal_hash_table_histogram(vec![Value::NIL]).is_err());
     assert!(builtin_internal_hash_table_index_size(vec![Value::NIL]).is_err());
 }
+
+// GNU `Sunintern` is `2, 2`: the OBARRAY argument is mandatory (may be nil, but
+// must be supplied).  `(unintern "zzz")` signals
+// `(wrong-number-of-arguments unintern 1)`.
+#[test]
+fn unintern_requires_obarray_argument() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+
+    // One-argument call: GNU signals wrong-number-of-arguments.
+    let one_arg = ctx
+        .eval_str(r#"(condition-case e (unintern "zzz") (error e))"#)
+        .expect("condition-case should catch the arity error");
+    let parts = list_to_vec(&one_arg).expect("error is a proper list");
+    assert_eq!(
+        parts.len(),
+        3,
+        "expected (wrong-number-of-arguments unintern 1)"
+    );
+    assert_eq!(parts[0].as_symbol_name(), Some("wrong-number-of-arguments"));
+    assert_eq!(parts[1].as_symbol_name(), Some("unintern"));
+    assert_eq!(parts[2].as_int(), Some(1));
+
+    // Two-argument call (OBARRAY nil) still works and returns nil for an absent
+    // symbol, exactly like GNU.
+    let two_arg = ctx
+        .eval_str(r#"(unintern "zzz" nil)"#)
+        .expect("two-arg unintern should succeed");
+    assert!(two_arg.is_nil(), "absent symbol returns nil");
+}

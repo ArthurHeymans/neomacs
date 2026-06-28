@@ -3947,7 +3947,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr("maphash", super::hashtab::builtin_maphash, 2, Some(2));
     ctx.defsubr("mapatoms", super::hashtab::builtin_mapatoms, 1, Some(2));
-    ctx.defsubr("unintern", super::hashtab::builtin_unintern, 1, Some(2));
+    // GNU `Sunintern` is `2, 2, 0`: the OBARRAY argument is mandatory (it may
+    // be nil to default to `obarray`, but it must be supplied).
+    ctx.defsubr("unintern", super::hashtab::builtin_unintern, 2, Some(2));
     ctx.defsubr("set-marker", super::marker::builtin_set_marker, 2, Some(3));
     ctx.defsubr(
         "move-marker",
@@ -7954,7 +7956,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr("upcase", |_ctx, args| builtin_upcase(args), 1, Some(1));
+    ctx.defsubr("upcase", builtin_upcase_in_state, 1, Some(1));
     ctx.defsubr("downcase", builtin_downcase_in_state, 1, Some(1));
     ctx.defsubr(
         "char-to-string",

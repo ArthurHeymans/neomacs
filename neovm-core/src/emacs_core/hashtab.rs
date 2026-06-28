@@ -970,7 +970,8 @@ pub(crate) fn collect_mapatoms_symbols(
 
 /// (unintern NAME OBARRAY) — remove symbol from obarray.
 pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("unintern", &args, 1)?;
+    // GNU `Sunintern` is `2, 2`: OBARRAY is mandatory (may be nil).
+    expect_min_args("unintern", &args, 2)?;
     expect_max_args("unintern", &args, 2)?;
     validate_optional_obarray_arg(&args)?;
 

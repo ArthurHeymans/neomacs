@@ -676,7 +676,24 @@ pub(crate) fn builtin_number_to_string(
     }
 }
 
+/// Pure form (tests + internal callers); uses the standard case table only.
 pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
+    upcase_with_override(args, super::super::casetab::CaseTableOverride::none())
+}
+
+/// Dispatched form: honors the current buffer's case table (`set-case-table`).
+pub(crate) fn builtin_upcase_in_state(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let casetab = super::super::casetab::CaseTableOverride::for_current_buffer(eval)?;
+    upcase_with_override(args, casetab)
+}
+
+fn upcase_with_override(
+    args: Vec<Value>,
+    casetab: super::super::casetab::CaseTableOverride,
+) -> EvalResult {
     expect_args("upcase", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
@@ -685,14 +702,20 @@ pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(transform_string_case(string, true, |_| false));
+            let result =
+                Value::heap_string(transform_string_case(string, true, |_| false, &casetab));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
             Ok(result)
         }
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => {
-            let mapped = upcase_char_code_emacs_compat(c as i64);
+            // GNU `upcase` consults the per-buffer upcase table first
+            // (`buffer.h:1656-1663`); only fall through to the hardwired
+            // Unicode mapping when the table has no explicit entry.
+            let mapped = casetab
+                .map(super::super::casetab::CaseMap::Up, c)
+                .unwrap_or_else(|| upcase_char_code_emacs_compat(c as i64));
             if let Some(ch) = u32::try_from(mapped).ok().and_then(char::from_u32) {
                 Ok(Value::fixnum(ch as i64))
             } else {
@@ -768,7 +791,9 @@ fn transform_string_case(
     s: &crate::heap_types::LispString,
     upcase: bool,
     is_word: impl Fn(u32) -> bool,
+    casetab: &super::super::casetab::CaseTableOverride,
 ) -> crate::heap_types::LispString {
+    use super::super::casetab::CaseMap;
     // Greek capital sigma down-cases to the final form ς at the end of a word
     // (GNU `casefiddle.c` `case_character`): when the preceding character is a
     // word constituent and the following one is not.
@@ -797,6 +822,19 @@ fn transform_string_case(
             (bytes[pos] as u32, 1)
         };
         pos += len;
+        // GNU `case_character_impl` resolves each character through the
+        // per-buffer up/down case table (`buffer.h` `downcase`/`upcase`) before
+        // the Unicode special-casing. When a custom table is installed and has
+        // an explicit entry for this character, use it and skip the hardwired
+        // path; otherwise fall through unchanged (byte-identical default).
+        if casetab.is_custom() {
+            let which = if upcase { CaseMap::Up } else { CaseMap::Down };
+            if let Some(mapped) = casetab.map(which, code as i64) {
+                push(&mut out, mapped as u32);
+                prev_word = is_word(code);
+                continue;
+            }
+        }
         match char::from_u32(code).filter(|_| multibyte || code < 0x80) {
             Some(ch) if upcase => {
                 if ch == '\u{0131}' || preserve_emacs_upcase_string_payload(code as i64) {
@@ -958,7 +996,11 @@ pub(crate) fn casing_word_predicate(
     move |code: u32| char::from_u32(code).is_some_and(char::is_alphanumeric) || extra(code)
 }
 
-fn downcase_with_word_pred(args: Vec<Value>, is_word: impl Fn(u32) -> bool) -> EvalResult {
+fn downcase_with_word_pred(
+    args: Vec<Value>,
+    is_word: impl Fn(u32) -> bool,
+    casetab: super::super::casetab::CaseTableOverride,
+) -> EvalResult {
     expect_args("downcase", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
@@ -967,14 +1009,20 @@ fn downcase_with_word_pred(args: Vec<Value>, is_word: impl Fn(u32) -> bool) -> E
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(transform_string_case(string, false, is_word));
+            let result =
+                Value::heap_string(transform_string_case(string, false, is_word, &casetab));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
             Ok(result)
         }
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => {
-            let mapped = downcase_char_code_emacs_compat(c as i64);
+            // GNU `downcase` consults the per-buffer downcase table first
+            // (`buffer.h:1648-1655`); fall through to the hardwired Unicode
+            // mapping only when there is no explicit entry.
+            let mapped = casetab
+                .map(super::super::casetab::CaseMap::Down, c)
+                .unwrap_or_else(|| downcase_char_code_emacs_compat(c as i64));
             if let Some(ch) = u32::try_from(mapped).ok().and_then(char::from_u32) {
                 Ok(Value::fixnum(ch as i64))
             } else {
@@ -995,17 +1043,22 @@ fn downcase_with_word_pred(args: Vec<Value>, is_word: impl Fn(u32) -> bool) -> E
 /// Pure form (tests + internal callers such as font-name normalization, where
 /// the Greek final-sigma word context does not apply); ignores final sigma.
 pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
-    downcase_with_word_pred(args, |_| false)
+    downcase_with_word_pred(
+        args,
+        |_| false,
+        super::super::casetab::CaseTableOverride::none(),
+    )
 }
 
 /// Dispatched form: applies the Greek final-sigma rule via the buffer syntax
-/// table (honoring `case-symbols-as-words`).
+/// table (honoring `case-symbols-as-words`) and the current case table.
 pub(crate) fn builtin_downcase_in_state(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     let is_word = casing_word_predicate(eval);
-    downcase_with_word_pred(args, is_word)
+    let casetab = super::super::casetab::CaseTableOverride::for_current_buffer(eval)?;
+    downcase_with_word_pred(args, is_word, casetab)
 }
 
 fn downcase_string_emacs_compat(s: &str) -> String {
@@ -1956,7 +2009,10 @@ fn do_format(
                 };
                 formatted.into_bytes()
             }
-            'f' | 'e' | 'E' | 'g' | 'G' => {
+            // GNU only treats lowercase e/f/g as float conversions; uppercase
+            // E/G (like F/A) fall through to the "Invalid format operation"
+            // error below, matching `float_conversion` in editfns.c.
+            'f' | 'e' | 'g' => {
                 let f = expect_number(&args[this_arg_idx])
                     .map_err(|_| format_spec_type_mismatch_error())?;
                 format_float_spec(f, &spec).into_bytes()

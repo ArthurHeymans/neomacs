@@ -1118,11 +1118,55 @@ pub(crate) fn builtin_key_description(args: Vec<Value>) -> EvalResult {
         vec![]
     };
     events.extend(key_sequence_values(&args[0])?);
-    let rendered: Result<Vec<String>, Flow> = events
-        .iter()
-        .map(|event| describe_single_key_value(event, false))
-        .collect();
-    Ok(Value::string(rendered?.join(" ")))
+
+    // Mirror GNU `Fkey_description`: a lone `meta_prefix_char` (ESC, 27) folds
+    // the meta bit onto the FOLLOWING event, so e.g. [27 97] -> "M-a".  When the
+    // following event cannot absorb the meta bit (a non-fixnum, another ESC, or
+    // an already-meta key), the ESC is rendered literally instead.
+    const META_PREFIX_CHAR: i64 = 27;
+    let mut rendered: Vec<String> = Vec::with_capacity(events.len());
+    let mut add_meta = false;
+    for event in &events {
+        let event_fixnum = event.as_fixnum();
+        if add_meta {
+            let absorbs_meta = match event_fixnum {
+                Some(code) if code != META_PREFIX_CHAR && (code & KEY_CHAR_META) == 0 => Some(code),
+                _ => None,
+            };
+            match absorbs_meta {
+                Some(code) => {
+                    rendered.push(describe_single_key_value(
+                        &Value::fixnum(code | KEY_CHAR_META),
+                        false,
+                    )?);
+                    add_meta = false;
+                    continue;
+                }
+                None => {
+                    rendered.push(describe_single_key_value(
+                        &Value::fixnum(META_PREFIX_CHAR),
+                        false,
+                    )?);
+                    if event_fixnum == Some(META_PREFIX_CHAR) {
+                        // Leave `add_meta` set: the next event still folds.
+                        continue;
+                    }
+                    add_meta = false;
+                }
+            }
+        } else if event_fixnum == Some(META_PREFIX_CHAR) {
+            add_meta = true;
+            continue;
+        }
+        rendered.push(describe_single_key_value(event, false)?);
+    }
+    if add_meta {
+        rendered.push(describe_single_key_value(
+            &Value::fixnum(META_PREFIX_CHAR),
+            false,
+        )?);
+    }
+    Ok(Value::string(rendered.join(" ")))
 }
 
 /// `(recent-keys &optional INCLUDE-CMDS)` -> vector of recent input events.
@@ -1144,3 +1188,7 @@ pub(crate) fn builtin_recent_keys_impl(
         .collect::<Vec<_>>();
     Ok(Value::vector(events))
 }
+
+#[cfg(test)]
+#[path = "keymaps_test.rs"]
+mod tests;

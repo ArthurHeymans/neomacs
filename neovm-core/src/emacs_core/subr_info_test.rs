@@ -1457,7 +1457,7 @@ fn subr_arity_symbol_obarray_primitives_match_oracle() {
     assert_subr_arity("make-symbol", 1, Some(1));
     assert_subr_arity("symbol-name", 1, Some(1));
     assert_subr_arity("symbol-plist", 1, Some(1));
-    assert_subr_arity("unintern", 1, Some(2));
+    assert_subr_arity("unintern", 2, Some(2));
     assert_subr_arity("indirect-function", 1, Some(2));
 }
 

@@ -322,6 +322,55 @@ fn make_standard_case_table_value() -> Value {
     )
 }
 
+/// Build a custom case table equal to the standard ASCII table but with one
+/// extra uppercase/lowercase pair installed, exactly as Lisp's
+/// `(set-case-syntax-pair UC LC (copy-case-table (standard-case-table)))`
+/// does (`lisp/case-table.el`): downcase[UC]=LC, downcase[LC]=LC, upcase[UC]=UC,
+/// upcase[LC]=UC. The canon/eqv extras are left nil so they are recomputed from
+/// the down/up tables by `ensure_case_table_derived_slots` (GNU `set_case_table`).
+#[cfg(test)]
+pub(crate) fn make_case_table_with_pair(uc: i64, lc: i64) -> Value {
+    let mut downcase_pairs = Vec::with_capacity(128);
+    let mut upcase_pairs = Vec::with_capacity(128);
+
+    for i in 0i64..128 {
+        let down = if (b'A' as i64..=b'Z' as i64).contains(&i) {
+            i + (b'a' as i64 - b'A' as i64)
+        } else {
+            i
+        };
+        downcase_pairs.push((i, Value::fixnum(down)));
+
+        let up = if (b'a' as i64..=b'z' as i64).contains(&i) {
+            i + (b'A' as i64 - b'a' as i64)
+        } else {
+            i
+        };
+        upcase_pairs.push((i, Value::fixnum(up)));
+    }
+
+    // Apply the pair (set-case-syntax-pair UC LC).
+    for (key, val) in [(uc, lc), (lc, lc)] {
+        if let Some(slot) = downcase_pairs.get_mut(key as usize) {
+            *slot = (key, Value::fixnum(val));
+        }
+    }
+    for (key, val) in [(uc, uc), (lc, uc)] {
+        if let Some(slot) = upcase_pairs.get_mut(key as usize) {
+            *slot = (key, Value::fixnum(val));
+        }
+    }
+
+    let upcase_ct = build_char_table("case-table", &[], Value::NIL, &upcase_pairs);
+    // canon (extras[1]) and eqv (extras[2]) are nil: recomputed on install.
+    build_char_table(
+        "case-table",
+        &[upcase_ct, Value::NIL, Value::NIL],
+        Value::NIL,
+        &downcase_pairs,
+    )
+}
+
 /// Create an empty case-table char-table (valid for `case-table-p`).
 fn make_case_table_value() -> Value {
     build_char_table(
@@ -453,6 +502,128 @@ pub(crate) fn current_case_canon_table(
     let table = current_case_table_for_buffer_in_state(&mut ctx.obarray, &mut ctx.buffers)?;
     ensure_case_table_derived_slots(table)?;
     Ok(case_table_extra(table, 1))
+}
+
+/// Which subsidiary case char-table to consult for a per-buffer override.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CaseMap {
+    /// The downcase (main) table — `BVAR (current_buffer, downcase_table)`.
+    Down,
+    /// The upcase table — extras[0] / `BVAR (current_buffer, upcase_table)`.
+    Up,
+    /// The canonicalize table — extras[1] / `BVAR (current_buffer, case_canon_table)`.
+    Canon,
+}
+
+/// Per-buffer case-table override layer.
+///
+/// NeoMacs keeps a hardwired full-Unicode casing path (`casefiddle.rs` /
+/// `strings.rs`) for speed and Unicode coverage. The Lisp-visible case table
+/// (`set-case-table`) only carries explicit per-character entries — the ASCII
+/// range for the standard table, plus whatever a custom table overrides. This
+/// override resolves a single character against that table, returning:
+///
+/// * `Some(mapped)` — the table has an explicit (fixnat) entry for `code`,
+///   which is GNU's `downcase`/`upcase`/canon result (`buffer.h` `downcase`).
+/// * `None` — no explicit entry, so the caller falls through to the hardwired
+///   Unicode path. This keeps the default/standard path byte-identical: the
+///   standard table's ASCII entries equal the hardwired ASCII mapping, and
+///   characters outside the table (all of non-ASCII) are deferred entirely.
+///
+/// When the installed table is the standard object (by identity), the whole
+/// override is skipped so the hot path stays allocation-free.
+#[derive(Clone, Copy)]
+pub(crate) struct CaseTableOverride {
+    down: Value,
+    up: Value,
+    canon: Value,
+    /// True when a non-standard case table is installed in the current buffer.
+    custom: bool,
+}
+
+impl CaseTableOverride {
+    /// Resolve the override for the current buffer, mirroring GNU's use of the
+    /// per-buffer downcase/upcase/canon char-tables (`buffer.h:1648-1663`,
+    /// `editfns.c:4440`).
+    pub(crate) fn for_current_buffer(
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> Result<Self, Flow> {
+        // Without a current buffer there is no buffer-local case table; behave
+        // like GNU's default (the standard table) and use the hardwired path.
+        if ctx.buffers.current_buffer_id().is_none() {
+            return Ok(Self::none());
+        }
+        let standard = ensure_standard_case_table_object_in_state(&mut ctx.obarray)?;
+        let table = current_case_table_for_buffer_in_state(&mut ctx.obarray, &mut ctx.buffers)?;
+        // The standard table's explicit entries already match the hardwired
+        // ASCII path; skip the override entirely so we stay byte-identical.
+        if table.bits() == standard.bits() {
+            return Ok(Self {
+                down: Value::NIL,
+                up: Value::NIL,
+                canon: Value::NIL,
+                custom: false,
+            });
+        }
+        // A custom table is installed: make sure the up/canon subsidiary tables
+        // exist (GNU `set_case_table` recomputes them lazily via extras[1] nil).
+        ensure_case_table_derived_slots(table)?;
+        Ok(Self {
+            down: table,
+            up: case_table_extra(table, 0),
+            canon: case_table_extra(table, 1),
+            custom: true,
+        })
+    }
+
+    /// An override that never overrides — used by pure/test callers and the
+    /// default path so the hardwired Unicode mapping is used verbatim.
+    pub(crate) fn none() -> Self {
+        Self {
+            down: Value::NIL,
+            up: Value::NIL,
+            canon: Value::NIL,
+            custom: false,
+        }
+    }
+
+    /// True when a non-standard case table is installed.
+    pub(crate) fn is_custom(&self) -> bool {
+        self.custom
+    }
+
+    /// Look up `code` in the requested subsidiary table. Returns `Some(mapped)`
+    /// only when the table holds an explicit fixnat entry (GNU's `downcase`
+    /// returns the entry if `FIXNATP`, else the char unchanged); otherwise
+    /// `None`, signalling the caller to use the hardwired Unicode path.
+    pub(crate) fn map(&self, which: CaseMap, code: i64) -> Option<i64> {
+        if !self.custom {
+            return None;
+        }
+        let table = match which {
+            CaseMap::Down => self.down,
+            CaseMap::Up => self.up,
+            CaseMap::Canon => self.canon,
+        };
+        if !is_case_table_subsidiary(&table) {
+            return None;
+        }
+        match super::chartable::ct_lookup(&table, code) {
+            Ok(value) => match value.kind() {
+                ValueKind::Fixnum(n)
+                    if (0..=crate::emacs_core::emacs_char::MAX_CHAR as i64).contains(&n) =>
+                {
+                    Some(n)
+                }
+                _ => None,
+            },
+            Err(_) => None,
+        }
+    }
+}
+
+fn is_case_table_subsidiary(table: &Value) -> bool {
+    super::chartable::is_char_table(table)
 }
 
 fn set_current_case_table_for_buffer_in_state(

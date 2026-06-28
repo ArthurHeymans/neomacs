@@ -325,6 +325,70 @@ fn format_percent_g_uses_gnu_fixed_precision_for_negative_exponents() {
 }
 
 #[test]
+fn format_rejects_uppercase_float_conversions() {
+    // GNU `Fformat`/`doprnt` only treats lowercase e/f/g as float conversions
+    // (`float_conversion` in editfns.c); uppercase E/G (like F/A) are invalid
+    // and must signal `(error "Invalid format operation %X")`.
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+
+    fn invalid_format_message(ctx: &mut crate::emacs_core::eval::Context, fmt: &str) -> String {
+        let err = builtin_format_wrapper_strict_slice(
+            ctx,
+            &[Value::string(fmt), Value::make_float(1.5e-20)],
+        )
+        .expect_err("uppercase float conversion must signal an error");
+        match err {
+            crate::emacs_core::error::Flow::Signal(sig) => {
+                assert_eq!(sig.symbol_name(), "error", "fmt: {fmt}");
+                sig.data
+                    .first()
+                    .and_then(|v| v.as_utf8_str())
+                    .expect("error message string")
+                    .to_string()
+            }
+            other => panic!("expected a signal for {fmt}, got {other:?}"),
+        }
+    }
+
+    assert_eq!(
+        invalid_format_message(&mut ctx, "%E"),
+        "Invalid format operation %E"
+    );
+    assert_eq!(
+        invalid_format_message(&mut ctx, "%G"),
+        "Invalid format operation %G"
+    );
+    assert_eq!(
+        invalid_format_message(&mut ctx, "%.3G"),
+        "Invalid format operation %G"
+    );
+    assert_eq!(
+        invalid_format_message(&mut ctx, "%010.2E"),
+        "Invalid format operation %E"
+    );
+
+    // Lowercase float conversions still work, byte-identical to before.
+    let ok = |ctx: &mut crate::emacs_core::eval::Context, fmt: &str| {
+        builtin_format_wrapper_strict_slice(ctx, &[Value::string(fmt), Value::make_float(1.5e-20)])
+            .expect("lowercase float conversion should succeed")
+            .as_utf8_str()
+            .map(str::to_string)
+    };
+    assert_eq!(ok(&mut ctx, "%e").as_deref(), Some("1.500000e-20"));
+    assert_eq!(ok(&mut ctx, "%g").as_deref(), Some("1.5e-20"));
+    assert_eq!(
+        builtin_format_wrapper_strict_slice(
+            &mut ctx,
+            &[Value::string("%f"), Value::make_float(1.5)]
+        )
+        .expect("eval")
+        .as_utf8_str(),
+        Some("1.500000")
+    );
+}
+
+#[test]
 fn downcase_greek_final_sigma() {
     // GNU `casefiddle.c` `case_character`: a down-cased capital sigma becomes
     // the final form ς at the end of a word (preceding char is a word
