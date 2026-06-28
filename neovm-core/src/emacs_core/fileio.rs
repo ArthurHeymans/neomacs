@@ -2076,6 +2076,7 @@ fn temporary_file_directory_for_eval(eval: &Context) -> Option<crate::heap_types
 }
 
 fn make_temp_file_impl(
+    eval: &super::eval::Context,
     temp_dir: &crate::heap_types::LispString,
     prefix: &crate::heap_types::LispString,
     dir_flag: bool,
@@ -2084,6 +2085,7 @@ fn make_temp_file_impl(
 ) -> Result<crate::heap_types::LispString, Flow> {
     let absolute_prefix = temp_file_absolute_prefix(temp_dir, prefix);
     make_temp_file_internal_impl(
+        eval,
         &absolute_prefix,
         TempCreateKind::from_dir_flag(dir_flag),
         suffix,
@@ -2167,7 +2169,30 @@ fn create_private_temp_dir(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// GNU `decode_file_name` (`src/coding.c`): decode FNAME's file-name bytes
+/// back to a multibyte string using `file-name-coding-system`, then
+/// `default-file-name-coding-system`, then (when both are nil) identity.
+/// Returns the decoded multibyte `LispString`.
+fn decode_file_name_lisp(
+    eval: &super::eval::Context,
+    bytes: &[u8],
+) -> crate::heap_types::LispString {
+    let coding =
+        coding_system_value_to_name(&eval.visible_variable_value_or_nil("file-name-coding-system"))
+            .or_else(|| {
+                coding_system_value_to_name(
+                    &eval.visible_variable_value_or_nil("default-file-name-coding-system"),
+                )
+            });
+    match coding {
+        Some(name) => crate::encoding::decode_bytes_to_lisp_string(bytes, &name),
+        // Both variables nil: GNU returns the name unchanged (unibyte bytes).
+        None => crate::heap_types::LispString::from_unibyte(bytes.to_vec()),
+    }
+}
+
 fn make_temp_file_internal_impl(
+    eval: &super::eval::Context,
     prefix: &crate::heap_types::LispString,
     kind: TempCreateKind,
     suffix: &crate::heap_types::LispString,
@@ -2175,20 +2200,45 @@ fn make_temp_file_internal_impl(
 ) -> Result<crate::heap_types::LispString, Flow> {
     const TEMP_FILE_ATTEMPTS: usize = 62 * 62 * 62;
 
+    // GNU `Fmake_temp_file_internal` first ENCODE_FILEs PREFIX and SUFFIX, so
+    // the on-disk name is built from file-name bytes.  Mirror that: encode both
+    // to unibyte file-name bytes, build the candidate, and DECODE_FILE the
+    // chosen name before returning so a non-ASCII PREFIX comes back multibyte.
+    let file_name_coding =
+        coding_system_value_to_name(&eval.visible_variable_value_or_nil("file-name-coding-system"))
+            .or_else(|| {
+                coding_system_value_to_name(
+                    &eval.visible_variable_value_or_nil("default-file-name-coding-system"),
+                )
+            });
+    let encode_file = |s: &crate::heap_types::LispString| -> crate::heap_types::LispString {
+        match &file_name_coding {
+            Some(name) => crate::heap_types::LispString::from_unibyte(
+                crate::encoding::encode_lisp_string(s, name),
+            ),
+            None => crate::heap_types::LispString::from_unibyte(s.as_bytes().to_vec()),
+        }
+    };
+    let encoded_prefix = encode_file(prefix);
+    let encoded_suffix = encode_file(suffix);
+
     for _ in 0..TEMP_FILE_ATTEMPTS {
         // GNU `Fmake_temp_file_internal` builds PREFIX + "XXXXXX" + SUFFIX as the
         // candidate name; keep the raw file-name bytes intact (the random nonce
         // is ASCII) instead of round-tripping through a UTF-8 String.
         let nonce =
             crate::heap_types::LispString::from_unibyte(make_temp_name_suffix().into_bytes());
-        let candidate = prefix.concat(&nonce).concat(suffix);
+        let candidate = encoded_prefix.concat(&nonce).concat(&encoded_suffix);
         let candidate_path = lisp_file_name_to_path_buf(&candidate);
         let candidate_display = crate::emacs_core::emacs_char::to_utf8_lossy(candidate.as_bytes());
 
+        // GNU `val = DECODE_FILE (val)` (fileio.c:809): the returned name is the
+        // *decoded* multibyte string, so a non-ASCII PREFIX round-trips back to
+        // its char form rather than leaking raw file-name bytes.
         match kind {
             TempCreateKind::Directory => match create_private_temp_dir(&candidate_path) {
                 Ok(()) => {
-                    return Ok(candidate);
+                    return Ok(decode_file_name_lisp(eval, candidate.as_bytes()));
                 }
                 Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
                 Err(err) => {
@@ -2206,7 +2256,7 @@ fn make_temp_file_internal_impl(
                             signal_file_io_path(err, "Writing to", &candidate_display)
                         })?;
                     }
-                    return Ok(candidate);
+                    return Ok(decode_file_name_lisp(eval, candidate.as_bytes()));
                 }
                 Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
                 Err(err) => {
@@ -2219,7 +2269,9 @@ fn make_temp_file_internal_impl(
             },
             TempCreateKind::NoCreate => match fs::symlink_metadata(&candidate_path) {
                 Ok(_) => continue,
-                Err(err) if err.kind() == ErrorKind::NotFound => return Ok(candidate),
+                Err(err) if err.kind() == ErrorKind::NotFound => {
+                    return Ok(decode_file_name_lisp(eval, candidate.as_bytes()));
+                }
                 Err(err) => {
                     return Err(signal_file_io_path(
                         err,
@@ -2237,7 +2289,10 @@ fn make_temp_file_internal_impl(
     ))
 }
 
-pub(crate) fn builtin_make_temp_file_internal(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_make_temp_file_internal(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("make-temp-file-internal", &args, 4)?;
     let prefix = expect_lisp_string_strict(&args[0])?;
     let suffix = expect_lisp_string_strict(&args[2])?;
@@ -2253,8 +2308,13 @@ pub(crate) fn builtin_make_temp_file_internal(args: Vec<Value>) -> EvalResult {
     } else {
         None
     };
-    let path =
-        make_temp_file_internal_impl(&prefix, kind, &suffix, text.as_ref().map(|t| t.as_bytes()))?;
+    let path = make_temp_file_internal_impl(
+        eval,
+        &prefix,
+        kind,
+        &suffix,
+        text.as_ref().map(|t| t.as_bytes()),
+    )?;
     Ok(Value::heap_string(path))
 }
 
@@ -2388,10 +2448,11 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
 }
 
 /// (make-temp-name PREFIX) -> string
-pub(crate) fn builtin_make_temp_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_make_temp_name(eval: &super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("make-temp-name", &args, 1)?;
     let prefix = expect_lisp_string_strict(&args[0])?;
     let path = make_temp_file_internal_impl(
+        eval,
         &prefix,
         TempCreateKind::NoCreate,
         &empty_file_name_lisp_string(),
@@ -2463,6 +2524,7 @@ pub(crate) fn builtin_make_temp_file(eval: &mut Context, args: Vec<Value>) -> Ev
         .unwrap_or_else(|| path_to_lisp_file_name(&std::env::temp_dir()));
 
     let path = make_temp_file_impl(
+        eval,
         &temp_dir,
         &prefix,
         dir_flag,
@@ -2499,7 +2561,7 @@ pub(crate) fn builtin_make_nearby_temp_file(eval: &mut Context, args: Vec<Value>
     let (temp_dir, file_prefix) =
         split_nearby_temp_prefix(&prefix).unwrap_or_else(|| (fallback_temp_dir, prefix.clone()));
 
-    let path = make_temp_file_impl(&temp_dir, &file_prefix, dir_flag, &suffix, None)?;
+    let path = make_temp_file_impl(eval, &temp_dir, &file_prefix, dir_flag, &suffix, None)?;
     Ok(Value::heap_string(path))
 }
 
@@ -2778,6 +2840,73 @@ fn file_error_symbol(kind: ErrorKind) -> &'static str {
     }
 }
 
+/// The bare `strerror` text for an errno, matching GNU's `emacs_strerror`
+/// (e.g. ENOENT -> "No such file or directory").  Rust's
+/// `io::Error::to_string()` appends "(os error N)", which GNU never emits, so
+/// go through libc `strerror` directly.
+#[cfg(unix)]
+fn errno_strerror(errno: i32) -> String {
+    // SAFETY: `strerror` returns a pointer to a static (per-thread) C string.
+    unsafe {
+        let ptr = libc::strerror(errno);
+        if ptr.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(ptr).to_string_lossy().into_owned()
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn errno_strerror(errno: i32) -> String {
+    std::io::Error::from_raw_os_error(errno).to_string()
+}
+
+/// Best-effort errno for a `std::io::Error` lacking a raw OS code, used so the
+/// errno-keyed branches of [`get_file_errno_data`] still classify correctly.
+fn errno_for_kind(kind: ErrorKind) -> i32 {
+    match kind {
+        ErrorKind::NotFound => libc::ENOENT,
+        ErrorKind::AlreadyExists => libc::EEXIST,
+        ErrorKind::PermissionDenied => libc::EACCES,
+        _ => libc::EIO,
+    }
+}
+
+/// Faithful port of GNU `get_file_errno_data` + `report_file_errno`
+/// (`src/fileio.c`).  Signals a `file-error`-family condition whose DATA
+/// matches GNU exactly:
+///
+/// * `STRERROR` is the bare libc `strerror` text (no Rust "(os error N)").
+/// * For `EEXIST` the DATA is `(file-already-exists STRERROR . NAME)` — the
+///   ACTION string is *omitted* (GNU's `Fcons (Qfile_already_exists, errdata)`).
+/// * Otherwise the DATA is `(SYMBOL ACTION STRERROR . NAME)` where SYMBOL is
+///   `file-missing` (ENOENT), `permission-denied` (EACCES), else `file-error`.
+///
+/// `name_items` holds the flat NAME tail GNU would carry: one filename, or the
+/// two-element `(file newname)` list.  Each element is appended verbatim.
+fn get_file_errno_data(err: &std::io::Error, action: &str, name_items: Vec<Value>) -> Flow {
+    let errno = err
+        .raw_os_error()
+        .unwrap_or_else(|| errno_for_kind(err.kind()));
+    let strerror = errno_strerror(errno);
+    if errno == libc::EEXIST {
+        // `(file-already-exists STRERROR . NAME)` — no ACTION prefix.
+        let mut data = vec![Value::string(strerror)];
+        data.extend(name_items);
+        signal("file-already-exists", data)
+    } else {
+        let symbol = match errno {
+            libc::ENOENT => "file-missing",
+            libc::EACCES => "permission-denied",
+            _ => "file-error",
+        };
+        let mut data = vec![Value::string(action), Value::string(strerror)];
+        data.extend(name_items);
+        signal(symbol, data)
+    }
+}
+
 fn signal_file_io_error(err: std::io::Error, context: String) -> Flow {
     let symbol = file_error_symbol(err.kind());
     signal(symbol, vec![Value::string(format!("{context}: {err}"))])
@@ -2808,21 +2937,11 @@ fn signal_directory_files_error(
 }
 
 fn signal_file_action_error(err: std::io::Error, action: &str, path: &str) -> Flow {
-    signal(
-        file_error_symbol(err.kind()),
-        vec![
-            Value::string(action),
-            Value::string(err.to_string()),
-            Value::string(path),
-        ],
-    )
+    get_file_errno_data(&err, action, vec![Value::string(path)])
 }
 
 fn signal_file_action_error_value(err: std::io::Error, action: &str, path: Value) -> Flow {
-    signal(
-        file_error_symbol(err.kind()),
-        vec![Value::string(action), Value::string(err.to_string()), path],
-    )
+    get_file_errno_data(&err, action, vec![path])
 }
 
 fn signal_file_action_error_pair_values(
@@ -2831,15 +2950,7 @@ fn signal_file_action_error_pair_values(
     left: Value,
     right: Value,
 ) -> Flow {
-    signal(
-        file_error_symbol(err.kind()),
-        vec![
-            Value::string(action),
-            Value::string(err.to_string()),
-            left,
-            right,
-        ],
-    )
+    get_file_errno_data(&err, action, vec![left, right])
 }
 
 fn signal_existing_path_value(path: &Path, value: Value) -> Flow {
@@ -4209,14 +4320,49 @@ pub(crate) fn builtin_copy_file(eval: &mut Context, args: Vec<Value>) -> EvalRes
         return Ok(result);
     }
     let ok_if_exists = args.get(2).is_some_and(|value| value.is_truthy());
+    let from_path = lisp_file_name_to_path_buf(&from);
     let to_path = lisp_file_name_to_path_buf(&to);
-    if fs::symlink_metadata(&to_path).is_ok() && !ok_if_exists {
+
+    // GNU opens the input first; a failure here is reported as
+    // `report_file_error ("Opening input file", file)` — only the source
+    // filename, before the destination is even considered (fileio.c:2346).
+    let from_meta = fs::metadata(&from_path).map_err(|err| {
+        signal_file_action_error_value(err, "Opening input file", Value::heap_string(from.clone()))
+    })?;
+
+    let dest_exists = fs::symlink_metadata(&to_path).is_ok();
+    if dest_exists && !ok_if_exists {
         return Err(signal_existing_path_value(
             &to_path,
             Value::heap_string(to.clone()),
         ));
     }
-    fs::copy(lisp_file_name_to_path_buf(&from), &to_path).map_err(|err| {
+
+    // GNU's `already_exists` path: after reopening the destination it compares
+    // the input/output `st_dev`+`st_ino` and, when equal, signals
+    // `report_file_errno ("Input and output files are the same",
+    //  list2 (file, newname), 0)` — errno 0, so strerror is "Success"
+    // (fileio.c:2401).
+    #[cfg(unix)]
+    if dest_exists {
+        use std::os::unix::fs::MetadataExt;
+        if let Ok(to_meta) = fs::metadata(&to_path) {
+            if from_meta.dev() == to_meta.dev() && from_meta.ino() == to_meta.ino() {
+                return Err(get_file_errno_data(
+                    &std::io::Error::from_raw_os_error(0),
+                    "Input and output files are the same",
+                    vec![
+                        Value::heap_string(from.clone()),
+                        Value::heap_string(to.clone()),
+                    ],
+                ));
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = &from_meta;
+
+    fs::copy(&from_path, &to_path).map_err(|err| {
         signal_file_action_error_pair_values(
             err,
             "Copying",
@@ -4795,12 +4941,16 @@ fn signal_and_insert_file_replace_text(
     Ok(())
 }
 
+/// Returns the *net* number of characters inserted after eliding the
+/// unchanged head/tail affixes, matching GNU's final `inserted = PT - temp`
+/// in the REPLACE branch of `Finsert_file_contents` (fileio.c).  When the new
+/// text is byte-identical to the accessible buffer text this is 0.
 fn replace_accessible_portion_for_insert_file_contents(
     eval: &mut Context,
     current_id: crate::buffer::BufferId,
     text: &LispString,
     signal_hooks: bool,
-) -> Result<(), Flow> {
+) -> Result<i64, Flow> {
     let (
         accessible_range,
         accessible_start_char,
@@ -4846,7 +4996,9 @@ fn replace_accessible_portion_for_insert_file_contents(
             accessible_end_char - char_count_for_lisp_string_byte_prefix(&old_text, suffix),
             text.schars(),
         )?;
-        return Ok(());
+        // Byte-identical content: GNU elides both affixes entirely, so the
+        // net inserted count reported by `(FILE INSERTED)` is 0.
+        return Ok(0);
     }
 
     let delete_range = EmacsByteRange::new(
@@ -4884,16 +5036,21 @@ fn replace_accessible_portion_for_insert_file_contents(
         same_at_start_char,
         same_at_end_char,
         inserted_chars,
-    )
+    )?;
+    Ok(inserted_chars as i64)
 }
 
+/// Inserts CONTENTS into the current buffer.  For a REPLACE request this
+/// returns `Some(net)` — the affix-elided net inserted char count GNU reports
+/// in `(FILE INSERTED)` — and `None` for a plain insert, where the caller keeps
+/// the full decoded char count.
 fn insert_file_contents_into_current_buffer_in_state(
     eval: &mut Context,
     current_id: crate::buffer::BufferId,
     contents: &LispString,
     replace_requested: bool,
     signal_hooks: bool,
-) -> Result<(), Flow> {
+) -> Result<Option<i64>, Flow> {
     if replace_requested {
         replace_accessible_portion_for_insert_file_contents(
             eval,
@@ -4901,6 +5058,7 @@ fn insert_file_contents_into_current_buffer_in_state(
             contents,
             signal_hooks,
         )
+        .map(Some)
     } else {
         // GNU Emacs: insert-file-contents inserts text at point but does NOT
         // advance point past the inserted text (unlike regular `insert`).
@@ -4928,7 +5086,7 @@ fn insert_file_contents_into_current_buffer_in_state(
         }
         // Restore point to before the insertion (matching GNU).
         let _ = eval.buffers.set_buffer_point_anchor(current_id, pt_before);
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -5597,13 +5755,18 @@ pub(crate) fn builtin_insert_file_contents(
     let decoded_char_count = contents.char_count();
 
     let signal_change_hooks = !visit || replace_requested;
-    insert_file_contents_into_current_buffer_in_state(
+    // GNU's REPLACE branch reports only the *net* inserted chars (the unchanged
+    // head/tail affixes are elided); a plain insert reports the full decoded
+    // char count.  Re-reading byte-identical content under REPLACE therefore
+    // yields `(FILE 0)`, not `(FILE FULL-COUNT)`.
+    let net_inserted = insert_file_contents_into_current_buffer_in_state(
         eval,
         current_id,
         contents.text(),
         replace_requested,
         signal_change_hooks,
     )?;
+    let base_inserted_count = net_inserted.unwrap_or(decoded_char_count);
 
     // GNU `insert-file-contents' sets `last-coding-system-used' before
     // `after-insert-file-set-coding' derives `buffer-file-coding-system'.
@@ -5614,7 +5777,7 @@ pub(crate) fn builtin_insert_file_contents(
         current_id,
         visit,
         replace_requested,
-        decoded_char_count,
+        base_inserted_count,
     )?;
 
     if visit {
@@ -5823,31 +5986,18 @@ pub(crate) fn builtin_write_region(
     // --- Write encoded bytes and handle fsync ---
     let file = write_bytes_to_file_with_mode(&encoded_bytes, &resolved_path, append_mode).map_err(
         |err| {
-            // GNU opens the output file and reports failures via
-            // `report_file_errno ("Opening output file", filename, errno)`.
-            // For MUSTBENEW=`excl`, an existing file makes the O_EXCL open
-            // fail with EEXIST, which `get_file_errno_data` turns into
-            // `(file-already-exists "File exists" FILENAME)` — note the
-            // strerror text "File exists" and the omitted action prefix.
-            if matches!(append_mode, FileWriteMode::Excl) && err.kind() == ErrorKind::AlreadyExists
-            {
-                // GNU's error string here is `emacs_strerror (EEXIST)`, i.e.
-                // the bare C `strerror` text "File exists" (no "(os error N)"
-                // suffix that Rust's `io::Error::to_string` would add).
-                return signal(
-                    "file-already-exists",
-                    vec![
-                        Value::string("File exists"),
-                        Value::heap_string(resolved.clone()),
-                    ],
-                );
-            }
-            let action = if matches!(append_mode, FileWriteMode::Excl) {
-                "Opening output file"
-            } else {
-                "Writing to"
-            };
-            signal_file_action_error_value(err, action, Value::heap_string(resolved.clone()))
+            // GNU `Fwrite_region` reports *any* open failure via
+            // `report_file_errno ("Opening output file", filename, open_errno)`
+            // (fileio.c:5656) — the action is always "Opening output file",
+            // never "Writing to" (which GNU reserves for `a_write` errors).
+            // `get_file_errno_data` then handles errno specially: a MUSTBENEW
+            // =`excl` collision is EEXIST -> `(file-already-exists "File exists"
+            // FILENAME)` (action omitted), ENOENT -> `file-missing`, etc.
+            signal_file_action_error_value(
+                err,
+                "Opening output file",
+                Value::heap_string(resolved.clone()),
+            )
         },
     )?;
 
@@ -6289,3 +6439,7 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
 #[cfg(test)]
 #[path = "fileio_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "fileio_fix8_test.rs"]
+mod fix8_tests;

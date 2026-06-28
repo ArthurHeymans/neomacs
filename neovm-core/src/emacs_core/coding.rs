@@ -2284,6 +2284,72 @@ fn validate_coding_system_list_cars_for_non_ascii(
     Ok(())
 }
 
+/// The effective `:charset-list` symbols of a coding system (alias-resolved),
+/// mirroring `CODING_ATTR_CHARSET_LIST` / what `coding-system-get :charset-list`
+/// returns.  Used by the encodability scan of `check-coding-systems-region` and
+/// `unencodable-char-position`.  Returns `None` for an unknown coding system.
+fn coding_system_charset_list_syms(mgr: &CodingSystemManager, name: &str) -> Option<Vec<SymId>> {
+    let resolved_name = resolve_runtime_name(mgr, name)?;
+    let base = strip_eol_suffix(&resolved_name);
+    if let Some(list) = coding_charset_list_for_base(base) {
+        return Some(list.iter().filter_map(|v| v.as_symbol_id()).collect());
+    }
+    let bucket = runtime_bucket_name(mgr, &resolved_name)?;
+    let info = mgr.get(&bucket)?;
+    Some(info.charset_list.clone())
+}
+
+/// GNU `char_encodable_p`: whether character `ch` can be encoded by some charset
+/// in `charset_list`.  `unicode` (the utf-8 family's only charset) and `ascii`
+/// cover their full repertoires, so the per-charset code-point lookup gives the
+/// same answer as GNU's `CHAR_CHARSET_P`.
+fn char_encodable_in_charset_list(ch: i64, charset_list: &[SymId]) -> bool {
+    charset_list
+        .iter()
+        .any(|&charset| super::charset::charset_encode_char_bytes(charset, ch).is_some())
+}
+
+/// Whether a coding system's charset list makes it ASCII-compatible (it includes
+/// the `ascii` charset, or `unicode`).  GNU skips ASCII characters in
+/// `unencodable-char-position` only when the coding is `:ascii-compatible-p`.
+fn charset_list_is_ascii_compatible(charset_list: &[SymId]) -> bool {
+    charset_list
+        .iter()
+        .any(|&c| super::charset::charset_is_ascii_compatible(c))
+}
+
+/// Scan the multibyte Emacs bytes of `text` (a region/string already known to be
+/// multibyte) and collect the 1-based positions (offset by `base_pos`) of every
+/// character that `charset_list` cannot encode, mirroring GNU's per-character
+/// `char_encodable_p` loop in `Fcheck_coding_systems_region` /
+/// `Funencodable_char_position`.  ASCII characters are always encodable when the
+/// coding is `ascii_compatible` and are skipped.  Stops after `limit` hits.
+fn scan_unencodable_positions(
+    text: &[u8],
+    charset_list: &[SymId],
+    base_pos: i64,
+    ascii_compatible: bool,
+    limit: usize,
+) -> Vec<i64> {
+    let mut positions = Vec::new();
+    let mut byte = 0usize;
+    let mut char_index = 0i64;
+    while byte < text.len() {
+        let (code, len) = super::emacs_char::string_char(&text[byte..]);
+        byte += len;
+        let ch = i64::from(code);
+        let is_ascii = code < 0x80;
+        if !(is_ascii && ascii_compatible) && !char_encodable_in_charset_list(ch, charset_list) {
+            positions.push(base_pos + char_index);
+            if positions.len() >= limit {
+                break;
+            }
+        }
+        char_index += 1;
+    }
+    positions
+}
+
 /// `(check-coding-systems-region START END CODING-SYSTEMS)` -- check whether
 /// CODING-SYSTEMS can encode the region.  The ASCII/unibyte fast paths mirror
 /// GNU `Fcheck_coding_systems_region`: they return nil before validating the
@@ -2294,42 +2360,249 @@ pub(crate) fn builtin_check_coding_systems_region(
 ) -> EvalResult {
     expect_args("check-coding-systems-region", &args, 3)?;
 
-    if args[0].is_string() {
-        let text = coding_runtime_string(&args[0])?;
-        if !args[0].string_is_multibyte() || text.is_ascii() {
+    // Resolve the region/string text plus the 1-based base position GNU reports
+    // (0 for a string START).  GNU returns nil early for unibyte / pure-ASCII
+    // text *before* touching the coding-system list.
+    let (text, base_pos) = if args[0].is_string() {
+        let string = args[0]
+            .as_lisp_string()
+            .expect("string checked above")
+            .clone();
+        if !args[0].string_is_multibyte() || string.as_bytes().is_ascii() {
             return Ok(Value::NIL);
         }
-        validate_coding_system_list_cars_for_non_ascii(&eval.coding_systems, args[2])?;
-        return Ok(Value::NIL);
-    }
+        (string, 0i64)
+    } else {
+        let start = marker_or_integer_position(&args[0])?;
+        let end = marker_or_integer_position(&args[1])?;
 
-    let start = marker_or_integer_position(&args[0])?;
-    let end = marker_or_integer_position(&args[1])?;
+        let buffer = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let buffer_start = 1;
+        let buffer_end = buffer.total_char_len().get() as i64 + 1;
+        if !(buffer_start <= start && start <= end && end <= buffer_end) {
+            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        }
 
-    let buffer = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let buffer_start = 1;
-    let buffer_end = buffer.total_char_len().get() as i64 + 1;
-    if !(buffer_start <= start && start <= end && end <= buffer_end) {
-        return Err(signal("args-out-of-range", vec![args[0], args[1]]));
-    }
+        if !buffer.get_multibyte() {
+            return Ok(Value::NIL);
+        }
+        let byte_range = EmacsByteRange::new(
+            buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
+            buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
+        );
+        let string = buffer.buffer_substring_lisp_string_range(byte_range);
+        if string.as_bytes().is_ascii() {
+            return Ok(Value::NIL);
+        }
+        (string, start)
+    };
 
-    if !buffer.get_multibyte() {
-        return Ok(Value::NIL);
-    }
-    let byte_range = EmacsByteRange::new(
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
-    );
-    let string = buffer.buffer_substring_lisp_string_range(byte_range);
-    if string.as_bytes().is_ascii() {
-        return Ok(Value::NIL);
-    }
-
+    // Validate the coding-system list (GNU `CODING_SYSTEM_SPEC` would signal
+    // `coding-system-error` for a non-coding-system) before scanning.
     validate_coding_system_list_cars_for_non_ascii(&eval.coding_systems, args[2])?;
-    Ok(Value::NIL)
+
+    // For each coding system, collect the positions of unencodable characters.
+    // GNU builds the result preserving the input list order, with positions
+    // ascending and only coding systems that have at least one unencodable
+    // character included.
+    let mut result_entries = Vec::new();
+    let mut tail = args[2];
+    while tail.is_cons() {
+        let coding_system = tail.cons_car();
+        tail = tail.cons_cdr();
+        let Some(name) = coding_system.as_symbol_name() else {
+            continue;
+        };
+        let Some(charset_list) = coding_system_charset_list_syms(&eval.coding_systems, name) else {
+            continue;
+        };
+        let ascii_compatible = charset_list_is_ascii_compatible(&charset_list);
+        let positions = scan_unencodable_positions(
+            text.as_bytes(),
+            &charset_list,
+            base_pos,
+            ascii_compatible,
+            usize::MAX,
+        );
+        if !positions.is_empty() {
+            let mut entry = vec![coding_system];
+            entry.extend(positions.into_iter().map(Value::fixnum));
+            result_entries.push(Value::list(entry));
+        }
+    }
+
+    Ok(Value::list(result_entries))
+}
+
+/// `(unencodable-char-position START END CODING-SYSTEM &optional COUNT STRING)`
+///
+/// GNU `Funencodable_char_position` (src/coding.c): return the position of the
+/// first character between START and END that CODING-SYSTEM cannot encode, or
+/// nil if it encodes the whole region.  With COUNT non-nil, return a list of at
+/// most COUNT such positions.  With STRING non-nil, START and END index STRING
+/// (`substring`-style) and the returned positions are 0-based char indices.
+pub(crate) fn builtin_unencodable_char_position(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("unencodable-char-position", &args, 3)?;
+    expect_max_args("unencodable-char-position", &args, 5)?;
+
+    // GNU calls `setup_coding_system (Fcheck_coding_system (coding_system))`:
+    // validate first (signalling on an unknown coding system), then short-circuit
+    // for raw-text which encodes every byte verbatim.
+    let coding_name = coding_symbol_name(&args[2])?;
+    if !is_known_or_derived_coding_system(&eval.coding_systems, &coding_name) {
+        return Err(signal("coding-system-error", vec![args[2]]));
+    }
+    let resolved = resolve_runtime_name(&eval.coding_systems, &coding_name)
+        .unwrap_or_else(|| coding_name.clone());
+    if coding_type_for_base(strip_eol_suffix(&resolved)) == Some("raw-text") {
+        return Ok(Value::NIL);
+    }
+    let Some(charset_list) = coding_system_charset_list_syms(&eval.coding_systems, &coding_name)
+    else {
+        return Ok(Value::NIL);
+    };
+    let ascii_compatible = charset_list_is_ascii_compatible(&charset_list);
+
+    let string_arg = args.get(4).copied().unwrap_or(Value::NIL);
+    let count = args.get(3).copied().unwrap_or(Value::NIL);
+
+    // COUNT nil => find one (and return it bare via car); else a fixnat limit.
+    let (limit, return_list) = if count.is_nil() {
+        (1usize, false)
+    } else {
+        match count.kind() {
+            ValueKind::Fixnum(n) if n >= 0 => (n as usize, true),
+            _ => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("natnump"), count],
+                ));
+            }
+        }
+    };
+
+    let (text, base_pos) = if !string_arg.is_nil() {
+        let string = string_arg.as_lisp_string().ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), string_arg],
+            )
+        })?;
+        let size = string.schars() as i64;
+        let (from, to) = substring_char_bounds(string_arg, args[0], args[1], size)?;
+        if !string_arg.string_is_multibyte() {
+            return Ok(Value::NIL);
+        }
+        // Slice the [from, to) char range out of the string's Emacs bytes.
+        let bytes = string_char_range_bytes(string.as_bytes(), from as usize, to as usize);
+        (bytes, from)
+    } else {
+        let start_raw = marker_or_integer_position(&args[0])?;
+        let end_raw = marker_or_integer_position(&args[1])?;
+        let (start, end) = if start_raw <= end_raw {
+            (start_raw, end_raw)
+        } else {
+            (end_raw, start_raw)
+        };
+        let buffer = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let buffer_end = buffer.total_char_len().get() as i64 + 1;
+        if !(1 <= start && start <= end && end <= buffer_end) {
+            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        }
+        if !buffer.get_multibyte() {
+            return Ok(Value::NIL);
+        }
+        let byte_range = EmacsByteRange::new(
+            buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
+            buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
+        );
+        let string = buffer.buffer_substring_lisp_string_range(byte_range);
+        // GNU returns nil for an ASCII-compatible coding when the region has no
+        // multibyte characters (byte length == char length).
+        if ascii_compatible && string.as_bytes().is_ascii() {
+            return Ok(Value::NIL);
+        }
+        (string.as_bytes().to_vec(), start)
+    };
+
+    let positions =
+        scan_unencodable_positions(&text, &charset_list, base_pos, ascii_compatible, limit);
+
+    if return_list {
+        Ok(Value::list(
+            positions.into_iter().map(Value::fixnum).collect(),
+        ))
+    } else {
+        Ok(positions
+            .first()
+            .map(|p| Value::fixnum(*p))
+            .unwrap_or(Value::NIL))
+    }
+}
+
+/// `substring`-style bounds for a string of `size` chars: nil START => 0, nil END
+/// => size, negative indices count from the end; signals `args-out-of-range` when
+/// the result is not `0 <= from <= to <= size`.
+fn substring_char_bounds(
+    array: Value,
+    from: Value,
+    to: Value,
+    size: i64,
+) -> Result<(i64, i64), Flow> {
+    fn normalize(value: Value, default: i64, size: i64) -> Result<i64, Flow> {
+        if value.is_nil() {
+            return Ok(default);
+        }
+        let raw = match value.kind() {
+            ValueKind::Fixnum(n) => n,
+            _ => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("integerp"), value],
+                ));
+            }
+        };
+        Ok(if raw < 0 { raw + size } else { raw })
+    }
+    let from_idx = normalize(from, 0, size)?;
+    let to_idx = normalize(to, size, size)?;
+    if !(0 <= from_idx && from_idx <= to_idx && to_idx <= size) {
+        return Err(signal("args-out-of-range", vec![array, from, to]));
+    }
+    Ok((from_idx, to_idx))
+}
+
+/// The Emacs multibyte bytes of the `[from_char, to_char)` char slice of `bytes`.
+fn string_char_range_bytes(bytes: &[u8], from_char: usize, to_char: usize) -> Vec<u8> {
+    let mut byte = 0usize;
+    let mut char_index = 0usize;
+    let mut start_byte = bytes.len();
+    let mut end_byte = bytes.len();
+    while byte < bytes.len() {
+        if char_index == from_char {
+            start_byte = byte;
+        }
+        if char_index == to_char {
+            end_byte = byte;
+            break;
+        }
+        let (_, len) = super::emacs_char::string_char(&bytes[byte..]);
+        byte += len;
+        char_index += 1;
+    }
+    if char_index <= from_char {
+        start_byte = bytes.len();
+    }
+    bytes[start_byte.min(end_byte)..end_byte].to_vec()
 }
 
 /// `(find-coding-system CODING-SYSTEM)` -- resolve CODING-SYSTEM to a known

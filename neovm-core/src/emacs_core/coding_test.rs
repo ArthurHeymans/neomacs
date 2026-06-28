@@ -2508,3 +2508,182 @@ fn detect_iso7_designation_respects_priority_override() {
         "iso-2022-8bit-ss2"
     );
 }
+
+// ---------------------------------------------------------------------------
+// fix8 GROUP=coding bug (3): check-coding-systems-region +
+// unencodable-char-position used to always return nil. They now scan each
+// candidate coding system's :charset-list for unencodable characters, matching
+// GNU's Fcheck_coding_systems_region / Funencodable_char_position (coding.c).
+// ---------------------------------------------------------------------------
+
+fn fmt(eval: &mut crate::emacs_core::eval::Context, src: &str) -> String {
+    crate::emacs_core::format_eval_result(&eval.eval_str(src))
+}
+
+/// `Context::new()` is bare (no `with-temp-buffer` macro), so seed the current
+/// buffer directly: erase it, insert `seed`, then evaluate `expr`.
+fn fmt_buf(eval: &mut crate::emacs_core::eval::Context, seed: &str, expr: &str) -> String {
+    let src = format!("(progn (erase-buffer) (insert {seed}) {expr})");
+    crate::emacs_core::format_eval_result(&eval.eval_str(&src))
+}
+
+#[test]
+fn check_coding_systems_region_reports_unencodable_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // (us-ascii 2): "é" at buffer position 2 is not us-ascii-encodable.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?a ?\u{e9} ?b)",
+            "(check-coding-systems-region (point-min) (point-max) '(us-ascii))",
+        ),
+        "OK ((us-ascii 2))"
+    );
+}
+
+#[test]
+fn check_coding_systems_region_accepts_string_first_arg() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // String START => 0-based char indices, END ignored: "é" is index 1.
+    assert_eq!(
+        fmt(
+            &mut eval,
+            "(check-coding-systems-region (string ?a ?\u{e9} ?b) nil '(us-ascii))",
+        ),
+        "OK ((us-ascii 1))"
+    );
+}
+
+#[test]
+fn check_coding_systems_region_utf8_encodes_everything() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // utf-8 (charset `unicode`) encodes every character, so it never appears.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?a ?\u{e9} ?b ?\u{3042})",
+            "(check-coding-systems-region (point-min) (point-max) '(utf-8 us-ascii))",
+        ),
+        "OK ((us-ascii 2 4))"
+    );
+}
+
+#[test]
+fn check_coding_systems_region_preserves_input_order_and_charset_membership() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // latin-1 encodes "é" but not "あ" (pos 2); us-ascii encodes neither (1 2).
+    // Output keeps the input list order.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{e9} ?\u{3042})",
+            "(check-coding-systems-region (point-min) (point-max) '(latin-1 us-ascii))",
+        ),
+        "OK ((latin-1 2) (us-ascii 1 2))"
+    );
+    // latin-1 encodes both "é" and "ü", so the region is fully encodable => nil.
+    // (euc-jp/shift_jis are only registered by elisp at runtime, not by the bare
+    // `CodingSystemManager::new()`, so they are verified on the release binary.)
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{e9} ?\u{fc})",
+            "(check-coding-systems-region (point-min) (point-max) '(latin-1))",
+        ),
+        "OK nil"
+    );
+}
+
+#[test]
+fn unencodable_char_position_returns_first_position() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // No COUNT => the first unencodable position (1-based) as a bare integer.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?a ?\u{e9})",
+            "(unencodable-char-position (point-min) (point-max) 'us-ascii)",
+        ),
+        "OK 2"
+    );
+}
+
+#[test]
+fn unencodable_char_position_with_count_returns_list() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // COUNT non-nil => a list of up to COUNT positions in ascending order.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?a ?\u{e9} ?b ?\u{fc})",
+            "(unencodable-char-position (point-min) (point-max) 'us-ascii 5)",
+        ),
+        "OK (2 4)"
+    );
+}
+
+#[test]
+fn unencodable_char_position_string_arg_uses_zero_based_indices() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // STRING arg: START/END index the string; positions are 0-based char indices.
+    assert_eq!(
+        fmt(
+            &mut eval,
+            "(unencodable-char-position 0 3 'us-ascii nil (string ?a ?\u{e9} ?b))",
+        ),
+        "OK 1"
+    );
+    assert_eq!(
+        fmt(
+            &mut eval,
+            "(unencodable-char-position 0 5 'us-ascii 5 (string ?a ?\u{e9} ?b ?\u{fc} ?c))",
+        ),
+        "OK (1 3)"
+    );
+}
+
+#[test]
+fn unencodable_char_position_raw_text_and_encodable_return_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // raw-text encodes every byte => nil.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{e9})",
+            "(unencodable-char-position (point-min) (point-max) 'raw-text)",
+        ),
+        "OK nil"
+    );
+    // utf-8 encodes everything => nil.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{3042})",
+            "(unencodable-char-position (point-min) (point-max) 'utf-8)",
+        ),
+        "OK nil"
+    );
+}
+
+#[test]
+fn unencodable_char_position_swaps_reversed_region() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // GNU validate_region swaps START/END; check-coding-systems-region does not.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?a ?\u{e9} ?b)",
+            "(unencodable-char-position 4 1 'us-ascii)",
+        ),
+        "OK 2"
+    );
+}

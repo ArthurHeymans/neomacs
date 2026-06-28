@@ -1215,3 +1215,196 @@ fn decode_sjis_attaches_charset_property() {
     assert_eq!(runs[1].plist, charset_prop("test-jis"));
     let _ = &mut input;
 }
+
+// ---------------------------------------------------------------------------
+// fix8 GROUP=coding bugs (1c), (7), (8): encode/decode-coding-region routing,
+// in-place point restoration, and the alias stored in last-coding-system-used.
+// ---------------------------------------------------------------------------
+
+fn fmt(eval: &mut crate::emacs_core::Context, src: &str) -> String {
+    crate::emacs_core::format_eval_result(&eval.eval_str(src))
+}
+
+/// `Context::new()` is bare (no `with-temp-buffer`); seed the current buffer.
+fn fmt_buf(eval: &mut crate::emacs_core::Context, seed: &str, expr: &str) -> String {
+    let src = format!("(progn (erase-buffer) (insert {seed}) {expr})");
+    crate::emacs_core::format_eval_result(&eval.eval_str(&src))
+}
+
+// Bug (1c): encode-coding-region for a charset/ISO-2022-type coding (cn-gb-2312,
+// like euc-jp/shift_jis/iso-2022-jp) used to drop the non-ASCII text: the region
+// path called `encode_lisp_string` directly, which only knows the UTF-8 /
+// single-byte / Big5 families and silently dropped every CJK character (its
+// `push_encoded` had an empty `_ => {}` arm). The region path now routes through
+// the same context-aware codec the string functions use, so region == string.
+// (euc-jp/shift_jis/chinese-gbk need external charset maps not loaded in the bare
+// `Context::new()`; cn-gb-2312's table is built in, so it exercises the same
+// dropped path here and the full set is re-verified on the release binary.)
+#[test]
+fn encode_coding_region_charset_coding_matches_string_path() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    // GNU: 一 -> two eight-bit bytes 0xD2 0xBB, buffer-size 2 (was 0/dropped).
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{4e00})",
+            "(progn (encode-coding-region (point-min) (point-max) 'cn-gb-2312-unix) (buffer-size))",
+        ),
+        "OK 2"
+    );
+    // The stored bytes (as eight-bit chars) equal the string encoder's bytes.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{4e00})",
+            "(progn (encode-coding-region (point-min) (point-max) 'cn-gb-2312-unix)
+                    (mapcar (lambda (c) (logand c #xFF)) (append (buffer-string) nil)))",
+        ),
+        "OK (210 187)"
+    );
+}
+
+// Bug (1c) decode side: decode-coding-region for a charset-type coding must also
+// route through the working decoder. It decodes the two GB2312 bytes back to the
+// single character 一, with the same `(charset chinese-gb2312)` text property GNU
+// attaches; the old region path garbled them into raw eight-bit characters.
+#[test]
+fn decode_coding_region_charset_coding_decodes_and_marks_charset() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str(
+            "(progn (set-buffer-multibyte nil) (insert #xd2 #xbb) (set-buffer-multibyte t)
+                    (decode-coding-region (point-min) (point-max) 'cn-gb-2312-unix)
+                    (buffer-string))",
+        )),
+        "OK #(\"\u{4e00}\" 0 1 (charset chinese-gb2312))"
+    );
+    // Round-trip: encoding 一 then decoding it gives 一 back.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "(string ?\u{4e00})",
+            "(progn (encode-coding-region (point-min) (point-max) 'cn-gb-2312-unix)
+                    (decode-coding-region (point-min) (point-max) 'cn-gb-2312-unix)
+                    (buffer-string))",
+        ),
+        "OK #(\"\u{4e00}\" 0 1 (charset chinese-gb2312))"
+    );
+}
+
+// Bug (7): decode/encode-coding-region used to leave point at the region END.
+// GNU restores point: before the region it is unchanged, interior point moves to
+// the region START, point at/after the end shifts by the size delta.
+#[test]
+fn coding_region_restores_point_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    // Interior point (3) over the whole "abcd" region -> region START (1).
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcd\"",
+            "(progn (goto-char 3) (decode-coding-region (point-min) (point-max) 'utf-8) (point))",
+        ),
+        "OK 1"
+    );
+    // Point at region start stays at start.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcd\"",
+            "(progn (goto-char 1) (decode-coding-region (point-min) (point-max) 'utf-8) (point))",
+        ),
+        "OK 1"
+    );
+    // Point at region end stays at end (size unchanged -> 5).
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcd\"",
+            "(progn (goto-char 5) (decode-coding-region (point-min) (point-max) 'utf-8) (point))",
+        ),
+        "OK 5"
+    );
+    // encode side behaves the same.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcd\"",
+            "(progn (goto-char 3) (encode-coding-region (point-min) (point-max) 'utf-8) (point))",
+        ),
+        "OK 1"
+    );
+}
+
+// Bug (7), partial region: point before the region is unchanged; point after the
+// region shifts by the produced-vs-original size delta (here 0).
+#[test]
+fn coding_region_restores_point_for_partial_region() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    // Point before the [3,5) region -> unchanged (1).
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcdef\"",
+            "(progn (goto-char 1) (decode-coding-region 3 5 'utf-8) (point))",
+        ),
+        "OK 1"
+    );
+    // Point inside the region -> region START (3).
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcdef\"",
+            "(progn (goto-char 4) (decode-coding-region 3 5 'utf-8) (point))",
+        ),
+        "OK 3"
+    );
+    // Point after the region -> unchanged (6) since the region size is preserved.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"abcdef\"",
+            "(progn (goto-char 6) (decode-coding-region 3 5 'utf-8) (point))",
+        ),
+        "OK 6"
+    );
+}
+
+// Bug (8): last-coding-system-used must store the coding system AS PASSED (the
+// alias), not its resolved base. utf-8 (its own base) is the control.
+#[test]
+fn last_coding_system_used_stores_passed_alias() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    // chinese-gbk's base is chinese-gbk itself in the bare manager; use an alias
+    // that resolves to a different base to prove we keep the alias.  cp936 is an
+    // alias of chinese-gbk; GNU stores `cp936`, not `chinese-gbk`.
+    assert_eq!(
+        fmt(
+            &mut eval,
+            "(progn (encode-coding-string \"x\" 'cp936) last-coding-system-used)",
+        ),
+        "OK cp936"
+    );
+    // Control: utf-8 stores utf-8 (alias == base, always agreed).
+    assert_eq!(
+        fmt(
+            &mut eval,
+            "(progn (encode-coding-string \"x\" 'utf-8) last-coding-system-used)",
+        ),
+        "OK utf-8"
+    );
+    // The region path stores the alias too.
+    assert_eq!(
+        fmt_buf(
+            &mut eval,
+            "\"x\"",
+            "(progn (encode-coding-region (point-min) (point-max) 'cp936) last-coding-system-used)",
+        ),
+        "OK cp936"
+    );
+}

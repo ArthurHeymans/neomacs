@@ -1825,10 +1825,10 @@ pub(crate) fn builtin_obarray_clear(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_make_temp_file_internal(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::fileio::builtin_make_temp_file_internal(args)
+    super::fileio::builtin_make_temp_file_internal(eval, args)
 }
 
 pub(crate) fn builtin_minibuffer_innermost_command_loop_p(args: Vec<Value>) -> EvalResult {
@@ -3499,11 +3499,6 @@ pub(crate) fn builtin_tty_set_output_buffer_size(args: Vec<Value>) -> EvalResult
 
 pub(crate) fn builtin_tty_suppress_bold_inverse_default_colors(args: Vec<Value>) -> EvalResult {
     expect_args("tty-suppress-bold-inverse-default-colors", &args, 1)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_unencodable_char_position(args: Vec<Value>) -> EvalResult {
-    expect_range_args("unencodable-char-position", &args, 3, 5)?;
     Ok(Value::NIL)
 }
 

@@ -4843,7 +4843,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "make-temp-name",
-        |_ctx, args| super::fileio::builtin_make_temp_name(args),
+        |ctx, args| super::fileio::builtin_make_temp_name(ctx, args),
         1,
         Some(1),
     );
@@ -6141,7 +6141,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "unencodable-char-position",
-        |_ctx, args| builtin_unencodable_char_position(args),
+        |ctx, args| super::coding::builtin_unencodable_char_position(ctx, args),
         3,
         Some(5),
     );

@@ -6,7 +6,7 @@
 
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
-use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
+use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor};
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
 use encoding_rs::{BIG5, GBK};
 
@@ -1487,10 +1487,19 @@ fn context_coding_name(
     Ok(name)
 }
 
-fn canonical_context_coding_name(ctx: &crate::emacs_core::eval::Context, name: &str) -> String {
-    ctx.coding_systems
-        .canonical_runtime_name(name)
-        .unwrap_or_else(|| name.to_owned())
+/// The coding-system name to store in `last-coding-system-used`.
+///
+/// GNU sets `Vlast_coding_system_used = CODING_ID_NAME (coding.id)` (coding.c
+/// `code_convert_string` / `code_convert_region`), which is the name the coding
+/// system was *set up* with — i.e. the alias exactly as the caller passed it
+/// (`euc-jp`, `shift_jis`, `cp932`, `euc-jp-dos`), NOT its resolved base
+/// (`japanese-iso-8bit`, …).  The only time the stored name differs from the
+/// argument is when the argument was "not fully specified" (`undecided` /
+/// `prefer-utf-8`), in which case the caller has already rewritten `name` to the
+/// detected concrete coding system before reaching here.  So the precise name is
+/// just `name` verbatim; resolving aliases to their base here was the bug.
+fn canonical_context_coding_name(_ctx: &crate::emacs_core::eval::Context, name: &str) -> String {
+    name.to_owned()
 }
 
 fn coding_region_destination(
@@ -1515,29 +1524,35 @@ fn coding_region_destination(
     }
 }
 
-fn transformed_region_string(
+/// Convert the text of a buffer region through the same context-aware codec
+/// the string functions use, so `encode-coding-region` / `decode-coding-region`
+/// support every coding system `encode-coding-string` / `decode-coding-string`
+/// do (euc-jp/shift_jis/iso-2022-jp and the other dedicated codecs).  GNU's
+/// `code_convert_region` and `code_convert_string` share the same
+/// `encode_coding_object`/`decode_coding_object` engine; this restores that
+/// shared path.  The standalone `encode_lisp_string` / `decode` fallbacks below
+/// only know the UTF-8 / single-byte / Big5 families and silently drop CJK text
+/// for the charset/ISO-2022 codings.
+fn transformed_region_string_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
     source: crate::heap_types::LispString,
     coding: &str,
     encode: bool,
 ) -> Result<Value, crate::emacs_core::error::Flow> {
-    if encode {
-        // `encode_lisp_string` prepends the UTF-8 BOM for
-        // utf-8-with-signature / utf-8-auto, so no extra handling here.
-        let bytes = encode_lisp_string(&source, coding);
-        Ok(Value::heap_string(
-            crate::heap_types::LispString::from_unibyte(bytes),
-        ))
-    } else {
-        builtin_decode_coding_string_with_known(
-            vec![
-                Value::heap_string(source),
-                Value::symbol(coding),
-                Value::NIL,
-                Value::NIL,
-            ],
-            |_| true,
-        )
-    }
+    // Destination nil => the codec returns the converted string (GNU
+    // `code_convert_string` with dst_object == t).  We carry the result back
+    // into the region in `builtin_coding_region`; `last-coding-system-used` is
+    // re-set there with the region-appropriate name.
+    builtin_coding_string_in_context(
+        ctx,
+        vec![
+            Value::heap_string(source),
+            Value::symbol(coding),
+            Value::NIL,
+            Value::NIL,
+        ],
+        encode,
+    )
 }
 
 fn insert_coding_result(
@@ -3480,7 +3495,7 @@ fn builtin_coding_region(
         .buffer_substring_lisp_string_range(byte_range);
     let start_byte = byte_range.start().get();
     let end_byte = byte_range.end().get();
-    let result = transformed_region_string(source, &coding, encode)?;
+    let result = transformed_region_string_in_context(ctx, source, &coding, encode)?;
     let result_text = result
         .as_lisp_string()
         .ok_or_else(|| {
@@ -3514,12 +3529,47 @@ fn builtin_coding_region(
                 .unwrap_or(true);
             let stored = coding_result_for_buffer_multibyte(&result_text, target_multibyte);
             let produced_chars = stored.schars();
+            // Capture point geometry BEFORE the replacement so we can mirror
+            // GNU's in-place point restoration (coding.c
+            // `decode_coding_object`/`encode_coding_object`, the `saved_pt >= 0`
+            // block).  All three are 1-based char positions.
+            let (saved_pt, from_char, chars) = ctx
+                .buffers
+                .get(current_id)
+                .map(|buf| {
+                    let saved_pt = buf.point_lisp_char_pos().as_i64();
+                    let from_char = buf
+                        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start_byte))
+                        .as_i64();
+                    let to_char = buf
+                        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end_byte))
+                        .as_i64();
+                    (saved_pt, from_char, to_char - from_char)
+                })
+                .unwrap_or((1, 1, 0));
             crate::emacs_core::fns::replace_buffer_emacs_byte_range_lisp_string(
                 ctx,
                 current_id,
                 EmacsByteRange::new(EmacsBytePos::new(start_byte), EmacsBytePos::new(end_byte)),
                 &stored,
             )?;
+            // GNU restores PT after replacing the region in place:
+            //   saved_pt < from               -> point unchanged (before region)
+            //   from <= saved_pt < from+chars  -> point moves to the region START
+            //   saved_pt >= from+chars         -> point shifts by the size delta
+            // (coding.c, the `if (saved_pt >= 0)` branch).  Without this the
+            // del+insert replacement leaves point at the region END.
+            let new_pt = if saved_pt < from_char {
+                saved_pt
+            } else if saved_pt < from_char + chars {
+                from_char
+            } else {
+                saved_pt + (produced_chars as i64 - chars)
+            };
+            if let Some(buf) = ctx.buffers.get(current_id) {
+                let byte_pos = buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(new_pt));
+                let _ = ctx.buffers.goto_buffer_emacs_byte_pos(current_id, byte_pos);
+            }
             ctx.set_variable(
                 "last-coding-system-used",
                 Value::symbol(&canonical_context_coding_name(ctx, &coding)),
