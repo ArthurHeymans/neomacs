@@ -1102,3 +1102,116 @@ fn printable_check() {
     assert!(!is_printable('\x00'));
     assert!(!is_printable('\x7f'));
 }
+
+// ===========================================================================
+// decode-coding-string charset text property for ISO-2022 / EUC / Shift-JIS
+// (bug 13).  GNU's `decode_coding_iso_2022` annotates each decoded run with the
+// source charset (`(charset CHARSET)`).  The pure decoders now emit those runs;
+// here we drive them directly with deterministic OFFSET charsets so the result
+// is reproducible in the bare test registry.
+// ===========================================================================
+
+/// Register a deterministic dim-2 ISO-2022 charset (`test-jis`, ISO final 'B',
+/// OFFSET method) so `charset_decode_char` maps a 2-byte code to a non-ASCII
+/// char and `charset_iso2022_designation` recognizes the `$B` designation.
+fn register_test_jis() -> crate::emacs_core::intern::SymId {
+    use crate::emacs_core::value::Value;
+    let mut args = vec![Value::NIL; 17];
+    args[0] = Value::symbol("test-jis");
+    args[1] = Value::fixnum(2);
+    args[2] = Value::vector(vec![
+        Value::fixnum(33),
+        Value::fixnum(126),
+        Value::fixnum(33),
+        Value::fixnum(126),
+    ]);
+    args[5] = Value::fixnum(66); // ISO final 'B'
+    args[11] = Value::fixnum(0x10000); // code-offset -> decoded chars are non-ASCII
+    crate::emacs_core::charset::builtin_define_charset_internal(args).unwrap();
+    crate::emacs_core::intern::intern("test-jis")
+}
+
+fn charset_prop(charset: &str) -> Value {
+    Value::list(vec![Value::symbol("charset"), Value::symbol(charset)])
+}
+
+#[test]
+fn decode_iso2022_attaches_charset_property_for_designated_charset() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::intern::intern;
+    register_test_jis();
+    let ascii = intern("ascii");
+    // 7-bit ISO-2022 with escape designations (iso-2022-7bit profile).
+    let spec = crate::emacs_core::coding::Iso2022Spec {
+        initial: [Some(ascii), None, None, None],
+        request: vec![],
+        reg_usage: (0, 1),
+        flags: enumflags2::BitFlags::from_flag(crate::emacs_core::coding::IsoFlag::SevenBits)
+            | crate::emacs_core::coding::IsoFlag::Designation,
+    };
+    // "X" + ESC$B designation + two dim-2 chars + ESC(B (ascii) + "Y".
+    let (bytes, runs) = decode_via_iso2022(b"X\x1b$B$3$s\x1b(BY", &spec);
+    let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
+    // X + 2 kanji + Y == 4 chars; the kanji run is [1,3).
+    assert_eq!(text.chars().count(), 4);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].start, 1);
+    assert_eq!(runs[0].end, 3);
+    assert_eq!(runs[0].plist, charset_prop("test-jis"));
+}
+
+#[test]
+fn decode_euc_attaches_charset_property() {
+    crate::test_utils::init_test_tracing();
+    let jis = register_test_jis();
+    // EUC profile: G1 = test-jis, decoded from GR (high-bit) bytes.
+    let spec = crate::emacs_core::coding::Iso2022Spec {
+        initial: [
+            Some(crate::emacs_core::intern::intern("ascii")),
+            Some(jis),
+            None,
+            None,
+        ],
+        request: vec![],
+        reg_usage: (0, 1),
+        flags: enumflags2::BitFlags::empty(),
+    };
+    // ASCII 'A' then one GR character (0xA4 0xB3 -> GL 0x24 0x33).
+    let (bytes, runs) = decode_via_euc(b"A\xA4\xB3", &spec);
+    let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
+    assert_eq!(text.chars().count(), 2);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].start, 1);
+    assert_eq!(runs[0].end, 2);
+    assert_eq!(runs[0].plist, charset_prop("test-jis"));
+}
+
+#[test]
+fn decode_sjis_attaches_charset_property() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::intern::intern;
+    // Shift-JIS charset list is (ascii katakana-jisx0201 <kanji>); register a
+    // deterministic dim-1 katakana charset and a dim-2 kanji charset.
+    let mut kana_args = vec![Value::NIL; 17];
+    kana_args[0] = Value::symbol("test-katakana");
+    kana_args[1] = Value::fixnum(1);
+    kana_args[2] = Value::vector(vec![Value::fixnum(33), Value::fixnum(126)]);
+    kana_args[11] = Value::fixnum(0x20000);
+    crate::emacs_core::charset::builtin_define_charset_internal(kana_args).unwrap();
+    let jis = register_test_jis();
+    let charsets = vec![intern("ascii"), intern("test-katakana"), jis];
+    // 'A' + half-width katakana 0xA1 (GL 0x21) + a 2-byte kanji.
+    // Pick SJIS bytes that map to a valid kanji code in test-jis.
+    let kanji_sjis = jis_to_sjis(0x2433);
+    let mut input = vec![b'A', 0xA1, kanji_sjis.0, kanji_sjis.1];
+    let (bytes, runs) = decode_via_sjis(&input, &charsets);
+    let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
+    assert_eq!(text.chars().count(), 3); // A + katakana + kanji
+    // Two runs: katakana at [1,2), kanji at [2,3).
+    assert_eq!(runs.len(), 2);
+    assert_eq!((runs[0].start, runs[0].end), (1, 2));
+    assert_eq!(runs[0].plist, charset_prop("test-katakana"));
+    assert_eq!((runs[1].start, runs[1].end), (2, 3));
+    assert_eq!(runs[1].plist, charset_prop("test-jis"));
+    let _ = &mut input;
+}

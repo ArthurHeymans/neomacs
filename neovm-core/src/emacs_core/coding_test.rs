@@ -1455,10 +1455,14 @@ fn priority_list_full() {
 fn priority_list_highest() {
     crate::test_utils::init_test_tracing();
     let m = mgr();
+    // GNU `(coding-system-priority-list t)` returns a BARE symbol (the base name
+    // of the highest-priority category), not a one-element list.
     let result = builtin_coding_system_priority_list(&m, vec![Value::T]).unwrap();
-    let items = list_to_vec(&result).unwrap();
-    assert_eq!(items.len(), 1);
-    assert!(items[0].is_symbol_named("utf-8"));
+    assert!(result.is_symbol_named("utf-8"));
+    assert!(
+        list_to_vec(&result).is_none(),
+        "HIGHESTP result must be a bare symbol, not a list"
+    );
 }
 
 #[test]
@@ -2285,10 +2289,10 @@ fn set_priority_moves_charset_category_to_front() {
         .unwrap()
         .len();
     builtin_set_coding_system_priority(&mut m, vec![Value::symbol("iso-latin-1")]).unwrap();
-    let after_latin =
-        list_to_vec(&builtin_coding_system_priority_list(&m, vec![Value::T]).unwrap()).unwrap();
+    // HIGHESTP returns a bare symbol (GNU `CODING_ATTR_BASE_NAME`).
+    let after_latin = builtin_coding_system_priority_list(&m, vec![Value::T]).unwrap();
     assert_eq!(
-        resolve_sym(after_latin[0].as_symbol_id().unwrap()),
+        resolve_sym(after_latin.as_symbol_id().unwrap()),
         "iso-latin-1"
     );
     builtin_set_coding_system_priority(&mut m, vec![Value::symbol("utf-8")]).unwrap();
@@ -2423,5 +2427,84 @@ fn insert_unbound_categories_matches_gnu_booted_order() {
             7, 0, 14, 4, 5, 18, 19, 1, 2, 3, 6, 8, 9, 10, 11, 12, 13, 15, 16, 17, 20
         ],
         "ccl must be inserted just before undecided, matching GNU"
+    );
+}
+
+// ===========================================================================
+// detect-coding-string iso-2022 escape-designation category mapping (bug 14).
+//
+// `\033$B$3\033(B` designates JISX0208 (a 7-bit ISO-2022 stream).  GNU's
+// `detect_coding_iso_2022` records this as found for the iso-7, iso-7-tight,
+// iso-7-else and iso-8-else categories, so the highest-priority *found*
+// category wins.  Default priority -> iso-2022-7bit (the iso-7 category);
+// with a priority override, the fronted category's coding system wins.
+// ===========================================================================
+
+/// Register the `japanese-jisx0208` charset (dim-2, ISO final 'B') in the bare
+/// test registry so the iso-2022 escape detector recognizes the `$B`
+/// designation, mirroring the booted runtime.
+fn register_jisx0208_for_detect() {
+    let mut args = vec![Value::NIL; 17];
+    args[0] = Value::symbol("japanese-jisx0208");
+    args[1] = Value::fixnum(2); // dimension
+    args[2] = Value::vector(vec![
+        Value::fixnum(33),
+        Value::fixnum(126),
+        Value::fixnum(33),
+        Value::fixnum(126),
+    ]); // 94x94 code-space
+    args[5] = Value::fixnum(66); // iso-final-char 'B'
+    crate::emacs_core::charset::builtin_define_charset_internal(args).unwrap();
+}
+
+const ISO7_DESIGNATION: &[u8] = b"\x1b$B$3\x1b(B";
+
+fn detect_highest_with_front(front: Option<CodingCat>) -> String {
+    let (mut priorities, cat_system) = gnu_detect_state();
+    if let Some(cat) = front {
+        let c = cat as usize;
+        priorities.retain(|&x| x != c);
+        priorities.insert(0, c);
+    }
+    let v = detect_categories(&priorities, &cat_system, ISO7_DESIGNATION, 6, false, true);
+    resolve_sym(v.as_symbol_id().unwrap()).to_string()
+}
+
+#[test]
+fn detect_iso7_designation_default_priority_is_iso_2022_7bit() {
+    crate::test_utils::init_test_tracing();
+    register_jisx0208_for_detect();
+    // (detect-coding-string (string-to-unibyte "\033$B$3\033(B") t) => iso-2022-7bit
+    assert_eq!(detect_highest_with_front(None), "iso-2022-7bit");
+    // The list form: (iso-2022-7bit iso-2022-7bit-lock iso-2022-8bit-ss2 iso-2022-jp)
+    assert_eq!(
+        detect_list(ISO7_DESIGNATION),
+        vec![
+            "iso-2022-7bit",
+            "iso-2022-7bit-lock",
+            "iso-2022-8bit-ss2",
+            "iso-2022-jp",
+        ]
+    );
+}
+
+#[test]
+fn detect_iso7_designation_respects_priority_override() {
+    crate::test_utils::init_test_tracing();
+    register_jisx0208_for_detect();
+    // (with-coding-priority '(iso-2022-jp) ...) => iso-2022-jp (iso-7-tight).
+    assert_eq!(
+        detect_highest_with_front(Some(CodingCat::Iso7Tight)),
+        "iso-2022-jp"
+    );
+    // (with-coding-priority '(iso-2022-7bit-lock) ...) => iso-2022-7bit-lock.
+    assert_eq!(
+        detect_highest_with_front(Some(CodingCat::Iso7Else)),
+        "iso-2022-7bit-lock"
+    );
+    // (with-coding-priority '(iso-2022-8bit-ss2) ...) => iso-2022-8bit-ss2.
+    assert_eq!(
+        detect_highest_with_front(Some(CodingCat::Iso8Else)),
+        "iso-2022-8bit-ss2"
     );
 }

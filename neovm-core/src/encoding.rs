@@ -1676,22 +1676,43 @@ fn encode_via_charset_list(
 /// `charset` property naming that charset (`decode_coding_charset` /
 /// `produce_charset`, src/coding.c).  ASCII characters and eight-bit raw bytes
 /// carry no `charset` property (GNU keeps `last_id == charset_ascii` for them).
-fn decode_via_charset_list(
-    bytes: &[u8],
-    charset_list: &[SymId],
-) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut pos = 0usize;
-    let mut char_index = 0usize;
-    let mut runs: Vec<StringTextPropertyRun> = Vec::new();
-    // The charset of the run currently being accumulated, with its start char
-    // index. `None` means we are inside an ASCII / eight-bit stretch that takes
-    // no `charset` property.
-    let mut run: Option<(SymId, usize)> = None;
-    let flush = |run: &mut Option<(SymId, usize)>, end: usize, runs: &mut Vec<_>| {
-        if let Some((charset, start)) = run.take() {
-            runs.push(StringTextPropertyRun {
+/// Accumulates `(charset NAME)` text-property runs while a decoder emits
+/// characters, mirroring GNU's `decode_coding_*` charset annotation: each
+/// maximal run of consecutive characters decoded by the *same* non-ASCII
+/// charset gets one `charset` property naming that charset.  ASCII characters
+/// and eight-bit raw bytes carry no `charset` property (GNU keeps
+/// `last_id == charset_ascii` for them).
+struct CharsetRunBuilder {
+    runs: Vec<StringTextPropertyRun>,
+    /// The charset of the run currently being accumulated, with its start char
+    /// index.  `None` means we are inside an ASCII / eight-bit stretch.
+    current: Option<(SymId, usize)>,
+}
+
+impl CharsetRunBuilder {
+    fn new() -> Self {
+        Self {
+            runs: Vec::new(),
+            current: None,
+        }
+    }
+
+    /// Record the source charset (`None` for ASCII / eight-bit) of the character
+    /// at output position `char_index`.
+    fn push(&mut self, char_index: usize, charset: Option<SymId>) {
+        match charset {
+            Some(cs) if self.current.map(|(c, _)| c) == Some(cs) => {}
+            Some(cs) => {
+                self.flush(char_index);
+                self.current = Some((cs, char_index));
+            }
+            None => self.flush(char_index),
+        }
+    }
+
+    fn flush(&mut self, end: usize) {
+        if let Some((charset, start)) = self.current.take() {
+            self.runs.push(StringTextPropertyRun {
                 start,
                 end,
                 plist: Value::list(vec![
@@ -1700,7 +1721,33 @@ fn decode_via_charset_list(
                 ]),
             });
         }
-    };
+    }
+
+    fn finish(mut self, end: usize) -> Vec<StringTextPropertyRun> {
+        self.flush(end);
+        self.runs
+    }
+}
+
+/// Build a decoded multibyte Lisp string from Emacs internal `bytes`, attaching
+/// the `(charset NAME)` text-property `runs` GNU's `decode_coding_*` produce.
+fn decoded_string_with_charset_runs(bytes: Vec<u8>, runs: Vec<StringTextPropertyRun>) -> Value {
+    let value = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
+    if !runs.is_empty() {
+        crate::emacs_core::value::set_string_text_properties_for_value(value, runs);
+    }
+    value
+}
+
+fn decode_via_charset_list(
+    bytes: &[u8],
+    charset_list: &[SymId],
+) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut pos = 0usize;
+    let mut char_index = 0usize;
+    let mut runs = CharsetRunBuilder::new();
     while pos < bytes.len() {
         let decoded = charset_list.iter().find_map(|&charset| {
             crate::emacs_core::charset::charset_decode_char_from_bytes(charset, &bytes[pos..])
@@ -1721,21 +1768,13 @@ fn decode_via_charset_list(
                 None,
             ),
         };
-        match annotation {
-            Some(charset) if run.map(|(c, _)| c) == Some(charset) => {}
-            Some(charset) => {
-                flush(&mut run, char_index, &mut runs);
-                run = Some((charset, char_index));
-            }
-            None => flush(&mut run, char_index, &mut runs),
-        }
+        runs.push(char_index, annotation);
         let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..n]);
         pos += consumed;
         char_index += 1;
     }
-    flush(&mut run, char_index, &mut runs);
-    (out, runs)
+    (out, runs.finish(char_index))
 }
 
 /// If `coding` is an EUC-profile ISO-2022 coding system, return its designation
@@ -1835,31 +1874,43 @@ fn decode_euc_register(charset: Option<SymId>, bytes: &[u8]) -> Option<(u32, usi
 }
 
 /// Decode 8-bit EUC bytes through the coding system's G0-G3 designations.
-fn decode_via_euc(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spec) -> Vec<u8> {
+fn decode_via_euc(
+    bytes: &[u8],
+    spec: &crate::emacs_core::coding::Iso2022Spec,
+) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
     let mut out = Vec::with_capacity(bytes.len());
     let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
     let mut pos = 0usize;
+    let mut char_index = 0usize;
+    let mut runs = CharsetRunBuilder::new();
+    let raw = |b: u8| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1, None);
     while pos < bytes.len() {
         let b = bytes[pos];
-        let (code, consumed) = if b < 0x80 {
-            (u32::from(b), 1)
+        // `(code, consumed, source-charset)`.  A successful register decode
+        // annotates the run with that register's designated charset; ASCII and
+        // raw bytes carry no `charset` property (GNU's `decode_coding_iso_2022`).
+        let (code, consumed, charset) = if b < 0x80 {
+            (u32::from(b), 1, None)
         } else if b == 0x8E {
             decode_euc_register(spec.initial[2], &bytes[pos + 1..])
-                .map(|(ch, n)| (ch, n + 1))
-                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+                .map(|(ch, n)| (ch, n + 1, spec.initial[2]))
+                .unwrap_or_else(|| raw(b))
         } else if b == 0x8F {
             decode_euc_register(spec.initial[3], &bytes[pos + 1..])
-                .map(|(ch, n)| (ch, n + 1))
-                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+                .map(|(ch, n)| (ch, n + 1, spec.initial[3]))
+                .unwrap_or_else(|| raw(b))
         } else {
             decode_euc_register(spec.initial[1], &bytes[pos..])
-                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+                .map(|(ch, n)| (ch, n, spec.initial[1]))
+                .unwrap_or_else(|| raw(b))
         };
+        runs.push(char_index, charset);
         let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..n]);
         pos += consumed;
+        char_index += 1;
     }
-    out
+    (out, runs.finish(char_index))
 }
 
 /// JIS code point (jisx0208 row/cell) -> the two Shift-JIS bytes. Mirrors
@@ -1951,36 +2002,43 @@ fn encode_via_sjis(
 
 /// Decode Shift-JIS bytes: ASCII, half-width katakana (0xA1-0xDF), and the
 /// two-byte JISX0208 sequences (`SJIS_TO_JIS`); other bytes become eight-bit raw.
-fn decode_via_sjis(bytes: &[u8], charsets: &[SymId]) -> Vec<u8> {
+fn decode_via_sjis(bytes: &[u8], charsets: &[SymId]) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
     let kana = charsets[1];
     let kanji = charsets[2];
     let mut out = Vec::with_capacity(bytes.len());
     let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
     let mut pos = 0usize;
-    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
+    let mut char_index = 0usize;
+    let mut runs = CharsetRunBuilder::new();
+    let raw = |b: u8| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1, None);
     while pos < bytes.len() {
         let b = bytes[pos];
-        let (code, consumed) = if b < 0x80 {
-            (u32::from(b), 1)
+        // `(code, consumed, source-charset)`: half-width katakana annotates the
+        // `katakana-jisx0201` charset, two-byte sequences annotate the JISX0208
+        // charset; ASCII and raw bytes carry no `charset` property.
+        let (code, consumed, charset) = if b < 0x80 {
+            (u32::from(b), 1, None)
         } else if (0xA1..=0xDF).contains(&b) {
             crate::emacs_core::charset::charset_decode_char(kana, i64::from(b & 0x7F))
-                .map(|ch| (ch as u32, 1))
-                .unwrap_or((raw(b), 1))
+                .map(|ch| (ch as u32, 1, Some(kana)))
+                .unwrap_or_else(|| raw(b))
         } else if ((0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b))
             && pos + 1 < bytes.len()
         {
             let jis = sjis_to_jis(b, bytes[pos + 1]);
             crate::emacs_core::charset::charset_decode_char(kanji, i64::from(jis))
-                .map(|ch| (ch as u32, 2))
-                .unwrap_or((raw(b), 1))
+                .map(|ch| (ch as u32, 2, Some(kanji)))
+                .unwrap_or_else(|| raw(b))
         } else {
-            (raw(b), 1)
+            raw(b)
         };
+        runs.push(char_index, charset);
         let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..n]);
         pos += consumed;
+        char_index += 1;
     }
-    out
+    (out, runs.finish(char_index))
 }
 
 /// Returns `Some(imap)` if `coding` is utf-7 (`imap=false`) or utf-7-imap.
@@ -2826,8 +2884,13 @@ fn encode_via_iso2022(
 }
 
 /// Decode bytes through the ISO-2022 escape-sequence machine to Emacs internal
-/// bytes (GNU `decode_coding_iso_2022`).
-fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spec) -> Vec<u8> {
+/// bytes (GNU `decode_coding_iso_2022`), plus the `(charset NAME)` text-property
+/// runs GNU attaches for each maximal run of characters from the same non-ASCII
+/// charset.
+fn decode_via_iso2022(
+    bytes: &[u8],
+    spec: &crate::emacs_core::coding::Iso2022Spec,
+) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
     use crate::emacs_core::charset::{
         charset_by_iso_final, charset_decode_char, charset_iso2022_designation,
     };
@@ -2842,9 +2905,19 @@ fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spe
 
     let mut out = Vec::with_capacity(bytes.len());
     let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut emit = |code: u32, out: &mut Vec<u8>| {
+    let mut char_index = 0usize;
+    let mut runs = CharsetRunBuilder::new();
+    // Emit one decoded character, recording its source charset for the
+    // `(charset NAME)` text-property runs (`None` for ASCII / eight-bit raw).
+    let mut emit = |code: u32,
+                    charset: Option<SymId>,
+                    out: &mut Vec<u8>,
+                    char_index: &mut usize,
+                    runs: &mut CharsetRunBuilder| {
+        runs.push(*char_index, charset);
         let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..n]);
+        *char_index += 1;
     };
     let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
 
@@ -2945,7 +3018,7 @@ fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spe
             continue;
         }
         if b < 0x20 || b == 0x7F {
-            emit(u32::from(b), &mut out);
+            emit(u32::from(b), None, &mut out, &mut char_index, &mut runs);
             i += 1;
             continue;
         }
@@ -2957,13 +3030,20 @@ fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spe
         } else if gr >= 0 {
             gr as usize
         } else {
-            emit(raw(b), &mut out); // 7-bit codec: stray high byte -> eight-bit raw
+            // 7-bit codec: stray high byte -> eight-bit raw (no `charset`).
+            emit(raw(b), None, &mut out, &mut char_index, &mut runs);
             i += 1;
             continue;
         };
         let charset = desig[reg];
         if charset == Some(ascii) {
-            emit(u32::from(b & 0x7F), &mut out);
+            emit(
+                u32::from(b & 0x7F),
+                None,
+                &mut out,
+                &mut char_index,
+                &mut runs,
+            );
             i += 1;
             continue;
         }
@@ -2977,16 +3057,22 @@ fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spe
                     code = (code << 8) | i64::from(bytes[i + k] & 0x7F);
                 }
                 if let Some(ch) = charset_decode_char(cs, code) {
-                    emit(ch as u32, &mut out);
+                    emit(ch as u32, Some(cs), &mut out, &mut char_index, &mut runs);
                     i += dim;
                     continue;
                 }
             }
         }
-        emit(if b < 0x80 { u32::from(b) } else { raw(b) }, &mut out);
+        emit(
+            if b < 0x80 { u32::from(b) } else { raw(b) },
+            None,
+            &mut out,
+            &mut char_index,
+            &mut runs,
+        );
         i += 1;
     }
-    out
+    (out, runs.finish(char_index))
 }
 
 /// Resolve `undecided` / `prefer-utf-8` to a concrete coding system by
@@ -3246,29 +3332,23 @@ fn builtin_coding_string_in_context(
     } else if let Some((spec, _)) = &full_iso {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
-        let bytes = decode_via_iso2022(&source_bytes, spec);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+        let (bytes, runs) = decode_via_iso2022(&source_bytes, spec);
+        decoded_string_with_charset_runs(bytes, runs)
     } else if let Some((spec, _)) = &euc_coding {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
-        let bytes = decode_via_euc(&source_bytes, spec);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+        let (bytes, runs) = decode_via_euc(&source_bytes, spec);
+        decoded_string_with_charset_runs(bytes, runs)
     } else if let Some(charsets) = &sjis_coding {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
-        let bytes = decode_via_sjis(&source_bytes, charsets);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+        let (bytes, runs) = decode_via_sjis(&source_bytes, charsets);
+        decoded_string_with_charset_runs(bytes, runs)
     } else if let Some(charset_list) = &charset_coding {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
         let (bytes, runs) = decode_via_charset_list(&source_bytes, charset_list);
-        let value = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
-        if !runs.is_empty() {
-            // GNU's charset-type decoder annotates each run with the source
-            // charset (`decode_coding_charset` / `produce_charset`).
-            crate::emacs_core::value::set_string_text_properties_for_value(value, runs);
-        }
-        value
+        decoded_string_with_charset_runs(bytes, runs)
     } else {
         builtin_decode_coding_string_with_known(args, |_| true)?
     };

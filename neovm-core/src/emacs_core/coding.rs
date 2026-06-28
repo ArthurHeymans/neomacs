@@ -3230,10 +3230,38 @@ fn detect_charset_latin1(
     }
 }
 
-/// Port of coding.c `detect_coding_iso_2022` for the non-escape (high-byte)
-/// path, which is what `detect-coding-string` exercises for 8-bit input.  Real
-/// ISO escape sequences (ESC/SI/SO designations) take the early ISO path in the
-/// driver scan; here we classify GL/GR bytes and reject 7-bit on lone controls.
+/// A bare `1 << coding_category_iso_7` etc. for the four categories a valid
+/// ISO-2022 *escape designation* can indicate (coding.c `CATEGORY_MASK_ISO_ESCAPE`).
+const MASK_ISO_ESCAPE: u32 = cat_mask(CodingCat::Iso7)
+    | cat_mask(CodingCat::Iso7Tight)
+    | cat_mask(CodingCat::Iso7Else)
+    | cat_mask(CodingCat::Iso8Else);
+
+/// Validate an ISO-2022 charset designation final byte, mirroring GNU's
+/// `iso_charset_table[dim][chars_96][final]` lookup in `detect_coding_iso_2022`.
+/// Returns `true` when FINAL designates a known charset of the given dimension
+/// and 94/96-char register (so GNU treats the designation as valid).
+fn iso_2022_designation_known(final_byte: u8, dimension: i64, chars_96: bool) -> bool {
+    super::charset::charset_by_iso_final(i64::from(final_byte), dimension, chars_96).is_some()
+}
+
+/// Record a valid ISO-2022 charset designation, mirroring the tail of GNU's
+/// `detect_coding_iso_2022` ESC handling.  A valid designation rejects the
+/// 8-bit categories (`CATEGORY_MASK_ISO_8BIT`) and is `found` for each of the
+/// four escape-indicated categories whose coding system can safely encode the
+/// designated charset.  GNU consults `SAFE_CHARSET_P` per category; the default
+/// `iso-2022-7bit` / `iso-2022-7bit-tight` / `iso-2022-7bit-lock` /
+/// `iso-2022-8bit-ss2` categories all accept the standard ISO-2022 charsets, so
+/// every recognized designation marks all four found.
+fn iso_designation_found(rejected: &mut u32, found: &mut u32) {
+    *rejected |= MASK_ISO_8BIT;
+    *found |= MASK_ISO_ESCAPE;
+}
+
+/// Port of coding.c `detect_coding_iso_2022`.  Handles both the escape-sequence
+/// path (ESC designations / locking shifts), which is what `detect-coding-string`
+/// exercises for 7-bit ISO-2022 input, and the GL/GR high-byte path used for
+/// 8-bit input.
 fn detect_iso_2022(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
     di.checked |= MASK_ISO;
     let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
@@ -3247,7 +3275,101 @@ fn detect_iso_2022(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut D
             return true;
         };
         match c {
-            0x1B | 0x0E | 0x0F => {
+            // ISO_CODE_ESC: a designation or shift sequence.  GNU parses the
+            // sequence rather than rejecting all of ISO_7BIT|ISO_8BIT.
+            0x1B => {
+                let Some(c) = src.next() else {
+                    di.rejected |= rejected;
+                    di.found |= found & !rejected;
+                    return true;
+                };
+                if c == i32::from(b'N') || c == i32::from(b'O') {
+                    // ESC N / ESC O: SS2 / SS3.
+                    rejected |= MASK_ISO_7BIT | MASK_ISO_8BIT;
+                } else if c == i32::from(b'1') {
+                    // End of composition.
+                    found |= MASK_ISO;
+                } else if (i32::from(b'0')..=i32::from(b'4')).contains(&c) {
+                    // ESC <Fp>: start/end composition -- no effect on masks.
+                } else if (i32::from(b'(')..=i32::from(b'/')).contains(&c) {
+                    // Designation sequence for a charset of dimension 1.
+                    let chars_96 = c >= i32::from(b',');
+                    match src.next() {
+                        None => {
+                            di.rejected |= rejected;
+                            di.found |= found & !rejected;
+                            return true;
+                        }
+                        Some(c1) => {
+                            if c1 < i32::from(b' ')
+                                || c1 >= 0x80
+                                || !iso_2022_designation_known(c1 as u8, 1, chars_96)
+                            {
+                                // Invalid designation; just ignore (reject 7bit
+                                // categories only when the final byte is 8-bit).
+                                if c1 >= 0x80 {
+                                    rejected |= MASK_ISO_7BIT | cat_mask(CodingCat::Iso7Else);
+                                }
+                            } else {
+                                iso_designation_found(&mut rejected, &mut found);
+                            }
+                        }
+                    }
+                } else if c == i32::from(b'$') {
+                    // Designation sequence for a charset of dimension 2.
+                    match src.next() {
+                        None => {
+                            di.rejected |= rejected;
+                            di.found |= found & !rejected;
+                            return true;
+                        }
+                        Some(c) => {
+                            let valid = if (i32::from(b'@')..=i32::from(b'B')).contains(&c) {
+                                // JISX0208.1978, GB2312, or JISX0208.
+                                iso_2022_designation_known(c as u8, 2, false)
+                            } else if (i32::from(b'(')..=i32::from(b'/')).contains(&c) {
+                                let chars_96 = c >= i32::from(b',');
+                                match src.next() {
+                                    None => {
+                                        di.rejected |= rejected;
+                                        di.found |= found & !rejected;
+                                        return true;
+                                    }
+                                    Some(c1) => {
+                                        if c1 < i32::from(b' ')
+                                            || c1 >= 0x80
+                                            || !iso_2022_designation_known(c1 as u8, 2, chars_96)
+                                        {
+                                            if c1 >= 0x80 {
+                                                rejected |=
+                                                    MASK_ISO_7BIT | cat_mask(CodingCat::Iso7Else);
+                                            }
+                                            false
+                                        } else {
+                                            true
+                                        }
+                                    }
+                                }
+                            } else {
+                                if c >= 0x80 {
+                                    rejected |= MASK_ISO_7BIT | cat_mask(CodingCat::Iso7Else);
+                                }
+                                false
+                            };
+                            if valid {
+                                iso_designation_found(&mut rejected, &mut found);
+                            }
+                        }
+                    }
+                } else {
+                    // Invalid escape sequence; just ignore it.
+                    if c >= 0x80 {
+                        rejected |= MASK_ISO_7BIT | cat_mask(CodingCat::Iso7Else);
+                    }
+                }
+            }
+            // ISO_CODE_SO / ISO_CODE_SI: locking shift out/in.
+            0x0E | 0x0F => {
                 rejected |= MASK_ISO_7BIT | MASK_ISO_8BIT;
             }
             _ => {
@@ -3852,8 +3974,11 @@ pub(crate) fn builtin_coding_system_priority_list(
     expect_max_args("coding-system-priority-list", &args, 1)?;
     let highest_only = args.first().is_some_and(|v| v.is_truthy());
     if highest_only {
+        // GNU `Fcoding_system_priority_list` returns the BARE base-name symbol
+        // of the highest-priority category when HIGHESTP is non-nil
+        // (`return CODING_ATTR_BASE_NAME (attrs)`), not a one-element list.
         if let Some(first) = mgr.priority.first() {
-            Ok(Value::list(vec![Value::symbol(*first)]))
+            Ok(Value::symbol(*first))
         } else {
             Ok(Value::NIL)
         }
