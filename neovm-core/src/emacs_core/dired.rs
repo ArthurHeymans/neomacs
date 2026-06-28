@@ -315,12 +315,13 @@ fn build_file_attributes(filename: &LispString, id_format: FileIdFormat) -> Opti
         Value::NIL
     };
 
-    // For symlinks, get the target metadata for size etc; fall back to symlink meta.
-    let meta = if sym_meta.file_type().is_symlink() {
-        fs::metadata(&path).unwrap_or_else(|_| sym_meta.clone())
-    } else {
-        sym_meta.clone()
-    };
+    // GNU (src/dired.c `file_attributes`) performs exactly ONE
+    // `emacs_fstatat (..., AT_SYMLINK_NOFOLLOW)` — an lstat — and derives every
+    // field from that single result, including the size (`s.st_size`).  For a
+    // symlink that means the size is the byte length of the link target string,
+    // NOT the resolved target's size.  So never follow the link here: use the
+    // lstat metadata (`sym_meta`) for all fields.
+    let meta = sym_meta.clone();
 
     // Number of hard links.
     #[cfg(unix)]
@@ -1309,34 +1310,26 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
 pub(crate) fn builtin_file_attributes_lessp(args: Vec<Value>) -> EvalResult {
     expect_range_args("file-attributes-lessp", &args, 2, 2)?;
 
-    let name2 = file_attributes_lessp_car_bytes(&args[1])?;
-    let name1 = file_attributes_lessp_car_bytes(&args[0])?;
+    // GNU (src/dired.c): `return Fstring_lessp (Fcar (f1), Fcar (f2));`.
+    // It performs NO type-check on the cars itself — it simply delegates to
+    // `string-lessp`, which accepts strings *and* symbols (including `nil`,
+    // via SYMBOL_NAME) and only rejects other types.  C function-argument
+    // evaluation runs right-to-left with the system compiler, so `Fcar (f2)`
+    // is observed before `Fcar (f1)`; mirror that ordering for error-equivalence.
+    let car2 = file_attributes_lessp_car(&args[1])?;
+    let car1 = file_attributes_lessp_car(&args[0])?;
 
-    Ok(Value::bool_val(name1 < name2))
+    super::builtins::builtin_string_lessp(vec![car1, car2])
 }
 
-/// Extract the car of a cons cell as its raw file-name bytes.
-///
-/// GNU implements `file-attributes-lessp` as `Fstring_lessp (Fcar (f1),
-/// Fcar (f2))`; with the current C build this observes the second `car` first.
-/// Comparing the raw bytes keeps eight-bit file names ordering byte-exactly.
-fn file_attributes_lessp_car_bytes(val: &Value) -> Result<Vec<u8>, Flow> {
+/// Take the car of a `file-attributes-lessp` argument with GNU `Fcar`
+/// semantics: `nil` yields `nil`, a cons yields its car, and any other type
+/// signals `(wrong-type-argument listp ...)`.
+fn file_attributes_lessp_car(val: &Value) -> Result<Value, Flow> {
     match val.kind() {
-        ValueKind::Cons => {
-            let pair_car = val.cons_car();
-            match pair_car.kind() {
-                ValueKind::String => Ok(pair_car
-                    .as_lisp_string()
-                    .expect("ValueKind::String must carry LispString payload")
-                    .as_bytes()
-                    .to_vec()),
-                other => Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("stringp"), *val],
-                )),
-            }
-        }
-        other => Err(signal(
+        ValueKind::Nil => Ok(Value::NIL),
+        ValueKind::Cons => Ok(val.cons_car()),
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), *val],
         )),

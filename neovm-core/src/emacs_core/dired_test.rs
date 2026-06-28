@@ -846,6 +846,37 @@ fn test_file_attributes_eval_respects_default_directory() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// GNU `file_attributes` (src/dired.c) does a single
+// `emacs_fstatat (..., AT_SYMLINK_NOFOLLOW)` (an lstat) and reports every
+// field — including SIZE (`s.st_size`) — from that lstat.  For a symlink the
+// lstat size is the byte length of the link-target string, NOT the resolved
+// target's size.  Regression test for following the link when sizing.
+#[cfg(unix)]
+#[test]
+fn test_file_attributes_symlink_size_is_link_string_length_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let (dir, _dir_str) = make_test_dir("fa_symlink_size");
+
+    // 12-byte regular file; a symlink whose target string "alpha.txt" is 9 bytes.
+    create_file(&dir, "alpha.txt", "123456789012");
+    let link = dir.join("link_to_alpha");
+    std::os::unix::fs::symlink("alpha.txt", &link).unwrap();
+    let link_str = link.to_string_lossy().to_string();
+
+    let result = call_file_attributes(vec![Value::string(&link_str)]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items.len(), 12);
+
+    // TYPE (nth 0) for a symlink is the target string.
+    assert_eq!(items[0].as_str_owned().as_deref(), Some("alpha.txt"));
+    // MODES (nth 8) lstats: leading 'l' for symlink.
+    assert_eq!(items[8].as_str_owned().as_deref(), Some("lrwxrwxrwx"));
+    // SIZE (nth 7) must be the link-string byte length (9), NOT the target's 12.
+    assert_eq!(items[7].as_int(), Some(9));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // -----------------------------------------------------------------------
 // file-attributes-lessp
 // -----------------------------------------------------------------------
@@ -884,6 +915,46 @@ fn test_file_attributes_lessp_bad_args_match_gnu_order() {
             assert_eq!(sig.data[0].as_symbol_name(), Some("listp"));
             assert_eq!(sig.data[1].as_str_owned().as_deref(), Some("beta"));
         }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+// GNU `Ffile_attributes_lessp` is just `Fstring_lessp (Fcar (f1), Fcar (f2))`.
+// It does NOT type-check the cars: `string-lessp` accepts symbols (including
+// `nil`) via SYMBOL_NAME, so a non-string car like `nil` is coerced, not
+// rejected.  `(file-attributes-lessp '(nil 1) '(nil 2))` => nil (because
+// `(string-lessp nil nil)` => nil), not a `(wrong-type-argument stringp ...)`.
+#[test]
+fn test_file_attributes_lessp_coerces_nil_car_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // Both cars are nil -> string-lessp "nil" "nil" -> nil (no error).
+    let f1 = Value::cons(Value::NIL, Value::cons(Value::fixnum(1), Value::NIL));
+    let f2 = Value::cons(Value::NIL, Value::cons(Value::fixnum(2), Value::NIL));
+    let result = builtin_file_attributes_lessp(vec![f1, f2]).unwrap();
+    assert!(result.is_nil());
+
+    // A symbol car is likewise coerced via SYMBOL_NAME: "abc" < "xyz" -> t.
+    let g1 = Value::cons(Value::symbol("abc"), Value::NIL);
+    let g2 = Value::cons(Value::symbol("xyz"), Value::NIL);
+    assert!(
+        builtin_file_attributes_lessp(vec![g1, g2])
+            .unwrap()
+            .is_truthy()
+    );
+
+    // A nil argument (not a cons) -> Fcar(nil) = nil -> string-lessp nil nil -> nil.
+    assert!(
+        builtin_file_attributes_lessp(vec![Value::NIL, Value::NIL])
+            .unwrap()
+            .is_nil()
+    );
+
+    // A fixnum car is still rejected, exactly like GNU's string-lessp.
+    let h1 = Value::cons(Value::fixnum(1), Value::NIL);
+    let h2 = Value::cons(Value::fixnum(2), Value::NIL);
+    let err = builtin_file_attributes_lessp(vec![h1, h2]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),
     }
 }

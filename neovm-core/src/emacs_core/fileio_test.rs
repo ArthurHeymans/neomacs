@@ -2439,6 +2439,61 @@ fn test_builtin_directory_files_args() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// GNU `directory_files_internal` (src/dired.c) applies COUNT to the *raw*
+// readdir stream — it breaks after COUNT entries (`if (ind == last) break;`)
+// and only THEN sorts.  So `(directory-files DIR nil nil nil COUNT)` is the
+// SORT of the first COUNT readdir entries, NOT the lexicographic prefix of the
+// fully sorted listing.  Readdir order is not portable, so assert the
+// ALGORITHM directly: the sorted-COUNT result must equal sort(first COUNT of
+// the raw readdir order), and must contain at most COUNT entries.
+#[test]
+fn test_directory_files_count_truncates_raw_stream_before_sort_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join("neovm_dirfiles_count_algo");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    for name in &["m.txt", "a.txt", "z.txt", "q.txt", "b.txt"] {
+        fs::write(dir.join(name), "").unwrap();
+    }
+    let dir_ls =
+        crate::heap_types::LispString::from_unibyte(dir.to_string_lossy().as_bytes().to_vec());
+
+    const COUNT: usize = 3;
+
+    // `nosort` keeps the traversal order WITHOUT sorting, exactly like GNU when
+    // NOSORT is non-nil.  Both GNU and neomacs build the list with `cons`
+    // (prepend), so the NOSORT listing is the REVERSE of the raw readdir order.
+    // COUNT breaks after the first COUNT *readdir* entries, which are therefore
+    // the LAST COUNT entries of the NOSORT listing; GNU then sorts them.
+    let nosort = directory_files(&dir_ls, false, None, true, None).unwrap();
+    let first_count_readdir = &nosort[nosort.len().saturating_sub(COUNT)..];
+    let mut expected: Vec<Vec<u8>> = first_count_readdir
+        .iter()
+        .map(|s| s.as_bytes().to_vec())
+        .collect();
+    expected.sort();
+
+    // The COUNT result must be sort(first-COUNT-of-raw), NOT the global sorted
+    // prefix.
+    let counted = directory_files(&dir_ls, false, None, false, Some(COUNT)).unwrap();
+    let counted_bytes: Vec<Vec<u8>> = counted.iter().map(|s| s.as_bytes().to_vec()).collect();
+
+    assert!(
+        counted_bytes.len() <= COUNT,
+        "COUNT must cap the entry count"
+    );
+    assert_eq!(
+        counted_bytes, expected,
+        "directory-files COUNT must truncate the raw readdir stream before sorting"
+    );
+    // Sanity: the result is itself sorted.
+    let mut sorted_check = counted_bytes.clone();
+    sorted_check.sort();
+    assert_eq!(counted_bytes, sorted_check);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn test_builtin_directory_files_eval_respects_default_directory() {
     crate::test_utils::init_test_tracing();
