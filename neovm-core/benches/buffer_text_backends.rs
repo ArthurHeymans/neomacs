@@ -50,7 +50,7 @@ fn byte_ranges_for_char_windows(
     count: usize,
     window_chars: usize,
 ) -> Vec<(usize, usize)> {
-    let total_chars = buffer.total_chars();
+    let total_chars = buffer.total_char_len().get();
     let max_start = total_chars.saturating_sub(window_chars);
     let mut ranges = Vec::with_capacity(count);
     for index in 0..count {
@@ -73,7 +73,7 @@ fn byte_ranges_for_char_windows(
 }
 
 fn scattered_char_positions(buffer: &Buffer, count: usize) -> Vec<usize> {
-    let total_chars = buffer.total_chars();
+    let total_chars = buffer.total_char_len().get();
     let mut positions = Vec::with_capacity(count);
     for index in 0..count {
         positions.push(if total_chars == 0 {
@@ -110,7 +110,7 @@ fn bench_scattered_edit_churn(c: &mut Criterion) {
                     let mut buffer = buffer_with_backend(&input, kind);
                     let start = Instant::now();
                     for edit in 0..EDITS_PER_ITER {
-                        let chars = buffer.total_chars();
+                        let chars = buffer.total_char_len().get();
                         let char_pos = (edit * 9_973) % (chars + 1);
                         let byte_pos = buffer
                             .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
@@ -123,9 +123,12 @@ fn bench_scattered_edit_churn(c: &mut Criterion) {
                                 char_pos + inserted.chars().count(),
                             ))
                             .get();
-                        buffer.delete_region(byte_pos, end_pos);
+                        buffer.delete_emacs_byte_range(EmacsByteRange::new(
+                            EmacsBytePos::new(byte_pos),
+                            EmacsBytePos::new(end_pos),
+                        ));
                     }
-                    black_box(buffer.total_bytes());
+                    black_box(buffer.total_emacs_byte_len().get());
                     total += start.elapsed();
                 }
                 total
