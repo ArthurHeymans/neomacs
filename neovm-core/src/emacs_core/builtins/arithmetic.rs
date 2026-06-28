@@ -1278,7 +1278,12 @@ fn rounding_with_divisor(
     int_div: fn(i64, i64) -> i64,
 ) -> EvalResult {
     expect_range_args(name, args, 1, 2)?;
-    if args.len() == 1 {
+    // GNU `rounding_driver` (src/floatfns.c) checks `if (NILP (d))` FIRST,
+    // treating a nil (or omitted) divisor as the single-arg form. So an
+    // explicitly-passed nil divisor — e.g. `(floor 5.5 nil)` or cl-lib's
+    // `(cl-floor 3.7)` forwarding its unsupplied `&optional y` — must take
+    // the single-arg path rather than failing the `numberp` check.
+    if args.len() == 1 || args[1].is_nil() {
         return match args[0].kind() {
             ValueKind::Fixnum(n) => Ok(Value::fixnum(n)),
             ValueKind::Float => float_to_lisp_integer(round_fn(args[0].xfloat())),
@@ -1778,3 +1783,7 @@ pub(crate) fn builtin_isnan(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "arithmetic_minmax_compare_test.rs"]
 mod arithmetic_minmax_compare_test;
+
+#[cfg(test)]
+#[path = "arithmetic_rounding_nil_divisor_test.rs"]
+mod arithmetic_rounding_nil_divisor_test;
