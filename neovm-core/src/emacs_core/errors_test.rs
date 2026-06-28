@@ -1305,3 +1305,102 @@ fn obarray_all_standard_errors_include_self_in_conditions() {
         );
     }
 }
+
+// =======================================================================
+// `signal` re-signal idiom: a cons error symbol with nil DATA is the
+// whole error object, re-raised as-is (GNU `signal_or_quit`, eval.c:1930).
+//
+// These use a bare `Context` (so they avoid the bootstrap pdump) and
+// `define-error` the `scan-error` symbol they re-raise.
+// =======================================================================
+
+/// Evaluate SRC in a bare context that has `scan-error` defined, returning the
+/// printed value or signal.
+///
+/// `define-error` is an elisp macro (subr.el), unavailable on a bare
+/// `Context`, so we install the `error-conditions`/`error-message` plist
+/// directly with `put` — exactly what `define-error` does internally.
+fn resignal_eval(src: &str) -> String {
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (put 'scan-error 'error-conditions '(scan-error error))
+             (put 'scan-error 'error-message "Scan error"))"#,
+    )
+    .expect("install scan-error conditions");
+    super::super::error::format_eval_result(&eval.eval_str(src))
+}
+
+#[test]
+fn signal_cons_error_object_resignals_whole_object() {
+    // GNU verified: (condition-case e (signal (list 'scan-error "msg" 2 4))
+    //                 (error e)) => (scan-error "msg" 2 4)
+    crate::test_utils::init_test_tracing();
+    let result =
+        resignal_eval(r#"(condition-case e (signal (list 'scan-error "msg" 2 4)) (error e))"#);
+    assert_eq!(result, r#"OK (scan-error "msg" 2 4)"#);
+}
+
+#[test]
+fn signal_cons_error_object_caught_by_specific_condition() {
+    // The re-raised object must match the *real* error symbol's conditions,
+    // so a `scan-error` handler catches it (this is the `up-list` idiom).
+    crate::test_utils::init_test_tracing();
+    let result = resignal_eval(
+        r#"(condition-case e (signal (list 'scan-error "msg" 2 4)) (scan-error (car e)))"#,
+    );
+    assert_eq!(result, "OK scan-error");
+}
+
+#[test]
+fn signal_cons_error_object_preserves_improper_cdr() {
+    // GNU verified: (signal (cons 'scan-error 5)) => (scan-error . 5)
+    crate::test_utils::init_test_tracing();
+    let result = resignal_eval(r#"(condition-case e (signal (cons 'scan-error 5)) (error e))"#);
+    assert_eq!(result, "OK (scan-error . 5)");
+}
+
+#[test]
+fn signal_cons_error_object_non_symbol_car_is_wrong_type() {
+    // GNU verified: (signal (list 5 "msg")) => wrong-type-argument symbolp 5
+    crate::test_utils::init_test_tracing();
+    let result = resignal_eval(r#"(condition-case e (signal (list 5 "msg")) (error e))"#);
+    assert_eq!(result, "OK (wrong-type-argument symbolp 5)");
+}
+
+#[test]
+fn signal_cons_error_object_unknown_symbol_is_invalid() {
+    // GNU verified: car symbol without error-conditions =>
+    //   (error "Invalid error symbol" totally-unknown-sym)
+    crate::test_utils::init_test_tracing();
+    let result =
+        resignal_eval(r#"(condition-case e (signal (list 'totally-unknown-sym "msg")) (error e))"#);
+    assert_eq!(
+        result,
+        r#"OK (error "Invalid error symbol" totally-unknown-sym)"#
+    );
+}
+
+#[test]
+fn signal_plain_symbol_still_works() {
+    // Regression guard: the normal (signal 'error "x") / (signal 'wrong-type
+    // -argument ...) paths must stay byte-identical.
+    crate::test_utils::init_test_tracing();
+    let result = resignal_eval(
+        r#"(condition-case e (signal 'wrong-type-argument (list 'symbolp 5)) (error e))"#,
+    );
+    assert_eq!(result, "OK (wrong-type-argument symbolp 5)");
+}
+
+#[test]
+fn signal_cons_with_explicit_data_keeps_old_behavior() {
+    // When DATA is non-nil, GNU does Fcons(error_symbol, data); the car of the
+    // resulting error is a cons => Fget runs CHECK_SYMBOL => symbolp error.
+    crate::test_utils::init_test_tracing();
+    let result =
+        resignal_eval(r#"(condition-case e (signal (list 'scan-error "msg") '(x y)) (error e))"#);
+    assert_eq!(
+        result,
+        r#"OK (wrong-type-argument symbolp (scan-error "msg"))"#
+    );
+}

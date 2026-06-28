@@ -8742,6 +8742,18 @@ impl Context {
             && let Some(target_sym_id) = func.as_subr_id()
             && self.subr_is_special_form_id(target_sym_id)
         {
+            // GNU eval.c:2624 runs `list_length (args_left)` for *every*
+            // SUBRP `fun` — including UNEVALLED special forms — BEFORE
+            // dispatching to the special-form C function. `list_length`
+            // ends in `CHECK_LIST_END`, so an improper top-level argument
+            // list (e.g. `(progn a . b)`, `(if t a . b)`, `(when t . b)`)
+            // signals `(wrong-type-argument listp BAD-CDR)` up front,
+            // *before* any body form is evaluated. Neo otherwise validated
+            // lazily and evaluated the first element first (wrong error /
+            // no error). Match GNU: validate the arg-list structure here.
+            if list_length(&original_args).is_none() {
+                return Err(self.listp_error(original_args));
+            }
             // The outer eval_sub_cons UNEVALLED frame (pushed by the
             // wrapper) already records the surface function and raw
             // argument forms. Special forms leave the frame UNEVALLED
@@ -8759,6 +8771,16 @@ impl Context {
 
         // Check for macro (GNU eval.c:2730-2755)
         if func.is_macro() {
+            // GNU expands a macro via `apply1 (Fcdr (fun), original_args)`
+            // (eval.c:2766), and `apply1` -> `Fapply` -> `list_length`
+            // (eval.c:3065/fns.c:115) validates the argument-list structure
+            // up front. An improper macro-call tail (e.g. `(when t . b)`)
+            // therefore signals `(wrong-type-argument listp BAD-CDR)` rather
+            // than silently dropping the bad cdr. `value_list_to_values`
+            // walks lazily and would otherwise swallow the improper tail.
+            if list_length(&original_args).is_none() {
+                return Err(self.listp_error(original_args));
+            }
             let arg_values = value_list_to_values(&original_args);
             let bt_count = self.specpdl.len();
             self.push_backtrace_frame(original_fun, &arg_values);
@@ -8773,6 +8795,11 @@ impl Context {
         }
         if cons_head_symbol_id(&func) == Some(macro_symbol()) {
             // Cons-cell macro: (macro . fn) — GNU eval.c:2730
+            // Same up-front `apply1`/`list_length` validation as the
+            // `func.is_macro()` branch above (GNU eval.c:2766).
+            if list_length(&original_args).is_none() {
+                return Err(self.listp_error(original_args));
+            }
             let macro_fn = func.cons_cdr();
             let arg_values = value_list_to_values(&original_args);
             let bt_count = self.specpdl.len();
@@ -8875,6 +8902,19 @@ impl Context {
         // transfers ownership to the outer frame's args slot.
         // GNU uses SAFE_ALLOCA_LISP for evaluated arguments here. Keep the
         // common arities inline instead of allocating a heap Vec per call.
+        // GNU validates the argument-list structure UP FRONT, before
+        // evaluating any argument: the MANY/8+ subr path runs
+        // `list_length (args_left)` (eval.c:2624) and `apply_lambda` runs
+        // `list_length (args)` (eval.c:3302). Both end in `CHECK_LIST_END`,
+        // so an improper arg list (e.g. `((lambda (a &rest b) b) x . y)`)
+        // signals `(wrong-type-argument listp BAD-CDR)` *before* `x` is ever
+        // evaluated. Neo previously evaluated args lazily and only checked
+        // the tail afterwards, leaking a void-variable error for `x` first.
+        // (Direct fixed-arity subrs already validated via `direct_subr_entry`
+        // above; this guards the closure/bytecode/MANY paths.)
+        if list_length(&original_args).is_none() {
+            return Err(self.listp_error(original_args));
+        }
         let mut args = LispArgVec::new();
         self.push_specpdl_root(func);
         let args_roots_base = self.specpdl.len();

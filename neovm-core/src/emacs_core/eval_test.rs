@@ -15885,3 +15885,145 @@ fn string_equal_unibyte_high_byte_vs_multibyte_char() {
         "OK t"
     );
 }
+
+// =======================================================================
+// Special-form bodies with an improper tail are validated UP FRONT.
+//
+// GNU eval.c:2624 runs `list_length (args_left)` for every SUBRP `fun`
+// (including UNEVALLED special forms) before dispatch, so an improper
+// top-level argument list signals `(wrong-type-argument listp BAD-CDR)`
+// *before* any body form is evaluated. Neo used to walk lazily, evaluating
+// the first element first (yielding void-variable, or no error at all).
+// =======================================================================
+
+#[test]
+fn if_improper_body_signals_listp_before_eval() {
+    // GNU: (eval '(if t a . b) t) => (wrong-type-argument listp b)
+    // (NOT void-variable a; the body is validated before `a` is evaluated).
+    assert_eq!(
+        eval_one("(condition-case e (eval '(if t a . b) t) (error e))"),
+        "OK (wrong-type-argument listp b)"
+    );
+}
+
+#[test]
+fn if_improper_body_validated_even_for_else_branch() {
+    // GNU: (eval '(if nil x . b) t) => (wrong-type-argument listp b)
+    // (cond is nil so `x` is never reached, but the tail is still checked).
+    assert_eq!(
+        eval_one("(condition-case e (eval '(if nil x . b) t) (error e))"),
+        "OK (wrong-type-argument listp b)"
+    );
+}
+
+#[test]
+fn macro_call_improper_body_signals_listp_with_no_error_before() {
+    // The bug report's `(eval '(when t . b) t)` => (wrong-type-argument listp b)
+    // case (neo previously returned nil with NO error) is the macroexpand path:
+    // `when` is a macro, so the improper tail is caught when `apply` collects
+    // the expander's args. `when` lives in subr.el (unavailable on a bare
+    // Context), so model it with a `when`-shaped cons-cell macro.
+    let src = "(defalias 'my-when (cons 'macro #'(lambda (cond &rest body)
+                 (list 'if cond (cons 'progn body)))))
+               (condition-case e (eval '(my-when t . b) t) (error e))";
+    let results = eval_all(src);
+    assert_eq!(results[1], "OK (wrong-type-argument listp b)");
+}
+
+#[test]
+fn progn_improper_body_signals_listp_before_eval() {
+    // GNU: (eval '(progn a . b) t) => (wrong-type-argument listp b)
+    // (NOT void-variable a).
+    assert_eq!(
+        eval_one("(condition-case e (eval '(progn a . b) t) (error e))"),
+        "OK (wrong-type-argument listp b)"
+    );
+    // Even with a literal first form, the tail check fires first.
+    assert_eq!(
+        eval_one("(condition-case e (eval '(progn 1 . b) t) (error e))"),
+        "OK (wrong-type-argument listp b)"
+    );
+}
+
+#[test]
+fn lambda_apply_improper_arglist_signals_listp() {
+    // GNU: (eval '((lambda (a &rest b) b) x . y) t)
+    //        => (wrong-type-argument listp y)
+    // (NOT void-variable x; the argument list is validated up front).
+    assert_eq!(
+        eval_one("(condition-case e (eval '((lambda (a &rest b) b) x . y) t) (error e))"),
+        "OK (wrong-type-argument listp y)"
+    );
+}
+
+#[test]
+fn proper_special_form_bodies_unchanged() {
+    // Regression guard: normal proper bodies must keep evaluating identically.
+    // (`when` lives in subr.el and is unavailable on a bare Context, so the
+    // proper-`when` cases live in the macro-path tests further down.)
+    assert_eq!(eval_one("(eval '(progn 1 2 3) t)"), "OK 3");
+    assert_eq!(eval_one("(eval '(if t 1 2) t)"), "OK 1");
+    assert_eq!(eval_one("(eval '(if nil 1 2 3) t)"), "OK 3");
+    assert_eq!(eval_one("(eval '(progn) t)"), "OK nil");
+    assert_eq!(eval_one("(eval '(and 1 2 3) t)"), "OK 3");
+    assert_eq!(eval_one("(eval '(or nil 7) t)"), "OK 7");
+    assert_eq!(
+        eval_one("(eval '((lambda (a &rest b) b) 1 2 3) t)"),
+        "OK (2 3)"
+    );
+    // Other special forms also validate the top-level tail up front (GNU
+    // eval.c:2624 `list_length`), matching GNU exactly.
+    assert_eq!(
+        eval_one("(condition-case e (eval (cons 'quote 5) t) (error e))"),
+        "OK (wrong-type-argument listp 5)"
+    );
+    assert_eq!(
+        eval_one("(condition-case e (eval '(setq x 1 . y) t) (error e))"),
+        "OK (wrong-type-argument listp y)"
+    );
+    assert_eq!(
+        eval_one("(condition-case e (eval '(let ((a 1)) a . b) t) (error e))"),
+        "OK (wrong-type-argument listp b)"
+    );
+}
+
+// =======================================================================
+// `macroexpand` of a macro call with an improper argument tail reports
+// only the bad cdr, not the whole improper tail.
+//
+// GNU `apply1 (expander, XCDR (form))` -> `Fapply` -> `list_length`
+// (fns.c:115) ends in `CHECK_LIST_END (list, list)`, so the irritant is
+// the final non-nil cdr, not the entire `(a . b)` tail.
+// =======================================================================
+
+// `m` is defined as a cons-cell macro via `defalias` (the bare-evaluator
+// idiom used by `defmacro_works`); a plain `defmacro` is unavailable on a
+// bare `Context`. The expander quotes its &rest args, so a successful
+// expansion of `(m ...)` yields `(quote (...))`.
+const MACRO_M_DEF: &str = "(defalias 'm (cons 'macro #'(lambda (&rest b) (list 'quote b))))";
+
+#[test]
+fn macroexpand_improper_tail_reports_only_bad_cdr() {
+    // GNU: (macroexpand '(m a . b)) => (wrong-type-argument listp b)
+    // (NOT (wrong-type-argument listp (a . b))).
+    let src = format!("{MACRO_M_DEF}\n(condition-case e (macroexpand '(m a . b)) (error e))");
+    let results = eval_all(&src);
+    assert_eq!(results[1], "OK (wrong-type-argument listp b)");
+}
+
+#[test]
+fn macroexpand_improper_tail_deeper_bad_cdr() {
+    // GNU: (macroexpand '(m a c . b)) => (wrong-type-argument listp b)
+    let src = format!("{MACRO_M_DEF}\n(condition-case e (macroexpand '(m a c . b)) (error e))");
+    let results = eval_all(&src);
+    assert_eq!(results[1], "OK (wrong-type-argument listp b)");
+}
+
+#[test]
+fn macroexpand_proper_args_unchanged() {
+    // Regression guard: a proper arg list still expands normally.
+    // GNU verified: (macroexpand '(m a c d)) => '(a c d).
+    let src = format!("{MACRO_M_DEF}\n(macroexpand '(m a c d))");
+    let results = eval_all(&src);
+    assert_eq!(results[1], "OK '(a c d)");
+}

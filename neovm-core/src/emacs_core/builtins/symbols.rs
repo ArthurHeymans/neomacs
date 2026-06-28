@@ -1101,6 +1101,26 @@ fn macroexpand_definition_is_macro(definition: &Value) -> bool {
         || (definition.is_cons() && definition.cons_car().is_symbol_named("macro"))
 }
 
+/// Collect the elements of a list, signalling `(wrong-type-argument listp
+/// BAD-CDR)` for an improper list — matching GNU's `list_length`
+/// (`FOR_EACH_TAIL` + `CHECK_LIST_END (list, list)`), which reports only the
+/// final non-nil cdr, not the whole improper tail.
+fn collect_proper_list_args(list: Value) -> Result<Vec<Value>, Flow> {
+    let mut items = Vec::new();
+    let mut tail = list;
+    while tail.is_cons() {
+        items.push(tail.cons_car());
+        tail = tail.cons_cdr();
+    }
+    if !tail.is_nil() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), tail],
+        ));
+    }
+    Ok(items)
+}
+
 #[tracing::instrument(level = "trace", skip(runtime, environment), fields(head))]
 fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
     runtime: &mut R,
@@ -1177,8 +1197,12 @@ fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
     let Some(function) = function else {
         return Ok((form, false));
     };
-    let args = list_to_vec(&tail)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), tail]))?;
+    // GNU `apply1 (expander, XCDR (form))` calls `Fapply`, which runs
+    // `list_length (spread_arg)`; that walks the list with `FOR_EACH_TAIL`
+    // and ends with `CHECK_LIST_END (list, list)` — so an improper arglist
+    // signals `(wrong-type-argument listp BAD-CDR)`, where BAD-CDR is the
+    // final non-nil cdr, NOT the whole improper tail (fns.c:115/lisp.h:3332).
+    let args = collect_proper_list_args(tail)?;
     let expanded = runtime.apply_macro_function(form, function, args, environment.copied())?;
     // Match real Emacs (eval.c line 1319): if the macro expander returned
     // the same form object (EQ), treat it as "no expansion occurred".

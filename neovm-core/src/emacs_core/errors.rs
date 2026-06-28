@@ -633,6 +633,19 @@ pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) 
         return dispatch_signal_flow(eval, flow);
     }
 
+    // GNU `signal_or_quit` (src/eval.c:1930):
+    //   error = (!SYMBOLP (error_symbol) && NILP (data)) ? error_symbol
+    //                                                     : Fcons (error_symbol, data);
+    //   real_error_symbol = CONSP (error) ? XCAR (error) : error_symbol;
+    // So when the public error symbol is itself a cons and DATA is nil, the
+    // cons *is* the whole error object, re-raised as-is: its car becomes the
+    // real error symbol and its cdr the data.  This is the re-signal idiom
+    // `(signal (list 'scan-error "msg" 2 4))` used by ~91 lisp/ call sites.
+    if args[0].is_cons() && data.is_nil() {
+        let flow = build_resignal_flow(eval, args[0]);
+        return dispatch_signal_flow(eval, flow);
+    }
+
     // Preserve the *identity* of the error symbol (GNU `Fsignal` passes the
     // actual symbol object to `signal_or_quit`).  An uninterned symbol given
     // `error-conditions' by `define-error' must keep its SymId so condition
@@ -660,6 +673,46 @@ fn build_signal_flow_id(symbol: SymId, data: Value) -> Flow {
         },
         _ => signal_with_data_id(symbol, data),
     }
+}
+
+/// `(signal CONS)` with nil DATA: the cons *is* the whole error object,
+/// re-raised as-is.  GNU `signal_or_quit` sets `real_error_symbol = XCAR(error)`
+/// and keeps `XCDR(error)` as the data.  Unlike `build_peculiar_signal_flow`
+/// (which models OOM and suppresses the signal hook), this is a normal
+/// `Fsignal` call, so the signal hook runs.
+fn build_resignal_flow(eval: &super::eval::Context, error_object: Value) -> Flow {
+    let error_symbol = error_object.cons_car();
+    let data = error_object.cons_cdr();
+
+    // `Fget (real_error_symbol, Qerror_conditions)` runs `CHECK_SYMBOL`, so a
+    // non-symbol car signals `wrong-type-argument symbolp <car>`.
+    let Some(symbol_id) = error_symbol.as_symbol_id() else {
+        return signal(
+            "wrong-type-argument",
+            vec![Value::symbol("symbolp"), error_symbol],
+        );
+    };
+    let sym_name = resolve_sym(symbol_id);
+
+    // Read `error-conditions' by identity so an uninterned error symbol is
+    // honoured (see `builtin_signal`).
+    if sym_name != "error"
+        && sym_name != "quit"
+        && eval
+            .obarray
+            .get_property_id(symbol_id, intern("error-conditions"))
+            .is_none()
+    {
+        return signal(
+            "error",
+            vec![
+                Value::string("Invalid error symbol"),
+                Value::from_sym_id(symbol_id),
+            ],
+        );
+    }
+
+    build_signal_flow_id(symbol_id, data)
 }
 
 fn dispatch_signal_flow(eval: &mut super::eval::Context, flow: Flow) -> EvalResult {
