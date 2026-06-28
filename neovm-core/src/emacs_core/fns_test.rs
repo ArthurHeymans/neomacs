@@ -440,6 +440,135 @@ fn base64_region_eval_error_shapes() {
     }
 }
 
+/// Bug 1: decoding base64 whose bytes are 0x80-0xFF into a *multibyte* buffer
+/// must store each raw byte as its two-byte eight-bit internal encoding, not
+/// as a raw byte (which is not a valid multibyte lead byte and previously
+/// panicked in `string_char_unchecked`).
+///
+/// GNU oracle:
+///   (with-temp-buffer (insert "/w==")
+///     (base64-decode-region (point-min) (point-max))
+///     (append (buffer-string) nil))  => (4194303)
+#[test]
+fn base64_decode_region_multibyte_eight_bit_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        assert!(
+            buf.get_multibyte(),
+            "default temp buffer should be multibyte"
+        );
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
+        ));
+        buf.insert("/w==");
+    }
+
+    // "/w==" decodes to the single byte 0xFF.
+    let decoded = builtin_base64_decode_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)])
+        .expect("decode into multibyte buffer should not panic");
+    // The number of inserted *characters* is 1 (one eight-bit char).
+    assert_eq!(decoded, Value::fixnum(1));
+
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    // The buffer now holds exactly one character.
+    let text = buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range());
+    assert!(
+        text.is_multibyte(),
+        "decoded text must stay in the multibyte buffer's representation"
+    );
+    assert_eq!(text.schars(), 1, "exactly one eight-bit character");
+    // The internal bytes are the two-byte eight-bit encoding of 0xFF
+    // (`str_to_multibyte([0xFF])` == [0xC1, 0xBF]), and it decodes back to
+    // the eight-bit character 0x3FFFFF (4194303) like GNU.
+    assert_eq!(text.as_bytes(), &[0xC1, 0xBF]);
+    let (ch, len) = crate::emacs_core::emacs_char::string_char(text.as_bytes());
+    assert_eq!(len, 2);
+    assert_eq!(ch, 4194303);
+}
+
+/// Bug 2a: encoding a region of a multibyte buffer containing a genuine
+/// (non-eight-bit) multibyte character must signal GNU's error instead of
+/// silently encoding the internal UTF-8 bytes.
+///
+/// GNU oracle:
+///   (with-temp-buffer (insert "héllo")
+///     (base64-encode-region (point-min) (point-max)) ...)
+///   => (error "Multibyte character in data for base64 encoding")
+#[test]
+fn base64_encode_region_rejects_multibyte_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        assert!(buf.get_multibyte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
+        ));
+        buf.insert("héllo");
+    }
+
+    let result = builtin_base64_encode_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|v| v.as_utf8_str()),
+                Some("Multibyte character in data for base64 encoding")
+            );
+        }
+        other => panic!("expected multibyte base64 error, got {other:?}"),
+    }
+}
+
+/// Bug 2b: a multibyte string whose characters are eight-bit raw bytes must
+/// encode the underlying raw bytes, not their internal UTF-8 expansion.
+///
+/// GNU oracle:
+///   (base64-encode-string (string-to-multibyte (unibyte-string 200 201)))
+///   => "yMk="
+#[test]
+fn base64_encode_string_multibyte_eight_bit_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // (string-to-multibyte (unibyte-string 200 201)) is a multibyte string
+    // holding two eight-bit characters; its internal bytes are
+    // str_to_multibyte([200, 201]).
+    let internal = crate::emacs_core::emacs_char::str_to_multibyte(&[200, 201]);
+    let input = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(internal));
+    assert!(input.as_lisp_string().unwrap().is_multibyte());
+    let encoded = builtin_base64_encode_string(vec![input, Value::T]).unwrap();
+    assert_eq!(encoded.as_utf8_str(), Some("yMk="));
+}
+
+/// Bug 2c: a final full 76-character line must not get a trailing line
+/// separator; GNU only inserts separators *between* lines.
+///
+/// GNU oracle:
+///   (length (base64-encode-string (make-string 57 ?A))) => 76
+#[test]
+fn base64_encode_string_no_trailing_newline_on_full_line_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![b'A'; 57]));
+    let encoded = builtin_base64_encode_string(vec![input]).unwrap();
+    let s = encoded.as_utf8_str().expect("string result");
+    assert_eq!(s.len(), 76, "exactly one full line, no trailing newline");
+    assert!(
+        !s.contains('\n'),
+        "a single full line must contain no separators"
+    );
+
+    // A 58-byte input (20 groups) wraps once, between the two lines.
+    let input2 = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![b'A'; 58]));
+    let encoded2 = builtin_base64_encode_string(vec![input2]).unwrap();
+    let s2 = encoded2.as_utf8_str().expect("string result");
+    assert_eq!(s2.len(), 81);
+    assert_eq!(s2.matches('\n').count(), 1);
+    assert!(!s2.ends_with('\n'), "the separator is between lines only");
+}
+
 // ---- MD5 ----
 
 #[test]
@@ -1082,6 +1211,54 @@ fn buffer_hash_eval_by_name_sha1() {
     assert_eq!(
         r.as_utf8_str(),
         Some("a9993e364706816aba3e25717850c26c9cd0d89d")
+    );
+}
+
+/// Bug 8: buffer-hash hashes the *whole* buffer (BUF_BEG..BUF_Z_BYTE),
+/// ignoring narrowing — unlike md5/secure-hash, which use the accessible
+/// region. A narrowed buffer must hash the same as the same un-narrowed
+/// content.
+///
+/// GNU oracle:
+///   (with-temp-buffer (insert "0123456789") (narrow-to-region 3 7)
+///     (equal (buffer-hash)
+///            (with-temp-buffer (insert "0123456789") (buffer-hash))))
+///   => t
+#[test]
+fn buffer_hash_ignores_narrowing_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
+        ));
+        buf.insert("0123456789");
+    }
+
+    // Hash of the whole, un-narrowed buffer.
+    let full_hash = builtin_buffer_hash(&mut eval, vec![]).unwrap();
+
+    // Narrow to lisp region 3..7, which is the accessible text "2345"
+    // (bytes 2..6 for this ASCII content), matching GNU's
+    // (narrow-to-region 3 7).
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 6));
+        assert_eq!(buf.buffer_string(), "2345", "narrowing is in effect");
+    }
+    let narrowed_hash = builtin_buffer_hash(&mut eval, vec![]).unwrap();
+
+    assert_eq!(
+        narrowed_hash.as_utf8_str(),
+        full_hash.as_utf8_str(),
+        "buffer-hash must ignore narrowing and hash the whole buffer"
+    );
+    // Sanity: it is the sha1 of the whole "0123456789", not of "3456".
+    assert_eq!(
+        full_hash.as_utf8_str(),
+        Some("87acec17cd9dcd20a716cc2cf67417b71c8a7016")
     );
 }
 

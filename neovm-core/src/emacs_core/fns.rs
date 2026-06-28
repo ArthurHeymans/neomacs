@@ -239,12 +239,29 @@ pub(crate) fn base64_standard_decode(input: &[u8]) -> Option<Vec<u8>> {
     base64_decode(input, &table, false, false).ok()
 }
 
+/// MIME line length used by GNU's base64 line-breaking (fns.c).
+const MIME_LINE_LENGTH: usize = 76;
+
 fn base64_encode(input: &[u8], alphabet: &[u8; 64], pad: bool, line_break: bool) -> String {
     let mut out = Vec::with_capacity(input.len().div_ceil(3) * 4 + input.len() / 57);
-    let mut col = 0usize;
+    // Mirror GNU `base64_encode_1` (fns.c): wrap a line every
+    // MIME_LINE_LENGTH/4 base64 groups, inserting '\n' *between* lines only.
+    // `counter` counts the groups emitted on the current line; the separator
+    // is emitted before a group when the previous line is full, so a final
+    // full line never gets a trailing newline.
+    let mut counter = 0usize;
 
     let chunks = input.chunks(3);
     for chunk in chunks {
+        if line_break {
+            if counter < MIME_LINE_LENGTH / 4 {
+                counter += 1;
+            } else {
+                out.push(b'\n');
+                counter = 1;
+            }
+        }
+
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
         let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
@@ -264,28 +281,24 @@ fn base64_encode(input: &[u8], alphabet: &[u8; 64], pad: bool, line_break: bool)
         } else if pad {
             out.push(b'=');
         }
-
-        col += 4;
-        if line_break && col >= 76 {
-            out.push(b'\n');
-            col = 0;
-        }
     }
 
     // Safety: we only pushed ASCII bytes
     unsafe { String::from_utf8_unchecked(out) }
 }
 
-fn base64_encode_string_bytes(
-    string: &crate::heap_types::LispString,
-) -> Result<Cow<'_, [u8]>, Flow> {
-    if !string.is_multibyte() {
-        return Ok(Cow::Borrowed(string.as_bytes()));
+/// Flatten the internal bytes of base64-encoding input into the raw data
+/// bytes to be encoded, mirroring GNU `base64_encode_1` (fns.c): when the
+/// source is multibyte, each character is decoded; ASCII passes through, an
+/// eight-bit raw-byte character collapses to its byte, and any other
+/// multibyte character (≥ 128) is rejected with GNU's error.
+fn base64_encode_source_bytes(source: &[u8], multibyte: bool) -> Result<Cow<'_, [u8]>, Flow> {
+    if !multibyte {
+        return Ok(Cow::Borrowed(source));
     }
 
-    let mut bytes = Vec::with_capacity(string.schars());
+    let mut bytes = Vec::with_capacity(source.len());
     let mut pos = 0;
-    let source = string.as_bytes();
     while pos < source.len() {
         let (ch, len) = super::emacs_char::string_char(&source[pos..]);
         if ch <= 0x7f {
@@ -305,6 +318,12 @@ fn base64_encode_string_bytes(
     Ok(Cow::Owned(bytes))
 }
 
+fn base64_encode_string_bytes(
+    string: &crate::heap_types::LispString,
+) -> Result<Cow<'_, [u8]>, Flow> {
+    base64_encode_source_bytes(string.as_bytes(), string.is_multibyte())
+}
+
 // ---------------------------------------------------------------------------
 // Base64 decode (manual implementation)
 // ---------------------------------------------------------------------------
@@ -316,6 +335,22 @@ fn base64_decode(
     ignore_invalid: bool,
 ) -> Result<Vec<u8>, ()> {
     base64_decode_bytes(input, table, base64url, ignore_invalid)
+}
+
+/// Build the LispString that base64-decode-region inserts into the buffer.
+///
+/// Mirrors GNU `base64_decode_1`'s `multibyte_bit` handling (fns.c): for a
+/// multibyte target each decoded raw byte 0x80-0xFF must be stored as its
+/// two-byte eight-bit internal encoding (BYTE8_STRING / `str_to_multibyte`),
+/// not as a raw byte (which is not a valid multibyte lead byte and would
+/// corrupt the buffer's internal representation). For a unibyte target the
+/// raw bytes are stored verbatim.
+fn decoded_bytes_to_lisp_string(bytes: Vec<u8>, multibyte: bool) -> crate::heap_types::LispString {
+    if multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(super::emacs_char::str_to_multibyte(&bytes))
+    } else {
+        crate::heap_types::LispString::from_unibyte(bytes)
+    }
 }
 
 fn base64_next_value(
@@ -661,15 +696,18 @@ pub(crate) fn builtin_base64_encode_region(
     expect_range_args("base64-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
         normalize_current_buffer_region_bounds_in_manager(&mut eval.buffers, &args[0], &args[1])?;
-    let source = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
-    let no_line_break = args.get(2).is_some_and(|v| v.is_truthy());
-    let encoded = base64_encode(&source, B64_STD, true, !no_line_break);
-    let encoded_len = encoded.len();
+    let raw = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
     let target_multibyte = eval
         .buffers
         .get(buffer_id)
         .map(|buf| buf.get_multibyte())
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+    // GNU base64_encode_region_1 passes the buffer's multibyteness to
+    // base64_encode_1, which rejects non-eight-bit multibyte chars.
+    let source = base64_encode_source_bytes(&raw, target_multibyte)?;
+    let no_line_break = args.get(2).is_some_and(|v| v.is_truthy());
+    let encoded = base64_encode(&source, B64_STD, true, !no_line_break);
+    let encoded_len = encoded.len();
     let replacement =
         super::builtins::lisp_string_from_buffer_bytes(encoded.into_bytes(), target_multibyte);
     replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
@@ -684,15 +722,18 @@ pub(crate) fn builtin_base64url_encode_region(
     expect_range_args("base64url-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
         normalize_current_buffer_region_bounds_in_manager(&mut eval.buffers, &args[0], &args[1])?;
-    let source = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
-    let no_pad = args.get(2).is_some_and(|v| v.is_truthy());
-    let encoded = base64_encode(&source, B64_URL, !no_pad, false);
-    let encoded_len = encoded.len();
+    let raw = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
     let target_multibyte = eval
         .buffers
         .get(buffer_id)
         .map(|buf| buf.get_multibyte())
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+    // GNU base64_encode_region_1 passes the buffer's multibyteness to
+    // base64_encode_1, which rejects non-eight-bit multibyte chars.
+    let source = base64_encode_source_bytes(&raw, target_multibyte)?;
+    let no_pad = args.get(2).is_some_and(|v| v.is_truthy());
+    let encoded = base64_encode(&source, B64_URL, !no_pad, false);
+    let encoded_len = encoded.len();
     let replacement =
         super::builtins::lisp_string_from_buffer_bytes(encoded.into_bytes(), target_multibyte);
     replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
@@ -722,10 +763,15 @@ pub(crate) fn builtin_base64_decode_region(
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     match base64_decode(&source, &table, use_url, noerror) {
         Ok(bytes) => {
-            let replacement =
-                super::builtins::lisp_string_from_buffer_bytes(bytes.clone(), target_multibyte);
+            // GNU base64_decode_1 (fns.c): when the target buffer is
+            // multibyte, each decoded raw byte 0x80-0xFF is stored as its
+            // two-byte eight-bit internal encoding (BYTE8_STRING). The return
+            // value is the number of inserted *characters*, which equals the
+            // raw decoded byte count (one char per decoded byte).
+            let inserted_chars = bytes.len();
+            let replacement = decoded_bytes_to_lisp_string(bytes, target_multibyte);
             replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
-            Ok(Value::fixnum(bytes.len() as i64))
+            Ok(Value::fixnum(inserted_chars as i64))
         }
         Err(()) if noerror => {
             let replacement =
@@ -1164,10 +1210,14 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
     };
 
     // GNU Emacs accepts killed buffer objects and hashes as empty content.
+    //
+    // GNU Fbuffer_hash (fns.c) hashes BUF_BEG_BYTE..BUF_Z_BYTE — the whole
+    // buffer, *ignoring narrowing* (unlike md5/secure-hash, which use the
+    // accessible region). Use the full byte range here.
     let text = eval
         .buffers
         .get(buffer_id)
-        .map(|buf| buf.buffer_substring_bytes_range(buf.accessible_emacs_byte_range()))
+        .map(|buf| buf.buffer_substring_bytes_range(buf.full_emacs_byte_range()))
         .unwrap_or_default();
 
     let mut hasher = Sha1::new();
