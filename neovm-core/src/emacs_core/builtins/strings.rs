@@ -2108,7 +2108,7 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
         let (bytes, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
-            &|v| super::error::print_value_bytes_with_eval(ctx, v),
+            &|v| super::error::print_value_bytes_escaped_with_eval(ctx, v),
             FormatMessageQuotingStyle::None,
         )?;
         Ok(build_format_result(
@@ -2274,7 +2274,7 @@ pub(crate) fn builtin_format_message_slice(
         let (bytes, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
-            &|v| super::error::print_value_bytes_with_eval(ctx, v),
+            &|v| super::error::print_value_bytes_escaped_with_eval(ctx, v),
             quoting_style,
         )?;
         Ok(build_format_result(
@@ -2453,6 +2453,19 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
     let data = ls.as_bytes();
     let is_multibyte = ls.is_multibyte();
     let display_table = crate::encoding::active_display_table(ctx);
+    // GNU `lisp_string_width' measures each character with `char_width', which
+    // bottoms out in `CHARACTER_WIDTH' returning `SANE_TAB_WIDTH(current_buffer)'
+    // for a TAB -- i.e. the dynamically-bound `tab-width', not a hardcoded 8.
+    let tab_width = crate::emacs_core::indent::current_buffer_tab_width(ctx);
+    let unit_width = |code: u32, width: usize| -> usize {
+        if display_table.is_some() {
+            crate::encoding::char_width_for_code_with_display_table(code as i64, display_table)
+        } else if code == 0x09 {
+            tab_width
+        } else {
+            width
+        }
+    };
     if args.len() <= 1
         || (args.len() == 2 && args[1] == Value::NIL)
         || (args.len() <= 3
@@ -2463,16 +2476,7 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
         let units = super::super::string_escape::decode_units_emacs(data, is_multibyte);
         let width = units
             .iter()
-            .map(|(code, width)| {
-                if display_table.is_some() {
-                    crate::encoding::char_width_for_code_with_display_table(
-                        *code as i64,
-                        display_table,
-                    )
-                } else {
-                    *width
-                }
-            })
+            .map(|(code, width)| unit_width(*code, *width))
             .sum::<usize>();
         return Ok(Value::fixnum(width as i64));
     }
@@ -2522,13 +2526,7 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
         .iter()
         .skip(from)
         .take(to - from)
-        .map(|(code, width)| {
-            if display_table.is_some() {
-                crate::encoding::char_width_for_code_with_display_table(*code as i64, display_table)
-            } else {
-                *width
-            }
-        })
+        .map(|(code, width)| unit_width(*code, *width))
         .sum();
     Ok(Value::fixnum(width as i64))
 }

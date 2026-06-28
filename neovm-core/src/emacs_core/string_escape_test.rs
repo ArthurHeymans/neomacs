@@ -96,11 +96,17 @@ fn unibyte_storage_string_round_trips_emacs_mule_bytes() {
     let encoded =
         bytes_to_unibyte_storage_string(&[0x06, b'"', b'\\', b'\n', 0x7F, 0x80, 0xA9, 0xFF]);
     assert!(storage_string_contains_unibyte_bytes(&encoded));
+    // With `print-escape-nonascii' nil (the default), GNU `print_object' prints a
+    // unibyte string's high byte as `printchar (BYTE8_TO_CHAR (c))' -- the raw
+    // byte in its 2-byte byte8 internal encoding (`BYTE8_STRING'), not an octal
+    // escape.  Octal escaping is reserved for `print-escape-nonascii' (a
+    // multibyte print target).  byte8 encodings: 0x80 -> C0 80, 0xA9 -> C0 A9,
+    // 0xFF -> C1 BF.
     assert_eq!(
         format_lisp_string_bytes_default(&encoded),
         vec![
-            b'"', 0x06, b'\\', b'"', b'\\', b'\\', b'\n', 0x7F, b'\\', b'2', b'0', b'0', b'\\',
-            b'2', b'5', b'1', b'\\', b'3', b'7', b'7', b'"'
+            b'"', 0x06, b'\\', b'"', b'\\', b'\\', b'\n', 0x7F, 0xC0, 0x80, 0xC0, 0xA9, 0xC1, 0xBF,
+            b'"'
         ]
     );
     assert_eq!(

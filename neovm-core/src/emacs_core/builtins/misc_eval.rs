@@ -1203,6 +1203,58 @@ pub(crate) fn resolve_print_target_in_state(
     }
 }
 
+/// The multibyteness of the buffer that a (resolved) print target writes into,
+/// or `None` when the target is the echo area / `t` / a printer function (where
+/// GNU's `print_prepare` leaves the `print-escape-*` variables untouched).
+fn print_target_buffer_multibyte(
+    ctx: &crate::emacs_core::eval::Context,
+    target: Value,
+) -> Option<bool> {
+    match target.kind() {
+        ValueKind::Veclike(VecLikeType::Buffer) => {
+            let id = target.as_buffer_id()?;
+            ctx.buffers.get(id).map(|buf| buf.get_multibyte())
+        }
+        ValueKind::String => {
+            let name = runtime_string_value(target);
+            let id = ctx.buffers.find_buffer_by_name(&name)?;
+            ctx.buffers.get(id).map(|buf| buf.get_multibyte())
+        }
+        _ if super::marker::is_marker(&target) => {
+            let (Some(buffer_id), _, _) = super::marker::marker_logical_fields(&target)? else {
+                return None;
+            };
+            ctx.buffers.get(buffer_id).map(|buf| buf.get_multibyte())
+        }
+        _ => None,
+    }
+}
+
+/// Apply GNU `print_prepare`'s implicit binding of the `print-escape-*` flags to
+/// `options` for a buffer/marker print target (print.c lines ~170-177): when the
+/// destination buffer is unibyte and `print-escape-multibyte` is unset, bind it
+/// to `t`; when it is multibyte and `print-escape-nonascii` is unset, bind that.
+///
+/// In particular, a unibyte string printed into a unibyte buffer keeps
+/// `print-escape-nonascii` nil, so its high bytes are emitted raw (not octal),
+/// while printing into a multibyte buffer escapes them.
+fn apply_print_target_escape_bindings(
+    ctx: &crate::emacs_core::eval::Context,
+    target: Value,
+    options: &mut super::print::PrintOptions,
+) {
+    let Some(target_multibyte) = print_target_buffer_multibyte(ctx, target) else {
+        return;
+    };
+    if target_multibyte {
+        if !options.print_escape_nonascii {
+            options.print_escape_nonascii = true;
+        }
+    } else if !options.print_escape_multibyte {
+        options.print_escape_multibyte = true;
+    }
+}
+
 fn write_print_output_to_target(
     ctx: &mut crate::emacs_core::eval::Context,
     target: Value,
@@ -1969,6 +2021,13 @@ fn prin1_to_lisp_string_value_in_state_with_overrides(
 ) -> Result<crate::heap_types::LispString, Flow> {
     let mut options = print_options_from_overrides(ctx, overrides)?;
     options.print_noescape = noescape;
+    // GNU `prin1-to-string' prints into `Vprin1_to_string_buffer', which is a
+    // multibyte buffer, so `print_prepare' binds `print-escape-nonascii' to t
+    // (print.c).  A unibyte string's high bytes are therefore octal-escaped in
+    // the resulting (multibyte) string, matching `(prin1 ... multibyte-buffer)'.
+    if !options.print_escape_nonascii {
+        options.print_escape_nonascii = true;
+    }
     Ok(crate::heap_types::LispString::from_emacs_bytes(
         super::error::format_value_bytes_in_state_with_options(
             &ctx.obarray,
@@ -2078,7 +2137,13 @@ pub(crate) fn builtin_prin1_impl(
 ) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
     ensure_continuous_print_number_table(ctx);
-    let options = print_options_from_overrides(ctx, args.get(2))?;
+    let mut options = print_options_from_overrides(ctx, args.get(2))?;
+    // GNU `print_prepare' implicitly binds `print-escape-nonascii' /
+    // `print-escape-multibyte' based on the destination buffer's multibyteness,
+    // so e.g. a unibyte string's high bytes print raw into a unibyte buffer but
+    // octal-escaped into a multibyte buffer.
+    let target = resolve_print_target_in_state(ctx, args.get(1));
+    apply_print_target_escape_bindings(ctx, target, &mut options);
     // Issue #131: emit canonical Emacs bytes so a real Private-Use glyph in the
     // printed output is inserted as itself, not decoded as a raw byte.
     let bytes = super::error::print_value_bytes_in_state_with_options(ctx, &args[0], options);
@@ -2132,10 +2197,17 @@ pub(crate) fn builtin_print_impl(
 ) -> EvalResult {
     expect_min_args("print", &args, 1)?;
     ensure_continuous_print_number_table(ctx);
+    // GNU `print_prepare' binds the `print-escape-*' flags from the destination
+    // buffer's multibyteness (see `builtin_prin1_impl`).
+    let mut options = super::error::print_options_from_state(&ctx.obarray);
+    let target = resolve_print_target_in_state(ctx, args.get(1));
+    apply_print_target_escape_bindings(ctx, target, &mut options);
     // Issue #131: emit canonical Emacs bytes (see `builtin_prin1_impl`).
     let mut bytes = Vec::new();
     bytes.push(b'\n');
-    bytes.extend_from_slice(&super::error::print_value_bytes_with_eval(ctx, &args[0]));
+    bytes.extend_from_slice(&super::error::print_value_bytes_in_state_with_options(
+        ctx, &args[0], options,
+    ));
     bytes.push(b'\n');
     write_print_bytes_from_ctx(ctx, args.get(1), &bytes)?;
     Ok(args[0])

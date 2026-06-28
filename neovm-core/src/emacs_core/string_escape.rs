@@ -188,10 +188,20 @@ fn decode_extended_sequence_span(s: &str, start: usize) -> Option<(usize, u32)> 
 }
 
 fn push_unibyte_literal_byte(out: &mut Vec<u8>, byte: u8) {
+    use crate::emacs_core::emacs_char;
     match byte {
         b'"' => out.extend_from_slice(br#"\""#),
         b'\\' => out.extend_from_slice(br#"\\"#),
-        b if b >= 0x80 => push_octal_escape(out, b),
+        // GNU `print_object' (print.c) prints a unibyte string's high byte as
+        // `printchar (BYTE8_TO_CHAR (c))' when `print-escape-nonascii' is nil --
+        // i.e. it emits the raw byte (in its byte8 internal encoding), not an
+        // octal escape.  Octal escaping only happens when the print target is
+        // multibyte (which sets `print-escape-nonascii'), handled by the caller.
+        b if b >= 0x80 => {
+            let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
+            let n = emacs_char::char_string(emacs_char::byte8_to_char(b), &mut buf);
+            out.extend_from_slice(&buf[..n]);
+        }
         b => out.push(b),
     }
 }

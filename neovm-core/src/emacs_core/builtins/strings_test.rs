@@ -416,3 +416,97 @@ fn downcase_greek_final_sigma() {
         assert_eq!(result.as_utf8_str(), Some(expected), "form: {form}");
     }
 }
+
+/// `string-width' must measure a TAB using the dynamically-bound `tab-width',
+/// not a hardcoded 8 -- mirroring GNU `lisp_string_width' -> `char_width' ->
+/// `CHARACTER_WIDTH' returning `SANE_TAB_WIDTH(current_buffer)'.
+#[test]
+fn string_width_honors_dynamic_tab_width() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+
+    let cases = [
+        // (form, expected) -- verified against GNU `emacs --batch'.
+        (r#"(let ((tab-width 2)) (string-width "\t"))"#, 2),
+        (r#"(let ((tab-width 4)) (string-width "a\tb"))"#, 6),
+        (r#"(let ((tab-width 8)) (string-width "\t"))"#, 8),
+        // Default (unbound/8) tab and `char-width' parity controls.
+        (r#"(string-width "\t")"#, 8),
+        (r#"(let ((tab-width 2)) (char-width ?\t))"#, 2),
+        // No-tab strings must be unaffected by tab-width.
+        (r#"(let ((tab-width 2)) (string-width "abc"))"#, 3),
+        (r#"(let ((tab-width 2)) (string-width "漢字"))"#, 4),
+    ];
+    for (form, expected) in cases {
+        let result = ev.eval_str(form).expect("eval");
+        assert_eq!(result.as_fixnum(), Some(expected), "form: {form}");
+    }
+}
+
+/// GNU `print_prepare' (print.c) binds `print-escape-nonascii' only when the
+/// destination buffer is multibyte, so a unibyte string's high bytes print raw
+/// into a unibyte buffer but octal-escaped into a multibyte buffer.
+#[test]
+fn prin1_unibyte_string_into_unibyte_buffer_prints_raw_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+
+    // Unibyte string (#xc3 #xa9) into a UNIBYTE buffer: raw `"<c3><a9>"' = 4 bytes.
+    let unibyte = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (prin1 (unibyte-string 195 169) (current-buffer))
+                 (buffer-size))"#,
+        )
+        .expect("eval");
+    assert_eq!(
+        unibyte.as_fixnum(),
+        Some(4),
+        "unibyte target prints raw bytes"
+    );
+
+    // Same string into a MULTIBYTE buffer: octal-escaped `"\303\251"' = 10 bytes.
+    let multibyte = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (prin1 (unibyte-string 195 169) (current-buffer))
+                 (buffer-size))"#,
+        )
+        .expect("eval");
+    assert_eq!(
+        multibyte.as_fixnum(),
+        Some(10),
+        "multibyte target octal-escapes high bytes"
+    );
+
+    // Multibyte-result printer paths (GNU prints into the multibyte
+    // `Vprin1_to_string_buffer', binding `print-escape-nonascii') stay escaped.
+    // (form, expected printed result) -- verified against GNU `emacs --batch'.
+    let escaped_cases: &[(&str, &str)] = &[
+        (
+            r#"(prin1-to-string (unibyte-string 195 169))"#,
+            r#""\"\\303\\251\"""#,
+        ),
+        (
+            r#"(format "%S" (unibyte-string 195 169))"#,
+            r#""\"\\303\\251\"""#,
+        ),
+        (
+            r#"(condition-case e (error "%S" (unibyte-string 195 169))
+                 (error (error-message-string e)))"#,
+            r#""\"\\303\\251\"""#,
+        ),
+        // Normal (multibyte / ASCII) content is unaffected by the fix.
+        (r#"(prin1-to-string "café")"#, r#""\"café\"""#),
+        (r#"(format "%S" "abc")"#, r#""\"abc\"""#),
+    ];
+    for (form, expected) in escaped_cases {
+        let result = ev.eval_str(form).expect("eval");
+        assert_eq!(
+            crate::emacs_core::print::print_value(&result),
+            *expected,
+            "form: {form}"
+        );
+    }
+}

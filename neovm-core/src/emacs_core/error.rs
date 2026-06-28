@@ -1114,6 +1114,29 @@ pub fn print_value_bytes_with_eval(eval: &super::eval::Context, value: &Value) -
     )
 }
 
+/// Like [`print_value_bytes_with_eval`], but for a printer whose result becomes a
+/// multibyte string (e.g. `format`/`message`'s `%S`, which GNU implements via
+/// `Fprin1_to_string` printing into the multibyte `Vprin1_to_string_buffer`).
+/// `print_prepare` binds `print-escape-nonascii' for a multibyte target, so a
+/// unibyte string's raw high bytes are octal-escaped rather than emitted raw.
+pub fn print_value_bytes_escaped_with_eval(eval: &super::eval::Context, value: &Value) -> Vec<u8> {
+    if let Some(handle) =
+        format_opaque_handle_in_state(&eval.buffers, &eval.frames, &eval.threads, value)
+    {
+        return handle.into_bytes();
+    }
+    let mut options = print_options_from_state(&eval.obarray);
+    options.print_escape_nonascii = true;
+    format_value_bytes_in_state_with_options(
+        &eval.obarray,
+        &eval.buffers,
+        &eval.frames,
+        &eval.threads,
+        value,
+        options,
+    )
+}
+
 fn print_data_payload_with_eval(eval: &super::eval::Context, data: &[Value]) -> String {
     if data.is_empty() {
         "nil".to_string()
