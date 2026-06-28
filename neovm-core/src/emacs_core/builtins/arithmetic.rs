@@ -890,6 +890,45 @@ pub(crate) fn builtin_lognot(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(!n))
 }
 
+/// Width of a GMP limb in bits on the 64-bit builds Emacs targets
+/// (`GMP_NUMB_BITS`). neomacs's bignum backend (malachite) likewise uses
+/// 64-bit limbs, so this matches GNU's `mpz_size` semantics.
+const GMP_NUMB_BITS: u64 = 64;
+
+/// GNU `GMP_NLIMBS_MAX = min (INT_MAX, ULONG_MAX / GMP_NUMB_BITS)`. On the
+/// 64-bit platforms Emacs supports this resolves to `INT_MAX`.
+const GMP_NLIMBS_MAX: u64 = i32::MAX as u64;
+
+/// GNU `mul_2exp_extra_limbs` fudge factor (`src/bignum.c:371`).
+const MUL_2EXP_EXTRA_LIMBS: u64 = 1;
+
+/// Number of 64-bit GMP limbs needed to represent |value|, matching
+/// GNU's `emacs_mpz_size` / `mpz_size` (0 for a zero magnitude).
+fn mpz_limb_count(value: &Integer) -> u64 {
+    let bits = value.significant_bits();
+    if bits == 0 {
+        0
+    } else {
+        bits.div_ceil(GMP_NUMB_BITS)
+    }
+}
+
+/// Replicates the overflow guard in GNU's `emacs_mpz_mul_2exp`
+/// (`src/bignum.c:367`): a left shift by `count` bits overflows when the
+/// resulting limb count would exceed Emacs's bignum size limit. Equivalent
+/// to GNU's `lim - emacs_mpz_size (op1) < op2 / GMP_NUMB_BITS`.
+fn mul_2exp_would_overflow(value: &Integer, count: i64) -> bool {
+    debug_assert!(count > 0);
+    // GNU: lim = min (NLIMBS_LIMIT, GMP_NLIMBS_MAX - mul_2exp_extra_limbs).
+    // On a 64-bit build NLIMBS_LIMIT = MOST_POSITIVE_FIXNUM / GMP_NUMB_BITS,
+    // which is far larger than GMP_NLIMBS_MAX (= INT_MAX), so the binding
+    // term is GMP_NLIMBS_MAX - 1.
+    let lim = GMP_NLIMBS_MAX - MUL_2EXP_EXTRA_LIMBS;
+    let op2limbs = (count as u64) / GMP_NUMB_BITS;
+    // op1 is `value`; emacs_mpz_size(op1) == mpz_limb_count(value).
+    lim.saturating_sub(mpz_limb_count(value)) < op2limbs
+}
+
 /// `(ash VALUE COUNT)` — arithmetic shift, mirrors GNU `Fash`
 /// (`src/data.c:3519`).
 ///
@@ -967,7 +1006,18 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         return Ok(Value::make_integer(value_big));
     }
     let result = if count_i64 > 0 {
-        // Left shift. Integer << u32 (or usize) does GMP mul_2exp.
+        // Left shift. Mirror GNU `emacs_mpz_mul_2exp` (src/bignum.c:367):
+        // it rejects shifts whose result limb count would overflow GMP /
+        // Emacs's bignum size limit, even when VALUE is zero. (GNU's
+        // `value == 0` short-circuit lives only in the *bignum* COUNT
+        // branch above; for a fixnum COUNT it falls through to this
+        // overflow check.) So `(ash 0 (expt 2 50))` must signal
+        // `overflow-error`, not return 0.
+        if mul_2exp_would_overflow(&value_big, count_i64) {
+            return Err(signal("overflow-error", vec![]));
+        }
+        // The overflow check guarantees `count_i64` fits the bignum size
+        // limit, hence well within `u32`, so this conversion is exact.
         let bits = u32::try_from(count_i64).unwrap_or(u32::MAX);
         value_big << bits
     } else {
@@ -1787,3 +1837,7 @@ mod arithmetic_minmax_compare_test;
 #[cfg(test)]
 #[path = "arithmetic_rounding_nil_divisor_test.rs"]
 mod arithmetic_rounding_nil_divisor_test;
+
+#[cfg(test)]
+#[path = "arithmetic_ash_overflow_test.rs"]
+mod arithmetic_ash_overflow_test;
