@@ -1,10 +1,9 @@
 name: nix smoke
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+  # Manual-only: this Nix build + startup smoke is slow (up to ~2h), so it does
+  # not run automatically on push/PR. Trigger it on demand from the Actions tab
+  # ("Run workflow") or via `gh workflow run "nix smoke"`.
   workflow_dispatch:
 
 permissions:
