@@ -190,15 +190,26 @@ impl Buffer {
         self.undo_prepare_change(plan.range().byte_start(), self.point_emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
+            // GNU `record_delete` (undo.c) records the point-position entry
+            // FIRST, then the marker adjustments, then conses the deletion.
+            // The point entry must precede the `(MARKER . ADJ)` entries so the
+            // boundary check inside `record_point` still sees the undo list at
+            // a boundary (GNU bug 16818 ordering).
+            undo::undo_list_record_point_for_change(
+                &mut ul,
+                plan.range().char_start(),
+                self.undo_state.point_before_command_or_undo(),
+            );
             for &(marker, adjustment) in plan.marker_adjustments() {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
-            undo::undo_list_record_delete(
+            undo::undo_list_record_delete_with_point(
                 &mut ul,
                 plan.range().char_start(),
                 plan.deleted_text().clone(),
                 self.point_char_pos(),
                 self.undo_state.point_before_command_or_undo(),
+                false,
             );
             self.set_undo_list(ul);
         }
@@ -265,6 +276,92 @@ impl Buffer {
             MeasuredReplaceEdit::new(replacement),
             ReplaceSideEffectPolicy::current_buffer(),
         );
+        if let Some(text_properties) = plan.text_properties() {
+            self.text.text_props_append_shifted_at_emacs_byte_pos(
+                text_properties,
+                replacement.byte_start(),
+            );
+        } else if !plan.new_extent().chars().is_empty() {
+            self.text.text_props_set_properties_in_emacs_byte_range(
+                EmacsByteRange::from_start_len(
+                    replacement.byte_start(),
+                    plan.new_extent().emacs_bytes(),
+                ),
+                Vec::new(),
+            );
+        }
+        replacement
+    }
+
+    /// Execute a case-region replacement using GNU `casify_region`'s undo
+    /// shape (casefiddle.c:529): `record_delete (start, ORIGINAL_TEXT, false)`
+    /// followed by `record_insert (start, NEW_LEN)`.
+    ///
+    /// Unlike [`Self::execute_replace_text_plan`] this records the deletion of
+    /// the original text *before* the insertion (so the final undo list is
+    /// `((START . START+NEWLEN) (ORIGINAL . START) POINT ...)`), records the
+    /// insert at `start` rather than at the old end, and records undo even when
+    /// the replacement is identical to the original (GNU always runs
+    /// `record_delete`/`record_insert` because the case op `modify_text`s the
+    /// range first).  Marker adjustments are *not* recorded — GNU passes
+    /// `record_markers = false` because the case operation preserves marker
+    /// positions for a same-length change.
+    pub(in crate::buffer) fn execute_casify_replace_text_plan(
+        &mut self,
+        plan: ReplaceTextPlan,
+    ) -> TextReplacement {
+        let old_range = plan.old_range();
+        debug_assert!(
+            !old_range.is_empty(),
+            "casify replace requires a non-empty range"
+        );
+
+        let old_point = self.point_anchor();
+        let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
+
+        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            // GNU `casify_region` records `record_delete` first, then
+            // `record_insert`, so `primitive-undo` reinserts the original text
+            // after deleting the recased text.
+            undo::undo_list_record_delete(
+                &mut ul,
+                old_range.char_start(),
+                deleted_text,
+                old_point.char_pos(),
+                self.undo_state.point_before_command_or_undo(),
+            );
+            undo::undo_list_record_insert(
+                &mut ul,
+                old_range.char_start(),
+                plan.new_char_len(),
+                self.undo_state.point_before_command_or_undo(),
+            );
+            self.set_undo_list(ul);
+        }
+
+        let replacement = plan.replacement();
+        if replacement.old_byte_len() == replacement.new_byte_len() {
+            // Same byte length: GNU `casify_region` overwrites the bytes in
+            // place (`memcpy`) without moving point, markers, or overlays.  Use
+            // the same-length mutation path so interior markers are preserved.
+            self.text
+                .replace_same_len_measured_range(replacement, plan.bytes());
+            self.apply_same_len_edit_side_effects(
+                MeasuredSameLenEdit::covering(replacement.old_range()),
+                SameLenModifiedStatePolicy::RecordChange,
+            );
+        } else {
+            // Byte length changed (e.g. a Unicode case mapping with a different
+            // encoding length): fall back to the general replacement so markers
+            // and overlays past the change are shifted.
+            self.text.replace_measured_range(replacement, plan.bytes());
+            self.apply_replace_side_effects(
+                MeasuredReplaceEdit::new(replacement),
+                ReplaceSideEffectPolicy::current_buffer(),
+            );
+        }
         if let Some(text_properties) = plan.text_properties() {
             self.text.text_props_append_shifted_at_emacs_byte_pos(
                 text_properties,

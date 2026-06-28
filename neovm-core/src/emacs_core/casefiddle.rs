@@ -615,13 +615,33 @@ fn casify_region_in_state(
             (byte_range, text)
         };
 
+        // GNU `casify_region` (casefiddle.c) always `modify_text`s the range
+        // and records `record_delete (start, ORIGINAL) + record_insert (start,
+        // NEW_LEN)` even when no character changes, so the undo list keeps the
+        // GNU shape `((START . END) (ORIGINAL . START) POINT ...)`.  Route the
+        // edit through the casify-specific replace so the undo recording and
+        // marker handling match GNU instead of the generic replace path.
         let replacement = transform(&text);
-        if replacement == text {
-            continue;
-        }
-        replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, true)?;
+        casify_replace_current_buffer_region(eval, byte_range, &replacement)?;
     }
 
+    Ok(Value::NIL)
+}
+
+/// Apply a case-region replacement to the current buffer, recording undo with
+/// GNU `casify_region`'s shape.  Point and markers are preserved for a
+/// same-length change, matching GNU's in-place `replace_range_2`.
+fn casify_replace_current_buffer_region(
+    eval: &mut super::eval::Context,
+    byte_range: EmacsByteRange,
+    replacement: &LispString,
+) -> EvalResult {
+    let buffer_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    eval.buffers
+        .casify_replace_buffer_emacs_byte_range_lisp_string(buffer_id, byte_range, replacement);
     Ok(Value::NIL)
 }
 

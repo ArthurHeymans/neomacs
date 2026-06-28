@@ -97,29 +97,56 @@ pub fn undo_list_record_insert(
     restore_scratch_gc_roots(saved);
 }
 
-/// Record a deletion.  `beg` is the 0-indexed character position, `text` is
-/// the deleted string, `pt` is the 0-indexed cursor character position at
-/// the time of deletion.
+/// Record the point-position undo entry that GNU `record_point (beg)` conses
+/// at the start of `record_delete`/`record_insert`.
 ///
-/// The stored position is 1-indexed and negative when `pt` was at the
-/// END of the deleted region (i.e. `pt == beg + SCHARS (text)`).
-pub fn undo_list_record_delete(
+/// GNU records `point_before_last_command_or_undo` (point as it was at the
+/// beginning of the command) — *not* the current point — and only when the
+/// undo list is currently at a boundary and that saved point differs from
+/// `beg` (the start of the change).  This must run *before* any
+/// marker-adjustment entries are consed so the resulting undo list keeps the
+/// point entry ahead of them (GNU bug 16818 ordering).
+pub fn undo_list_record_point_for_change(
     undo_list: &mut Value,
     beg: CharPos0,
-    text: LispString,
-    pt: CharPos0,
     point_before_command_or_undo: Option<CharPos0>,
 ) {
-    if undo_list_is_disabled(undo_list) || text.is_empty() {
+    if undo_list_is_disabled(undo_list) {
         return;
     }
-
     let at_boundary = undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil());
     if let Some(point) = point_before_command_or_undo
         && at_boundary
         && point != beg
     {
         undo_list_record_point(undo_list, point);
+    }
+}
+
+/// Record a deletion.  `beg` is the 0-indexed character position, `text` is
+/// the deleted string, `pt` is the 0-indexed cursor character position at
+/// the time of deletion.
+///
+/// The stored position is 1-indexed and negative when `pt` was at the
+/// END of the deleted region (i.e. `pt == beg + SCHARS (text)`).
+///
+/// When `record_point` is `false` the caller has already recorded the
+/// point-position entry (GNU records it *before* marker adjustments, so the
+/// marker-adjustment path records it itself and suppresses it here).
+pub fn undo_list_record_delete_with_point(
+    undo_list: &mut Value,
+    beg: CharPos0,
+    text: LispString,
+    pt: CharPos0,
+    point_before_command_or_undo: Option<CharPos0>,
+    record_point: bool,
+) {
+    if undo_list_is_disabled(undo_list) || text.is_empty() {
+        return;
+    }
+
+    if record_point {
+        undo_list_record_point_for_change(undo_list, beg, point_before_command_or_undo);
     }
 
     let pos1 = beg.to_lisp().as_i64();
@@ -137,6 +164,25 @@ pub fn undo_list_record_delete(
     push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
     restore_scratch_gc_roots(saved);
+}
+
+/// Record a deletion, recording the point-position entry first (the common
+/// case with no marker adjustments).  See [`undo_list_record_delete_with_point`].
+pub fn undo_list_record_delete(
+    undo_list: &mut Value,
+    beg: CharPos0,
+    text: LispString,
+    pt: CharPos0,
+    point_before_command_or_undo: Option<CharPos0>,
+) {
+    undo_list_record_delete_with_point(
+        undo_list,
+        beg,
+        text,
+        pt,
+        point_before_command_or_undo,
+        true,
+    );
 }
 
 /// Record a marker adjustment immediately before a deletion record.

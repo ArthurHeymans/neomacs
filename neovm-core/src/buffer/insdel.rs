@@ -478,6 +478,36 @@ impl BufferManager {
         })
     }
 
+    /// Replace `byte_range` with `text` using GNU `casify_region`'s undo
+    /// recording (a single `record_delete` of the original text followed by a
+    /// `record_insert`).  Used by `upcase-region`/`downcase-region`/
+    /// `capitalize-region` so the undo list shape matches GNU even when the
+    /// replacement leaves the text unchanged.
+    pub fn casify_replace_buffer_emacs_byte_range_lisp_string(
+        &mut self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+        text: &LispString,
+    ) -> Option<()> {
+        if byte_range.start() >= byte_range.end() {
+            return None;
+        }
+        let range = self.edit_range_for_buffer_emacs_byte_range(id, byte_range)?;
+        if range.is_empty() {
+            return None;
+        }
+        let multibyte = self.buffers.get(&id)?.get_multibyte();
+        let plan = ReplaceTextPlan::from_lisp_string(range, text, multibyte);
+        self.execute_shared_text_edit(id, |buffer| {
+            let replacement = buffer.execute_casify_replace_text_plan(plan);
+            let edit = MeasuredReplaceEdit::new(replacement);
+            Some(SharedTextEditOutcome::edited(
+                (),
+                SharedTextEditMetadata::Replace(edit),
+            ))
+        })
+    }
+
     pub fn subst_char_in_buffer_region(
         &mut self,
         id: BufferId,

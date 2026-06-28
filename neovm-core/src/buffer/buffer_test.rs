@@ -271,6 +271,137 @@ fn create_indirect_buffer_flattens_double_indirection() {
     assert!(base.shares_text_storage_with(second));
 }
 
+/// Build a manager whose scratch buffer holds `text` with undo enabled,
+/// point at the end, and `point_before_command_or_undo` set to the end —
+/// the precondition GNU establishes before a case-region command.
+fn casify_manager_with_text(text: &str) -> (BufferManager, BufferId) {
+    let mut mgr = BufferManager::new();
+    let id = mgr.current_buffer_id().expect("scratch buffer");
+    {
+        // Enable undo before filling so the insert records `(BEG . END)` and
+        // the first-change `(t . 0)` exactly like the GNU repro flow.
+        mgr.get_mut(id)
+            .expect("scratch buffer")
+            .set_undo_list(Value::NIL);
+    }
+    let _ = mgr.insert_into_buffer(id, text);
+    {
+        let buf = mgr.get_mut(id).expect("scratch buffer");
+        let end_char = buf.point_char_pos();
+        buf.undo_state
+            .set_point_before_command_or_undo(Some(end_char));
+        // GNU inserts an undo boundary between the buffer fill and the case op.
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+    (mgr, id)
+}
+
+#[test]
+fn casify_region_records_gnu_undo_shape_when_changed() {
+    crate::test_utils::init_test_tracing();
+    // GNU `casify_region` (casefiddle.c) records `record_delete (start,
+    // ORIGINAL)` then `record_insert (start, NEW_LEN)`, yielding the undo
+    // shape `((1 . 6) ("hello" . 1) 12 nil ...)` for `(upcase-region 1 6)`
+    // on "hello world" with point at end.
+    let (mut mgr, id) = casify_manager_with_text("hello world");
+
+    mgr.casify_replace_buffer_emacs_byte_range_lisp_string(
+        id,
+        crate::buffer::EmacsByteRange::from_usize(0, 5),
+        &LispString::from_utf8("HELLO"),
+    );
+
+    let buf = mgr.get(id).expect("buffer");
+    assert_eq!(buf.buffer_string(), "HELLO world");
+    let ul = buf.get_undo_list();
+
+    // 0: (1 . 6) — insertion range at start.
+    let insert_entry = undo_nth(ul, 0);
+    assert_eq!(insert_entry.cons_car(), Value::fixnum(1));
+    assert_eq!(insert_entry.cons_cdr(), Value::fixnum(6));
+    // 1: ("hello" . 1) — original-text deletion at start.
+    let delete_entry = undo_nth(ul, 1);
+    assert_eq!(delete_entry.cons_car().as_utf8_str(), Some("hello"));
+    assert_eq!(delete_entry.cons_cdr(), Value::fixnum(1));
+    // 2: 12 — point entry.
+    assert_eq!(undo_nth(ul, 2), Value::fixnum(12));
+    // 3: nil — boundary.
+    assert!(undo_nth(ul, 3).is_nil());
+}
+
+#[test]
+fn casify_region_records_undo_even_when_unchanged() {
+    crate::test_utils::init_test_tracing();
+    // GNU records the delete+insert even when no character changes
+    // (`modify_text` + `record_delete` + `record_insert` always run).  With
+    // point at the end of the region (6), the original-text delete pos is
+    // negative: `((1 . 6) ("HELLO" . -1) 6 nil ...)`.
+    let mut mgr = BufferManager::new();
+    let id = mgr.current_buffer_id().expect("scratch buffer");
+    mgr.get_mut(id)
+        .expect("scratch buffer")
+        .set_undo_list(Value::NIL);
+    let _ = mgr.insert_into_buffer(id, "HELLO world");
+    {
+        let buf = mgr.get_mut(id).expect("scratch buffer");
+        // Point at buffer position 6 (end of region) == Emacs byte pos 5.
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
+        buf.undo_state
+            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+
+    mgr.casify_replace_buffer_emacs_byte_range_lisp_string(
+        id,
+        crate::buffer::EmacsByteRange::from_usize(0, 5),
+        &LispString::from_utf8("HELLO"),
+    );
+
+    let buf = mgr.get(id).expect("buffer");
+    assert_eq!(buf.buffer_string(), "HELLO world");
+    let ul = buf.get_undo_list();
+    let insert_entry = undo_nth(ul, 0);
+    assert_eq!(insert_entry.cons_car(), Value::fixnum(1));
+    assert_eq!(insert_entry.cons_cdr(), Value::fixnum(6));
+    let delete_entry = undo_nth(ul, 1);
+    assert_eq!(
+        delete_entry.cons_car().as_utf8_str(),
+        Some("HELLO"),
+        "undo must record the (unchanged) original text"
+    );
+    assert_eq!(delete_entry.cons_cdr(), Value::fixnum(-1));
+    assert_eq!(undo_nth(ul, 2), Value::fixnum(6));
+}
+
+#[test]
+fn casify_region_undo_restores_original_text() {
+    crate::test_utils::init_test_tracing();
+    // Applying the recorded undo group restores the original lower-case text.
+    let (mut mgr, id) = casify_manager_with_text("hello world");
+    mgr.casify_replace_buffer_emacs_byte_range_lisp_string(
+        id,
+        crate::buffer::EmacsByteRange::from_usize(0, 5),
+        &LispString::from_utf8("HELLO"),
+    );
+    assert_eq!(mgr.get(id).unwrap().buffer_string(), "HELLO world");
+
+    // GNU's `undo` command pushes a boundary before undoing so exactly one
+    // group is reverted; mirror that here.
+    {
+        let buf = mgr.get_mut(id).expect("buffer");
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+    let result = mgr.undo_buffer(id, 1).expect("undo result");
+    assert!(result.applied_any);
+    assert_eq!(mgr.get(id).unwrap().buffer_string(), "hello world");
+}
+
 #[test]
 fn indirect_buffers_keep_undo_state_in_sync() {
     crate::test_utils::init_test_tracing();
@@ -1302,6 +1433,102 @@ fn marker_adjusts_on_deletion() {
     let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 2);
+}
+
+/// Walk `list` and return its Nth (0-indexed) element, treating it as a
+/// proper Lisp list.
+fn undo_nth(list: Value, n: usize) -> Value {
+    let mut cur = list;
+    for _ in 0..n {
+        assert!(cur.is_cons(), "undo list shorter than expected");
+        cur = cur.cons_cdr();
+    }
+    assert!(cur.is_cons(), "undo list shorter than expected");
+    cur.cons_car()
+}
+
+#[test]
+fn delete_records_point_entry_before_marker_adjustment() {
+    crate::test_utils::init_test_tracing();
+    // Regression for GNU `record_delete` ordering (undo.c): the
+    // point-position entry must be recorded *before* the marker-adjustment
+    // entries, otherwise `primitive-undo` restores point to the wrong place.
+    //
+    // Repro: (insert "abcdef"); marker (After) at char 4; point at char 7;
+    // undo-boundary; delete-region chars 3..5 (bytes [2,4)).  The marker is
+    // inside the deleted region so it records an adjustment; GNU's resulting
+    // list is `(("cd" . 3) (#<marker> . 1) 7 (t . 0))`.
+    // Mirror the repro flow: the buffer is filled with undo enabled (so it is
+    // already modified and the first-change `(t . 0)` is already recorded),
+    // then an undo boundary is added, then the delete happens.
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    buf.set_undo_list(Value::NIL);
+    buf.insert("abcdef");
+    // Marker at buffer position 4 (1-indexed) == Emacs byte pos 3.
+    register_marker_for_test(&mut buf, 1, 3, InsertionType::After);
+    // Point at buffer position 7 (1-indexed) == Emacs byte pos 6.
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6));
+    {
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+    // GNU records `point_before_last_command_or_undo`; here point == 7
+    // (0-indexed char 6).
+    buf.undo_state
+        .set_point_before_command_or_undo(Some(crate::buffer::CharPos0::new(6)));
+
+    // delete-region chars 3..5 (1-indexed) == Emacs bytes [2, 4).
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
+
+    let ul = buf.get_undo_list();
+
+    // 0: ("cd" . 3) — deletion entry.
+    let delete_entry = undo_nth(ul, 0);
+    assert!(delete_entry.is_cons());
+    assert_eq!(delete_entry.cons_car().as_utf8_str(), Some("cd"));
+    assert_eq!(delete_entry.cons_cdr(), Value::fixnum(3));
+
+    // 1: (#<marker> . 1) — marker adjustment (cdr is the adjustment).
+    let marker_entry = undo_nth(ul, 1);
+    assert!(marker_entry.is_cons());
+    assert!(marker_entry.cons_car().is_marker());
+    assert_eq!(marker_entry.cons_cdr(), Value::fixnum(1));
+
+    // 2: 7 — the point-position entry MUST be present and placed *after*
+    // the marker adjustment in list order (i.e. recorded before it).  This
+    // is the bug: without the fix the entry is dropped entirely.
+    let point_entry = undo_nth(ul, 2);
+    assert_eq!(
+        point_entry,
+        Value::fixnum(7),
+        "point-position entry (7) must precede the marker adjustment"
+    );
+}
+
+#[test]
+fn delete_records_point_entry_without_marker_adjustment() {
+    crate::test_utils::init_test_tracing();
+    // The no-marker path must keep recording the point entry (no regression).
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    buf.set_undo_list(Value::NIL);
+    buf.insert("abcdef");
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6));
+    {
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+    buf.undo_state
+        .set_point_before_command_or_undo(Some(crate::buffer::CharPos0::new(6)));
+
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
+
+    let ul = buf.get_undo_list();
+    // 0: ("cd" . 3) deletion, 1: 7 point entry (no marker entries here).
+    let delete_entry = undo_nth(ul, 0);
+    assert_eq!(delete_entry.cons_car().as_utf8_str(), Some("cd"));
+    assert_eq!(undo_nth(ul, 1), Value::fixnum(7));
 }
 
 #[test]
