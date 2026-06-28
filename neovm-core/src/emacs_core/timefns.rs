@@ -1267,55 +1267,6 @@ fn decode_time_for_zone(rule: &ZoneRule, epoch_secs: i64) -> Result<ZonedDecoded
     }
 }
 
-fn decode_time_form_hz(time_arg: Option<&Value>) -> i64 {
-    let Some(time_arg) = time_arg else {
-        return 1_000_000;
-    };
-
-    match time_arg.kind() {
-        ValueKind::Nil => 1_000_000,
-        ValueKind::Float => 1_000_000,
-        ValueKind::Cons => {
-            if let Some(items) = list_to_vec(time_arg) {
-                if items.len() >= 4 {
-                    1_000_000_000_000
-                } else if items.len() >= 3 {
-                    1_000_000
-                } else {
-                    1
-                }
-            } else {
-                1
-            }
-        }
-        _ => 1,
-    }
-}
-
-fn decode_time_second_value(
-    time_arg: Option<&Value>,
-    tm: TimeMicros,
-    decoded_sec: i64,
-    form: Option<&Value>,
-) -> Value {
-    if !matches!(form.map(|value| value.kind()), Some(ValueKind::T)) {
-        return Value::fixnum(decoded_sec);
-    }
-
-    match decode_time_form_hz(time_arg) {
-        1 => Value::fixnum(decoded_sec),
-        1_000_000 => Value::cons(
-            Value::make_int(decoded_sec * 1_000_000 + tm.usecs),
-            Value::fixnum(1_000_000),
-        ),
-        1_000_000_000_000 => Value::cons(
-            Value::make_int(decoded_sec * 1_000_000_000_000 + tm.usecs * 1_000_000 + tm.psecs),
-            Value::make_int(1_000_000_000_000),
-        ),
-        _ => Value::fixnum(decoded_sec),
-    }
-}
-
 fn time_convert_default_hz(value: &Value) -> i64 {
     match value.kind() {
         ValueKind::Fixnum(_) => 1,
@@ -1407,16 +1358,106 @@ fn decode_encode_time_second(value: &Value) -> Result<(i64, i64, i64), Flow> {
     Ok((sec, subsec_ticks.rem_euclid(hz), hz))
 }
 
-fn encode_time_zone_offset(zone: &Value, approx_epoch_secs: i64) -> Result<i64, Flow> {
-    let rule = effective_zone_rule(Some(zone))?;
-    let initial = zone_rule_to_offset_name(&rule, approx_epoch_secs).0;
-    Ok(match rule {
-        ZoneRule::Local | ZoneRule::TzString(_) => {
-            let adjusted_epoch = approx_epoch_secs - initial;
-            zone_rule_to_offset_name(&rule, adjusted_epoch).0
+/// GNU `Fencode_time`'s broken-down-time daylight-saving flag (the input
+/// `tm.tm_isdst` it hands to `mktime_z`, `src/timefns.c:1696`/`1718`/`1761`):
+/// `-1` auto-detects DST from the wall clock, `0` forces standard time, and `1`
+/// forces daylight saving time. An explicit `nil` DST slot means `0`, an
+/// explicit `t` means `1`, and a missing/`-1`/non-symbol slot stays `-1`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TmIsDst {
+    Auto,
+    Standard,
+    Daylight,
+}
+
+impl TmIsDst {
+    fn to_c(self) -> libc::c_int {
+        match self {
+            TmIsDst::Auto => -1,
+            TmIsDst::Standard => 0,
+            TmIsDst::Daylight => 1,
         }
-        _ => initial,
-    })
+    }
+}
+
+/// Compute the epoch seconds for a broken-down local time in a DST-aware zone
+/// (`Local`/`TzString`) honoring the forced `isdst` flag, mirroring GNU's
+/// `mktime_z` (`src/timefns.c:1761`). Unlike `localtime_r`, libc `mktime`
+/// treats `tm_isdst` as an *input* that disambiguates which UTC offset applies,
+/// so an explicit `nil` DST slot forces standard time even during the summer.
+#[cfg(unix)]
+fn mktime_with_isdst(
+    sec: i64,
+    min: i64,
+    hour: i64,
+    day: i64,
+    month: i64,
+    year: i64,
+    isdst: TmIsDst,
+) -> Result<i64, Flow> {
+    // `mktime` normalizes out-of-range fields itself, but `tm_year`/`tm_mon`
+    // must fit in a C `int`; bail out the same way GNU `check_tm_member` does.
+    let tm_year = year.checked_sub(1900).filter(|v| i32::try_from(*v).is_ok());
+    let Some(tm_year) = tm_year else {
+        return Err(time_error_overflow());
+    };
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    tm.tm_sec = sec as libc::c_int;
+    tm.tm_min = min as libc::c_int;
+    tm.tm_hour = hour as libc::c_int;
+    tm.tm_mday = day as libc::c_int;
+    tm.tm_mon = (month - 1) as libc::c_int;
+    tm.tm_year = tm_year as libc::c_int;
+    tm.tm_isdst = isdst.to_c();
+    // GNU sets `tm.tm_wday = -1` and treats a still-negative `tm_wday` after
+    // `mktime_z` as an error; libc `mktime` returns `(time_t)-1` on failure.
+    tm.tm_wday = -1;
+    let value = unsafe { libc::mktime(&mut tm as *mut _) };
+    if value == -1 && tm.tm_wday < 0 {
+        return Err(time_error_overflow());
+    }
+    Ok(value as i64)
+}
+
+#[cfg(not(unix))]
+fn mktime_with_isdst(
+    sec: i64,
+    min: i64,
+    hour: i64,
+    day: i64,
+    month: i64,
+    year: i64,
+    _isdst: TmIsDst,
+) -> Result<i64, Flow> {
+    Ok(encode_to_epoch_secs(sec, min, hour, day, month, year))
+}
+
+/// Encode a broken-down local time to epoch seconds honoring the zone's DST
+/// rules and the forced `isdst` flag, mirroring GNU `Fencode_time` +
+/// `mktime_z`. For zones without DST transitions (`Utc`/fixed offsets) the flag
+/// is irrelevant and a plain offset subtraction suffices.
+fn encode_time_to_epoch(
+    sec: i64,
+    min: i64,
+    hour: i64,
+    day: i64,
+    month: i64,
+    year: i64,
+    zone: &Value,
+    isdst: TmIsDst,
+) -> Result<i64, Flow> {
+    let rule = effective_zone_rule(Some(zone))?;
+    let local_secs = encode_to_epoch_secs(sec, min, hour, day, month, year);
+    match rule {
+        ZoneRule::Local => mktime_with_isdst(sec, min, hour, day, month, year, isdst),
+        ZoneRule::TzString(spec) => with_tz_env(Some(&spec), || {
+            mktime_with_isdst(sec, min, hour, day, month, year, isdst)
+        }),
+        ZoneRule::Utc => Ok(local_secs),
+        ZoneRule::FixedOffset(offset) | ZoneRule::FixedNamedOffset(offset, _) => {
+            Ok(local_secs - offset)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1621,7 +1662,7 @@ fn check_cons(obj: &Value) -> Result<(Value, Value), Flow> {
 pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
     // The SECOND field accepts any Lisp time value (GNU decodes it via
     // `decode_lisp_time'); its sub-second resolution carries into the result.
-    let (sec, subsec_ticks, hz, min, hour, day, month, year, zone) = if args.len() == 1 {
+    let (sec, subsec_ticks, hz, min, hour, day, month, year, zone, isdst) = if args.len() == 1 {
         // GNU `Fencode_time` (`src/timefns.c:1698`) walks the single list
         // argument cons-by-cons: `for (i=0;i<6;i++) CHECK_CONS(tail)` then peels
         // SECOND..YEAR off the head. A malformed tail therefore signals
@@ -1640,14 +1681,27 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
         let (monarg, a) = check_cons(&a)?;
         let (yeararg, a) = check_cons(&a)?;
         // ZONE is the element after the IGNORED and DST fields, when present.
-        // GNU `CHECK_CONS`-walks them too, but we only need the ZONE value here.
-        let zone = if a.is_nil() {
-            Value::NIL
+        // GNU `CHECK_CONS`-walks them too. The DST slot only forces the
+        // broken-down time's `tm_isdst` when it is a symbol AND ZONE is neither
+        // a fixnum nor a cons (`src/timefns.c:1717`): an explicit `nil` forces
+        // standard time, an explicit `t` forces daylight saving, and any other
+        // DST value leaves the default auto-detection (`tm_isdst = -1`).
+        let (zone, isdst) = if a.is_nil() {
+            (Value::NIL, TmIsDst::Auto)
         } else {
             let (_ignored, a) = check_cons(&a)?;
-            let (_dstflag, a) = check_cons(&a)?;
+            let (dstflag, a) = check_cons(&a)?;
             let (zoneval, _) = check_cons(&a)?;
-            zoneval
+            let isdst = if dstflag.is_symbol() && !zoneval.is_fixnum() && !zoneval.is_cons() {
+                if dstflag.is_nil() {
+                    TmIsDst::Standard
+                } else {
+                    TmIsDst::Daylight
+                }
+            } else {
+                TmIsDst::Auto
+            };
+            (zoneval, isdst)
         };
         let (sec, subsec_ticks, hz) = decode_encode_time_second(&secarg)?;
         (
@@ -1660,6 +1714,7 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
             require_fixnum_component(&monarg)?,
             require_fixnum_component(&yeararg)?,
             zone,
+            isdst,
         )
     } else if args.len() < 6 {
         return Err(signal(
@@ -1670,6 +1725,8 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
             ],
         ));
     } else {
+        // Obsolescent 6+-argument convention: GNU keeps `tm_isdst = -1` and
+        // ZONE defaults to nil (`src/timefns.c:1696`/`1723`).
         let (sec, subsec_ticks, hz) = decode_encode_time_second(&args[0])?;
         (
             sec,
@@ -1685,12 +1742,11 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
             } else {
                 Value::NIL
             },
+            TmIsDst::Auto,
         )
     };
 
-    let local_secs = encode_to_epoch_secs(sec, min, hour, day, month, year);
-    let zone_offset = encode_time_zone_offset(&zone, local_secs)?;
-    let total_secs = local_secs - zone_offset;
+    let total_secs = encode_time_to_epoch(sec, min, hour, day, month, year, &zone, isdst)?;
     if hz <= 1 {
         // Integer-second SECOND field: keep GNU's (HIGH LOW) result form
         // (`current-time-list' defaults to t).
@@ -1711,15 +1767,42 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
 /// -> `(SECONDS MINUTES HOURS DAY MONTH YEAR DOW DST UTCOFF)`
 pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
     expect_min_max_args("decode-time", &args, 0, 3)?;
-    let tm = if args.is_empty() || args[0].is_nil() {
-        TimeMicros::now()
+    // GNU `Fdecode_time` (`src/timefns.c:1542`): with FORM=t it decodes the
+    // exact `(TICKS . HZ)` so the broken-down SEC member can carry sub-second
+    // precision; otherwise HZ is 1 and SEC is a plain integer.
+    let form_is_t = matches!(args.get(2).map(|v| v.kind()), Some(ValueKind::T));
+    let time_arg = if args.is_empty() { Value::NIL } else { args[0] };
+    let (broken_down_secs, sec_value): (i64, Option<(Integer, Integer)>) = if form_is_t {
+        // CFORM_TICKS_HZ: keep the exact ticks/hz; `time_spec = tv_sec` is the
+        // floor of ticks/hz (GNU `ticks_hz_to_timespec`).
+        let th = decode_lisp_time(&time_arg)?.th;
+        let secs = i64::try_from(&ticks_hz_seconds(&th)).map_err(|_| time_error_overflow())?;
+        (secs, Some((th.ticks, th.hz)))
     } else {
-        parse_time(&args[0])?
+        let tm = if time_arg.is_nil() {
+            TimeMicros::now()
+        } else {
+            parse_time(&time_arg)?
+        };
+        (tm.secs, None)
     };
+
     let rule = effective_zone_rule(args.get(1))?;
-    let decoded = decode_time_for_zone(&rule, tm.secs)?;
+    let decoded = decode_time_for_zone(&rule, broken_down_secs)?;
     let dt = decoded.time;
-    let sec = decode_time_second_value(args.first(), tm, dt.sec, args.get(2));
+
+    // Compute the SEC member. For FORM=t with a sub-second clock (HZ != 1) GNU
+    // returns `(HZ * tm_sec + mod(ticks, HZ)) . HZ` (`src/timefns.c:1596`);
+    // otherwise SEC is the integer `tm_sec`.
+    let sec = match sec_value {
+        Some((ticks, hz)) if hz != Integer::from(1) => {
+            // GNU `mpz_fdiv_r`: the floor remainder is always non-negative.
+            let (_, rem) = integer_fdiv_qr(&ticks, &hz);
+            let sec_ticks = &hz * Integer::from(dt.sec) + rem;
+            Value::cons(Value::make_integer(sec_ticks), Value::make_integer(hz))
+        }
+        _ => Value::fixnum(dt.sec),
+    };
     Ok(Value::list(vec![
         sec,
         Value::fixnum(dt.min),

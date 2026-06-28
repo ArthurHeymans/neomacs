@@ -756,6 +756,85 @@ fn builtin_decode_time_form_t_preserves_input_precision() {
     assert_eq!(default_items[0].as_int(), Some(1));
 }
 
+// Bug 8: `encode-time` must honor an explicit `nil` DST slot by forcing
+// standard time (GNU passes `tm_isdst = 0` to `mktime_z`), rather than treating
+// it like the auto-detecting `-1`. With a DST-observing zone in summer, an
+// explicit nil keeps EST (-5h) while `t`/`-1` give EDT (-4h).
+//
+// GNU oracle (TZ-string slot, July 10 2023 12:00):
+//   (encode-time '(0 0 12 10 7 2023 nil nil "EST5EDT,M3.2.0,M11.1.0"))
+//     => (25772 14608)            ; explicit nil -> standard time (EST)
+//   (encode-time '(0 0 12 10 7 2023 nil t   "EST5EDT,M3.2.0,M11.1.0"))
+//     => (25772 11008)            ; explicit t   -> daylight (EDT)
+//   (encode-time '(0 0 12 10 7 2023 nil -1  "EST5EDT,M3.2.0,M11.1.0"))
+//     => (25772 11008)            ; -1 auto      -> daylight (EDT) in summer
+#[test]
+fn builtin_encode_time_honors_explicit_nil_dst() {
+    crate::test_utils::init_test_tracing();
+    let _guard = tz_test_lock();
+    reset_tz_rule();
+
+    let encode = |dst: Value| -> i64 {
+        let result = builtin_encode_time(vec![Value::list(vec![
+            Value::fixnum(0),    // sec
+            Value::fixnum(0),    // min
+            Value::fixnum(12),   // hour
+            Value::fixnum(10),   // day
+            Value::fixnum(7),    // month (July)
+            Value::fixnum(2023), // year
+            Value::NIL,          // ignored (dow)
+            dst,                 // DST slot
+            Value::string("EST5EDT,M3.2.0,M11.1.0"),
+        ])])
+        .unwrap();
+        let items = list_to_vec(&result).unwrap();
+        items[0].as_int().unwrap() * 65536 + items[1].as_int().unwrap()
+    };
+
+    // 25772 * 65536 + 14608 = 1689004608 (EST, standard time forced by nil)
+    assert_eq!(encode(Value::NIL), 25772 * 65536 + 14608);
+    // 25772 * 65536 + 11008 = 1689001008 (EDT, daylight forced by t)
+    assert_eq!(encode(Value::T), 25772 * 65536 + 11008);
+    // -1 auto-detects: summer -> EDT, same as t
+    assert_eq!(encode(Value::fixnum(-1)), 25772 * 65536 + 11008);
+
+    reset_tz_rule();
+}
+
+// Bug 9: `decode-time` with FORM=t on a sub-second `(TICKS . HZ)` timestamp
+// whose HZ is a nanosecond clock must put the seconds as a `(TICKS . HZ)` pair
+// preserving sub-second precision, not a truncated integer.
+//
+// GNU oracle:
+//   (decode-time '(1700000000123456789 . 1000000000) 0 t)
+//     => SEC slot = (20123456789 . 1000000000)
+#[test]
+fn builtin_decode_time_form_t_preserves_nanosecond_subsec() {
+    crate::test_utils::init_test_tracing();
+
+    // 1700000000 epoch seconds = 2023-11-14 22:13:20 UTC, so tm_sec = 20.
+    let time = Value::cons(
+        Value::make_int(1_700_000_000_123_456_789),
+        Value::make_int(1_000_000_000),
+    );
+    let result = builtin_decode_time(vec![time, Value::fixnum(0), Value::T]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+
+    // SEC slot is a (TICKS . HZ) pair: HZ * 20 + (ticks mod HZ)
+    //   = 1_000_000_000 * 20 + 123_456_789 = 20_123_456_789
+    let sec = items[0];
+    assert!(
+        sec.is_cons(),
+        "SEC slot must be a (TICKS . HZ) pair, got {sec:?}"
+    );
+    assert_eq!(sec.cons_car().as_int(), Some(20_123_456_789));
+    assert_eq!(sec.cons_cdr().as_int(), Some(1_000_000_000));
+
+    // The minute/second context must still be right (22:13:20 UTC).
+    assert_eq!(items[1].as_int(), Some(13)); // min
+    assert_eq!(items[2].as_int(), Some(22)); // hour
+}
+
 #[test]
 fn builtin_decode_time_no_args() {
     crate::test_utils::init_test_tracing();
