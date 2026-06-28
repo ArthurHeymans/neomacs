@@ -366,6 +366,116 @@ fn test_multibyte_charset_match_position() {
     assert_eq!(regs.end[0], 8, "á is 2 bytes in UTF-8, ends at byte 8");
 }
 
+// Regression tests for the byte-shift bug: when an alternation/quantifier
+// splices an `on_failure_jump` (or similar) AHEAD of an already-emitted
+// `Charset`/`CharsetNot` opcode, the opcode's byte position shifts.  The
+// multibyte range table is kept in a side map keyed by that byte position;
+// before the fix the keys were never updated, so the range table was orphaned
+// and non-ASCII chars silently failed to match.  GNU returns 0 for all of the
+// patterns below; neomacs returned `None` (matching char position 0 here).
+
+#[test]
+fn test_charset_before_alternation_shift() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // (string-match "[é]\\|x" (string ?é)) => 0 in GNU.
+    // The `\\|x` second alternative splices an OnFailureJump before `[é]`.
+    let r = search_pattern("[é]\\|x", "é", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, _) = r
+        .unwrap()
+        .expect("[é]\\|x should match the lone é, not be orphaned by the splice");
+    assert_eq!(pos, 0);
+}
+
+#[test]
+fn test_charset_range_before_alternation_shift() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // (string-match "[ç-ï]\\|x" (string ?é)) => 0 in GNU (é is in ç..ï).
+    let r = search_pattern("[ç-ï]\\|x", "é", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, _) = r.unwrap().expect("[ç-ï]\\|x should match é (in range ç-ï)");
+    assert_eq!(pos, 0);
+}
+
+#[test]
+fn test_charset_range_before_quantifier_shift() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // (string-match "[ç-ï]*x" (string ?é ?é ?x)) => 0 in GNU.
+    // The `*` splices OnFailureJumpLoop before `[ç-ï]`.
+    let r = search_pattern("[ç-ï]*x", "ééx", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, _) = r
+        .unwrap()
+        .expect("[ç-ï]*x should match \"ééx\" from the start");
+    assert_eq!(pos, 0);
+}
+
+#[test]
+fn test_charset_in_group_before_alternation_shift() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // (string-match "\\([ç-ï]\\)\\|z" (string ?é)) => 0 in GNU.
+    // Group + alternation both splice bytes ahead of `[ç-ï]`.
+    let r = search_pattern("\\([ç-ï]\\)\\|z", "é", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, regs) = r
+        .unwrap()
+        .expect("\\([ç-ï]\\)\\|z should match é and capture it");
+    assert_eq!(pos, 0);
+    assert_eq!(regs.start[1], 0, "group 1 should capture the é");
+    assert_eq!(regs.end[1], 2, "é is 2 bytes in UTF-8");
+}
+
+#[test]
+fn test_charset_optional_before_quantifier_shift() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // Greedy `?` also splices an OnFailureJump before the charset.
+    // (string-match "[ç-ï]?x" (string ?é ?x)) => 0 in GNU.
+    let r = search_pattern("[ç-ï]?x", "éx", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, _) = r.unwrap().expect("[ç-ï]?x should match \"éx\"");
+    assert_eq!(pos, 0);
+
+    // Non-greedy `*?` truncates+re-extends the charset body to a new offset.
+    // (string-match "[ç-ï]*?x" (string ?é ?é ?x)) => 0 in GNU.
+    let r = search_pattern("[ç-ï]*?x", "ééx", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    let (pos, _) = r.unwrap().expect("[ç-ï]*?x should match \"ééx\"");
+    assert_eq!(pos, 0);
+}
+
+#[test]
+fn test_ascii_class_before_alternation_no_regression() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    // ASCII-only classes use the bitmap (no side-map entry), so the splice
+    // never affected them; assert they still behave correctly.
+    let r = search_pattern("[a-c]\\|x", "b", 0, false, &syn, 0);
+    assert!(r.is_ok());
+    assert_eq!(r.unwrap().expect("[a-c]\\|x should match b").0, 0);
+
+    let r = search_pattern("[a-c]\\|x", "x", 0, false, &syn, 0);
+    assert!(r.is_ok());
+    assert_eq!(
+        r.unwrap().expect("[a-c]\\|x should match x via 2nd alt").0,
+        0
+    );
+
+    let r = search_pattern("[a-c]\\|x", "z", 0, false, &syn, 0);
+    assert!(r.is_ok());
+    assert!(r.unwrap().is_none(), "[a-c]\\|x should not match z");
+
+    // Quantifier over an ASCII class (`*`) plus a multibyte class to confirm
+    // the two co-exist after a shift.
+    let r = search_pattern("[a-c]*[ç-ï]", "abcé", 0, false, &syn, 0);
+    assert!(r.is_ok(), "compile failed: {:?}", r.err());
+    assert_eq!(r.unwrap().expect("[a-c]*[ç-ï] should match \"abcé\"").0, 0);
+}
+
 // ---------------------------------------------------------------------------
 // GNU parity: descending intervals \{n,m\} with n>m must be rejected.
 // (string-match "a\\{2,1\\}" "aa") -> (invalid-regexp "Invalid content of \\{\\}")

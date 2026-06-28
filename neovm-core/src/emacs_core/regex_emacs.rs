@@ -363,6 +363,74 @@ impl CompiledPattern {
             charset_class_bits: HashMap::new(),
         }
     }
+
+    /// Splice `bytes` into the bytecode at `at`, keeping the
+    /// opcode-position-keyed side tables consistent.
+    ///
+    /// `multibyte_charsets` and `charset_class_bits` are keyed by the byte
+    /// position of each `Charset`/`CharsetNot` opcode.  GNU stores the
+    /// charset range table inline in the bytecode, so moving the opcode also
+    /// moves its range table; neomacs keeps the range table in a side map, so
+    /// every byte inserted *before* an already-emitted charset opcode must
+    /// re-key that opcode's entry by the inserted byte count.  Failing to do
+    /// so orphans the range table and the charset silently matches no
+    /// non-ASCII character (the alternation/quantifier splices that insert an
+    /// `on_failure_jump` ahead of a `[é]` are exactly this case).
+    fn splice_bytecode(&mut self, at: usize, bytes: &[u8]) {
+        let count = bytes.len();
+        self.buffer.splice(at..at, bytes.iter().copied());
+        if count != 0 {
+            shift_charset_keys(&mut self.multibyte_charsets, at, count as isize);
+            shift_charset_keys(&mut self.charset_class_bits, at, count as isize);
+        }
+    }
+
+    /// Move the charset side-table keys for opcodes that lived in
+    /// `[from..from_end)` to start at `to` instead.  Used by the non-greedy
+    /// `*?`/`+?` quantifier compilers, which `truncate` the body bytes and
+    /// re-`extend` them at a new offset.
+    fn relocate_charset_keys(&mut self, from: usize, from_end: usize, to: usize) {
+        relocate_charset_keys(&mut self.multibyte_charsets, from, from_end, to);
+        relocate_charset_keys(&mut self.charset_class_bits, from, from_end, to);
+    }
+
+    /// Drop charset side-table keys for opcodes at or beyond `at`, mirroring a
+    /// `buffer.truncate(at)`.
+    fn truncate_charset_keys(&mut self, at: usize) {
+        self.multibyte_charsets.retain(|&pos, _| pos < at);
+        self.charset_class_bits.retain(|&pos, _| pos < at);
+    }
+}
+
+/// Shift every key `>= at` in an opcode-position-keyed map by `delta` bytes.
+fn shift_charset_keys<V>(map: &mut HashMap<usize, V>, at: usize, delta: isize) {
+    if map.is_empty() || delta == 0 {
+        return;
+    }
+    let moved: Vec<(usize, V)> = map
+        .extract_if(|&pos, _| pos >= at)
+        .map(|(pos, v)| ((pos as isize + delta) as usize, v))
+        .collect();
+    for (pos, v) in moved {
+        map.insert(pos, v);
+    }
+}
+
+/// Re-key opcode entries that lived in `[from..from_end)` so they start at `to`.
+fn relocate_charset_keys<V>(map: &mut HashMap<usize, V>, from: usize, from_end: usize, to: usize) {
+    if map.is_empty() {
+        return;
+    }
+    let moved: Vec<(usize, V)> = map
+        .extract_if(|&pos, _| pos >= from && pos < from_end)
+        .map(|(pos, v)| (pos - from + to, v))
+        .collect();
+    // Drop any remaining keys at or beyond `from` that were not relocated
+    // (they belonged to bytes that the caller truncated away).
+    map.retain(|&pos, _| pos < from);
+    for (pos, v) in moved {
+        map.insert(pos, v);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -874,8 +942,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         // Insert on_failure_jump at the start of the current alt
                         let alt_start = begalt_offset;
                         // We need to insert 3 bytes at alt_start
-                        buf.buffer
-                            .splice(alt_start..alt_start, [RegexOp::OnFailureJump as u8, 0, 0]);
+                        buf.splice_bytecode(alt_start, &[RegexOp::OnFailureJump as u8, 0, 0]);
                         // The failure jump target is right after the jump we just emitted
                         let target = (bpos!() - alt_start - 3) as i16;
                         store_number(&mut buf.buffer, alt_start + 1, target);
@@ -1378,10 +1445,7 @@ fn compile_repetition(
                 //   Jump target → back to OFJL opcode
 
                 // Insert OnFailureJumpLoop before the expression
-                buf.buffer.splice(
-                    laststart..laststart,
-                    [RegexOp::OnFailureJumpLoop as u8, 0, 0],
-                );
+                buf.splice_bytecode(laststart, &[RegexOp::OnFailureJumpLoop as u8, 0, 0]);
                 // After splice, expr occupies [laststart+3 .. laststart+3+expr_len)
                 let expr_len = after_last - laststart; // original expr length
 
@@ -1424,6 +1488,9 @@ fn compile_repetition(
 
                 let expr_start = buf.buffer.len();
                 buf.buffer.extend_from_slice(&expr_bytes);
+                // The body bytes moved from [laststart..after_last) to start at
+                // expr_start; re-key any charset side tables to follow them.
+                buf.relocate_charset_keys(laststart, after_last, expr_start);
                 if body_may_be_empty {
                     buf.buffer.push(RegexOp::NoOp as u8);
                 }
@@ -1478,6 +1545,9 @@ fn compile_repetition(
                 buf.buffer.truncate(laststart);
                 let expr_start = buf.buffer.len();
                 buf.buffer.extend_from_slice(&expr_bytes);
+                // The body moved from [laststart..after_last) to expr_start
+                // (here unchanged, but re-key defensively to track the move).
+                buf.relocate_charset_keys(laststart, after_last, expr_start);
                 if body_may_be_empty {
                     buf.buffer.push(RegexOp::NoOp as u8);
                 }
@@ -1500,17 +1570,13 @@ fn compile_repetition(
             if greedy {
                 // Layout: [laststart] OFJ  offset(2)  <expr>
                 // OFJ fail target → past expr
-                buf.buffer
-                    .splice(laststart..laststart, [RegexOp::OnFailureJump as u8, 0, 0]);
+                buf.splice_bytecode(laststart, &[RegexOp::OnFailureJump as u8, 0, 0]);
                 let expr_len = after_last - laststart;
                 // From (laststart+3) → (laststart+3+expr_len), offset = expr_len
                 store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
             } else {
                 // Non-greedy ??
-                buf.buffer.splice(
-                    laststart..laststart,
-                    [RegexOp::OnFailureKeepStringJump as u8, 0, 0],
-                );
+                buf.splice_bytecode(laststart, &[RegexOp::OnFailureKeepStringJump as u8, 0, 0]);
                 let expr_len = after_last - laststart;
                 store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
             }
@@ -2281,36 +2347,36 @@ fn store_jump2_at(
 }
 
 fn insert_jump(
-    buffer: &mut Vec<u8>,
+    buf: &mut CompiledPattern,
     at: usize,
     op: RegexOp,
     target: usize,
 ) -> Result<(), RegexCompileError> {
-    buffer.splice(at..at, [op as u8, 0, 0]);
-    store_jump_at(buffer, at, op, target)
+    buf.splice_bytecode(at, &[op as u8, 0, 0]);
+    store_jump_at(&mut buf.buffer, at, op, target)
 }
 
 fn insert_jump2(
-    buffer: &mut Vec<u8>,
+    buf: &mut CompiledPattern,
     at: usize,
     op: RegexOp,
     target: usize,
     count: usize,
 ) -> Result<(), RegexCompileError> {
-    buffer.splice(at..at, [op as u8, 0, 0, 0, 0]);
-    store_jump2_at(buffer, at, op, target, count)
+    buf.splice_bytecode(at, &[op as u8, 0, 0, 0, 0]);
+    store_jump2_at(&mut buf.buffer, at, op, target, count)
 }
 
 fn insert_set_number_at(
-    buffer: &mut Vec<u8>,
+    buf: &mut CompiledPattern,
     at: usize,
     target_counter_offset: usize,
     value: usize,
 ) -> Result<(), RegexCompileError> {
-    buffer.splice(at..at, [RegexOp::SetNumberAt as u8, 0, 0, 0, 0]);
+    buf.splice_bytecode(at, &[RegexOp::SetNumberAt as u8, 0, 0, 0, 0]);
     let offset = checked_i16_offset(target_counter_offset as isize)?;
-    store_number(buffer, at + 1, offset);
-    store_number(buffer, at + 3, checked_i16_counter(value)?);
+    store_number(&mut buf.buffer, at + 1, offset);
+    store_number(&mut buf.buffer, at + 3, checked_i16_counter(value)?);
     Ok(())
 }
 
@@ -2340,6 +2406,7 @@ fn compile_interval(
     if let Some(max_val) = max {
         if max_val == 0 {
             buf.buffer.truncate(laststart);
+            buf.truncate_charset_keys(laststart);
             return Ok(());
         }
         if min == 1 && max_val == 1 {
@@ -2358,7 +2425,7 @@ fn compile_interval(
 
     if min == 0 {
         insert_jump(
-            &mut buf.buffer,
+            buf,
             laststart,
             RegexOp::OnFailureJumpLoop,
             old_end + 3 + upper_extra_bytes,
@@ -2366,14 +2433,14 @@ fn compile_interval(
         emitted_end += 3;
     } else {
         insert_jump2(
-            &mut buf.buffer,
+            buf,
             laststart,
             RegexOp::SucceedN,
             old_end + 5 + upper_extra_bytes,
             min,
         )?;
         emitted_end += 5;
-        insert_set_number_at(&mut buf.buffer, laststart, 5, min)?;
+        insert_set_number_at(buf, laststart, 5, min)?;
         emitted_end += 5;
         startoffset += 5;
     }
@@ -2401,12 +2468,7 @@ fn compile_interval(
                 max_val - 1,
             )?;
             emitted_end += 5;
-            insert_set_number_at(
-                &mut buf.buffer,
-                laststart,
-                emitted_end - laststart,
-                max_val - 1,
-            )?;
+            insert_set_number_at(buf, laststart, emitted_end - laststart, max_val - 1)?;
         }
         Some(_) => {}
     }
