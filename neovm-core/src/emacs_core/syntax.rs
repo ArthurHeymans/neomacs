@@ -4375,6 +4375,22 @@ impl PartialParseState {
             };
         }
 
+        // GNU `internalize_parse_state`:
+        //   tem = Fcar (external);   /* element 8 */
+        //   state->comstr_start =
+        //     RANGED_FIXNUMP (...) ? XFIXNUM (tem) : -1;
+        // i.e. when element 8 is nil (or not a fixnum) the comment/string
+        // start is normalized to -1, not left unknown.  `scan_sexps_forward`
+        // only ever *reports* `comstr_start` while inside a string/comment
+        // (element 8 of the result is nil otherwise), so this -1 surfaces
+        // exactly when resuming from a from-state that is already inside a
+        // string (element 3) or comment (element 4) but gave no start.
+        if state.comment_or_string_start.is_none()
+            && (state.in_string.is_some() || state.in_comment.is_some())
+        {
+            state.comment_or_string_start = Some(-1);
+        }
+
         if let Some(item) = items.get(9)
             && let Some(stack_items) = list_to_vec(item)
         {
@@ -4943,8 +4959,19 @@ fn parse_state_from_range_with_options(
                 idx += 1;
                 continue;
             }
-            SyntaxClass::Word | SyntaxClass::Symbol | SyntaxClass::Quote => {
+            SyntaxClass::Word | SyntaxClass::Symbol => {
                 atom_start.get_or_insert(pos1);
+            }
+            SyntaxClass::Quote => {
+                // GNU `scan_sexps_forward`: a top-level Squote (expression
+                // prefix, e.g. `'`, backquote, `,`, `#`) falls into the
+                // `default' arm — "Ignore whitespace, punctuation, quote,
+                // endcomment." — so it does NOT begin an atom and never
+                // becomes element 2 (last-complete-sexp start).  But within an
+                // in-progress symbol run Squote is a constituent (the inner
+                // `symstarted` loop's `case Squote: break;`), so an already
+                // started atom keeps running across it (the `finish_atom`
+                // guard above already keeps Quote in the run).
             }
             SyntaxClass::Whitespace | SyntaxClass::EndComment => {}
             _ => {}

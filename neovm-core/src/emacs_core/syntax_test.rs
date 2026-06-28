@@ -2650,3 +2650,240 @@ fn syntax_class_at_char_defaults_for_missing_entries() {
         SyntaxClass::Word
     );
 }
+
+/// Extract the nth element of a `parse-partial-sexp` result list.
+fn nth_value(list: &Value, n: usize) -> Value {
+    list_to_vec(list)
+        .expect("parse-partial-sexp returns a list")
+        .get(n)
+        .cloned()
+        .unwrap_or(Value::NIL)
+}
+
+/// Install the `emacs-lisp-mode` expression-prefix syntax on the current
+/// buffer, making `'`, backquote, `,` and `#` Squote (class `'`) — the same
+/// reassignment `lisp-mode-syntax-table` performs over the fundamental-mode
+/// standard table (where these are punctuation).
+fn install_elisp_prefix_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+    let entry = string_to_syntax("'").unwrap();
+    let mut table = super::SyntaxTable::isolate_for_buffer(buf);
+    for ch in ['\'', '`', ',', '#'] {
+        table.modify_syntax_entry(ch, entry.clone());
+    }
+}
+
+// === parse-partial-sexp prefix-quote / last-complete-sexp (bug 7) ===
+//
+// GNU `scan_sexps_forward`: a top-level Squote (expression prefix) falls into
+// the `default' switch arm — "Ignore whitespace, punctuation, quote,
+// endcomment." — so it neither begins an atom nor becomes element 2
+// (last-complete-sexp start).  Within a symbol run Squote is a constituent.
+
+#[test]
+fn parse_partial_sexp_prefix_quote_does_not_become_last_complete_sexp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "'abc");
+    install_elisp_prefix_syntax(&mut eval);
+    // (with-temp-buffer (emacs-lisp-mode) (insert "'abc")
+    //   (nth 2 (parse-partial-sexp (point-min) (point-max)))) => 2
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+    assert_eq!(nth_value(&state, 2), Value::fixnum(2));
+}
+
+#[test]
+fn parse_partial_sexp_bare_prefix_quote_has_no_last_complete_sexp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "'");
+    install_elisp_prefix_syntax(&mut eval);
+    // (insert "'") (nth 2 (parse-partial-sexp (point-min) (point-max))) => nil
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(2)]).unwrap();
+    assert_eq!(nth_value(&state, 2), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_other_prefix_quotes_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    // backquote, comma and `#'` prefixes are all Squote in elisp; each yields
+    // the following sexp's start as element 2, never the prefix's own position.
+    // GNU: ,foo => 2, `bar => 2, #'foo => 3.
+    for (text, to, expected) in [(",foo", 5, 2i64), ("`bar", 5, 2), ("#'foo", 6, 3)] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        replace_current_buffer_text(&mut eval, text);
+        install_elisp_prefix_syntax(&mut eval);
+        let state =
+            builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(to)])
+                .unwrap();
+        assert_eq!(
+            nth_value(&state, 2),
+            Value::fixnum(expected),
+            "element 2 for {text:?}"
+        );
+    }
+}
+
+#[test]
+fn parse_partial_sexp_double_prefix_quote_has_no_last_complete_sexp() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "''");
+    install_elisp_prefix_syntax(&mut eval);
+    // (insert "''") (nth 2 (parse-partial-sexp (point-min) (point-max))) => nil
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(3)]).unwrap();
+    assert_eq!(nth_value(&state, 2), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_quote_continues_in_progress_symbol_run() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "abc'def");
+    install_elisp_prefix_syntax(&mut eval);
+    // A quote inside a symbol run is a constituent: `abc'def` is one symbol
+    // starting at 1, so element 2 is 1 (GNU => 1).
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(8)]).unwrap();
+    assert_eq!(nth_value(&state, 2), Value::fixnum(1));
+}
+
+#[test]
+fn parse_partial_sexp_prefix_quote_before_paren_full_state() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "'abc");
+    install_elisp_prefix_syntax(&mut eval);
+    // (insert "'abc") (parse-partial-sexp (point-min) (point-max))
+    //   => (0 nil 2 nil nil nil 0 nil nil nil nil)
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+    assert_eq!(
+        state,
+        Value::list(vec![
+            Value::fixnum(0),
+            Value::NIL,
+            Value::fixnum(2),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(0),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ])
+    );
+}
+
+// === parse-partial-sexp from-state element 8 normalization (bug 8) ===
+//
+// GNU `internalize_parse_state` sets `state->comstr_start` to -1 when element
+// 8 of OLDSTATE is nil; while resuming inside a string (element 3) or comment
+// (element 4) this -1 is reported as element 8 of the result.
+
+#[test]
+fn parse_partial_sexp_from_state_in_string_normalizes_unknown_start_to_minus_one() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "abc\" def");
+    // (parse-partial-sexp (point-min) 4 nil nil
+    //   (list 0 nil nil ?\" nil nil 0 nil nil nil nil)) => element 8 is -1
+    let oldstate = Value::list(vec![
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum('"' as i64),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+    ]);
+    let state = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(4),
+            Value::NIL,
+            Value::NIL,
+            oldstate,
+        ],
+    )
+    .unwrap();
+    assert_eq!(nth_value(&state, 8), Value::fixnum(-1));
+    // Still inside the string at TO.
+    assert_eq!(nth_value(&state, 3), Value::fixnum('"' as i64));
+}
+
+#[test]
+fn parse_partial_sexp_from_state_in_comment_normalizes_unknown_start_to_minus_one() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "abc def");
+    // Resume inside a comment (element 4 = t) with element 8 nil => -1.
+    let oldstate = Value::list(vec![
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::T,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+    ]);
+    let state = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(4),
+            Value::NIL,
+            Value::NIL,
+            oldstate,
+        ],
+    )
+    .unwrap();
+    assert_eq!(nth_value(&state, 8), Value::fixnum(-1));
+}
+
+#[test]
+fn parse_partial_sexp_from_state_not_in_string_or_comment_keeps_start_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "abc def");
+    // No string/comment in the from-state: element 8 must stay nil (no
+    // spurious -1), matching GNU's gated output of `comstr_start`.
+    let oldstate = Value::list(vec![
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+        Value::NIL,
+    ]);
+    let state = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(4),
+            Value::NIL,
+            Value::NIL,
+            oldstate,
+        ],
+    )
+    .unwrap();
+    assert_eq!(nth_value(&state, 8), Value::NIL);
+}
