@@ -321,6 +321,12 @@ jobs:
         timeout-minutes: 150
         run: |
           source scripts/windows-gstreamer-env.sh
+          # The pdump generation runs neomacs, whose startup expands `~`. The
+          # minimal CI build environment sets USERPROFILE/APPDATA but not HOME,
+          # so `~` would stay literal and `directory-files "~"` would fail. Give
+          # it HOME explicitly (a real Windows session always has one; GNU's
+          # w32.c init_environment likewise guarantees HOME is set).
+          export HOME="${USERPROFILE:-$GITHUB_WORKSPACE}"
           cargo xtask fresh-build --release
 
       - name: Set version env (bash)
