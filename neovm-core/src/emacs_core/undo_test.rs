@@ -647,3 +647,80 @@ fn test_undo_with_non_positive_arg_and_boundary_returns_undo() {
         .buffer_string();
     assert_eq!(contents, "x");
 }
+
+/// Return the printed form of the current buffer's `buffer-undo-list` in a bare
+/// `Context` (whose default `buffer-undo-list` is nil = enabled).
+fn undo_list_after(eval: &mut super::super::eval::Context) -> String {
+    let value = eval.eval_str("buffer-undo-list").expect("buffer-undo-list");
+    super::super::print::print_value(&value)
+}
+
+/// GNU `record_first_change` (undo.c:64,210) pushes `(t . MODTIME)` whenever
+/// the buffer transitions clean->modified, i.e. on every edit while
+/// `MODIFF <= SAVE_MODIFF`.  `(set-buffer-modified-p nil)` resets
+/// `SAVE_MODIFF = MODIFF`, so the buffer becomes clean again and the *next*
+/// modification must re-emit the first-change marker.  neomacs previously
+/// emitted it only once (a sticky `recorded_first_change` flag) and never
+/// re-armed, producing `((8 . 9) (3 . 4) (1 . 11) (t . 0))` instead of GNU's
+/// `((8 . 9) (3 . 4) (t . 0) (1 . 11) (t . 0))`.
+///
+/// Driven through the bare `Context` buffer (whose default `buffer-undo-list`
+/// is nil = enabled) because the heavier bootstrap harness is unavailable in
+/// this build; the recorder path exercised is identical.
+#[test]
+fn first_change_marker_rearmed_after_set_modified_nil() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    eval.eval_str("(insert \"0123456789\")").unwrap();
+    eval.eval_str("(set-buffer-modified-p nil)").unwrap();
+    eval.eval_str("(goto-char 3)").unwrap();
+    eval.eval_str("(insert \"A\")").unwrap();
+    eval.eval_str("(goto-char 8)").unwrap();
+    eval.eval_str("(insert \"B\")").unwrap();
+    assert_eq!(
+        undo_list_after(&mut eval),
+        "((8 . 9) (3 . 4) (t . 0) (1 . 11) (t . 0))"
+    );
+}
+
+/// Without re-cleaning between edits, GNU records the first-change marker only
+/// once: after the first edit increments `MODIFF`, later edits in the same
+/// modified run see `MODIFF > SAVE_MODIFF` and skip the marker.  Guards against
+/// over-eager re-arming (a regression in the other direction).  The original
+/// `(1 . 11)` insert and its first-change marker remain on the list because
+/// `set-buffer-modified-p nil` does not clear `buffer-undo-list`.
+#[test]
+fn first_change_marker_recorded_once_per_modified_run() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    eval.eval_str("(insert \"0123456789\")").unwrap();
+    eval.eval_str("(set-buffer-modified-p nil)").unwrap();
+    eval.eval_str("(insert \"X\")").unwrap();
+    eval.eval_str("(insert \"Y\")").unwrap();
+    // "X"/"Y" coalesce into one (11 . 13) entry, preceded by a single re-armed
+    // first-change marker for the clean->modified transition.
+    assert_eq!(
+        undo_list_after(&mut eval),
+        "((11 . 13) (t . 0) (1 . 11) (t . 0))"
+    );
+}
+
+/// Re-cleaning between every edit re-arms the first-change marker each time,
+/// matching GNU's per-transition behavior.
+#[test]
+fn first_change_marker_rearmed_on_each_clean_transition() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    eval.eval_str("(insert \"0123456789\")").unwrap();
+    eval.eval_str("(set-buffer-modified-p nil)").unwrap();
+    eval.eval_str("(insert \"X\")").unwrap();
+    eval.eval_str("(set-buffer-modified-p nil)").unwrap();
+    eval.eval_str("(insert \"Y\")").unwrap();
+    assert_eq!(
+        undo_list_after(&mut eval),
+        "((12 . 13) (t . 0) (11 . 12) (t . 0) (1 . 11) (t . 0))"
+    );
+}

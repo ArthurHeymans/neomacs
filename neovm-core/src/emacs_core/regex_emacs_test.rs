@@ -484,3 +484,127 @@ fn cntrl_class_excludes_del_like_gnu() {
         "[[:cntrl:]] must NOT match space"
     );
 }
+
+/// A `SyntaxLookup` mirroring the buffer-local syntax table used by the default
+/// `*scratch*`/batch buffer (`lisp-interaction-mode` / `emacs-lisp-mode`): the
+/// newline is comment-end (`Sendcomment`, syntax `>`) and the carriage return
+/// is a symbol constituent (`Ssymbol`, syntax `_`) — neither is whitespace.
+/// Space, tab and formfeed remain whitespace.  Everything else falls back to
+/// the GNU standard-table classification.
+struct LispModeSyntaxLookup;
+
+impl SyntaxLookup for LispModeSyntaxLookup {
+    fn char_syntax(&self, c: char) -> SyntaxClass {
+        match c {
+            '\n' => SyntaxClass::EndComment,
+            '\r' => SyntaxClass::Symbol,
+            _ => crate::emacs_core::syntax::standard_syntax_class_for_char(c),
+        }
+    }
+
+    fn char_has_category(&self, c: char, cat: u8) -> bool {
+        DefaultSyntaxLookup.char_has_category(c, cat)
+    }
+}
+
+/// GNU `[[:space:]]` is `ISSPACE(c) == (BUFFER_SYNTAX(c) == Swhitespace)`
+/// (regex-emacs.c:151,1618): it consults the ACTIVE syntax table's whitespace
+/// class, NOT a fixed isspace/Unicode-whitespace set.  neomacs previously baked
+/// space/tab/LF/CR/FF into the compile-time bitmap, so `[[:space:]]` matched LF
+/// and CR even when the buffer's syntax table classified them otherwise.
+///
+/// Under a `lisp-interaction-mode`-style table (the default batch buffer) `\n`
+/// is comment-end and `\r` is a symbol, so neither is whitespace and
+/// `[[:space:]]` must NOT match them — matching GNU's
+/// `(string-match "[[:space:]]" "\n")` => nil and `"\r"` => nil.  Space, tab and
+/// formfeed are still whitespace and must match.
+#[test]
+fn posix_space_class_consults_syntax_table_excludes_newline_cr() {
+    crate::test_utils::init_test_tracing();
+    let syn = LispModeSyntaxLookup;
+
+    // GNU: nil for LF and CR under emacs-lisp syntax.
+    assert!(
+        search_pattern("[[:space:]]", "\n", 0, false, &syn, 0)
+            .unwrap()
+            .is_none(),
+        "[[:space:]] must NOT match LF when newline is comment-end (GNU nil)"
+    );
+    assert!(
+        search_pattern("[[:space:]]", "\r", 0, false, &syn, 0)
+            .unwrap()
+            .is_none(),
+        "[[:space:]] must NOT match CR when it is a symbol constituent (GNU nil)"
+    );
+
+    // GNU: 0 for space, tab and formfeed (still whitespace syntax).
+    for (text, label) in [(" ", "space"), ("\t", "tab"), ("\u{0c}", "formfeed")] {
+        assert!(
+            search_pattern("[[:space:]]", text, 0, false, &syn, 0)
+                .unwrap()
+                .is_some(),
+            "[[:space:]] must match {label} (whitespace syntax)"
+        );
+    }
+}
+
+/// Under the GNU *standard* syntax table (`init_syntax_once`, syntax.c:3686-3691,
+/// the table used by `fundamental-mode` / `(standard-syntax-table)`), LF and CR
+/// ARE whitespace, so `[[:space:]]` DOES match them.  This is the other half of
+/// the syntax-table dependency and guards against over-correcting the fix.
+#[test]
+fn posix_space_class_matches_newline_cr_under_standard_syntax() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    for (text, label) in [
+        ("\n", "LF"),
+        ("\r", "CR"),
+        (" ", "space"),
+        ("\t", "tab"),
+        ("\u{0c}", "formfeed"),
+    ] {
+        assert!(
+            search_pattern("[[:space:]]", text, 0, false, &syn, 0)
+                .unwrap()
+                .is_some(),
+            "[[:space:]] must match {label} under the standard syntax table"
+        );
+    }
+}
+
+/// `[[:blank:]]` is strictly ASCII space and tab (`ISBLANK`, regex-emacs.c:113):
+/// it is NOT syntax-table-driven and must never match LF or CR regardless of the
+/// syntax table.  Guards against the space fix accidentally touching blank.
+#[test]
+fn posix_blank_class_is_space_tab_only_independent_of_syntax() {
+    crate::test_utils::init_test_tracing();
+    for syn in [
+        &DefaultSyntaxLookup as &dyn SyntaxLookup,
+        &LispModeSyntaxLookup,
+    ] {
+        assert!(
+            search_pattern("[[:blank:]]", " ", 0, false, syn, 0)
+                .unwrap()
+                .is_some(),
+            "[[:blank:]] must match space"
+        );
+        assert!(
+            search_pattern("[[:blank:]]", "\t", 0, false, syn, 0)
+                .unwrap()
+                .is_some(),
+            "[[:blank:]] must match tab"
+        );
+        assert!(
+            search_pattern("[[:blank:]]", "\n", 0, false, syn, 0)
+                .unwrap()
+                .is_none(),
+            "[[:blank:]] must NOT match LF"
+        );
+        assert!(
+            search_pattern("[[:blank:]]", "\r", 0, false, syn, 0)
+                .unwrap()
+                .is_none(),
+            "[[:blank:]] must NOT match CR"
+        );
+    }
+}

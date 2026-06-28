@@ -730,11 +730,17 @@ impl Buffer {
 
     /// Prepare to record a buffer change: ensure the first-change sentinel
     /// has been recorded if needed.
+    ///
+    /// GNU `record_point` (undo.c:64) unconditionally calls `record_first_change`
+    /// whenever `MODIFF <= SAVE_MODIFF`, i.e. whenever the buffer is currently
+    /// CLEAN.  Because `(set-buffer-modified-p nil)` resets `SAVE_MODIFF =
+    /// MODIFF`, the buffer becomes clean again and the *next* modification must
+    /// re-emit `(t . MODTIME)`.  We therefore gate purely on the modified-tick
+    /// comparison (no sticky "already recorded" flag): the first edit after each
+    /// clean->modified transition records the sentinel, and subsequent edits in
+    /// the same modified run see `MODIFF > SAVE_MODIFF` and skip it.
     fn undo_ensure_first_change(&mut self) {
         let mut ul = self.get_undo_list();
-        if self.undo_state.recorded_first_change() && undo::undo_list_contains_first_change(&ul) {
-            return;
-        }
         if undo::undo_list_is_disabled(&ul) {
             return;
         }

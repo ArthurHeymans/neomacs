@@ -3935,9 +3935,10 @@ fn buffer_text_property_undo_runs(
 }
 
 fn record_text_property_first_change(buf: &mut Buffer, undo_list: &mut Value) {
-    if buf.undo_state.recorded_first_change() && undo::undo_list_contains_first_change(undo_list) {
-        return;
-    }
+    // GNU `record_property_change` (undo.c:241) calls `record_first_change`
+    // whenever `MODIFF <= SAVE_MODIFF` — the same clean->modified re-arm rule as
+    // `record_point`.  Gate purely on the modified-tick comparison so the
+    // sentinel is re-emitted after every `(set-buffer-modified-p nil)`.
     if undo::undo_list_is_disabled(undo_list) {
         return;
     }

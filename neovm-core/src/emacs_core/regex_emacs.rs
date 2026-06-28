@@ -2061,10 +2061,18 @@ fn apply_posix_class(
             .chain(b'a'..=b'z')
             .chain(b'0'..=b'9')
             .collect(),
-        // GNU ISSPACE uses BUFFER_SYNTAX; default standard-syntax-table
-        // whitespace is space, tab, LF, CR, and FF. Vtab (0x0B) is NOT
-        // whitespace in GNU's default. See syntax.c standard init.
-        "space" => vec![b' ', b'\t', b'\n', b'\r', 0x0C],
+        // GNU `ISSPACE(c)` is `BUFFER_SYNTAX(c) == Swhitespace`
+        // (regex-emacs.c:151): the `[[:space:]]` class consults the ACTIVE
+        // syntax table's whitespace class, NOT a fixed isspace set.  GNU builds
+        // the ASCII bitmap at compile time from that syntax table; neomacs
+        // re-derives the syntax-sensitive ASCII membership at MATCH time via
+        // `posix_class_matches` (which tests `char_syntax(ch) == Whitespace`),
+        // so we contribute NO fixed bitmap bytes here.  Baking in space/tab/
+        // LF/CR/FF would make `[[:space:]]` match LF/CR even when the buffer's
+        // syntax table classifies them otherwise (e.g. `\n` = comment-end and
+        // `\r` = symbol in `emacs-lisp-mode`), which is exactly the GNU
+        // divergence this avoids.
+        "space" => Vec::new(),
         // GNU ISBLANK is strictly ASCII space and tab.
         "blank" => vec![b' ', b'\t'],
         "upper" => (b'A'..=b'Z').collect(),
