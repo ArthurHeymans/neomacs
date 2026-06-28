@@ -3800,7 +3800,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     expect_min_args("where-is-internal", &args, 1)?;
     expect_max_args("where-is-internal", &args, 5)?;
 
-    let definition = &args[0];
+    let mut definition = args[0];
     let first_only = args.get(2).is_some_and(|v| !v.is_nil());
     let first_only_non_ascii = args
         .get(2)
@@ -3808,27 +3808,91 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         .is_some_and(|name| name == "non-ascii");
     let prefer_single_binding = first_only && !first_only_non_ascii;
     let no_menu_bindings = prefer_single_binding;
+    let no_remap = args.get(4).is_some_and(|v| v.is_truthy());
 
     let keymaps = where_is_keymaps_in_context(eval, args.get(1))?;
     if args.get(1).is_none() && keymaps.is_empty() {
         return Ok(Value::NIL);
     }
 
+    // Mirror GNU `Fwhere_is_internal`: if DEFINITION is itself remapped to some
+    // other command, search for the keys bound to that remap target instead.
+    // (keymap.c: `tem = Fcommand_remapping (definition, Qnil, keymaps); if
+    // (NILP (no_remap) && !NILP (tem)) definition = tem;`)
+    if !no_remap {
+        if let Some(command_name) = command_remapping_command_name(&definition) {
+            if let Some(target) = command_remapping_lookup_in_keymaps(&keymaps, command_name) {
+                if !target.is_nil() {
+                    definition = target;
+                }
+            }
+        }
+    }
+
+    // Collect the raw candidate sequences (longest-to-shortest, possibly
+    // including raw `[remap COMMAND]` pseudo-keys, matching GNU's
+    // `where_is_internal`).
     let mut sequences = Vec::new();
     for keymap in &keymaps {
-        if collect_where_is_sequences_value(
+        collect_where_is_sequences_value(
             eval.obarray(),
             keymap,
-            definition,
+            &definition,
             &mut sequences,
             no_menu_bindings,
             0,
-        ) {
-            break;
-        };
+        );
     }
 
-    if sequences.is_empty() {
+    // Now mirror `Fwhere_is_internal`'s post-processing: expand `[remap COMMAND]`
+    // pseudo-keys into the real key sequences that run COMMAND, and never leak
+    // the raw pseudo-key into the result.  Remapped sequences are processed
+    // after the non-remapped ones, since non-remapped bindings are preferred.
+    let mut found: Vec<Vec<Value>> = Vec::new();
+    let mut remapped_sequences: Vec<Vec<Value>> = Vec::new();
+    let mut work = sequences;
+    let mut remapped = false;
+    loop {
+        if work.is_empty() {
+            if remapped {
+                break;
+            }
+            // Switch over to the sequences discovered via remapping.
+            work = std::mem::take(&mut remapped_sequences);
+            remapped = true;
+            continue;
+        }
+        let sequence = work.remove(0);
+
+        // If this is a `[remap COMMAND]` pseudo-key, replace it with the key
+        // sequences that actually run COMMAND (unless NO-REMAP suppresses it).
+        if !no_remap && !remapped {
+            if let Some(function) = where_is_remap_pseudo_key_command(&sequence) {
+                let mut seqs = Vec::new();
+                for keymap in &keymaps {
+                    collect_where_is_sequences_value(
+                        eval.obarray(),
+                        keymap,
+                        &function,
+                        &mut seqs,
+                        no_menu_bindings,
+                        0,
+                    );
+                }
+                // Preserve GNU ordering: `nconc2 (Freverse (seqs), remapped_sequences)`.
+                seqs.reverse();
+                seqs.append(&mut remapped_sequences);
+                remapped_sequences = seqs;
+                continue;
+            }
+        }
+
+        if !found.iter().any(|existing| *existing == sequence) {
+            found.push(sequence);
+        }
+    }
+
+    if found.is_empty() {
         return Ok(Value::NIL);
     }
 
@@ -3836,16 +3900,33 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         // Convert Vec<Value> events to a vector value
         if prefer_single_binding {
             return Ok(Value::vector(
-                select_where_is_preferred_sequence(eval.obarray(), &sequences).clone(),
+                select_where_is_preferred_sequence(eval.obarray(), &found).clone(),
             ));
         }
-        return Ok(Value::vector(sequences[0].clone()));
+        return Ok(Value::vector(found[0].clone()));
     }
-    let out: Vec<Value> = sequences
-        .iter()
-        .map(|seq| Value::vector(seq.clone()))
-        .collect();
+    let out: Vec<Value> = found.iter().map(|seq| Value::vector(seq.clone())).collect();
     Ok(Value::list(out))
+}
+
+/// If `sequence` is a raw `[remap COMMAND]` pseudo-key (a 2-element key
+/// sequence whose first event is the `remap` symbol and whose second event is a
+/// command symbol), return COMMAND.  This mirrors GNU's check in
+/// `Fwhere_is_internal`:
+/// `VECTORP (sequence) && ASIZE (sequence) == 2 && EQ (AREF (sequence, 0), Qremap)`.
+fn where_is_remap_pseudo_key_command(sequence: &[Value]) -> Option<Value> {
+    if sequence.len() != 2 {
+        return None;
+    }
+    if !KeymapMarker::Remap.is_value(sequence[0]) {
+        return None;
+    }
+    let command = sequence[1];
+    if command.as_symbol_id().is_some() {
+        Some(command)
+    } else {
+        None
+    }
 }
 
 /// `(this-command-keys)` -> string of keys that invoked current command.

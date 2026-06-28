@@ -4777,6 +4777,76 @@ fn where_is_internal_firstonly_uses_where_is_preferred_modifier() {
     assert_eq!(result, "OK t");
 }
 
+// `where-is-internal` command-remapping handling, mirroring GNU keymap.c
+// `Fwhere_is_internal`: (a) a DEFINITION that is itself remapped resolves to its
+// remap target's keys, (b) keys for commands remapped TO DEFINITION are folded
+// in via `[remap COMMAND]` expansion, and (c) the raw `[remap ...]` pseudo-key
+// never leaks into the returned key list.
+
+#[test]
+fn where_is_internal_resolves_command_remapping_to_target_keys() {
+    crate::test_utils::init_test_tracing();
+    // forward-char is remapped to next-line, which is bound to "n" (110).
+    // GNU: forward-char's keys are next-line's keys, and next-line itself also
+    // reports the same keys; the raw [remap forward-char] is never returned.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m [remap forward-char] 'next-line)
+             (define-key m "n" 'next-line)
+             (list (where-is-internal 'forward-char (list m) t)
+                   (where-is-internal 'next-line (list m))
+                   (where-is-internal 'forward-char (list m))))"#,
+    );
+    assert_eq!(result, "OK ([110] ([110]) ([110]))");
+}
+
+#[test]
+fn where_is_internal_remap_target_key_sequence_is_resolved() {
+    crate::test_utils::init_test_tracing();
+    // forward-char remapped to `my`, which is bound to the multi-event key
+    // sequence C-c z ([3 122]).  where-is for forward-char must report [3 122],
+    // not the raw [remap forward-char] pseudo-key.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m [3 122] 'my)
+             (define-key m [remap forward-char] 'my)
+             (list (where-is-internal 'forward-char (list m) t)
+                   (where-is-internal 'forward-char (list m))))"#,
+    );
+    assert_eq!(result, "OK ([3 122] ([3 122]))");
+}
+
+#[test]
+fn where_is_internal_filters_raw_remap_pseudo_key_from_results() {
+    crate::test_utils::init_test_tracing();
+    // next-line is bound to "n", and forward-char is remapped to next-line.
+    // where-is for next-line must list only the real key [110]; the raw
+    // [remap forward-char] pseudo-key must be filtered out.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m [remap forward-char] 'next-line)
+             (define-key m "n" 'next-line)
+             (where-is-internal 'next-line (list m)))"#,
+    );
+    assert_eq!(result, "OK ([110])");
+}
+
+#[test]
+fn where_is_internal_no_remap_keeps_raw_remap_pseudo_key() {
+    crate::test_utils::init_test_tracing();
+    // With NO-REMAP non-nil GNU does NOT expand or resolve remapping:
+    // - next-line keeps its own key [110] plus the raw [remap forward-char].
+    // - forward-char (only reachable via remapping) returns nil.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m [remap forward-char] 'next-line)
+             (define-key m "n" 'next-line)
+             (list (where-is-internal 'next-line (list m) nil nil t)
+                   (where-is-internal 'forward-char (list m) nil nil t)))"#,
+    );
+    assert_eq!(result, "OK (([110] [remap forward-char]) nil)");
+}
+
 #[test]
 fn bootstrap_define_keymap_populates_help_style_bindings() {
     crate::test_utils::init_test_tracing();
