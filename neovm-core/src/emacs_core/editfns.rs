@@ -1660,6 +1660,30 @@ pub(crate) fn builtin_translate_region_internal(
         .map(|b| b.get_multibyte())
         .unwrap_or(true);
 
+    // Capture point and the region start as 1-based character positions so we
+    // can reproduce GNU's per-character `replace_range` point relocation.  GNU
+    // translates the region one character at a time, calling
+    // `replace_range (pos, pos + len, ...)` for each grow/shrink; that path
+    // relocates point with `adjust_point` only when the replaced character ends
+    // at or before point (`from < PT || PT == to`).  Net effect: point's
+    // *character* position is shifted by the cumulative character-count delta of
+    // every replacement that ends at or before point, and char->char
+    // replacements (which preserve the character count) never move point even
+    // when the byte length grows.  Our whole-region replace strategy would
+    // otherwise drag point to the end of the inserted replacement, so we track
+    // the delta during the walk and restore point afterwards.
+    let (point_char, region_start_char) = eval
+        .buffers
+        .get(buffer_id)
+        .map(|b| {
+            (
+                b.point_lisp_char_pos().as_i64(),
+                b.emacs_byte_pos_to_lisp_char_pos(byte_range.start())
+                    .as_i64(),
+            )
+        })
+        .unwrap_or((0, 0));
+
     // Read the whole region up front (whole-region replace strategy).
     let source =
         super::fns::read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
@@ -1691,6 +1715,14 @@ pub(crate) fn builtin_translate_region_internal(
     let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut characters_changed: i64 = 0;
     let mut p: usize = 0;
+    // GNU per-character point relocation: track the current source character
+    // position and accumulate the net character-count delta of every
+    // replacement that ends at or before point.  `replace_range` relocates
+    // point when `from < PT || PT == to`, i.e. when the replaced character span
+    // ends at or before point's character position (`cur_char + old_chars <=
+    // point_char`).
+    let mut cur_char: i64 = region_start_char;
+    let mut point_char_delta: i64 = 0;
     while p < source.len() {
         let (oc, len) = if multibyte {
             let mut q = p;
@@ -1773,10 +1805,29 @@ pub(crate) fn builtin_translate_region_internal(
                             to_bytes.len() as i64
                         };
                         characters_changed += added_chars;
-                        // Net change of characters; for our whole-region
-                        // replacement strategy this contributes only to the
-                        // final byte stream — no `end_pos` adjustment needed.
-                        let _ = consumed_chars;
+                        // GNU `replace_range (from, to, TO)` with `from =
+                        // cur_char`, `to = cur_char + consumed`, `inschars =
+                        // added` relocates point via
+                        //   adjust_point (from + inschars - min (PT, to))
+                        // when `from < PT || PT == to`.  This multi-character
+                        // source span is the only branch where point can fall
+                        // strictly inside the consumed text, so handle both
+                        // cases here.
+                        let from = cur_char;
+                        let to = cur_char + consumed_chars as i64;
+                        if to <= point_char {
+                            // Replacement ends at or before point: shift point
+                            // by the net character-count delta.
+                            point_char_delta += added_chars - consumed_chars as i64;
+                        } else if from < point_char {
+                            // Point is strictly inside the consumed span; GNU
+                            // clamps it to the end of the replacement.  In the
+                            // running (already-shifted) coordinate space that
+                            // is `from + point_char_delta + added`, so re-express
+                            // the total delta relative to the original point.
+                            point_char_delta = from + point_char_delta + added_chars - point_char;
+                        }
+                        cur_char += consumed_chars as i64;
                         p += consumed_bytes.max(1);
                         continue;
                     }
@@ -1795,7 +1846,7 @@ pub(crate) fn builtin_translate_region_internal(
             }
             characters_changed += 1;
         } else if nc < 0 {
-            // Vector form: char(s) → multiple chars.
+            // Vector form: one source char → multiple chars.
             if let Some(b) = new_bytes {
                 let added = if multibyte {
                     chars_in_multibyte(&b) as i64
@@ -1804,6 +1855,11 @@ pub(crate) fn builtin_translate_region_internal(
                 };
                 out.extend_from_slice(&b);
                 characters_changed += added;
+                // GNU `replace_range (pos, pos + 1, [TO ...])` relocates point
+                // when the single replaced char ends at or before point.
+                if cur_char + 1 <= point_char {
+                    point_char_delta += added - 1;
+                }
             } else {
                 out.extend_from_slice(&source[p..p + len]);
             }
@@ -1811,6 +1867,11 @@ pub(crate) fn builtin_translate_region_internal(
             // Identity.
             out.extend_from_slice(&source[p..p + len]);
         }
+        // Each source character consumed here is exactly one buffer character
+        // (the multi-character `check_translation` case advances `cur_char`
+        // itself and `continue`s before reaching this point).  char->char and
+        // identity translations preserve the count, so they never move point.
+        cur_char += 1;
         p += len.max(1);
     }
 
@@ -1827,6 +1888,19 @@ pub(crate) fn builtin_translate_region_internal(
             byte_range,
             &replacement,
         )?;
+
+        // Restore point to the GNU-faithful character position.  The
+        // whole-region replace dragged point to the end of the inserted
+        // replacement; GNU instead leaves point at its original character
+        // position shifted only by replacements ending at or before it.
+        let target_char = point_char + point_char_delta;
+        if let Some(byte_pos) = eval
+            .buffers
+            .get(buffer_id)
+            .map(|b| b.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(target_char)))
+        {
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
+        }
     }
 
     Ok(Value::fixnum(characters_changed))

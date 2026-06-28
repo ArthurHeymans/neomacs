@@ -3699,6 +3699,32 @@ fn read_from_string_hash_s_without_list_payload_matches_oracle() {
 }
 
 #[test]
+fn read_from_string_hash_s_followed_by_non_paren_includes_consumed_char() {
+    // GNU `read1` case 's' consumes the next character before checking it, so
+    // the `invalid-read-syntax` text includes the offending char.  Verified
+    // against the oracle:
+    //   (read "#s[foo 1]") => (invalid-read-syntax "#s[")
+    //   (read "#s5")       => (invalid-read-syntax "#s5")
+    //   (read "#sf")       => (invalid-read-syntax "#sf")
+    crate::test_utils::init_test_tracing();
+    for (input, expected) in [("#s[foo 1]", "#s["), ("#s5", "#s5"), ("#sf", "#sf")] {
+        let mut ev = Context::new();
+        let result = builtin_read_from_string(&mut ev, vec![Value::string(input)]);
+        match result {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "invalid-read-syntax");
+                assert_eq!(
+                    sig.data,
+                    vec![Value::string(expected)],
+                    "input {input:?} should report {expected:?}"
+                );
+            }
+            other => panic!("expected invalid-read-syntax for {input:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn read_from_string_unmatched_close_paren_payload_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -322,3 +322,184 @@ fn translate_region_accepts_real_char_table_translation_table() {
     let buf = eval.buffers.get(current).expect("current buffer");
     assert_eq!(buf.buffer_string(), "axc");
 }
+
+#[test]
+fn translate_region_keeps_point_char_position_when_char_grows() {
+    // GNU translates one character at a time via `replace_range`, which moves
+    // point only by the *character* delta of replacements ending at or before
+    // point.  A char->char translation preserves the character count, so point
+    // stays at the same character position even when the byte length grows.
+    //
+    // Oracle (GNU Emacs):
+    //   (let ((tt (make-translation-table '((?a . ?é)))))
+    //     (with-temp-buffer (insert "aaaa") (goto-char N)
+    //       (translate-region (point-min) (point-max) tt)
+    //       (list (point) (buffer-string))))
+    //   N=1 => (1 "éééé")  N=2 => (2 "éééé")
+    //   N=3 => (3 "éééé")  N=5 => (5 "éééé")
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    // `?a` (1 byte) -> `?é` (2 bytes in multibyte text): a growing char->char
+    // translation.  Point must keep its character position for every starting
+    // point.
+    for point_char in [1usize, 2, 3, 5] {
+        let mut eval = crate::emacs_core::Context::new();
+        let current = eval.buffers.current_buffer_id().expect("current buffer");
+        eval.buffers
+            .insert_into_buffer(current, "aaaa")
+            .expect("insert test text");
+        {
+            let buf = eval.buffers.get_mut(current).expect("buffer");
+            assert!(buf.get_multibyte(), "default buffer must be multibyte");
+            // 1-based lisp char N for all-ASCII text is the 0-based byte N-1.
+            buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(point_char - 1));
+        }
+
+        let table = Value::make_char_table(Value::symbol("translation-table"), Value::NIL, 0);
+        crate::emacs_core::chartable::builtin_set_char_table_range(
+            vec![table, Value::fixnum('a' as i64), Value::fixnum('é' as i64)],
+            None,
+        )
+        .expect("set translation table entry");
+
+        let changed = builtin_translate_region_internal(
+            &mut eval,
+            vec![Value::fixnum(1), Value::fixnum(5), table],
+        )
+        .expect("translate region");
+        assert_eq!(changed, Value::fixnum(4));
+
+        let buf = eval.buffers.get(current).expect("buffer");
+        assert_eq!(buf.buffer_string(), "éééé");
+        assert_eq!(
+            buf.point_lisp_char_pos().as_i64(),
+            point_char as i64,
+            "point char position must be preserved for goto-char {point_char}"
+        );
+    }
+}
+
+#[test]
+fn translate_region_advances_point_by_char_delta_for_growing_vector() {
+    // A vector translation `?a -> [?x ?y]` grows each source character into two
+    // characters.  GNU advances point by the cumulative character delta of all
+    // replacements ending at or before point.
+    //
+    // Oracle (GNU Emacs):
+    //   (let ((tt (make-char-table 'translation-table)))
+    //     (aset tt ?a (vector ?x ?y))
+    //     (with-temp-buffer (insert "aaaa") (goto-char N)
+    //       (translate-region (point-min) (point-max) tt)
+    //       (list (point) (buffer-string))))
+    //   N=1 => (1 "xyxyxyxy")  N=2 => (3 "xyxyxyxy")
+    //   N=3 => (5 "xyxyxyxy")  N=5 => (9 "xyxyxyxy")
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    for (point_char, expected_point) in [(1usize, 1i64), (2, 3), (3, 5), (5, 9)] {
+        let mut eval = crate::emacs_core::Context::new();
+        let current = eval.buffers.current_buffer_id().expect("current buffer");
+        eval.buffers
+            .insert_into_buffer(current, "aaaa")
+            .expect("insert test text");
+        {
+            let buf = eval.buffers.get_mut(current).expect("buffer");
+            buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(point_char - 1));
+        }
+
+        let table = Value::make_char_table(Value::symbol("translation-table"), Value::NIL, 0);
+        let replacement =
+            Value::make_vector(vec![Value::fixnum('x' as i64), Value::fixnum('y' as i64)]);
+        crate::emacs_core::chartable::builtin_set_char_table_range(
+            vec![table, Value::fixnum('a' as i64), replacement],
+            None,
+        )
+        .expect("set translation table vector entry");
+
+        let changed = builtin_translate_region_internal(
+            &mut eval,
+            vec![Value::fixnum(1), Value::fixnum(5), table],
+        )
+        .expect("translate region");
+        assert_eq!(changed, Value::fixnum(8));
+
+        let buf = eval.buffers.get(current).expect("buffer");
+        assert_eq!(buf.buffer_string(), "xyxyxyxy");
+        assert_eq!(
+            buf.point_lisp_char_pos().as_i64(),
+            expected_point,
+            "point must advance by char delta for goto-char {point_char}"
+        );
+    }
+}
+
+#[test]
+fn translate_region_clamps_point_inside_shrinking_multi_char_source() {
+    // Multi-character source translation `([?a ?b ?c ?d] . ?X)` consumes 4
+    // characters and produces 1.  When point falls strictly inside a consumed
+    // span, GNU's `replace_range` clamps it to the end of the replacement
+    // (`adjust_point (from + inschars - PT)`); when the span ends at or before
+    // point, point shifts by the net character delta.
+    //
+    // Oracle (GNU Emacs), buffer "abcdabcd":
+    //   (let ((tt (make-char-table 'translation-table)))
+    //     (aset tt ?a (list (cons (vector ?a ?b ?c ?d) ?X)))
+    //     (with-temp-buffer (insert "abcdabcd") (goto-char N)
+    //       (translate-region (point-min) (point-max) tt)
+    //       (point)))
+    //   N=1 => 1  N=2..5 => 2  N=6..9 => 3   (buffer becomes "XX")
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    for (point_char, expected_point) in [
+        (1usize, 1i64),
+        (2, 2),
+        (3, 2),
+        (4, 2),
+        (5, 2),
+        (6, 3),
+        (7, 3),
+        (8, 3),
+        (9, 3),
+    ] {
+        let mut eval = crate::emacs_core::Context::new();
+        let current = eval.buffers.current_buffer_id().expect("current buffer");
+        eval.buffers
+            .insert_into_buffer(current, "abcdabcd")
+            .expect("insert test text");
+        {
+            let buf = eval.buffers.get_mut(current).expect("buffer");
+            buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(point_char - 1));
+        }
+
+        let table = Value::make_char_table(Value::symbol("translation-table"), Value::NIL, 0);
+        let from_vector = Value::make_vector(vec![
+            Value::fixnum('a' as i64),
+            Value::fixnum('b' as i64),
+            Value::fixnum('c' as i64),
+            Value::fixnum('d' as i64),
+        ]);
+        let entry = Value::list(vec![Value::cons(from_vector, Value::fixnum('X' as i64))]);
+        crate::emacs_core::chartable::builtin_set_char_table_range(
+            vec![table, Value::fixnum('a' as i64), entry],
+            None,
+        )
+        .expect("set translation table multi-char entry");
+
+        let changed = builtin_translate_region_internal(
+            &mut eval,
+            vec![Value::fixnum(1), Value::fixnum(9), table],
+        )
+        .expect("translate region");
+        assert_eq!(changed, Value::fixnum(2));
+
+        let buf = eval.buffers.get(current).expect("buffer");
+        assert_eq!(buf.buffer_string(), "XX");
+        assert_eq!(
+            buf.point_lisp_char_pos().as_i64(),
+            expected_point,
+            "point must match GNU for goto-char {point_char}"
+        );
+    }
+}

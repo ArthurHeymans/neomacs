@@ -1764,7 +1764,19 @@ impl<'a> Reader<'a> {
                 if self.current_code() == Some(b'(' as u32) {
                     self.read_hash_table_or_record_literal()
                 } else {
-                    Err(self.error("#s"))
+                    // GNU `read1` case 's' consumes the next character with
+                    // `read_and_buffer` before checking it, so the
+                    // `invalid-read-syntax` text includes the offending char
+                    // (e.g. "#s[").  Mirror that: append the consumed character
+                    // to the "#s" prefix, or report just "#s" at end of input.
+                    let mut message = String::from("#s");
+                    if let Some(code) = self.current_code() {
+                        self.bump();
+                        if let Some(ch) = char::from_u32(code) {
+                            message.push(ch);
+                        }
+                    }
+                    Err(self.error(&message))
                 }
             }
             x if x == b'&' as u32 => {
