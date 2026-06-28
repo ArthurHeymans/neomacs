@@ -6863,7 +6863,7 @@ fn vm_category_charset_and_case_table_builtins_use_shared_runtime_state() {
                    (characterp (get-unused-category))
                    (charsetp 'ascii)
                    (eq (char-charset ?A) 'ascii)
-                   (equal (find-charset-string "é") '(unicode-bmp))
+                   (equal (find-charset-string "é") '(unicode))
                    (integerp (charset-id-internal 'ascii))
                    (consp (charset-priority-list))
                    (progn
@@ -8386,7 +8386,9 @@ fn vm_charset_region_builtins_use_shared_runtime_state() {
                   (charset-after 3)
                   (charset-after 4)))"#
         ),
-        r#"OK ((ascii unicode unicode-bmp) (unicode-bmp) (ascii) ascii unicode-bmp unicode nil)"#
+        // GNU never surfaces the internal `unicode-bmp` subset: BMP é and
+        // astral 😀 both canonicalize to the dimension-3 `unicode` charset.
+        r#"OK ((ascii unicode) (unicode) (ascii) ascii unicode unicode nil)"#
     );
 }
 

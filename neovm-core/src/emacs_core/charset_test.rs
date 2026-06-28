@@ -784,20 +784,19 @@ fn find_charset_region_eval_semantics() {
         buf.insert("aé😀");
     }
 
+    // GNU never surfaces the internal `unicode-bmp` subset charset: both the
+    // BMP é and the astral 😀 canonicalize to the dimension-3 `unicode`
+    // charset, so the deduplicated list is just (ascii unicode).
     let all = builtin_find_charset_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(4)])
         .expect("find-charset-region all");
     assert_eq!(
         all,
-        Value::list(vec![
-            Value::symbol("ascii"),
-            Value::symbol("unicode"),
-            Value::symbol("unicode-bmp"),
-        ])
+        Value::list(vec![Value::symbol("ascii"), Value::symbol("unicode"),])
     );
 
     let bmp = builtin_find_charset_region(&mut eval, vec![Value::fixnum(2), Value::fixnum(3)])
         .expect("find-charset-region bmp");
-    assert_eq!(bmp, Value::list(vec![Value::symbol("unicode-bmp")]));
+    assert_eq!(bmp, Value::list(vec![Value::symbol("unicode")]));
 
     let empty = builtin_find_charset_region(&mut eval, vec![Value::fixnum(4), Value::fixnum(4)])
         .expect("find-charset-region empty");
@@ -853,10 +852,12 @@ fn find_charset_string_empty_is_nil() {
 #[test]
 fn find_charset_string_bmp() {
     crate::test_utils::init_test_tracing();
+    // GNU classifies BMP chars as the dimension-3 `unicode` charset, never the
+    // internal `unicode-bmp` subset: (find-charset-string "é") => (unicode).
     let r = builtin_find_charset_string(vec![Value::string("é")]).unwrap();
     let items = list_to_vec(&r).unwrap();
     assert_eq!(items.len(), 1);
-    assert!(items[0].is_symbol_named("unicode-bmp"));
+    assert!(items[0].is_symbol_named("unicode"));
 }
 
 #[test]
@@ -872,9 +873,11 @@ fn find_charset_string_unicode_supplementary() {
 fn find_charset_string_mixed_order_matches_oracle() {
     crate::test_utils::init_test_tracing();
     // a (ascii) + 😀 (astral unicode) + é (BMP unicode) + a genuine eight-bit
-    // raw byte 255. Issue #131: the eight-bit char is a real byte8 char, not the
-    // in-Unicode PUA codepoint U+E3FF (which is itself a real glyph that GNU
-    // classifies `unicode`, neomacs `unicode-bmp`).
+    // raw byte 255. Both Unicode chars canonicalize to the dimension-3
+    // `unicode` charset (GNU never surfaces the internal `unicode-bmp` subset),
+    // so the oracle result is (ascii unicode eight-bit):
+    //   (find-charset-string (string ?a ?😀 ?é (decode-char 'eight-bit 255)))
+    //     => (ascii unicode eight-bit)
     let mut bytes = "a😀é".as_bytes().to_vec();
     bytes.extend_from_slice(
         &crate::emacs_core::emacs_char::EmacsChar::from_byte8(255).to_emacs_bytes(),
@@ -882,11 +885,10 @@ fn find_charset_string_mixed_order_matches_oracle() {
     let s = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
     let r = builtin_find_charset_string(vec![s]).unwrap();
     let items = list_to_vec(&r).unwrap();
-    assert_eq!(items.len(), 4);
+    assert_eq!(items.len(), 3);
     assert!(items[0].is_symbol_named("ascii"));
     assert!(items[1].is_symbol_named("unicode"));
     assert!(items[2].is_symbol_named("eight-bit"));
-    assert!(items[3].is_symbol_named("unicode-bmp"));
 }
 
 #[test]
@@ -1316,9 +1318,11 @@ fn charset_after_eval_semantics() {
         builtin_charset_after(&mut eval, vec![Value::fixnum(1)]).expect("pos 1"),
         Value::symbol("ascii")
     );
+    // GNU `charset-after` returns `CHAR_CHARSET`, which maps both the BMP é and
+    // the astral 😀 to the dimension-3 `unicode` charset (never `unicode-bmp`).
     assert_eq!(
         builtin_charset_after(&mut eval, vec![Value::fixnum(2)]).expect("pos 2"),
-        Value::symbol("unicode-bmp")
+        Value::symbol("unicode")
     );
     assert_eq!(
         builtin_charset_after(&mut eval, vec![Value::fixnum(3)]).expect("pos 3"),
@@ -1395,4 +1399,123 @@ fn charsetp_all_standard() {
         let r = builtin_charsetp(vec![Value::symbol(*name)]).unwrap();
         assert!(r.is_t(), "charsetp should return t for {}", name);
     }
+}
+
+// -----------------------------------------------------------------------
+// char-charset / split-char: unicode-bmp must never be surfaced (GNU parity)
+// -----------------------------------------------------------------------
+
+#[test]
+fn char_charset_bmp_canonicalizes_to_unicode() {
+    crate::test_utils::init_test_tracing();
+    // (char-charset ?中) => unicode (not the internal `unicode-bmp` subset).
+    // GNU `char_charset` returns the dimension-3 parent on hitting the
+    // non-preferred head, before ever reaching the `unicode-bmp` entry.
+    let r = builtin_char_charset(vec![Value::fixnum(0x4E2D)]).unwrap();
+    assert!(r.is_symbol_named("unicode"), "?中 -> {r:?}");
+
+    // BMP é and astral 😀 both canonicalize to `unicode`.
+    let r = builtin_char_charset(vec![Value::fixnum(0xE9)]).unwrap();
+    assert!(r.is_symbol_named("unicode"), "?é -> {r:?}");
+    let r = builtin_char_charset(vec![Value::fixnum(0x1F600)]).unwrap();
+    assert!(r.is_symbol_named("unicode"), "?😀 -> {r:?}");
+
+    // ASCII is still the `ascii` exception.
+    let r = builtin_char_charset(vec![Value::fixnum(65)]).unwrap();
+    assert!(r.is_symbol_named("ascii"), "?A -> {r:?}");
+}
+
+#[test]
+fn split_char_bmp_is_dimension_three_unicode() {
+    crate::test_utils::init_test_tracing();
+    // (split-char ?中) => (unicode 0 78 45): the charset is the dimension-3
+    // `unicode`, so the code point 0x4E2D splits into three big-endian bytes
+    // 0x00 0x4E(=78) 0x2D(=45), preceded by the charset name.
+    let r = builtin_split_char(vec![Value::fixnum(0x4E2D)]).unwrap();
+    let items = list_to_vec(&r).unwrap();
+    assert_eq!(items.len(), 4, "split-char ?中 -> {r:?}");
+    assert!(items[0].is_symbol_named("unicode"));
+    assert_eq!(items[1].as_fixnum(), Some(0));
+    assert_eq!(items[2].as_fixnum(), Some(78));
+    assert_eq!(items[3].as_fixnum(), Some(45));
+
+    // (split-char ?😀) => (unicode 1 246 0) for U+1F600.
+    let r = builtin_split_char(vec![Value::fixnum(0x1F600)]).unwrap();
+    let items = list_to_vec(&r).unwrap();
+    assert_eq!(items.len(), 4, "split-char ?😀 -> {r:?}");
+    assert!(items[0].is_symbol_named("unicode"));
+    assert_eq!(items[1].as_fixnum(), Some(1));
+    assert_eq!(items[2].as_fixnum(), Some(246));
+    assert_eq!(items[3].as_fixnum(), Some(0));
+
+    // ASCII is dimension 1: (split-char ?A) => (ascii 65).
+    let r = builtin_split_char(vec![Value::fixnum(65)]).unwrap();
+    let items = list_to_vec(&r).unwrap();
+    assert_eq!(items.len(), 2, "split-char ?A -> {r:?}");
+    assert!(items[0].is_symbol_named("ascii"));
+    assert_eq!(items[1].as_fixnum(), Some(65));
+}
+
+// -----------------------------------------------------------------------
+// char-charset RESTRICTION argument (GNU walks the list in order)
+// -----------------------------------------------------------------------
+
+#[test]
+fn char_charset_restriction_walks_list_in_order() {
+    crate::test_utils::init_test_tracing();
+    // (char-charset ?A '(latin-iso8859-1)) => nil: A (65) is not in the
+    // right-hand-only latin-iso8859-1 (which covers chars 160..255).
+    let r = builtin_char_charset(vec![
+        Value::fixnum(65),
+        Value::list(vec![Value::symbol("latin-iso8859-1")]),
+    ])
+    .unwrap();
+    assert!(r.is_nil(), "?A '(latin-iso8859-1) -> {r:?}");
+
+    // (char-charset ?é '(unicode latin-iso8859-1)) => unicode: é (0xE9) is in
+    // `unicode`, which appears first in the restriction list.
+    let r = builtin_char_charset(vec![
+        Value::fixnum(0xE9),
+        Value::list(vec![
+            Value::symbol("unicode"),
+            Value::symbol("latin-iso8859-1"),
+        ]),
+    ])
+    .unwrap();
+    assert!(r.is_symbol_named("unicode"), "?é restriction -> {r:?}");
+
+    // (char-charset ?中 '(ascii latin-iso8859-1)) => nil: 中 is in neither.
+    let r = builtin_char_charset(vec![
+        Value::fixnum(0x4E2D),
+        Value::list(vec![
+            Value::symbol("ascii"),
+            Value::symbol("latin-iso8859-1"),
+        ]),
+    ])
+    .unwrap();
+    assert!(r.is_nil(), "?中 '(ascii latin-iso8859-1) -> {r:?}");
+
+    // The literal list element is returned, not its alias target: `ucs` is an
+    // alias for `unicode`, so the result is `ucs`.
+    let r = builtin_char_charset(vec![
+        Value::fixnum(0x4E2D),
+        Value::list(vec![Value::symbol("ucs")]),
+    ])
+    .unwrap();
+    assert!(r.is_symbol_named("ucs"), "?中 '(ucs) -> {r:?}");
+}
+
+#[test]
+fn char_charset_restriction_unknown_charset_errors() {
+    crate::test_utils::init_test_tracing();
+    // A non-charset element signals wrong-type-argument, like
+    // CHECK_CHARSET_GET_CHARSET in GNU.
+    let r = builtin_char_charset(vec![
+        Value::fixnum(65),
+        Value::list(vec![Value::symbol("not-a-charset")]),
+    ]);
+    assert!(
+        matches!(r, Err(Flow::Signal(_))),
+        "expected signal, got {r:?}"
+    );
 }

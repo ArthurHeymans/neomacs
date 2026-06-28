@@ -1475,7 +1475,14 @@ pub(crate) fn builtin_set_charset_priority(args: Vec<Value>) -> EvalResult {
 /// internal char boundaries: codes above MAX_5_BYTE_CHAR (0x3FFF7F) are raw
 /// bytes in the `eight-bit` charset, codes above the Unicode maximum
 /// (0x10FFFF) but within MAX_5_BYTE_CHAR are in the internal `emacs` charset,
-/// and the rest are Unicode (`unicode-bmp` for the BMP, `unicode` above).
+/// and the rest are Unicode.
+///
+/// GNU never surfaces the `unicode-bmp` subset charset from `CHAR_CHARSET`:
+/// `char_charset` walks `Vcharset_ordered_list` and, on reaching
+/// `Vcharset_non_preferred_head` for any char `<= MAX_UNICODE_CHAR`, returns
+/// the dimension-3 parent `unicode` charset (charset.c:1990-1992) before it
+/// ever reaches the `unicode-bmp` entry that mule-conf.el appends later.  So
+/// all BMP and astral Unicode characters canonicalize to `unicode`.
 pub(crate) fn char_charset_name(ch: i64) -> &'static str {
     if (0..=0x7F).contains(&ch) {
         "ascii"
@@ -1483,23 +1490,53 @@ pub(crate) fn char_charset_name(ch: i64) -> &'static str {
         "eight-bit"
     } else if ch > 0x10_FFFF {
         "emacs"
-    } else if ch <= 0xFFFF {
-        "unicode-bmp"
     } else {
         "unicode"
     }
 }
 
 /// `(char-charset CH &optional RESTRICTION)` -- return charset for character.
-/// Mirrors Emacs baseline behavior:
-/// - ASCII characters map to `ascii`
-/// - BMP non-ASCII characters map to `unicode-bmp`
-/// - non-BMP Unicode characters map to `unicode`
+///
+/// Mirrors GNU `Fchar_charset` (src/charset.c:2032).  Without RESTRICTION the
+/// char is classified by `CHAR_CHARSET` (see `char_charset_name`): ASCII chars
+/// map to `ascii`, all other Unicode chars to the dimension-3 `unicode`
+/// charset.
+///
+/// When RESTRICTION is a non-nil list of charsets, GNU walks it in order and
+/// returns the first charset that contains CH (`ENCODE_CHAR` !=
+/// `CHARSET_INVALID_CODE`), or nil if none does.  Each element must be a real
+/// charset or a `wrong-type-argument`/`charsetp` error is signalled, exactly
+/// as `CHECK_CHARSET_GET_CHARSET` does.  The literal list element is returned,
+/// not its alias target.
 pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
     expect_min_args("char-charset", &args, 1)?;
     expect_max_args("char-charset", &args, 2)?;
     let ch = encode_char_input(&args[0])?;
-    Ok(Value::symbol(char_charset_name(ch)))
+
+    let restriction = args.get(1).copied().unwrap_or(Value::NIL);
+    if restriction.is_nil() {
+        return Ok(Value::symbol(char_charset_name(ch)));
+    }
+
+    // GNU only special-cases CONSP restrictions; a non-cons (coding-system)
+    // restriction goes through `coding_system_charset_list`, which neomacs does
+    // not yet model, so fall back to the unrestricted classification.
+    if !matches!(restriction.kind(), ValueKind::Cons) {
+        return Ok(Value::symbol(char_charset_name(ch)));
+    }
+
+    let mut tail = restriction;
+    while matches!(tail.kind(), ValueKind::Cons) {
+        let elem = tail.cons_car();
+        // CHECK_CHARSET_GET_CHARSET: each element must be a known charset.
+        let name = require_known_charset(&elem)?;
+        let contains = CHARSET_REGISTRY.with(|slot| slot.borrow().encode_char(name, ch).is_some());
+        if contains {
+            return Ok(elem);
+        }
+        tail = tail.cons_cdr();
+    }
+    Ok(Value::NIL)
 }
 
 /// `(split-char CH)` -- return a list of the charset symbol and the one to
@@ -1509,8 +1546,10 @@ pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
 /// char into its highest-priority charset (`CHAR_CHARSET`), encodes it
 /// (`ENCODE_CHAR`) to a code point, then splits that code into
 /// `CHARSET_DIMENSION` bytes big-endian and conses the charset name onto the
-/// front.  Examples (UTF-8 language environment): `(split-char ?A)` =>
-/// `(ascii 65)`, `(split-char ?世)` => `(unicode-bmp 78 22)`.
+/// front.  Since `CHAR_CHARSET` canonicalizes every Unicode char to the
+/// dimension-3 `unicode` charset (see `char_charset_name`), non-ASCII chars
+/// yield four-element lists.  Examples (UTF-8 language environment):
+/// `(split-char ?A)` => `(ascii 65)`, `(split-char ?中)` => `(unicode 0 78 45)`.
 pub(crate) fn builtin_split_char(args: Vec<Value>) -> EvalResult {
     expect_args("split-char", &args, 1)?;
     // CHECK_CHARACTER: reject non-characters like GNU (encode_char_input
@@ -2233,17 +2272,16 @@ pub(crate) fn builtin_charset_after(
         return Ok(Value::NIL);
     };
     let cp = ch as u32;
+    // GNU `Fcharset_after` returns `CHAR_CHARSET (ch)`, which canonicalizes
+    // every Unicode char to the dimension-3 `unicode` charset and never
+    // surfaces the internal `unicode-bmp` subset (see `char_charset_name`).
     let charset = if (RAW_BYTE_SENTINEL_MIN..=RAW_BYTE_SENTINEL_MAX).contains(&cp) {
         "eight-bit"
     } else if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&cp) {
         let byte = cp - UNIBYTE_BYTE_SENTINEL_MIN;
         if byte <= 0x7F { "ascii" } else { "eight-bit" }
-    } else if cp <= 0x7F {
-        "ascii"
-    } else if cp <= 0xFFFF {
-        "unicode-bmp"
     } else {
-        "unicode"
+        char_charset_name(cp as i64)
     };
     Ok(Value::symbol(charset))
 }
@@ -2258,12 +2296,15 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
     let mut has_ascii = false;
     let mut has_unicode = false;
     let mut has_eight_bit = false;
-    let mut has_unicode_bmp = false;
 
     // Issue #131: classify the string's real Emacs characters directly (an
     // eight-bit raw byte is a byte8 char, a multibyte char is decoded from its
     // extended encoding) rather than inspecting the retired in-Unicode storage
     // sentinels.
+    //
+    // Like GNU's `CHAR_CHARSET` (see `char_charset_name`), every Unicode
+    // character -- BMP and astral alike -- canonicalizes to the dimension-3
+    // `unicode` charset; the internal `unicode-bmp` subset is never surfaced.
     if ls.is_multibyte() {
         let mut pos = 0usize;
         while pos < bytes.len() {
@@ -2273,8 +2314,6 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
                 has_eight_bit = true;
             } else if cp <= 0x7F {
                 has_ascii = true;
-            } else if cp <= 0xFFFF {
-                has_unicode_bmp = true;
             } else {
                 has_unicode = true;
             }
@@ -2290,7 +2329,7 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
     }
 
     // Match Emacs ordering observed for find-charset-string:
-    // ascii, unicode, eight-bit, unicode-bmp.
+    // ascii, unicode, eight-bit.
     let mut out = Vec::new();
     if has_ascii {
         out.push("ascii");
@@ -2300,9 +2339,6 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
     }
     if has_eight_bit {
         out.push("eight-bit");
-    }
-    if has_unicode_bmp {
-        out.push("unicode-bmp");
     }
     out
 }
