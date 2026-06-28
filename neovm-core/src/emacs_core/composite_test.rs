@@ -717,3 +717,146 @@ fn composition_sort_rules_wrong_arity() {
     let result = builtin_composition_sort_rules(vec![]);
     assert!(result.is_err());
 }
+
+// --- GNU-parity regression tests for compose-region/find-composition ---
+//
+// These drive the `*-internal` C builtins directly with the same arguments the
+// Lisp wrappers (`compose-region`, `compose-string`, `find-composition`) pass
+// after `encode-composition-components`. The expected values were taken from
+// `emacs --batch --eval "(prin1 ...)"` on `find-composition-internal`.
+
+/// GNU `Fcompose_region_internal` runs `validate_region`, which swaps START/END
+/// so START <= END. An out-of-order region must compose, not signal
+/// `args-out-of-range`.
+/// GNU: (with-temp-buffer (insert "hello") (compose-region-internal 4 2)
+///       (find-composition-internal 2 nil nil nil)) => (2 4 t)
+#[test]
+fn compose_region_internal_swaps_out_of_order_bounds() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("hello");
+    }
+    // compose-region-internal 4 2 -- must swap to compose [2,4), not signal.
+    builtin_compose_region_internal(&mut eval, vec![Value::fixnum(4), Value::fixnum(2)])
+        .expect("compose-region-internal must swap, not signal args-out-of-range");
+
+    let detail = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::NIL],
+    )
+    .expect("find-composition");
+    // Expect (2 4 t).
+    let items = list_to_vec(&detail).expect("list");
+    assert_eq!(
+        items.len(),
+        3,
+        "got {:?}",
+        crate::emacs_core::print::print_value(&detail)
+    );
+    assert_eq!(items[0].as_fixnum(), Some(2));
+    assert_eq!(items[1].as_fixnum(), Some(4));
+    assert_eq!(items[2], Value::T);
+}
+
+/// GNU `get_composition_id` rejects an even-length rule/components vector
+/// (id = -1), so the detail call reports only `(FROM TO)`. The components for
+/// `(compose-region 1 3 (list ?X ?Y))` reach the builtin as the list `(88 89)`.
+/// GNU: (find-composition-internal 1 nil nil t) => (1 3)
+#[test]
+fn find_composition_internal_rejects_even_length_components() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("abc");
+    }
+    let components = Value::list(vec![Value::fixnum('X' as i64), Value::fixnum('Y' as i64)]);
+    builtin_compose_region_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(3), components, Value::NIL],
+    )
+    .expect("compose-region-internal");
+
+    let detail = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::NIL, Value::NIL, Value::T],
+    )
+    .expect("find-composition detail");
+    // Even-length rule vector is invalid -> only (FROM TO) = (1 3).
+    let items = list_to_vec(&detail).expect("list");
+    assert_eq!(
+        items.len(),
+        2,
+        "even-length composition must report only (FROM TO); got {}",
+        crate::emacs_core::print::print_value(&detail)
+    );
+    assert_eq!(items[0].as_fixnum(), Some(1));
+    assert_eq!(items[1].as_fixnum(), Some(3));
+}
+
+/// GNU computes the WIDTH of a rule-based composition from the leftmost/rightmost
+/// overlap geometry, not the max component glyph width. Stacked `(tc . bc)`
+/// rules (encoded to 19) give width 1, even though the rule code 19 displays as
+/// a 2-column control glyph.
+/// GNU: (compose-string-internal "hello" 0 3 [65 19 66 19 67]) then
+///      (find-composition-internal 0 nil s t) => (0 3 [65 19 66 19 67] nil nil 1)
+#[test]
+fn find_composition_internal_rule_based_width_is_geometry() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    // Components as produced by `encode-composition-components` on
+    // [?A (tc . bc) ?B (tc . bc) ?C]: (tc . bc) -> 1*12 + 7 = 19.
+    let components = Value::vector(vec![
+        Value::fixnum('A' as i64),
+        Value::fixnum(19),
+        Value::fixnum('B' as i64),
+        Value::fixnum(19),
+        Value::fixnum('C' as i64),
+    ]);
+    let s = Value::string("hello");
+    let composed = builtin_compose_string_internal(vec![
+        s,
+        Value::fixnum(0),
+        Value::fixnum(3),
+        components,
+        Value::NIL,
+    ])
+    .expect("compose-string-internal");
+
+    let detail = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(0), Value::NIL, composed, Value::T],
+    )
+    .expect("find-composition detail");
+    // (0 3 [65 19 66 19 67] nil nil 1)
+    let items = list_to_vec(&detail).expect("list");
+    assert_eq!(
+        items.len(),
+        6,
+        "got {}",
+        crate::emacs_core::print::print_value(&detail)
+    );
+    assert_eq!(items[0].as_fixnum(), Some(0));
+    assert_eq!(items[1].as_fixnum(), Some(3));
+    let expected_comps = Value::vector(vec![
+        Value::fixnum(65),
+        Value::fixnum(19),
+        Value::fixnum(66),
+        Value::fixnum(19),
+        Value::fixnum(67),
+    ]);
+    assert!(
+        equal_value(&items[2], &expected_comps, 0),
+        "components mismatch: got {}",
+        crate::emacs_core::print::print_value(&items[2])
+    );
+    assert_eq!(items[3], Value::NIL, "relative-p must be nil (rule-based)");
+    assert_eq!(items[4], Value::NIL, "mod-func");
+    assert_eq!(
+        items[5].as_fixnum(),
+        Some(1),
+        "rule-based width must be geometry-computed (1), not max glyph width (2)"
+    );
+}

@@ -142,33 +142,41 @@ pub(crate) fn builtin_compose_region_internal(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("compose-region-internal", &args, 2, 4)?;
-    let start = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[0])?;
-    let end = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[1])?;
+    // GNU `Fcompose_region_internal` runs `validate_region (&start, &end)`
+    // (buffer.c), which resolves markers, swaps so the lower bound comes first,
+    // then bounds-checks against `BEGV`/`ZV`.
+    let mut beg = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[0])?;
+    let mut end = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[1])?;
+    if end < beg {
+        std::mem::swap(&mut beg, &mut end);
+    }
     let components = args.get(2).copied().unwrap_or(Value::NIL);
     let modification_func = args.get(3).copied().unwrap_or(Value::NIL);
     expect_composition_components(components)?;
 
-    let (buffer_handle, point_max) = if let Some(buf) = ctx.buffers.current_buffer() {
+    let (buffer_handle, point_min, point_max) = if let Some(buf) = ctx.buffers.current_buffer() {
         (
             Value::make_buffer(buf.id),
+            buf.point_min_lisp_char_pos().as_i64(),
             buf.point_max_lisp_char_pos().as_i64(),
         )
     } else {
-        (Value::NIL, 1)
+        (Value::NIL, 1, 1)
     };
-    if start < 1 || end < 1 || start > end || start > point_max || end > point_max {
+    if beg < point_min || end > point_max {
+        // GNU `args_out_of_range_3` reports the original (un-swapped) arguments.
         return Err(signal(
             "args-out-of-range",
-            vec![buffer_handle, Value::fixnum(start), Value::fixnum(end)],
+            vec![buffer_handle, args[0], args[1]],
         ));
     }
 
-    let prop = composition_property(start, end, components, modification_func);
+    let prop = composition_property(beg, end, components, modification_func);
     super::textprop::builtin_put_text_property(
         ctx,
         vec![
-            args[0],
-            args[1],
+            Value::fixnum(beg),
+            Value::fixnum(end),
             Value::symbol("composition"),
             prop,
             Value::NIL,
@@ -352,13 +360,20 @@ pub(crate) fn composition_width_at(
     if length <= 0 {
         return None;
     }
-    if registered.is_some() {
+    if let Some(id) = registered {
         // Already Form-B: `components` is the registered components vector.
-        return Some((composition_relative_width(&components), length));
+        let width = if composition_lookup_relative(id) {
+            composition_relative_width(&components)
+        } else {
+            composition_rule_based_width(&components)
+        };
+        return Some((width, length));
     }
-    // Form-A: compute the width, then register (rewrite in place to Form-B).
+    // Form-A: compute the width via `get_composition_id`, then register
+    // (rewrite in place to Form-B). An invalid composition yields id=-1 and is
+    // not treated as a composition here.
     let key = composition_components_key(ctx, components, Value::NIL, charpos1, length);
-    let width = composition_relative_width(&key);
+    let width = composition_get_id_width(components, &key)?;
     let relative_p = composition_relative_p(components);
     composition_register_prop(prop, key, length, mod_func, relative_p);
     Some((width, length))
@@ -437,10 +452,20 @@ fn composition_components_key(
     }
 }
 
-/// GNU relative/altchars width: the maximum display width over the component
-/// glyphs (TAB counts as 1), 0 for an empty composition. (Rule-based
-/// compositions report `relative-p` nil and are not exercised by batch tests;
-/// this max is a faithful upper bound for them.)
+/// GNU `CHARACTER_WIDTH` (buffer.h): display columns of a single character. A
+/// TAB inside a composition counts as 1 (see `get_composition_id`).
+fn composition_char_width(code: i64) -> i64 {
+    if code == 9 {
+        1
+    } else {
+        crate::encoding::char_width_for_code_with_display_table(code, None) as i64
+    }
+}
+
+/// GNU relative/altchars width (`get_composition_id`, the
+/// `method != COMPOSITION_WITH_RULE_ALTCHARS` branch): the maximum display
+/// width over the component glyphs (TAB counts as 1), 0 for an empty
+/// composition.
 fn composition_relative_width(key: &Value) -> i64 {
     let Some(items) = key.as_vector_data() else {
         return 0;
@@ -448,17 +473,104 @@ fn composition_relative_width(key: &Value) -> i64 {
     let mut width = 0i64;
     for item in items.iter() {
         if let ValueKind::Fixnum(code) = item.kind() {
-            let this = if code == 9 {
-                1
-            } else {
-                crate::encoding::char_width_for_code_with_display_table(code, None) as i64
-            };
+            let this = composition_char_width(code);
             if width < this {
                 width = this;
             }
         }
     }
     width
+}
+
+/// GNU rule-based width (`get_composition_id`, the
+/// `COMPOSITION_WITH_RULE_ALTCHARS` branch, composite.c ~L344-390): walk the
+/// `char rule char rule ...` key computing the leftmost/rightmost overlap
+/// geometry from each rule's decoded reference points, then take the ceiling of
+/// `rightmost - leftmost`. `glyph_len = (ASIZE(key)+1)/2` and the loop bound is
+/// `i < glyph_len` over the key indices, exactly as GNU writes it.
+fn composition_rule_based_width(key: &Value) -> i64 {
+    let Some(items) = key.as_vector_data() else {
+        return 0;
+    };
+    let codes: Vec<i64> = items.iter().map(|v| v.as_fixnum().unwrap_or(0)).collect();
+    if codes.is_empty() {
+        return 0;
+    }
+    let glyph_len = (codes.len() + 1) / 2;
+    let mut leftmost = 0.0_f64;
+    let ch0 = codes[0];
+    let mut rightmost = if ch0 != b'\t' as i64 {
+        composition_char_width(ch0) as f64
+    } else {
+        1.0
+    };
+    let mut i = 1usize;
+    while i < glyph_len {
+        let rule = codes[i];
+        let ch = codes[i + 1];
+        let this_width = if ch != b'\t' as i64 {
+            composition_char_width(ch) as f64
+        } else {
+            1.0
+        };
+        // COMPOSITION_DECODE_REFS (composite.h): gref = (rule & 0xFF) / 12,
+        // nref = (rule & 0xFF) % 12.
+        let rule_code = rule & 0xFF;
+        let mut gref = rule_code / 12;
+        if gref > 12 {
+            gref = 11;
+        }
+        let nref = rule_code % 12;
+        let this_left = leftmost + (gref % 3) as f64 * (rightmost - leftmost) / 2.0
+            - (nref % 3) as f64 * this_width / 2.0;
+        if this_left < leftmost {
+            leftmost = this_left;
+        }
+        if this_left + this_width > rightmost {
+            rightmost = this_left + this_width;
+        }
+        i += 2;
+    }
+    // GNU truncates `rightmost - leftmost` to an int, then adds 1 if the
+    // truncation lost a fractional part — i.e. the ceiling.
+    (rightmost - leftmost).ceil() as i64
+}
+
+/// GNU `get_composition_id` validity + width. `components` is the raw Form-A
+/// components used to derive the method; `key` is the derived component vector.
+/// Returns the composition width, or `None` when `get_composition_id` would
+/// return -1 (an invalid composition), in which case `Ffind_composition_internal`
+/// reports only `(FROM TO)`.
+fn composition_get_id_width(components: Value, key: &Value) -> Option<i64> {
+    let Some(items) = key.as_vector_data() else {
+        return None;
+    };
+    let rule_based = !composition_relative_p(components);
+    // GNU `get_composition_id` validates COMPONENTS that are vectors or lists.
+    // A glyph-string (a vector whose first element is itself a vector) takes a
+    // separate branch with no odd-length requirement; everything else
+    // (rule/altchars vectors and lists) requires an odd-length, all-fixnum key.
+    let is_glyph_string = components
+        .as_vector_data()
+        .is_some_and(|c| c.len() >= 2 && c[0].is_vector());
+    if is_glyph_string {
+        // Each composed glyph element must be a vector.
+        if items.iter().skip(1).any(|v| !v.is_vector()) {
+            return None;
+        }
+    } else if components.is_vector() || components.is_cons() {
+        if items.len() % 2 == 0 {
+            return None;
+        }
+        if items.iter().any(|v| !v.is_fixnum()) {
+            return None;
+        }
+    }
+    Some(if rule_based {
+        composition_rule_based_width(key)
+    } else {
+        composition_relative_width(key)
+    })
 }
 
 /// GNU `find_composition`/`get_property_and_range` for a buffer: the
@@ -634,23 +746,37 @@ pub(crate) fn builtin_find_composition_internal(
         ]));
     }
 
-    // Requesting detail registers the composition (GNU `get_composition_id` in
-    // the detail branch of `Ffind_composition_internal`), so a subsequent read
-    // of the property sees Form-B. The Lisp-visible detail list is identical for
-    // both forms.
+    // Requesting detail runs GNU `get_composition_id` (the detail branch of
+    // `Ffind_composition_internal`), which registers the composition (rewriting
+    // the property to Form-B) — unless the composition is invalid, in which case
+    // it returns -1 and the property is left untouched.
     let (length, components, mod_func, registered) =
         composition_parts_any(prop).expect("valid composition decodes");
-    let (key, relative_p) = if let Some(id) = registered {
+    let (key, relative_p, width) = if let Some(id) = registered {
         // Already Form-B: components is the registered vector; relative-p was
         // recorded at registration (it cannot be inferred from the bare vector).
-        (components, composition_lookup_relative(id))
+        // GNU caches the width in `composition_table[id]`; recompute it from the
+        // stored method + key, which is equivalent.
+        let relative_p = composition_lookup_relative(id);
+        let width = if relative_p {
+            composition_relative_width(&components)
+        } else {
+            composition_rule_based_width(&components)
+        };
+        (components, relative_p, width)
     } else {
         let relative_p = composition_relative_p(components);
         let key = composition_components_key(ctx, components, args[2], start, end - start);
+        // GNU `get_composition_id` validates the components and returns -1 for an
+        // invalid composition (e.g. an even-length rule vector). On -1 the detail
+        // `tail` is nil, so only `(FROM TO)` is returned and PROP is not
+        // registered.
+        let Some(width) = composition_get_id_width(components, &key) else {
+            return Ok(Value::list(vec![Value::fixnum(start), Value::fixnum(end)]));
+        };
         composition_register_prop(prop, key, length, mod_func, relative_p);
-        (key, relative_p)
+        (key, relative_p, width)
     };
-    let width = composition_relative_width(&key);
     Ok(Value::list(vec![
         Value::fixnum(start),
         Value::fixnum(end),
