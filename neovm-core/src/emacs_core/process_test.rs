@@ -1261,6 +1261,66 @@ fn call_process_and_start_file_process_string_contracts_match_oracle() {
     assert_eq!(results[17], "OK t");
 }
 
+/// GNU `call-process` resolves the program via `openp` and, on failure,
+/// signals through `report_file_error ("Searching for program", PROG)`
+/// (callproc.c:526), which `get_file_errno_data` (fileio.c) turns into the
+/// triple `(SYMBOL "Searching for program" STRERROR PROG)`. The SYMBOL and the
+/// libc `strerror` middle element are both derived from the errno `openp`
+/// recorded: ENOENT -> `file-missing` "No such file or directory", EISDIR ->
+/// `file-error` "Is a directory", EACCES -> `permission-denied`
+/// "Permission denied". neomacs previously dropped the strerror element and
+/// mis-shaped the directory/permission cases (a bare `error`/raw os-error
+/// string). Verified against `/usr/bin/emacs --batch`.
+#[test]
+fn call_process_program_resolution_errors_match_gnu_report_file_error() {
+    crate::test_utils::init_test_tracing();
+
+    // EISDIR: an absolute directory. Create our own so the test is hermetic.
+    let dir = tmp_dir("call-process-isdir");
+    // EACCES: a non-executable regular file looked up via exec-path.
+    let noexec_dir = tmp_dir("call-process-noexec");
+    let noexec = format!("{noexec_dir}/noexecprog");
+    std::fs::write(&noexec, b"#!/bin/sh\n").expect("write noexec file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&noexec, std::fs::Permissions::from_mode(0o644))
+            .expect("chmod 0644");
+    }
+
+    let results = eval_all(&format!(
+        r#"(condition-case e (call-process "/nonexistent/program/xyzzy" nil nil nil) (error e))
+           (condition-case e (call-process "{dir}") (error e))
+           (condition-case e (call-process "") (error e))
+           (let ((exec-path (list "{noexec_dir}")))
+             (condition-case e (call-process "noexecprog") (error e)))"#,
+    ));
+
+    // ENOENT: missing program — file-missing with the strerror middle element.
+    assert_eq!(
+        results[0],
+        r#"OK (file-missing "Searching for program" "No such file or directory" "/nonexistent/program/xyzzy")"#
+    );
+    // EISDIR: an absolute directory is not runnable — file-error "Is a directory".
+    assert_eq!(
+        results[1],
+        format!(r#"OK (file-error "Searching for program" "Is a directory" "{dir}")"#)
+    );
+    // Empty program name expands to default-directory (a directory) -> EISDIR.
+    assert_eq!(
+        results[2],
+        r#"OK (file-error "Searching for program" "Is a directory" "")"#
+    );
+    // EACCES: a found-but-unrunnable file -> permission-denied "Permission denied".
+    assert_eq!(
+        results[3],
+        r#"OK (permission-denied "Searching for program" "Permission denied" "noexecprog")"#
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&noexec_dir);
+}
+
 #[test]
 fn delete_process_removes() {
     crate::test_utils::init_test_tracing();

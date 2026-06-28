@@ -72,6 +72,69 @@ fn buffer_replace_match_backref_does_not_copy_source_properties() {
     assert!(items[2].is_nil());
 }
 
+/// GNU `Freplace_match` (search.c) treats the buffer and string replacement
+/// paths differently for `\?`: the string path (search.c:2567,
+/// `else if (c != '?')`) tolerates it as a literal because `\?' is reserved for
+/// `query-replace-regexp`, but the buffer path (search.c:2694) rejects it like
+/// any other invalid escape with "Invalid use of `\\' in replacement text".
+/// neomacs previously whitelisted `\?' in both paths; this asserts the buffer
+/// path now errors while the string path (replace-regexp-in-string) still
+/// passes it through literally, and that the other escapes (\& \N \\) keep
+/// working in the buffer path.  Verified against `/usr/bin/emacs --batch`.
+#[test]
+fn buffer_replace_match_rejects_backslash_question_but_string_path_allows_it() {
+    crate::test_utils::init_test_tracing();
+
+    // Buffer path: `\?' must signal `error' "Invalid use of `\\' in replacement text".
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let err = ev
+        .eval_str(
+            r#"(progn
+  (insert "abc")
+  (goto-char 1)
+  (re-search-forward "b")
+  (condition-case e (replace-match "\\?") (error e)))"#,
+        )
+        .expect("condition-case form should evaluate to the captured error");
+    let items = list_to_vec(&err).expect("captured error should be a list");
+    assert_eq!(items.len(), 2);
+    assert!(
+        items[0].is_symbol_named("error"),
+        "expected `error' symbol, got {:?}",
+        items[0]
+    );
+    // The C-level message `Invalid use of `\\' in replacement text` is requoted
+    // through `text-quoting-style` (curly by default), matching GNU's default
+    // `--batch` output of U+2018/U+2019 around the backslash.
+    assert_str(
+        items[1],
+        "Invalid use of \u{2018}\\\u{2019} in replacement text",
+    );
+
+    // Buffer path: other escapes still resolve normally.
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let ok = ev
+        .eval_str(
+            r#"(progn
+  (insert "abc")
+  (goto-char 1)
+  (re-search-forward "\\(b\\)")
+  (replace-match "[\\&-\\1-\\\\]")
+  (buffer-string))"#,
+        )
+        .expect("valid backslash escapes should evaluate");
+    assert_str(ok, "a[b-b-\\]c");
+
+    // String path (replace-regexp-in-string): `\?' is kept literally.
+    let result = call_replace_regexp_in_string(vec![
+        Value::string("b"),
+        Value::string("\\?"),
+        Value::string("abc"),
+    ])
+    .expect("string replacement with `\\?' should succeed");
+    assert_str(result, "a\\?c");
+}
+
 #[test]
 fn replace_match_buffer_replacement_leaves_point_at_replacement_end() {
     crate::test_utils::init_test_tracing();

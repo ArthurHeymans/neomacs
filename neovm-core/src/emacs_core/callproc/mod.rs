@@ -179,30 +179,81 @@ fn lisp_string_to_output_path(string: &LispString) -> std::path::PathBuf {
     super::fileio::lisp_file_name_to_path_buf(string)
 }
 
-fn executable_path_exists(path: &std::path::Path) -> bool {
-    #[cfg(unix)]
-    {
-        let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-            return false;
-        };
-        unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
-    }
+/// Outcome of probing one candidate path for executability, mirroring the
+/// `FIXNATP (predicate)` branch of GNU `openp` (lread.c:1912-1930) when the
+/// predicate is `X_OK`. Each variant carries the errno GNU's `openp` would
+/// record in `last_errno` for that outcome, so callers can build the
+/// `report_file_errno` triple `(MSG STRERROR PROG)` exactly like GNU.
+#[derive(Clone, Copy, Debug)]
+enum AccessResult {
+    /// The candidate is an executable, runnable file.
+    Ok,
+    /// `faccessat(X_OK)` failed; carries `errno`. ENOENT/ENOTDIR mean
+    /// "keep searching" (GNU leaves `last_errno` untouched at its ENOENT
+    /// default); any other errno (e.g. EACCES) is recorded.
+    Err(libc::c_int),
+}
 
-    #[cfg(not(unix))]
-    {
-        path.exists()
+/// Probe PATH for X_OK like GNU `openp`'s faccessat branch, returning the
+/// errno GNU would record. Note GNU checks for a directory *before* trusting a
+/// successful `faccessat`: a directory with the execute (search) bit set passes
+/// `access(X_OK)` yet is not runnable, so it maps to EISDIR.
+#[cfg(unix)]
+fn access_executable(path: &std::path::Path) -> AccessResult {
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return AccessResult::Err(libc::ENOENT);
+    };
+    let rc = unsafe { libc::access(c_path.as_ptr(), libc::X_OK) };
+    if rc == 0 {
+        // GNU openp: `if (file_directory_p (encoded_fn)) last_errno = EISDIR;`
+        if path.is_dir() {
+            AccessResult::Err(libc::EISDIR)
+        } else {
+            AccessResult::Ok
+        }
+    } else {
+        AccessResult::Err(
+            std::io::Error::last_os_error()
+                .raw_os_error()
+                .unwrap_or(libc::ENOENT),
+        )
     }
 }
 
-fn call_process_lookup_error(program: &LispString) -> Flow {
-    signal(
-        "file-missing",
-        vec![
-            Value::string("Searching for program"),
-            Value::string(crate::emacs_core::emacs_char::to_utf8_lossy(
-                program.as_bytes(),
-            )),
-        ],
+#[cfg(not(unix))]
+fn access_executable(path: &std::path::Path) -> AccessResult {
+    if path.is_dir() {
+        AccessResult::Err(libc::EISDIR)
+    } else if path.exists() {
+        AccessResult::Ok
+    } else {
+        AccessResult::Err(libc::ENOENT)
+    }
+}
+
+/// Fold one candidate's `AccessResult` into GNU `openp`'s `last_errno`
+/// accumulator (lread.c:1768/1923-1929): ENOENT/ENOTDIR mean "keep searching"
+/// and leave the accumulator at its ENOENT default; any other errno (EISDIR,
+/// EACCES, ...) is recorded so the most informative failure is reported.
+fn record_access_errno(last_errno: &mut libc::c_int, result: AccessResult) {
+    if let AccessResult::Err(e) = result
+        && e != libc::ENOENT
+        && e != libc::ENOTDIR
+    {
+        *last_errno = e;
+    }
+}
+
+/// Signal the program-resolution failure with GNU's `report_file_errno` shape:
+/// `(SYMBOL "Searching for program" STRERROR PROGRAM)`, where SYMBOL and the
+/// libc `strerror` string are both derived from ERRNO (callproc.c:526 ->
+/// fileio.c `get_file_errno_data`). ENOENT yields `file-missing`, EACCES
+/// `permission-denied`, else `file-error`.
+fn call_process_lookup_error(program: &LispString, errno: libc::c_int) -> Flow {
+    super::process::signal_file_errno(
+        "Searching for program",
+        Value::heap_string(program.clone()),
+        errno,
     )
 }
 
@@ -225,22 +276,24 @@ fn resolve_call_process_program(
 ) -> Result<OsString, Flow> {
     let program_path = lisp_string_to_output_path(program);
 
+    // GNU `openp` (lread.c:1768) seeds `last_errno = ENOENT` and overwrites it
+    // with any more-informative errno (EISDIR for a directory, EACCES for an
+    // unrunnable file, ...) as it probes candidates, then on failure does
+    // `errno = last_errno` (lread.c:2031). callproc.c:526 then turns that errno
+    // into the `(SYMBOL "Searching for program" STRERROR PROG)` triple via
+    // `report_file_error`. We track the same accumulator so the signalled error
+    // matches GNU exactly instead of always claiming `file-missing`.
+    let mut last_errno = libc::ENOENT;
+
     // Mirror resolve_async_process_program (process.rs:584-595) and GNU
-    // openp (lread.c:2027-2028): if the program is an absolute path,
+    // openp (lread.c:2026-2027): if the program is an absolute path,
     // check it directly and return immediately — no exec-path search.
     if program_path.is_absolute() {
-        if program_path.is_dir() {
-            return Err(signal(
-                "error",
-                vec![Value::string(
-                    "Specified program for new process is a directory",
-                )],
-            ));
+        match access_executable(&program_path) {
+            AccessResult::Ok => return Ok(program_path.into_os_string()),
+            other => record_access_errno(&mut last_errno, other),
         }
-        if executable_path_exists(&program_path) {
-            return Ok(program_path.into_os_string());
-        }
-        return Err(call_process_lookup_error(program));
+        return Err(call_process_lookup_error(program, last_errno));
     }
 
     // Relative program name — search exec-path with suffixes.
@@ -253,7 +306,7 @@ fn resolve_call_process_program(
         // expanded against default-directory.
         vec![Value::NIL]
     } else {
-        list_to_vec(&exec_path).ok_or_else(|| call_process_lookup_error(program))?
+        list_to_vec(&exec_path).ok_or_else(|| call_process_lookup_error(program, last_errno))?
     };
     let suffixes = exec_suffixes(eval)?;
 
@@ -284,13 +337,14 @@ fn resolve_call_process_program(
                 }
                 candidate = PathBuf::from(os);
             }
-            if executable_path_exists(&candidate) {
-                return Ok(candidate.into_os_string());
+            match access_executable(&candidate) {
+                AccessResult::Ok => return Ok(candidate.into_os_string()),
+                other => record_access_errno(&mut last_errno, other),
             }
         }
     }
 
-    Err(call_process_lookup_error(program))
+    Err(call_process_lookup_error(program, last_errno))
 }
 
 fn fallback_subprocess_directory() -> Option<PathBuf> {

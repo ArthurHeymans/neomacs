@@ -411,6 +411,7 @@ fn build_replacement_lisp_string(
     literal: bool,
     md: &super::regex::MatchData,
     preserve_substitution_properties: bool,
+    string_replacement: bool,
 ) -> Result<crate::heap_types::LispString, String> {
     const INVALID_BACKSLASH_MSG: &str = "Invalid use of `\\' in replacement text";
 
@@ -504,9 +505,12 @@ fn build_replacement_lisp_string(
                 );
                 last = pos;
             }
-            c if c == b'?' as u32 => {
-                // GNU leaves `\?' in the literal run for query-replace-regexp
-                // compatibility.
+            c if c == b'?' as u32 && string_replacement => {
+                // GNU `Freplace_match` (search.c:2567) only tolerates `\?' as a
+                // literal when replacing into a STRING (`else if (c != '?')`);
+                // it is reserved for query-replace-regexp.  The buffer path
+                // (search.c:2694) rejects it like any other invalid escape, so
+                // we only whitelist it here when `string_replacement` is set.
             }
             _ => return Err(INVALID_BACKSLASH_MSG.to_string()),
         }
@@ -554,11 +558,13 @@ pub(crate) fn replace_match_lisp_string_with_syntax(
     subexp: usize,
     match_data: &Option<super::regex::MatchData>,
 ) -> Result<crate::heap_types::LispString, String> {
+    // Replacing into a STRING: `\?' is tolerated as a literal (search.c:2567).
     replace_match_lisp_string_with_syntax_and_properties(
-        source, newtext, fixedcase, literal, subexp, match_data, true,
+        source, newtext, fixedcase, literal, subexp, match_data, true, true,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn replace_match_lisp_string_with_syntax_and_properties(
     source: &crate::heap_types::LispString,
     newtext: &crate::heap_types::LispString,
@@ -567,6 +573,7 @@ fn replace_match_lisp_string_with_syntax_and_properties(
     subexp: usize,
     match_data: &Option<super::regex::MatchData>,
     preserve_substitution_properties: bool,
+    string_replacement: bool,
 ) -> Result<crate::heap_types::LispString, String> {
     let md = match match_data {
         Some(md) => md,
@@ -593,6 +600,7 @@ fn replace_match_lisp_string_with_syntax_and_properties(
         literal,
         md,
         preserve_substitution_properties,
+        string_replacement,
     )?;
 
     if !fixedcase {
@@ -714,6 +722,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     };
 
     let replacement_match_option = Some(replacement_match_data.clone());
+    // Replacing into a BUFFER: `\?' is an invalid escape (search.c:2694).
     let replacement = replace_match_lisp_string_with_syntax_and_properties(
         &source,
         newtext,
@@ -721,6 +730,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         literal,
         subexp,
         &replacement_match_option,
+        false,
         false,
     )?;
     let replace_start = if replacement_match_data.is_string_match() {
