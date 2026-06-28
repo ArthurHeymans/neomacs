@@ -530,3 +530,38 @@ fn format_time_string_hash_case_flag_matches_gnu() {
     // %P is always lowercase even with `^`.
     assert_eq!(fts("%^P"), "pm");
 }
+
+#[test]
+fn format_time_string_subsecond_flags_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    // `(1 . 4)` = 1/4 s = 0.25 s, i.e. 250_000_000 ns.
+    let quarter = Value::cons(Value::fixnum(1), Value::fixnum(4));
+    let fts_n = |fmt: &str| -> String {
+        builtin_format_time_string(vec![Value::string(fmt), quarter.clone(), Value::T])
+            .unwrap()
+            .as_utf8_str()
+            .unwrap()
+            .to_string()
+    };
+
+    // Plain %N: 9 digits, zero-padded on the right (GNU default).
+    assert_eq!(fts_n("%N"), "250000000");
+    // `-` (NoPad): strip trailing zeros, no padding.
+    assert_eq!(fts_n("%-N"), "25");
+    // `_` (SpacePad): strip trailing zeros, then space-pad to width 9.
+    assert_eq!(fts_n("%_N"), "25       ");
+    // `-` with explicit width caps the digits but still strips zeros, no pad.
+    assert_eq!(fts_n("%-3N"), "25");
+    // Width 3, default zero-pad: "25" + one trailing zero.
+    assert_eq!(fts_n("%3N"), "250");
+    // `0` flag behaves like the default (zero-pad).
+    assert_eq!(fts_n("%0N"), "250000000");
+    // Explicit width 9 == default.
+    assert_eq!(fts_n("%9N"), "250000000");
+    // Width beyond 9 zero-pads past the nanosecond resolution.
+    assert_eq!(fts_n("%12N"), "250000000000");
+    // `_` with explicit width 3: "25" + one trailing space.
+    assert_eq!(fts_n("%_3N"), "25 ");
+    // Later flag wins: `0-` ends as NoPad.
+    assert_eq!(fts_n("%0-N"), "25");
+}

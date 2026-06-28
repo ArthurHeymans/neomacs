@@ -672,15 +672,46 @@ fn format_time(
             'n' => do_text(&mut result, &flags, false, "\n"),
             't' => do_text(&mut result, &flags, false, "\t"),
             'N' => {
-                // GNU extension: subsecond digits. The field width selects how
-                // many of the 9 nanosecond digits to emit; default 9.
-                let width = if flags.width <= 0 { 9 } else { flags.width } as usize;
-                let digits9 = format!("{:09}", nanos.clamp(0, 999_999_999));
-                if width <= 9 {
-                    result.push_str(&digits9[..width]);
+                // GNU extension: subsecond digits (`lib/strftime.c`, `case 'N'`).
+                // GNU always computes the nanosecond digits, strips trailing
+                // zeros (while `1 < ndigs && n % 10 == 0`), then pads the field
+                // to `width` according to the directive's pad style:
+                //   `-` (NoPad)  -> no padding (just the stripped digits);
+                //   `_` (SpacePad) -> space-pad on the right to `width`;
+                //   default/`0`  -> zero-pad on the right to `width`.
+                // A field width caps the number of significant digits emitted.
+                const NS_DIGITS: i64 = 9;
+                let mut n = nanos.clamp(0, 999_999_999);
+                let width = if flags.width <= 0 {
+                    NS_DIGITS
                 } else {
-                    result.push_str(&digits9);
-                    result.extend(std::iter::repeat_n('0', width - 9));
+                    flags.width
+                };
+                // GNU: `while (width < ndigs || (1 < ndigs && n % 10 == 0)) ndigs--, n /= 10;`
+                let mut ndigs = NS_DIGITS;
+                while width < ndigs || (1 < ndigs && n % 10 == 0) {
+                    ndigs -= 1;
+                    n /= 10;
+                }
+                // Emit the `ndigs` significant digits (zero-padded to `ndigs`),
+                // which corresponds to GNU's `width_cpy (0, ndigs, buf)`.
+                let digits = format!("{:0width$}", n, width = ndigs as usize);
+                result.push_str(&digits);
+                // GNU: `if (pad == ZERO_PAD) pad = ALWAYS_ZERO_PAD;` then
+                // `width_add (width - ndigs, 0, ...)` -- pad the remainder.
+                let pad = if flags.pad == Pad::Zero {
+                    Pad::AlwaysZero
+                } else {
+                    flags.pad
+                };
+                let extra = width - ndigs;
+                if pad != Pad::NoPad && extra > 0 {
+                    let pad_char = if pad == Pad::AlwaysZero || pad == Pad::SignPad {
+                        '0'
+                    } else {
+                        ' '
+                    };
+                    result.extend(std::iter::repeat_n(pad_char, extra as usize));
                 }
             }
             // ---- Compound (subformat) directives ---------------------------
