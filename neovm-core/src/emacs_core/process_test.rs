@@ -623,6 +623,56 @@ fn process_send_eof_accepts_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn process_controls_accept_get_process_designators_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers.create_buffer("*control-target*");
+    buffers.set_current(buffer_id);
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process_with_kind(
+        "control-pipe".into(),
+        Value::make_buffer(buffer_id),
+        String::new(),
+        vec![],
+        ProcessKind::Pipe,
+    );
+
+    let buffer_value = Value::make_buffer(buffer_id);
+    assert_eq!(
+        builtin_stop_process_impl(&mut pm, &buffers, vec![buffer_value])
+            .expect("stop-process buffer"),
+        buffer_value
+    );
+    assert_eq!(pm.get(id).expect("pipe").command, Value::T);
+
+    let name_value = Value::string("*control-target*");
+    assert_eq!(
+        builtin_continue_process_impl(&mut pm, &buffers, vec![name_value])
+            .expect("continue-process buffer name"),
+        name_value
+    );
+    assert_eq!(pm.get(id).expect("pipe").command, Value::NIL);
+
+    assert_eq!(
+        builtin_stop_process_impl(&mut pm, &buffers, vec![Value::NIL]).expect("stop-process nil"),
+        Value::NIL
+    );
+    let signal_err =
+        builtin_signal_process_impl(&mut pm, &buffers, vec![buffer_value, Value::symbol("TERM")])
+            .expect_err("signal-process buffer should reject connection process");
+    match signal_err {
+        Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "error");
+            assert_eq!(
+                signal.data,
+                vec![Value::string("Cannot signal process control-pipe")]
+            );
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn process_manager_find_by_name() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();

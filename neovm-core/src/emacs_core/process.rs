@@ -5865,7 +5865,7 @@ fn resolve_optional_process_with_explicit_return_in_state(
     }
     if let Some(v) = value {
         if !v.is_nil() {
-            let id = resolve_process_or_missing_error_in_manager(processes, v)?;
+            let id = resolve_get_process_designator_in_state(processes, buffers, v)?;
             return Ok((id, *v));
         }
     }
@@ -5920,7 +5920,9 @@ fn resolve_signal_process_target_in_state(
                         Ok(SignalProcessTarget::Pid(pid))
                     }
                 }
-                _ => Err(signal_wrong_type_processp(*v)),
+                _ => Ok(SignalProcessTarget::Process(
+                    resolve_get_process_designator_in_state(processes, buffers, v)?,
+                )),
             };
         }
     }
