@@ -3036,7 +3036,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "arboard",
  "crossbeam-channel",
@@ -3055,7 +3055,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-display-protocol"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "bitflags 2.11.1",
  "num_enum",
@@ -3065,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-display-runtime"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "alacritty_terminal",
  "arboard",
@@ -3109,14 +3109,14 @@ dependencies = [
 
 [[package]]
 name = "neomacs-gui-tests"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "neomacs-layout-engine"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "allsorts",
  "cosmic-text",
@@ -3136,14 +3136,14 @@ dependencies = [
 
 [[package]]
 name = "neomacs-melpa-tests"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "tempfile",
 ]
 
 [[package]]
 name = "neomacs-renderer-wgpu"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "ash",
  "bytemuck",
@@ -3167,7 +3167,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-tui-tests"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "libc",
  "pty-process",
@@ -3194,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-core"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "aes",
  "base64",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-executor"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "cranelift-jit",
  "cranelift-module",
@@ -3274,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-gc"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "bitflags 2.11.1",
  "criterion",
@@ -3284,11 +3284,11 @@ dependencies = [
 
 [[package]]
 name = "neovm-host-abi"
-version = "0.0.8"
+version = "0.0.9"
 
 [[package]]
 name = "neovm-oracle-tests"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "colored",
  "libc",
@@ -3299,7 +3299,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-worker"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "neovm-core",
  "neovm-host-abi",
@@ -7194,7 +7194,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "flate2",
  "rayon",
