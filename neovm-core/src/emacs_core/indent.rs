@@ -129,7 +129,7 @@ fn expect_wholenump(val: &Value) -> Result<usize, Flow> {
     }
 }
 
-fn dynamic_buffer_or_global_symbol_value(
+pub(crate) fn dynamic_buffer_or_global_symbol_value(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
     buf: Option<&Buffer>,
@@ -514,7 +514,15 @@ fn scan_for_column(
             .buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let line = line_bounds(buf, buf.point_emacs_byte_pos());
+        // Anchor the line at the target byte position when one is given so the
+        // column is measured from *that* position's beginning-of-line, not the
+        // buffer's current point.  For the two in-buffer callers
+        // (`current-column`, `move-to-column`) `end_byte`, when `Some`, is point
+        // itself, so this is behavior-preserving; it additionally lets callers
+        // (auto-hscroll) measure the column at an arbitrary position such as a
+        // non-selected window's `pointm`.
+        let anchor = end_byte.unwrap_or_else(|| buf.point_emacs_byte_pos());
+        let line = line_bounds(buf, anchor);
         (
             line.start().get(),
             line.end().get(),
@@ -859,6 +867,30 @@ pub(crate) fn builtin_current_column(
     let scan = scan_for_column(ctx, current_id, Some(point), None)?;
     set_last_known_column(current_id.0, point, modiff, scan.column);
     Ok(Value::fixnum(scan.column as i64))
+}
+
+/// Display column (`current-column`-equivalent) of an explicit byte position in
+/// a buffer, measured from that position's beginning-of-line.
+///
+/// Unlike `current-column`, this does not consult the current buffer or point:
+/// it is the column primitive auto-hscroll (`hscroll`) needs to follow a
+/// window's `pointm`, which for a non-selected window may differ from the
+/// buffer's `pt`.  Tab- and char-width-aware, honoring `tab-width`, display
+/// tables, `display`/`composition` properties, and invisibility, exactly as
+/// `current-column` does (it shares `scan_for_column`).
+pub(crate) fn display_column_at_emacs_byte_pos(
+    ctx: &mut crate::emacs_core::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    pos: EmacsBytePos,
+) -> Result<usize, Flow> {
+    let clamped = {
+        let Some(buf) = ctx.buffers.get(buffer_id) else {
+            return Ok(0);
+        };
+        buf.accessible_emacs_byte_region().clamp(pos)
+    };
+    let scan = scan_for_column(ctx, buffer_id, Some(clamped), None)?;
+    Ok(scan.column)
 }
 
 /// (move-to-column COLUMN &optional FORCE) -> COLUMN-REACHED

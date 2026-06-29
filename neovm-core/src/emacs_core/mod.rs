@@ -58,6 +58,7 @@ pub mod forward;
 pub mod frame_vars;
 pub mod hashtab;
 pub(crate) mod hook_runtime;
+pub mod hscroll;
 pub mod image;
 pub mod indent;
 pub mod interactive;

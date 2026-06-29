@@ -5066,13 +5066,11 @@ impl Context {
             }
         }
 
-        if !ev.feature_present("make-network-process") {
-            ev.provide_value(
-                Value::symbol("make-network-process"),
-                Some(super::process::make_network_process_subfeatures()),
-            )
-            .expect("startup make-network-process provide should succeed");
-        }
+        ev.provide_value(
+            Value::symbol("make-network-process"),
+            Some(super::process::make_network_process_subfeatures()),
+        )
+        .expect("startup make-network-process provide should succeed");
         if !ev.feature_present("tls") {
             ev.provide_value(Value::symbol("tls"), None)
                 .expect("startup tls provide should succeed");
@@ -6774,6 +6772,13 @@ impl Context {
         // recomputed at the end of this function and absorbs any overlay change,
         // keeping the next unchanged redisplay skippable (no thrash).
         self.run_pre_redisplay_function();
+        // GNU `redisplay_internal` calls `hscroll_window_tree` (src/xdisp.c)
+        // before laying out windows so each window's `hscroll` follows point;
+        // for a truncated line whose point has moved off the right edge (the
+        // `C-e` case, issue #140) this keeps the cursor visible. Updating
+        // `Window::Leaf.hscroll` here makes both the layout render and
+        // `(window-hscroll)` reflect the new value (no post-layout write-back).
+        crate::emacs_core::hscroll::update_auto_hscroll_before_redisplay(self);
         let has_fn = self.redisplay_fn.is_some();
         tracing::debug!("redisplay called (has_fn={})", has_fn);
         if let Some(mut f) = self.redisplay_fn.take() {

@@ -972,7 +972,11 @@ fn window_body_horizontal_offsets_pixels(
     }
 }
 
-fn window_body_width_pixels(frames: &FrameManager, fid: FrameId, w: &Window) -> i64 {
+/// Text-area width of a leaf window in pixels (total minus scroll bars,
+/// fringes, and margins).  Shared with auto-hscroll (`super::hscroll`) so the
+/// column geometry it follows matches what `window-body-width` reports and what
+/// the layout engine renders.
+pub(crate) fn window_body_width_pixels(frames: &FrameManager, fid: FrameId, w: &Window) -> i64 {
     let total = window_width_pixels(w);
     let (left, right) = window_body_horizontal_offsets_pixels(frames, fid, w);
     total.saturating_sub(left.saturating_add(right))
