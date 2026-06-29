@@ -3146,12 +3146,19 @@ fn process_attributes_runtime_shape_matches_oracle() {
               (let ((pair (assq 'ttname attrs)))
                 (and (consp pair) (stringp (cdr pair))))
               (process-attributes -1)
+              (process-attributes -1.0)
+              (process-attributes #x7fffffff)
+              (let ((float-attrs (process-attributes (float (emacs-pid)))))
+                (not (null (assq 'comm float-attrs))))
               (condition-case err (process-attributes 'x) (error err))
+              (condition-case err (process-attributes 1.5) (error err))
+              (condition-case err (process-attributes #x80000000) (error err))
+              (condition-case err (process-attributes #x100000000000000000000) (error err))
               (process-attributes 999999999)))"#,
     );
     assert_eq!(
         result,
-        "OK (t t t t t t t t t t t t t t t t t t t t t t nil (wrong-type-argument numberp x) nil)"
+        "OK (t t t t t t t t t t t t t t t t t t t t t t nil nil nil t (wrong-type-argument numberp x) (error \"Not an in-range integer, integral float, or cons of integers\") (error \"Not an in-range integer, integral float, or cons of integers\") (error \"Not an in-range integer, integral float, or cons of integers\") nil)"
     );
 }
 

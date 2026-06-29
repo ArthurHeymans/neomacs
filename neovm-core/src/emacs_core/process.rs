@@ -5971,6 +5971,15 @@ fn signal_wrong_type_numberp(value: Value) -> Flow {
     signal("wrong-type-argument", vec![Value::symbol("numberp"), value])
 }
 
+fn signal_process_attributes_pid_range_error() -> Flow {
+    signal(
+        "error",
+        vec![Value::string(
+            "Not an in-range integer, integral float, or cons of integers",
+        )],
+    )
+}
+
 fn signal_undefined_signal_name(name: &str) -> Flow {
     signal(
         "error",
@@ -11396,10 +11405,7 @@ pub(crate) fn builtin_process_attributes(
 
 pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     expect_args("process-attributes", &args, 1)?;
-    let pid = match args[0].kind() {
-        ValueKind::Fixnum(n) => n,
-        _ => return Err(signal_wrong_type_numberp(args[0])),
-    };
+    let pid = process_attributes_pid_arg(args[0])?;
     if !pid_exists(pid) {
         return Ok(Value::NIL);
     }
@@ -11541,6 +11547,30 @@ pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     ));
 
     Ok(Value::list(attrs))
+}
+
+fn process_attributes_pid_arg(value: Value) -> Result<i64, Flow> {
+    let pid = match value.kind() {
+        ValueKind::Fixnum(n) => n,
+        ValueKind::Veclike(VecLikeType::Bignum) => i64::try_from(value.as_bignum().unwrap())
+            .map_err(|_| signal_process_attributes_pid_range_error())?,
+        ValueKind::Float => {
+            let f = value.xfloat();
+            if !f.is_finite()
+                || f.fract() != 0.0
+                || f < libc::pid_t::MIN as f64
+                || f > libc::pid_t::MAX as f64
+            {
+                return Err(signal_process_attributes_pid_range_error());
+            }
+            f as i64
+        }
+        _ => return Err(signal_wrong_type_numberp(value)),
+    };
+    if pid < libc::pid_t::MIN as i64 || pid > libc::pid_t::MAX as i64 {
+        return Err(signal_process_attributes_pid_range_error());
+    }
+    Ok(pid)
 }
 
 /// (make-process &rest ARGS) -> process-or-nil
