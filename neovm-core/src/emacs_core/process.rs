@@ -4997,6 +4997,14 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+fn check_keyword_arg_pairs(args: &[Value]) -> Result<(), Flow> {
+    if args.len() % 2 == 0 {
+        Ok(())
+    } else {
+        Err(signal("malformed-keyword-arg-list", vec![]))
+    }
+}
+
 fn process_owned_runtime_string(value: Value) -> String {
     value
         .as_lisp_string()
@@ -8167,6 +8175,7 @@ pub(crate) fn builtin_make_network_process(
     if args.is_empty() {
         return Ok(Value::NIL);
     }
+    check_keyword_arg_pairs(&args)?;
 
     // ---- Parse all keyword arguments ----
     let mut name: Option<LispString> = None;
@@ -10169,6 +10178,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
     if args.is_empty() {
         return Ok(Value::NIL);
     }
+    check_keyword_arg_pairs(&args)?;
 
     let contact = Value::list(args.clone());
     let mut name: Option<LispString> = None;
@@ -10285,6 +10295,7 @@ pub(crate) fn builtin_make_serial_process_impl(
     if args.is_empty() {
         return Ok(Value::NIL);
     }
+    check_keyword_arg_pairs(&args)?;
 
     let contact = Value::list(args.clone());
     let mut name: Option<LispString> = None;
@@ -10413,6 +10424,8 @@ pub(crate) fn builtin_serial_process_configure_impl(
     buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
+    check_keyword_arg_pairs(&args)?;
+
     let mut process_id: Option<ProcessId> = None;
     let mut i = 0usize;
     while i < args.len() {
@@ -10489,6 +10502,19 @@ pub(crate) fn builtin_set_network_process_option_impl(
     }
 
     let id = resolve_live_process_or_wrong_type_in_manager(processes, &args[0])?;
+    let proc = processes.get_mut(id).ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("processp"), args[0]],
+        )
+    })?;
+    if proc.kind != ProcessKind::Network {
+        return Err(signal(
+            "error",
+            vec![Value::string("Process is not a network process")],
+        ));
+    }
+
     if args[1].as_symbol_name().is_none() {
         return Err(signal(
             "wrong-type-argument",
@@ -10516,19 +10542,6 @@ pub(crate) fn builtin_set_network_process_option_impl(
             ))
         };
     };
-
-    let proc = processes.get_mut(id).ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("processp"), args[0]],
-        )
-    })?;
-    if proc.kind != ProcessKind::Network {
-        return Err(signal(
-            "error",
-            vec![Value::string("Process is not a network process")],
-        ));
-    }
 
     let spec = NetworkSocketOptionSpec {
         keyword,
@@ -11325,6 +11338,7 @@ fn builtin_make_process_impl_with_environment(
     if args.is_empty() {
         return Ok(Value::NIL);
     }
+    check_keyword_arg_pairs(&args)?;
 
     let mut name: Option<LispString> = None;
     let mut buffer: Option<Value> = None;

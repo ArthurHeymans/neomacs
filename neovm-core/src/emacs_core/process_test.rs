@@ -4050,7 +4050,35 @@ fn process_list_network_serial_runtime_surface() {
     );
     assert_eq!(
         results[2],
-        "OK (nil (wrong-type-argument stringp nil) (error \":name value not a string\") (error \"Missing :name keyword parameter\") t nil t (error \":name value not a string\") nil (wrong-type-argument stringp t) (wrong-type-argument stringp 1) (error \"No port specified\") (error \":speed not specified\") error error wrong-number-of-arguments (wrong-type-argument processp 1) (error \"Process is not a network process\") (error \"Unknown or unsupported option\"))"
+        "OK (nil (wrong-type-argument stringp nil) (error \":name value not a string\") (error \"Missing :name keyword parameter\") t nil t (error \":name value not a string\") nil (wrong-type-argument stringp t) (wrong-type-argument stringp 1) (error \"No port specified\") (error \":speed not specified\") error malformed-keyword-arg-list wrong-number-of-arguments (wrong-type-argument processp 1) (error \"Process is not a network process\") (error \"Unknown or unsupported option\"))"
+    );
+}
+
+#[test]
+fn process_keyword_arg_lists_match_gnu_malformed_pair_handling() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(list
+            (condition-case err (make-network-process :name "odd-net" :server t :service)
+              (error (car err)))
+            (condition-case err (make-process :name)
+              (error (car err)))
+            (condition-case err (make-pipe-process :name)
+              (error (car err)))
+            (condition-case err (make-serial-process :name)
+              (error (car err)))
+            (condition-case err (serial-process-configure :process)
+              (error (car err)))
+            (let ((p (make-network-process
+                      :name "even-unknown-net" :server t :service 0 :ignored nil)))
+              (unwind-protect
+                  (list (processp p) (process-contact p :ignored))
+                (ignore-errors (delete-process p)))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (malformed-keyword-arg-list malformed-keyword-arg-list malformed-keyword-arg-list malformed-keyword-arg-list malformed-keyword-arg-list (t nil))"
     );
 }
 

@@ -297,6 +297,12 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
     register_simple(obarray, "search-failed", "Search failed", &["error"]);
     register_simple(
         obarray,
+        "malformed-keyword-arg-list",
+        "Keyword lacks a corresponding value",
+        &["error"],
+    );
+    register_simple(
+        obarray,
         "setting-constant",
         "Attempt to set a constant symbol",
         &["error"],
